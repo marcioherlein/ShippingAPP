@@ -20,7 +20,7 @@ export default function App() {
   const [product, setProduct] = useState('')
   const [analysis, setAnalysis] = useState<ProductAnalysisV2 | null>(null)
   const [client, setClient] = useState<ClientProfile>(defaultClientProfile)
-  const taxContext = useMemo<ScenarioTaxContext>(() => ({ entityType: client.entityType, taxStatus: client.taxStatus, purpose: client.purpose, statisticsExempt: analysis?.customs.statisticsExemptByOrigin === true, vatPerceptionExempt: client.entityType === 'individual' && client.purpose === 'own_use', gainsPerceptionExempt: false }), [client, analysis])
+  const taxContext = useMemo<ScenarioTaxContext>(() => ({ entityType: client.entityType, taxStatus: client.taxStatus, purpose: client.purpose, statisticsExempt: false, vatPerceptionExempt: client.entityType === 'individual' && client.purpose === 'own_use', gainsPerceptionExempt: false }), [client])
   const results = useMemo(() => calculateV2(inputs, taxContext), [inputs, taxContext])
   const rows = useMemo(() => bestRowsV2(results), [results])
   const selected = useMemo(() => recommendV2(results), [results])
@@ -38,7 +38,7 @@ export default function App() {
     <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 0.3.2</span></header>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
     {analysis && economicsReady && <>
-      <div className="analysis-banner"><b>Estimación instantánea.</b> NCM, derecho e intervenciones permanecen sujetos a verificación contra Arancel Integrado/CIVUCE.</div>
+      <div className="analysis-banner"><b>Estimación instantánea.</b> NCM, derecho, origen preferencial e intervenciones permanecen sujetos a verificación contra Arancel Integrado/CIVUCE.</div>
       <div className="workspace"><aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>
       <section className="results-column"><div className="sticky-results"><div className="result-heading"><span className="eyebrow">Business case estimado</span><h2>{product || 'Producto sin nombre'}</h2></div><Recommendation result={selected} capitalAvailableUsd={inputs.capitalAvailableUsd} /></div><ScenarioTable rows={rows} selected={selected} /><section className="method-card"><h3>Cómo se calcula el score</h3><p>Margen sobre costo económico 40% · eficiencia del capital 30% · inventario 20% · capacidad de financiar el capital inicial 10%.</p><p>El score mide atractivo económico, no habilitación legal. El Regulatory Engine mantiene ambos conceptos separados.</p></section></section></div>
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />

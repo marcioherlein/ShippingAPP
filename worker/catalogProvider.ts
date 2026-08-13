@@ -1,5 +1,5 @@
 import { buildMarketQuery, cleanText, comparableScore } from './catalogMatch'
-import { percentile } from './catalogStats'
+import { percentile, trimPriceOutliers } from './catalogStats'
 import type { ArgentinaMarketResult, MarketComparable, MlSearch } from './marketTypes'
 
 export async function analyzeArgentinaMarket(productName: string, category: string): Promise<ArgentinaMarketResult> {
@@ -27,13 +27,15 @@ export async function analyzeArgentinaMarket(productName: string, category: stri
     }
 
     const strict = matches.filter((item) => item.score >= 65)
-    const accepted = strict.length >= 5 ? strict : matches
+    const acceptedBeforeTrim = strict.length >= 5 ? strict : matches
+    const accepted = trimPriceOutliers(acceptedBeforeTrim, (item) => item.priceArs, 5)
     const prices = accepted.map((item) => item.priceArs)
     const p25Ars = percentile(prices, 0.25)
     const medianArs = percentile(prices, 0.5)
     const p75Ars = percentile(prices, 0.75)
     const suggestedPriceArs = percentile(prices, 0.4)
-    const confidence = Math.min(90, Math.round((accepted.length / 12) * 60 + (strict.length / Math.max(1, accepted.length)) * 20 + (medianArs ? 10 : 0)))
+    const confidence = Math.min(90, Math.round((accepted.length / 12) * 60 + (strict.length / Math.max(1, acceptedBeforeTrim.length)) * 20 + (medianArs ? 10 : 0)))
+    if (accepted.length < acceptedBeforeTrim.length) warnings.push(`${acceptedBeforeTrim.length - accepted.length} price outlier(s) excluded by IQR screening.`)
 
     return { status: accepted.length >= 5 && medianArs ? 'live' : 'insufficient', query, rawCount: raw.length, comparableCount: accepted.length, p25Ars, medianArs, p75Ars, suggestedPriceArs, confidence, source: 'Mercado Libre Argentina public search', priceQuality: 'listed_search_price', comparables: accepted.sort((a, b) => b.score - a.score).slice(0, 8), warnings }
   } catch (error) {

@@ -23,11 +23,11 @@ export function comparableScore(item: MlResult, productName: string, category: s
   if (!title || !item.price || item.currency_id !== 'ARS') return 0
   if (item.condition && item.condition !== 'new') return 0
   if (EXCLUDED_LISTING_TERMS.some((term) => title.includes(term))) return 0
+  if (!hasKnownBrand(productName) && hasKnownBrand(title)) return 0
 
   let score = 0
   if (target.includes('padel') && title.includes('padel')) score += 50
   if (target.includes('carbon')) score += title.includes('carbon') ? 25 : -20
-  if (!hasKnownBrand(productName) && hasKnownBrand(title)) score -= 20
   if (item.condition === 'new' || !item.condition) score += 10
   return Math.max(0, Math.min(100, score))
 }

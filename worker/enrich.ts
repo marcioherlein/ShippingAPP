@@ -11,7 +11,17 @@ export default {
     if (!response.ok) return response
     const data = await response.json() as any
     const market = await analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '')
-    data.market = { ...data.market, details: market }
+    const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
+
+    if (market.status !== 'live' || !market.suggestedPriceArs) {
+      data.market = { ...data.market, estimatedPriceArs: null, source: `${market.source} · ${market.status}`, details: market }
+      data.assumptions = [...prior, 'Mercado local no confirmado: no se reutiliza el benchmark histórico.']
+    } else {
+      data.market = { ...data.market, estimatedPriceArs: Math.round(market.suggestedPriceArs), source: market.source, details: market }
+      data.assumptions = [...prior, `Precio local de screening basado en ${market.comparableCount} comparables activos.`, 'La demanda mensual sigue siendo un supuesto editable; no se infiere del stock público.']
+      data.confidence = { ...data.confidence, market: `live-${market.confidence}` }
+    }
+
     return new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } })
   },
 }

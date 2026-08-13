@@ -1,4 +1,4 @@
-import baseWorker from './baseIndex'
+import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
 
 type Env = { AI: { run: (model: string, input: unknown) => Promise<unknown> }; ASSETS: { fetch: (request: Request) => Promise<Response> } }

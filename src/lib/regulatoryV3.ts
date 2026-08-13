@@ -100,11 +100,19 @@ export function buildRegulatoryChecksV3(analysis: ProductAnalysis, client: Clien
     technical = { id: 'technical-regulation', group: 'sale', status: 'verify', title: 'Determinar si aplica un Reglamento Técnico', detail: 'La NCM por sí sola no cierra este punto. Verificar VUCE/CIVUCE y el alcance material del reglamento. Si aplica, activar DJC, evaluación/certificación y marcado según corresponda.', sourceIds: ['vuce', 'technicalRegs'], financialEffect: 'economic_cost' }
   }
 
-  const tadRelevant = client.technicalRegulation === 'applies_ready' || client.technicalRegulation === 'applies_pending'
+  const technicalPending = client.technicalRegulation === 'applies_pending'
+  const technicalReady = client.technicalRegulation === 'applies_ready'
+  let tadStatus: RegulatoryCheck['status'] = 'info'
+  if (technicalPending) tadStatus = triStatus(client.tadAccess, true)
+  else if (technicalReady) tadStatus = client.tadAccess === 'yes' ? 'pass' : 'verify'
   const tad: RegulatoryCheck = {
-    id: 'tad', group: 'sale', status: tadRelevant ? triStatus(client.tadAccess, true) : 'info',
-    title: tadRelevant ? (client.tadAccess === 'yes' ? 'Canal TAD disponible' : 'Confirmar acceso TAD para trámites técnicos') : 'TAD: activar si el producto queda alcanzado por Reglamento Técnico',
-    detail: 'Los trámites y procedimientos del Marco General de Evaluación de la Conformidad se realizan mediante TAD ante la autoridad de reglamentos técnicos, o el sistema que lo reemplace.',
+    id: 'tad', group: 'sale', status: tadStatus,
+    title: technicalPending
+      ? (client.tadAccess === 'yes' ? 'Canal TAD disponible para resolver conformidad' : 'Resolver acceso TAD para el trámite técnico pendiente')
+      : technicalReady
+        ? (client.tadAccess === 'yes' ? 'Canal TAD disponible' : 'Conformidad informada como lista; confirmar acceso TAD si hubiera gestiones posteriores')
+        : 'TAD: activar cuando un trámite de Reglamento Técnico lo requiera',
+    detail: 'Los trámites y procedimientos instituidos por el Marco General de Evaluación de la Conformidad se realizan mediante TAD, o el sistema que lo reemplace. La falta de acceso sólo se trata como blocker cuando existe un trámite técnico pendiente que debe resolverse.',
     sourceIds: ['technicalRegs'], financialEffect: 'none',
   }
 

@@ -1,3 +1,5 @@
+export type TechnicalRegulationScreening = 'no_specific_rt_detected' | 'known_applicable' | 'not_screened'
+
 export type CustomsProfile = {
   ncmCandidate: string | null
   classificationConfidence: 'high' | 'medium' | 'low' | 'missing'
@@ -6,6 +8,8 @@ export type CustomsProfile = {
   statisticsRatePct: number
   statisticsPreferenceStatus: 'none' | 'verify_origin' | 'unknown'
   interventionsStatus: 'verify_vuce'
+  technicalRegulationScreening: TechnicalRegulationScreening
+  technicalRegulationEvidence: string
   source: string
   reviewedAt: string
 }
@@ -30,6 +34,8 @@ export function customsProfileFor(category: string | null | undefined, originCou
       statisticsRatePct: 3,
       statisticsPreferenceStatus,
       interventionsStatus: 'verify_vuce',
+      technicalRegulationScreening: 'no_specific_rt_detected',
+      technicalRegulationEvidence: 'Screening oficial 13/08/2026: la familia de paletas/raquetas de pádel no aparece entre los productos enumerados por el régimen de productos de consumo de la Res. SIC 313/2025. Mantener verificación VUCE/CIVUCE por posición y producto antes de ejecutar.',
       source: `NCM 9506.59.00 — las demás raquetas similares. Verificar contra Arancel Integrado/CIVUCE vigente.${originNote}`,
       reviewedAt: REVIEWED_AT,
     }
@@ -43,6 +49,8 @@ export function customsProfileFor(category: string | null | undefined, originCou
     statisticsRatePct: 3,
     statisticsPreferenceStatus,
     interventionsStatus: 'verify_vuce',
+    technicalRegulationScreening: 'not_screened',
+    technicalRegulationEvidence: 'No existe todavía un screening técnico específico soportado para esta categoría.',
     source: `Clasificación arancelaria pendiente.${originNote}`,
     reviewedAt: REVIEWED_AT,
   }

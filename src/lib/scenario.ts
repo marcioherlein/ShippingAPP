@@ -1,4 +1,4 @@
-import { airFreight, seaFreight } from './freight'
+import { airFreightV2, seaFreightV2 } from './freightV2'
 import { calculateImportTaxes } from './importTaxes'
 import { unitPriceFor } from './pricing'
 import { opportunityScore } from './scoring'
@@ -12,9 +12,13 @@ const unknownTaxContext: ScenarioTaxContext = {
 export function scenario(quantity: number, mode: FreightMode, i: Inputs, taxContext: ScenarioTaxContext = unknownTaxContext): Result {
   const supplierUnitUsd = unitPriceFor(quantity, i.priceTiers)
   const goodsUsd = supplierUnitUsd * quantity
-  const freightUsd = mode === 'air'
-    ? airFreight(quantity, i.weightKg, i.airUsdKg, i.airMinimumUsd)
-    : seaFreight(quantity, i.volumeCbm, i.seaUsdCbm, i.seaMinimumUsd)
+  const freight = mode === 'air'
+    ? airFreightV2(quantity, i.weightKg, i.volumeCbm, i.airUsdKg, i.airMinimumUsd)
+    : seaFreightV2(quantity, i.weightKg, i.volumeCbm, i.seaUsdCbm, i.seaMinimumUsd)
+  const freightUsd = freight.costUsd
+  const freightAssumption = mode === 'air'
+    ? `Flete aéreo calculado sobre ${freight.chargeableUnits.toFixed(1)} kg cobrables (${freight.basis === 'volumetric_weight' ? 'peso volumétrico' : freight.basis === 'actual_weight' ? 'peso real' : 'cargo mínimo'}).`
+    : `Flete LCL calculado sobre ${freight.chargeableUnits.toFixed(2)} W/M (${freight.basis === 'weight_measurement' ? 'peso' : freight.basis === 'volume' ? 'volumen' : 'cargo mínimo'}).`
   const insuranceUsd = (goodsUsd + freightUsd) * i.insurancePct / 100
   const customsBaseUsd = goodsUsd + freightUsd + insuranceUsd
 
@@ -42,12 +46,8 @@ export function scenario(quantity: number, mode: FreightMode, i: Inputs, taxCont
 
   const marketGrossUsd = i.usdArs > 0 ? i.marketPriceArs / i.usdArs : 0
   const priceIsRetailGross = taxContext.taxStatus === 'responsable_inscripto' && taxContext.purpose === 'resale'
-  const marketEconomicUsd = priceIsRetailGross && i.vatRatePct > 0
-    ? marketGrossUsd / (1 + i.vatRatePct / 100)
-    : marketGrossUsd
-  const saleAssumptions = priceIsRetailGross
-    ? [`Precio local tratado como precio final con IVA incluido; para RI + reventa el margen usa venta neta de IVA (${i.vatRatePct}%).`]
-    : []
+  const marketEconomicUsd = priceIsRetailGross && i.vatRatePct > 0 ? marketGrossUsd / (1 + i.vatRatePct / 100) : marketGrossUsd
+  const saleAssumptions = priceIsRetailGross ? [`Precio local tratado como precio final con IVA incluido; para RI + reventa el margen usa venta neta de IVA (${i.vatRatePct}%).`] : []
 
   const marginPct = marketEconomicUsd > 0 ? (marketEconomicUsd - economicLandedUnitUsd) / marketEconomicUsd : 0
   const inventoryMonths = i.monthlyDemand > 0 ? quantity / i.monthlyDemand : 99
@@ -67,6 +67,6 @@ export function scenario(quantity: number, mode: FreightMode, i: Inputs, taxCont
     economicLandedTotalUsd, economicLandedUnitUsd, cashRequiredUsd, cashRequiredUnitUsd,
     landedTotalUsd: economicLandedTotalUsd, landedUnitUsd: economicLandedUnitUsd,
     marginPct, inventoryMonths, breakEvenArs: economicLandedUnitUsd * i.usdArs,
-    score, affordable, taxAssumptions: [...taxes.assumptions, ...saleAssumptions],
+    score, affordable, taxAssumptions: [freightAssumption, ...taxes.assumptions, ...saleAssumptions],
   }
 }

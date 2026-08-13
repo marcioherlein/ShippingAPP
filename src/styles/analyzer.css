@@ -19,6 +19,9 @@
 .fact-grid > div { background: #f7f8fb; border-radius: 12px; padding: 13px; }
 .fact-grid span { display: block; color: #7b8598; font-size: 12px; margin-bottom: 5px; }
 .fact-grid b { font-size: 15px; }
+.customs-note { display:flex; gap:10px; align-items:flex-start; margin-top:12px; padding:11px 13px; border:1px solid #ecdcae; background:#fff9ea; border-radius:12px; color:#6e5a2c; font-size:11px; line-height:1.45; }
+.customs-note b { white-space:nowrap; }
+.customs-note span { color:#776941; }
 .assumptions { margin-top: 14px; color: #5f6b80; }
 .assumptions summary, .manual-details > summary { cursor: pointer; font-weight: 750; color: #3c4659; }
 .assumptions li { margin: 6px 0; }
@@ -35,5 +38,5 @@
 .value-strip b { color: #5468ff; font-size: 12px; margin-right: 8px; }
 .value-strip span { font-weight: 800; }
 .value-strip p { color: #7a8497; font-size: 13px; line-height: 1.45; }
-@media (max-width: 760px) { .url-input-wrap { grid-template-columns: 1fr; } .url-input-wrap button { min-height: 48px; } .extraction-top { flex-direction: column; } .fact-grid, .value-strip { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) { .url-input-wrap { grid-template-columns: 1fr; } .url-input-wrap button { min-height: 48px; } .extraction-top { flex-direction: column; } .fact-grid, .value-strip { grid-template-columns: 1fr 1fr; } .customs-note { flex-direction:column; } }
 @media (max-width: 480px) { .fact-grid, .value-strip { grid-template-columns: 1fr; } }

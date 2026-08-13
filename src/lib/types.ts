@@ -5,6 +5,15 @@ export type PriceTier = {
   unitPriceUsd: number
 }
 
+export type ScenarioTaxContext = {
+  entityType: 'company' | 'individual' | 'unknown'
+  taxStatus: 'responsable_inscripto' | 'monotributo' | 'exento' | 'unknown'
+  purpose: 'resale' | 'own_use' | 'unknown'
+  statisticsExempt: boolean
+  vatPerceptionExempt: boolean
+  gainsPerceptionExempt: boolean
+}
+
 export type Inputs = {
   quantities: number[]
   priceTiers: PriceTier[]
@@ -16,7 +25,13 @@ export type Inputs = {
   seaMinimumUsd: number
   fixedFeesUsd: number
   insurancePct: number
-  importChargesPct: number
+  dutyRatePct: number
+  dutyRateVerified: boolean
+  statisticsRatePct: number
+  vatRatePct: number
+  vatPerceptionPct: number
+  gainsPerceptionPct: number
+  iibbPerceptionPct: number
   marketPriceArs: number
   usdArs: number
   monthlyDemand: number
@@ -28,6 +43,21 @@ export type Result = {
   mode: FreightMode
   supplierUnitUsd: number
   freightUsd: number
+  insuranceUsd: number
+  customsBaseUsd: number
+  importDutyUsd: number
+  statisticsFeeUsd: number
+  importVatUsd: number
+  vatPerceptionUsd: number
+  gainsPerceptionUsd: number
+  iibbPerceptionUsd: number
+  cashTaxesUsd: number
+  potentialCreditsUsd: number
+  nonRecoverableTaxCostUsd: number
+  economicLandedTotalUsd: number
+  economicLandedUnitUsd: number
+  cashRequiredUsd: number
+  cashRequiredUnitUsd: number
   landedTotalUsd: number
   landedUnitUsd: number
   marginPct: number
@@ -35,4 +65,5 @@ export type Result = {
   breakEvenArs: number
   score: number
   affordable: boolean
+  taxAssumptions: string[]
 }

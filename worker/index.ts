@@ -89,6 +89,28 @@ function slugFallback(url: URL) {
   return decodeURIComponent(slug).replace(/[-_]+/g, ' ').replace(/\b\d{8,}\b/g, '').trim()
 }
 
+function inferCategory(source: string) {
+  const s = source.toLowerCase()
+  if (/\b(padel|pádel)\b/.test(s) && /\b(racket|racquet|paddle|paleta)\b/.test(s)) return 'Padel racket'
+  if (/\b(pickleball)\b/.test(s) && /\b(paddle|racket|racquet)\b/.test(s)) return 'Pickleball paddle'
+  if (/\b(tennis|tenis)\b/.test(s) && /\b(racket|racquet|raqueta)\b/.test(s)) return 'Tennis racket'
+  return null
+}
+
+function extractMoq(source: string) {
+  const patterns = [
+    /(?:min(?:imum)?\.?\s*(?:order|order quantity)|moq)\s*[:：-]?\s*(\d{1,6})/i,
+    /(\d{1,6})\s*(?:pieces|piece|pcs|units|sets)\s*(?:min(?:imum)?\.?\s*order|minimum)/i,
+    /(?:>=|≥)\s*(\d{1,6})\s*(?:pieces|piece|pcs|units|sets)/i,
+  ]
+  for (const pattern of patterns) {
+    const match = source.match(pattern)
+    const value = match ? numberOrNull(match[1]) : null
+    if (value) return Math.round(value)
+  }
+  return null
+}
+
 async function aiExtract(ai: AI, source: string): Promise<Extracted> {
   try {
     const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
@@ -119,9 +141,23 @@ async function aiExtract(ai: AI, source: string): Promise<Extracted> {
 function benchmark(category: string | null | undefined) {
   const c = (category || '').toLowerCase()
   if (c.includes('padel') || c.includes('paddle racket') || c.includes('pádel')) {
-    return { key: 'padel_racket', packedWeightKg: 0.65, volumeCbm: 0.006, marketPriceArs: 220000, monthlyDemand: 40 }
+    return {
+      key: 'padel_racket',
+      packedWeightKg: 0.65,
+      volumeCbm: 0.006,
+      marketPriceArs: 220000,
+      monthlyDemand: 40,
+      defaultMoq: 300,
+    }
   }
-  return { key: 'generic', packedWeightKg: 0.5, volumeCbm: 0.004, marketPriceArs: 0, monthlyDemand: 20 }
+  return {
+    key: 'generic',
+    packedWeightKg: 0.5,
+    volumeCbm: 0.004,
+    marketPriceArs: 0,
+    monthlyDemand: 20,
+    defaultMoq: null,
+  }
 }
 
 function quantitiesFromMoq(moq: number | null) {
@@ -136,7 +172,7 @@ async function analyze(rawUrl: string, env: Env) {
   try {
     const response = await fetch(url.toString(), {
       headers: {
-        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/0.2; +https://shippingapp.workers.dev)',
+        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/0.2.1; +https://shippingapp.workers.dev)',
         'accept': 'text/html,application/xhtml+xml',
         'accept-language': 'en-US,en;q=0.8',
       },
@@ -151,28 +187,34 @@ async function analyze(rawUrl: string, env: Env) {
   const structured = fetched ? findProductJsonLd(html) : {}
   const title = fetched ? (meta(html, 'og:title') || meta(html, 'twitter:title')) : null
   const description = fetched ? (meta(html, 'og:description') || meta(html, 'description')) : null
+  const pageText = fetched ? visibleText(html) : ''
   const imageUrl = structured.imageUrl || (fetched ? meta(html, 'og:image') : null)
   const sourceText = fetched
-    ? `URL: ${url}\nTITLE: ${title || ''}\nDESCRIPTION: ${description || ''}\nPAGE TEXT: ${visibleText(html)}`
+    ? `URL: ${url}\nTITLE: ${title || ''}\nDESCRIPTION: ${description || ''}\nPAGE TEXT: ${pageText}`
     : `Alibaba URL slug only: ${slugFallback(url)}. Extract only what can reasonably be identified; do not invent price, MOQ or weight.`
   const ai = await aiExtract(env.AI, sourceText)
 
   const name = structured.name || ai.name || title || slugFallback(url) || 'Producto Alibaba'
-  const category = ai.category || null
+  const category = ai.category || inferCategory(`${name} ${title || ''} ${description || ''} ${pageText}`)
   const unitPriceUsd = structured.unitPriceUsd || ai.unitPriceUsd || null
-  const moq = ai.moq ? Math.round(ai.moq) : null
+  const detectedMoq = ai.moq ? Math.round(ai.moq) : extractMoq(`${description || ''} ${pageText}`)
   const b = benchmark(category)
+  const moq = detectedMoq || b.defaultMoq
   const packedWeightKg = ai.weightKg || b.packedWeightKg
   const assumptions: string[] = []
   if (!fetched) assumptions.push('Alibaba no expuso el contenido completo; parte del perfil se estimó desde el link.')
+  if (!ai.category && category) assumptions.push(`Categoría detectada por reglas del título/descripción: ${category}.`)
   if (!ai.weightKg) assumptions.push(`Peso logístico estimado con benchmark de categoría: ${b.packedWeightKg} kg/unidad.`)
   assumptions.push(`Volumen logístico estimado con benchmark de categoría: ${b.volumeCbm} m³/unidad.`)
   if (!unitPriceUsd) assumptions.push('No se pudo verificar el precio automáticamente; el análisis económico requiere una estimación de precio.')
+  if (!detectedMoq && moq) assumptions.push(`MOQ estimado con benchmark de categoría: ${moq} unidades.`)
   if (!moq) assumptions.push('MOQ no verificado; se usa 100 unidades como base de escenarios.')
-  if (!b.marketPriceArs) assumptions.push('Precio de mercado argentino aún no estimado para esta categoría.')
+  if (b.marketPriceArs) assumptions.push(`Precio argentino inicial estimado con benchmark de categoría: ARS ${b.marketPriceArs.toLocaleString('es-AR')}.`)
+  else assumptions.push('Precio de mercado argentino aún no estimado para esta categoría.')
 
-  const verifiedCount = [fetched, !!unitPriceUsd, !!moq, !!ai.weightKg, !!category].filter(Boolean).length
-  const overallConfidence = Math.min(92, 38 + verifiedCount * 10)
+  const verifiedCount = [fetched, !!unitPriceUsd, !!detectedMoq, !!ai.weightKg, !!ai.category].filter(Boolean).length
+  const fallbackCount = [!!category && !ai.category, !!moq && !detectedMoq, b.key !== 'generic'].filter(Boolean).length
+  const overallConfidence = Math.min(92, 38 + verifiedCount * 10 + fallbackCount * 4)
 
   return {
     sourceUrl: url.toString(),
@@ -196,8 +238,8 @@ async function analyze(rawUrl: string, env: Env) {
     confidence: {
       overall: overallConfidence,
       productSource: fetched ? 'verified/estimated' : 'estimated',
-      logistics: ai.weightKg ? 'medium' : 'low',
-      market: b.marketPriceArs ? 'low' : 'missing',
+      logistics: ai.weightKg ? 'medium' : b.key === 'generic' ? 'low' : 'benchmark',
+      market: b.marketPriceArs ? 'benchmark' : 'missing',
     },
     assumptions,
   }

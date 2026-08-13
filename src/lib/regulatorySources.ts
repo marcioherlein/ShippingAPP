@@ -18,5 +18,6 @@ export const legalSources: Record<string, LegalSource> = {
   gains: { id: 'gains', label: 'RG 2281/2007 · percepción Ganancias', url: 'https://www.argentina.gob.ar/normativa/nacional/norma-130808/actualizacion', lastChecked: '2026-08-13' },
   bcra: { id: 'bcra', label: 'BCRA · Normativa de Exterior y Cambios', url: 'https://www.bcra.gob.ar/normativa-de-exterior-y-cambios/', lastChecked: '2026-08-13' },
   technicalRegs: { id: 'technicalRegs', label: 'Resolución 237/2024 · Marco General de Evaluación de la Conformidad', url: 'https://www.argentina.gob.ar/normativa/nacional/resoluci%C3%B3n-237-2024-403547/actualizacion', lastChecked: '2026-08-13' },
+  consumerProducts313: { id: 'consumerProducts313', label: 'Resolución SIC 313/2025 · productos de consumo alcanzados', url: 'https://www.argentina.gob.ar/node/477287', lastChecked: '2026-08-13' },
   labeling: { id: 'labeling', label: 'DNU 274/2019 · Lealtad Comercial', url: 'https://www.argentina.gob.ar/normativa/nacional/decreto-274-2019-322236/texto', lastChecked: '2026-08-13' },
 }

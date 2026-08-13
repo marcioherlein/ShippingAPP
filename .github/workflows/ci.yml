@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feature/mvp-0.1]
+    branches: [main, 'feature/**']
   pull_request:
     branches: [main]
 
@@ -19,3 +19,4 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run build
+      - run: npx --yes wrangler@latest deploy --dry-run --outdir .wrangler-dry-run

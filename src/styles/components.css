@@ -21,6 +21,7 @@
 .tier-row input { padding: 8px 9px; }
 .warning-panel { background: #fffcf4; }
 .assumption-note { margin: 13px 0 0; color: #7d6b3e; font-size: 11px; line-height: 1.5; }
+.tax-verification { display:flex; gap:8px; align-items:flex-start; margin-top:14px; font-size:11px; font-weight:800; color:#65562f; }
 .secondary { border: 1px solid #d7dce7; background: #fff; color: #344057; border-radius: 10px; padding: 10px 14px; font-weight: 800; }
 .recommendation { padding: 24px; background: #182039; color: #fff; border-color: #182039; }
 .recommendation-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
@@ -34,6 +35,12 @@
 .metric-grid div { background: rgba(255,255,255,.06); border-radius: 12px; padding: 13px; }
 .metric-grid span { display: block; color: #aeb8d0; font-size: 10px; margin-bottom: 5px; }
 .metric-grid b { font-size: 15px; }
+.tax-breakdown { margin-top:18px; border-top:1px solid rgba(255,255,255,.13); padding-top:14px; }
+.tax-breakdown summary { cursor:pointer; color:#d7deef; font-size:12px; font-weight:800; }
+.tax-breakdown-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:12px; }
+.tax-breakdown-grid span { display:grid; gap:4px; padding:10px; border-radius:10px; background:rgba(255,255,255,.05); color:#aeb8d0; font-size:10px; }
+.tax-breakdown-grid b { color:#fff; font-size:12px; }
+.tax-assumptions { margin:12px 0 0; padding-left:18px; color:#aeb8d0; font-size:10px; line-height:1.5; }
 .table-card, .method-card { padding: 20px; }
 .table-title { display: flex; justify-content: space-between; align-items: end; margin-bottom: 12px; }
 .table-title h2 { margin: 0; font-size: 17px; }
@@ -48,4 +55,5 @@ td em { display: block; color: #5468ff; font-style: normal; font-size: 9px; font
 .method-card { color: #667188; font-size: 12px; line-height: 1.6; }
 .method-card h3 { color: #263149; margin-bottom: 6px; }
 .method-card p:last-child { margin-bottom: 0; }
-@media (max-width: 620px) { .field-grid, .metric-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .tax-breakdown-grid { grid-template-columns:1fr 1fr; } }
+@media (max-width: 620px) { .field-grid, .metric-grid, .tax-breakdown-grid { grid-template-columns: 1fr; } }

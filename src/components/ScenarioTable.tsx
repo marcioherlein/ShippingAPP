@@ -12,7 +12,7 @@ export default function ScenarioTable({ rows, selected }: Props) {
       <tbody>{rows.map((r) => {
         const chosen = selected?.quantity === r.quantity && selected?.mode === r.mode
         return <tr key={`${r.quantity}-${r.mode}`} className={chosen ? 'selected-row' : ''}>
-          <td><b>{r.quantity}</b>{chosen && <em>Recomendado</em>}</td>
+          <td><b>{r.quantity}</b>{chosen && <em>{selected?.affordable ? 'Recomendado' : 'Mínimo requerido'}</em>}</td>
           <td>{r.mode === 'air' ? 'Aéreo' : 'Marítimo'}</td>
           <td>{usd(r.landedUnitUsd)}</td><td>{usd(r.landedTotalUsd)}</td>
           <td>{pct(r.marginPct)}</td><td>{r.inventoryMonths.toFixed(1)}</td>

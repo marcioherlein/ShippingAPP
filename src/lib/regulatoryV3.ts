@@ -72,7 +72,7 @@ export function buildRegulatoryChecksV3(analysis: ProductAnalysis, client: Clien
       : client.declarationRoute === 'authorized_declarante' || client.declarationRoute === 'customs_broker'
         ? 'La destinación será gestionada por una persona autorizada. ARCA prevé el Perfil de Despachante de Aduanas/Declarante para quien actúe como declarante autorizado.'
         : 'Definir si la operación se gestionará directamente o mediante despachante/declarante autorizado antes de oficializar la destinación.',
-    sourceIds: ['customsCode', 'arcaProfile'], financialEffect: 'economic_cost',
+    sourceIds: ['customsCode', 'arcaProfile'], financialEffect: 'none',
   }
 
   const needsExternalDeclarant = client.declarationRoute === 'authorized_declarante' || client.declarationRoute === 'customs_broker'
@@ -80,7 +80,7 @@ export function buildRegulatoryChecksV3(analysis: ProductAnalysis, client: Clien
     id: 'declarant-profile', group: 'customs', status: triStatus(client.declarantProfile, true),
     title: client.declarantProfile === 'yes' ? 'Declarante / despachante con perfil operativo' : client.declarantProfile === 'no' ? 'Falta declarante habilitado' : 'Confirmar perfil del declarante / despachante',
     detail: 'Cuando actúa una persona autorizada como declarante, ARCA exige su alta en el Perfil de Despachante de Aduanas/Declarante.',
-    sourceIds: ['arcaProfile'], financialEffect: 'economic_cost',
+    sourceIds: ['arcaProfile'], financialEffect: 'none',
   } : null
 
   const stats: RegulatoryCheck = {

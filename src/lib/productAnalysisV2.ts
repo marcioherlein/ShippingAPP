@@ -6,7 +6,11 @@ export type ProductAnalysisV2 = ProductAnalysis & { customs: CustomsProfile }
 
 export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
   const base = await analyzeAlibabaUrl(url)
-  return { ...base, customs: customsProfileFor(base.product.category, base.product.originCountry) }
+  const customs = customsProfileFor(base.product.category, base.product.originCountry)
+  const market = customs.dutyRatePct === null
+    ? { ...base.market, estimatedPriceArs: null, source: `${base.market.source} · economics blocked pending customs classification` }
+    : base.market
+  return { ...base, market, customs }
 }
 
 export function applyAnalysisV2(current: Inputs, analysis: ProductAnalysisV2): Inputs {

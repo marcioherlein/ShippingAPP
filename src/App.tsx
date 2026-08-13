@@ -44,7 +44,7 @@ export default function App() {
           </details>
         </aside>
         <section className="results-column">
-          <div className="sticky-results"><div className="result-heading"><span className="eyebrow">Business case estimado</span><h2>{product || 'Producto sin nombre'}</h2></div><Recommendation result={selected} /></div>
+          <div className="sticky-results"><div className="result-heading"><span className="eyebrow">Business case estimado</span><h2>{product || 'Producto sin nombre'}</h2></div><Recommendation result={selected} capitalAvailableUsd={inputs.capitalAvailableUsd} /></div>
           <ScenarioTable rows={rows} selected={selected} />
           <section className="method-card"><h3>Cómo se calcula el score</h3><p>Margen 40% · eficiencia del capital 30% · inventario 20% · capacidad de financiar la operación 10%.</p><p>Los números son estimaciones para screening. ShippingAPP mostrará la calidad de cada input antes de tratarlo como dato verificado.</p></section>
         </section>

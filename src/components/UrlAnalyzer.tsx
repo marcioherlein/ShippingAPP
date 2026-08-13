@@ -1,17 +1,13 @@
 import React, { useState } from 'react'
-import { type CustomsProfile } from '../lib/customsClassification'
-import { type ProductAnalysis } from '../lib/productAnalysis'
-import { analyzeAlibabaUrlV2 } from '../lib/productAnalysisV2'
+import { analyzeAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
 
-type EnrichedAnalysis = ProductAnalysis & { customs?: CustomsProfile }
-type Props = { onAnalysis: (analysis: ProductAnalysis) => void; analysis?: ProductAnalysis | null }
+type Props = { onAnalysis: (analysis: ProductAnalysisV2) => void; analysis?: ProductAnalysisV2 | null }
 
 export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const enriched = analysis as EnrichedAnalysis | null | undefined
-  const customs = enriched?.customs
+  const customs = analysis?.customs
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -38,10 +34,10 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
       <div className="fact-grid">
         <div><span>Precio proveedor</span><b>{analysis.product.unitPriceUsd ? `USD ${analysis.product.unitPriceUsd.toFixed(2)}` : 'No verificado'}</b></div>
         <div><span>MOQ</span><b>{analysis.product.moq ? `${analysis.product.moq} u.` : 'Estimado'}</b></div>
-        <div><span>NCM candidato</span><b>{customs?.ncmCandidate || 'Pendiente'}</b></div>
-        <div><span>Derecho candidato</span><b>{customs?.dutyRatePct !== null && customs?.dutyRatePct !== undefined ? `${customs.dutyRatePct}%` : 'Pendiente'}</b></div>
+        <div><span>NCM candidato</span><b>{customs.ncmCandidate || 'Pendiente'}</b></div>
+        <div><span>Derecho candidato</span><b>{customs.dutyRatePct !== null ? `${customs.dutyRatePct}%` : 'Pendiente'}</b></div>
       </div>
-      {customs && <div className="customs-note"><b>{customs.dutyRateStatus === 'candidate' ? 'Clasificación para screening' : 'Clasificación pendiente'}</b><span>{customs.source} · Revisado {customs.reviewedAt}. Intervenciones: verificar en CIVUCE/VUCE.</span></div>}
+      <div className="customs-note"><b>{customs.dutyRateStatus === 'candidate' ? 'Clasificación para screening' : 'Clasificación pendiente'}</b><span>{customs.source} · Revisado {customs.reviewedAt}. Intervenciones: verificar en CIVUCE/VUCE.</span></div>
       <details className="assumptions"><summary>Ver supuestos y calidad de datos</summary><ul>{analysis.assumptions.map((item) => <li key={item}>{item}</li>)}</ul></details>
     </div>}
   </section>

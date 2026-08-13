@@ -2,17 +2,27 @@ import React from 'react'
 import { ars, pct, usd } from '../lib/format'
 import type { Result } from '../lib/types'
 
-type Props = { result?: Result }
+type Props = { result?: Result; capitalAvailableUsd?: number }
 
-export default function Recommendation({ result }: Props) {
+export default function Recommendation({ result, capitalAvailableUsd = 0 }: Props) {
   if (!result) return <section className="recommendation empty">Completá los datos para calcular escenarios.</section>
+
+  const shortfall = Math.max(0, result.landedTotalUsd - capitalAvailableUsd)
+  const mode = result.mode === 'air' ? '✈ Aéreo' : '⚓ Marítimo LCL'
 
   return <section className="recommendation">
     <div className="recommendation-top">
-      <div><span className="eyebrow">Cantidad recomendada</span><strong>{result.quantity} unidades</strong></div>
-      <div className="score"><span>Score</span><b>{result.score}</b><small>/100</small></div>
+      <div>
+        <span className="eyebrow">{result.affordable ? 'Cantidad recomendada' : 'No hay escenario financiable'}</span>
+        <strong>{result.affordable ? `${result.quantity} unidades` : `Faltan ${usd(shortfall)}`}</strong>
+      </div>
+      <div className="score"><span>Opportunity score</span><b>{result.score}</b><small>/100</small></div>
     </div>
-    <div className="mode">{result.mode === 'air' ? '✈ Aéreo' : '⚓ Marítimo LCL'} {result.affordable ? '· Dentro del capital' : '· Supera el capital'}</div>
+    <div className="mode">
+      {result.affordable
+        ? `${mode} · Dentro del capital`
+        : `${mode} · Pedido mínimo analizado: ${result.quantity} u. · Capital insuficiente`}
+    </div>
     <div className="metric-grid">
       <div><span>Landed / unidad</span><b>{usd(result.landedUnitUsd)}</b></div>
       <div><span>Margen bruto</span><b>{pct(result.marginPct)}</b></div>

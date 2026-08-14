@@ -7,6 +7,7 @@ describe('NCM intelligence adversarial rules', () => {
     const result = classifyNcm({ name: 'Carbon Fiber Padel Racket', category: 'Padel racket' })
     expect(result.status).toBe('candidate')
     expect(result.top?.code).toBe('9506.59.00')
+    expect(result.top?.simOpening?.code).toBe('9506.59.00.900Z')
   })
 
   it('does not classify a padel racket as a tennis racket', () => {
@@ -19,9 +20,21 @@ describe('NCM intelligence adversarial rules', () => {
     expect(result.top?.code).toBe('9506.51.00')
   })
 
+  it('does not force a tennis SIM material opening when composition wording is insufficient', () => {
+    const result = classifyNcm({ name: 'Carbon fiber tennis racket', category: 'Tennis racket' })
+    expect(result.top?.code).toBe('9506.51.00')
+    expect(result.top?.simOpening).toBeNull()
+  })
+
+  it('resolves badminton and squash to their specific official SIM openings', () => {
+    expect(classifyNcm({ name: 'Badminton racket', category: 'Badminton racket' }).top?.simOpening?.code).toBe('9506.59.00.100F')
+    expect(classifyNcm({ name: 'Squash racket', category: 'Squash racket' }).top?.simOpening?.code).toBe('9506.59.00.200L')
+  })
+
   it('keeps table tennis out of the similar-racket residual', () => {
     const result = classifyNcm({ name: 'Table tennis ping pong paddle', category: 'Table tennis equipment' })
     expect(result.top?.code).toBe('9506.40.00')
+    expect(result.top?.simOpening?.code).toBe('9506.40.00.200P')
   })
 
   it('does not force an unrelated product into chapter 95 pilot coverage', () => {
@@ -52,7 +65,13 @@ describe('NCM intelligence adversarial rules', () => {
   it('returns alternatives rather than pretending the top candidate is the only possibility', () => {
     const result = classifyNcm({ name: 'sport racket paddle', category: 'Racket sports equipment' })
     expect(result.status).toBe('candidate')
+    expect(result.confidence).toBe('low')
     expect(result.alternatives.length).toBeGreaterThan(0)
+  })
+
+  it('does not invent a SIM opening for an ambiguous racket', () => {
+    const result = classifyNcm({ name: 'sport racket paddle', category: 'Racket sports equipment' })
+    expect(result.top?.simOpening).toBeNull()
   })
 
   it('flags missing functional facts on ambiguous products', () => {

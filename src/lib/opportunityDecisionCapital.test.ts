@@ -63,4 +63,22 @@ describe('Opportunity Decision missing-capital / manual-evidence boundaries', ()
     expect(decision.summary).not.toContain('precio proveedor')
     expect(decision.result).toBeNull()
   })
+
+  it('uses the active case MOQ after a manual override instead of reverting to the extracted MOQ', () => {
+    const decision = buildOpportunityDecision({
+      analysis,
+      inputs: {
+        ...baseInputs,
+        quantities: [120, 180, 240],
+        priceTiers: [{ minQuantity: 120, unitPriceUsd: 20 }],
+        monthlyDemand: 0,
+      },
+      taxContext: context,
+      economicsReady: true,
+      manualOverrideActive: true,
+    })
+    expect(analysis.product.moq).toBe(300)
+    expect(decision.result?.quantity).toBe(120)
+    expect(decision.reasons.join(' ')).toContain('MOQ económico activo 120')
+  })
 })

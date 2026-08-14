@@ -24,10 +24,10 @@ export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV
     }
   }
 
-  const market = customs.dutyRatePct === null
-    ? { ...base.market, estimatedPriceArs: null, source: `${base.market.source} · economics blocked pending customs classification/tariff` }
-    : base.market
-  return { ...base, market, customs }
+  // Market evidence and customs evidence are independent. A missing/LOW duty
+  // blocks landed-cost economics through decisionReadiness, but must not erase
+  // a valid local-market observation that is still useful to the user.
+  return { ...base, customs }
 }
 
 export function applyAnalysisV2(current: Inputs, analysis: ProductAnalysisV2): Inputs {

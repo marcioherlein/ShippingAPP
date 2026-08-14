@@ -2,35 +2,27 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseNomencladorText } from './parse-arca-nomenclador.mjs'
 
-function normalize(value) {
-  return (value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+function uniqueText(parts) {
+  const seen = new Set()
+  const out = []
+  for (const part of parts.filter(Boolean)) {
+    const value = String(part).trim().replace(/\s+/g, ' ')
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    out.push(value)
+  }
+  return out.join(' > ')
 }
 
 function compactRecord(record) {
-  const simOpenings = record.simOpenings.map((opening) => ({
-    code: opening.code,
-    description: opening.description,
-    context: opening.context,
-  }))
-  const searchText = normalize([
-    ...record.context,
-    record.description,
-    ...simOpenings.flatMap((opening) => [...opening.context, opening.description]),
-  ].filter(Boolean).join(' '))
-
-  return {
-    code: record.code,
-    description: record.description,
-    context: record.context,
-    simOpenings,
-    searchText,
-  }
+  return [
+    record.code,
+    uniqueText([...record.context, record.description]),
+    record.simOpenings.map((opening) => [
+      opening.code,
+      uniqueText([...opening.context, opening.description]),
+    ]),
+  ]
 }
 
 export function buildSearchIndex(text, sourceFile) {
@@ -41,9 +33,10 @@ export function buildSearchIndex(text, sourceFile) {
       sourceFile: parsed.meta.sourceFile,
       sourceDate: parsed.meta.sourceDate,
       parserSchema: parsed.meta.parserSchema,
-      indexSchema: 1,
+      indexSchema: 2,
       recordCount: parsed.meta.recordCount,
       tariffDataIncluded: false,
+      recordShape: '[ncmCode,label,[[simCode,label],...]]',
     },
     records: parsed.records.map(compactRecord),
   }

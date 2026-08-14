@@ -110,7 +110,11 @@ export function classifyNcm(facts: NcmProductFacts): NcmClassification {
     .filter((candidate) => candidate.score > 0)
     .sort((a, b) => b.score - a.score)
 
-  if (!ranked.length || ranked[0].score < 25) {
+  // 20 points requires at least two short positive signals (for example
+  // “racket” + “paddle”) or one strong catalogue phrase. That is enough to
+  // surface a LOW-confidence candidate and alternatives, but still rejects
+  // generic terms such as “sports equipment” that score only once.
+  if (!ranked.length || ranked[0].score < 20) {
     return {
       status: 'missing', top: null, alternatives: [], confidence: 'missing',
       missingFacts: missingFactsFor(facts, null),

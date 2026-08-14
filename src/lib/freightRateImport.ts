@@ -43,6 +43,7 @@ export function parseFreightRateCsv(text: string): FreightImportResult {
 
   const records: FreightRateRecord[] = []
   const issues: FreightImportIssue[] = []
+  const ids = new Set<string>()
   for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
     const row = lineIndex + 1
     const cells = splitCsvLine(lines[lineIndex], separator)
@@ -61,25 +62,25 @@ export function parseFreightRateCsv(text: string): FreightImportResult {
     if (!['quote','rate_sheet','benchmark'].includes(sourceType)) { issues.push({ row, message: 'sourceType inválido.' }); continue }
     if (invalidNumber) { issues.push({ row, message: `${invalidNumber[0]} debe ser un número no negativo.` }); continue }
     if (!get('provider') || !get('origin') || !get('destination')) { issues.push({ row, message: 'Proveedor, origen y destino son obligatorios.' }); continue }
+    if (!Number.isFinite(Date.parse(get('receivedAt')))) { issues.push({ row, message: 'receivedAt debe ser una fecha válida.' }); continue }
 
+    const id = get('id') || `csv-${row}`
+    if (ids.has(id)) { issues.push({ row, message: `ID duplicado: ${id}.` }); continue }
     const record: FreightRateRecord = {
-      id: get('id') || `csv-${row}`,
+      id,
       provider: get('provider'), mode, origin: get('origin'), destination: get('destination'), currency: 'USD',
       rate: num(get('rate')), rateUnit, minimumUsd: num(get('minimumUsd')),
       originChargesUsd: num(get('originChargesUsd')), destinationChargesUsd: num(get('destinationChargesUsd')), otherSurchargesUsd: num(get('otherSurchargesUsd')),
       validFrom: get('validFrom'), validTo: get('validTo'), sourceType: sourceType as FreightRateRecord['sourceType'], receivedAt: get('receivedAt'),
     }
     if (freightRateStatus(record, record.validFrom) === 'invalid') { issues.push({ row, message: 'Fechas o campos de vigencia inválidos.' }); continue }
+    ids.add(id)
     records.push(record)
   }
   return { records, issues }
 }
 
-export type FreightRateSelection = {
-  record: FreightRateRecord
-  pendingFixedChargesUsd: number
-}
-
+export type FreightRateSelection = { record: FreightRateRecord; pendingFixedChargesUsd: number }
 const sourcePriority: Record<FreightRateRecord['sourceType'], number> = { quote: 3, rate_sheet: 2, benchmark: 1 }
 
 export function selectFreightRate(records: FreightRateRecord[], mode: FreightRateRecord['mode'], origin: string, destination: string, asOfIso: string): FreightRateSelection | null {

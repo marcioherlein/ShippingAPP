@@ -2,6 +2,7 @@ import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
 import { resolveSimOpening } from './simHydration'
+import { fetchBcraReferenceFx } from './bcraFx'
 
 type Env = { AI: { run: (model: string, input: unknown) => Promise<unknown> }; ASSETS: { fetch: (request: Request) => Promise<Response> } }
 
@@ -59,7 +60,13 @@ export default {
     const response = await baseWorker.fetch(request.clone(), env)
     if (!response.ok) return response
     const data = await response.json() as any
-    const market = await analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '')
+
+    // Independent evidence layers are fetched in parallel. A failure in one
+    // never fabricates data for the other.
+    const [market, fx] = await Promise.all([
+      analyzeArgentinaMarket(data.product?.name || '', data.product?.category || ''),
+      fetchBcraReferenceFx(),
+    ])
     const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
 
     if (market.status !== 'live' || !market.suggestedPriceArs) {
@@ -70,6 +77,14 @@ export default {
       data.assumptions = [...prior, `Precio local de screening basado en ${market.comparableCount} comparables activos.`, 'La demanda mensual sigue siendo un supuesto editable; no se infiere del stock público.']
       data.confidence = { ...data.confidence, market: `live-${market.confidence}` }
     }
+
+    data.fx = fx
+    data.assumptions = [
+      ...data.assumptions,
+      fx.status === 'live' && fx.arsPerUsd
+        ? `FX de screening: ARS ${fx.arsPerUsd.toFixed(4)}/USD · BCRA REF Comunicación A 3500 · ${fx.sourceDate}.`
+        : 'FX BCRA REF no disponible: economics bloqueado; no se reutiliza una tasa anterior.',
+    ]
 
     return json(data)
   },

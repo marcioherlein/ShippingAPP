@@ -11,6 +11,7 @@ import RegulatoryPanel from './components/RegulatoryPanel'
 import MarketEvidence from './components/MarketEvidence'
 import RobustQuantityPanel from './components/RobustQuantityPanel'
 import ExpertOverridePanel from './components/ExpertOverridePanel'
+import NcmIntelligencePanel from './components/NcmIntelligencePanel'
 import { defaultInputs } from './data/defaults'
 import { bestRowsV2, calculateV2, recommendV2 } from './lib/optimizerV2'
 import { applyAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
@@ -52,14 +53,15 @@ export default function App() {
   const missingAutomatic = analysis ? missingAutomaticEvidence(analysis) : []
 
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 0.9</span></header>
+    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.0</span></header>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
     {analysis && <MarketEvidence analysis={analysis} />}
+    {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
 
     {analysis && economicsReady && <>
       {expertOverride
         ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. ShippingAPP no convierte esos datos en validación aduanera; NCM/derecho permanecen en VERIFICAR.</div>
-        : <div className="analysis-banner"><b>Estimación instantánea.</b> Precio local basado en comparables publicados; la demanda no se infiere de Mercado Libre. Confirmá una hipótesis mensual antes de usar score o recomendación de cantidad. NCM, derecho, origen preferencial, intervenciones, cargos fijos de freight y requisitos técnicos permanecen sujetos a verificación cuando no exista evidencia suficiente.</div>}
+        : <div className="analysis-banner"><b>Estimación instantánea.</b> Precio local basado en comparables publicados; la demanda no se infiere de Mercado Libre. Confirmá una hipótesis mensual antes de usar score o recomendación de cantidad. La NCM proviene del catálogo restringido cargado en ShippingAPP y sigue siendo candidata; intervenciones, origen preferencial, reglamentos técnicos y medidas comerciales permanecen sujetos a verificación.</div>}
 
       <div className="workspace">
         <aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>
@@ -81,6 +83,6 @@ export default function App() {
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto y MOQ</span><p>Extraemos lo visible de la publicación.</p></div><div><b>02</b><span>Clasificación</span><p>Automática sólo para categorías soportadas; override manual trazable para el resto.</p></div><div><b>03</b><span>Mercado y logística</span><p>Comparables robustos + rate sheets validadas.</p></div><div><b>04</b><span>Decisión robusta</span><p>Se habilita sólo con una hipótesis explícita de demanda.</p></div></section>}
+    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto y MOQ</span><p>Extraemos lo visible de la publicación.</p></div><div><b>02</b><span>NCM Intelligence</span><p>Top candidatos restringidos al catálogo cargado + evidencia faltante.</p></div><div><b>03</b><span>Requirements</span><p>Arancel, CIVUCE, restricciones, reglamentos y origen a resolver.</p></div><div><b>04</b><span>Decisión robusta</span><p>Economics + readiness + cantidad con demanda explícita.</p></div></section>}
   </main>
 }

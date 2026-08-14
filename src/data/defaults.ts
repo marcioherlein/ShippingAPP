@@ -21,5 +21,6 @@ export const defaultInputs: Inputs = {
   marketPriceArs: 120000,
   usdArs: 1300,
   monthlyDemand: 40,
-  capitalAvailableUsd: 6000,
+  // 0 means “not provided”. Capital is optional and must never be fabricated.
+  capitalAvailableUsd: 0,
 }

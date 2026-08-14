@@ -14,17 +14,6 @@ function uniqueText(parts) {
   return out.join(' > ')
 }
 
-function compactRecord(record) {
-  return [
-    record.code,
-    uniqueText([...record.context, record.description]),
-    record.simOpenings.map((opening) => [
-      opening.code,
-      uniqueText([...opening.context, opening.description]),
-    ]),
-  ]
-}
-
 export function buildSearchIndex(text, sourceFile) {
   const parsed = parseNomencladorText(text, sourceFile)
   return {
@@ -33,12 +22,16 @@ export function buildSearchIndex(text, sourceFile) {
       sourceFile: parsed.meta.sourceFile,
       sourceDate: parsed.meta.sourceDate,
       parserSchema: parsed.meta.parserSchema,
-      indexSchema: 2,
+      indexSchema: 3,
       recordCount: parsed.meta.recordCount,
       tariffDataIncluded: false,
-      recordShape: '[ncmCode,label,[[simCode,label],...]]',
+      simOpeningsIncluded: false,
+      recordShape: '[ncmCode,label]',
     },
-    records: parsed.records.map(compactRecord),
+    records: parsed.records.map((record) => [
+      record.code,
+      uniqueText([...record.context, record.description]),
+    ]),
   }
 }
 

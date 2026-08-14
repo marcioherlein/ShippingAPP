@@ -47,6 +47,11 @@ describe('freight rate import adversarial rules', () => {
     expect(selectFreightRate(records, 'air', 'Shanghai', 'Buenos Aires', '2026-08-14')).toBeNull()
   })
 
+  it('does not use a rate that was received after the as-of date', () => {
+    const records = parse(row({ receivedAt: '2026-08-20' })).records
+    expect(selectFreightRate(records, 'air', 'Shanghai', 'Buenos Aires', '2026-08-14')).toBeNull()
+  })
+
   it('requires an exact normalized lane match', () => {
     const records = parse(row()).records
     expect(selectFreightRate(records, 'air', 'Shanghai', 'Cordoba', '2026-08-14')).toBeNull()

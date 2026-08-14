@@ -8,6 +8,7 @@ export type ExpertOverrideDraft = {
   unitWeightKg: number | null
   unitVolumeCbm: number | null
   marketPriceArs: number | null
+  monthlyDemand: number | null
   userCheckedOfficialSource: boolean
   sourceNote: string
 }
@@ -20,6 +21,7 @@ export type ExpertOverride = {
   unitWeightKg: number
   unitVolumeCbm: number
   marketPriceArs: number
+  monthlyDemand: number
   userCheckedOfficialSource: boolean
   sourceNote: string
   evidenceOrigin: 'user_supplied'
@@ -33,7 +35,7 @@ export type ExpertOverrideValidation = {
 
 export const emptyExpertOverride: ExpertOverrideDraft = {
   ncm: '', dutyRatePct: null, supplierUnitPriceUsd: null, moq: null,
-  unitWeightKg: null, unitVolumeCbm: null, marketPriceArs: null,
+  unitWeightKg: null, unitVolumeCbm: null, marketPriceArs: null, monthlyDemand: null,
   userCheckedOfficialSource: false, sourceNote: '',
 }
 
@@ -56,9 +58,10 @@ export function validateExpertOverride(draft: ExpertOverrideDraft): ExpertOverri
   if (!positive(draft.unitWeightKg)) errors.unitWeightKg = 'Ingresá peso embalado por unidad.'
   if (!positive(draft.unitVolumeCbm)) errors.unitVolumeCbm = 'Ingresá volumen embalado por unidad.'
   if (!positive(draft.marketPriceArs)) errors.marketPriceArs = 'Ingresá un benchmark local positivo.'
+  if (!positive(draft.monthlyDemand)) errors.monthlyDemand = 'Ingresá una hipótesis explícita de ventas mensuales.'
   if (draft.userCheckedOfficialSource && draft.sourceNote.trim().length < 5) errors.sourceNote = 'Indicá qué fuente oficial verificaste.'
 
-  if (Object.keys(errors).length || !ncm || draft.dutyRatePct === null || draft.supplierUnitPriceUsd === null || draft.moq === null || draft.unitWeightKg === null || draft.unitVolumeCbm === null || draft.marketPriceArs === null) return { valid: false, errors }
+  if (Object.keys(errors).length || !ncm || draft.dutyRatePct === null || draft.supplierUnitPriceUsd === null || draft.moq === null || draft.unitWeightKg === null || draft.unitVolumeCbm === null || draft.marketPriceArs === null || draft.monthlyDemand === null) return { valid: false, errors }
 
   return {
     valid: true,
@@ -71,6 +74,7 @@ export function validateExpertOverride(draft: ExpertOverrideDraft): ExpertOverri
       unitWeightKg: draft.unitWeightKg,
       unitVolumeCbm: draft.unitVolumeCbm,
       marketPriceArs: draft.marketPriceArs,
+      monthlyDemand: draft.monthlyDemand,
       userCheckedOfficialSource: draft.userCheckedOfficialSource,
       sourceNote: draft.sourceNote.trim(),
       evidenceOrigin: 'user_supplied',
@@ -88,6 +92,7 @@ export function applyExpertOverride(inputs: Inputs, override: ExpertOverride): I
     weightKg: override.unitWeightKg,
     volumeCbm: override.unitVolumeCbm,
     marketPriceArs: override.marketPriceArs,
+    monthlyDemand: override.monthlyDemand,
     dutyRatePct: override.dutyRatePct,
     dutyRateVerified: false,
   }

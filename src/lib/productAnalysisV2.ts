@@ -17,7 +17,10 @@ export function applyAnalysisV2(current: Inputs, analysis: ProductAnalysisV2): I
   const base = applyAnalysis(current, analysis)
   return {
     ...base,
-    dutyRatePct: analysis.customs.dutyRatePct ?? current.dutyRatePct,
+    // A new scan must replace the previous product's customs state. When the
+    // classifier deliberately withholds duty (missing/LOW confidence), reset
+    // the numeric field to a neutral sentinel instead of retaining stale duty.
+    dutyRatePct: analysis.customs.dutyRatePct ?? 0,
     dutyRateVerified: false,
     statisticsRatePct: analysis.customs.statisticsRatePct,
   }

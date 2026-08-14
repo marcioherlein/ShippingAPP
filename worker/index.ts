@@ -138,7 +138,7 @@ async function aiExtract(ai: AI, source: string): Promise<Extracted> {
   }
 }
 
-function benchmark(category: string | null | undefined) {
+export function benchmark(category: string | null | undefined) {
   const c = (category || '').toLowerCase()
   if (c.includes('padel') || c.includes('paddle racket') || c.includes('pádel')) {
     return {
@@ -146,22 +146,23 @@ function benchmark(category: string | null | undefined) {
       packedWeightKg: 0.65,
       volumeCbm: 0.006,
       marketPriceArs: 220000,
-      monthlyDemand: 40,
+      monthlyDemand: 0,
       defaultMoq: 300,
     }
   }
   return {
     key: 'generic',
-    packedWeightKg: 0.5,
-    volumeCbm: 0.004,
+    packedWeightKg: 0,
+    volumeCbm: 0,
     marketPriceArs: 0,
-    monthlyDemand: 20,
+    monthlyDemand: 0,
     defaultMoq: null,
   }
 }
 
-function quantitiesFromMoq(moq: number | null) {
-  const base = Math.max(1, Math.round(moq || 100))
+export function quantitiesFromMoq(moq: number | null) {
+  if (!moq || moq <= 0) return []
+  const base = Math.max(1, Math.round(moq))
   return [...new Set([base, Math.ceil(base * 1.5 / 10) * 10, base * 2, base * 3])]
 }
 
@@ -201,18 +202,24 @@ async function analyze(rawUrl: string, env: Env) {
   const b = benchmark(category)
   const moq = detectedMoq || b.defaultMoq
   const packedWeightKg = ai.weightKg || b.packedWeightKg
+  const originCountry = ai.originCountry || ''
   const assumptions: string[] = []
+
   if (!fetched) assumptions.push('Alibaba no expuso el contenido completo; parte del perfil se estimó desde el link.')
   if (!ai.category && category) assumptions.push(`Categoría detectada por reglas del título/descripción: ${category}.`)
-  if (!ai.weightKg) assumptions.push(`Peso logístico estimado con benchmark de categoría: ${b.packedWeightKg} kg/unidad.`)
-  assumptions.push(`Volumen logístico estimado con benchmark de categoría: ${b.volumeCbm} m³/unidad.`)
+  if (!ai.weightKg && b.packedWeightKg > 0) assumptions.push(`Peso logístico estimado con benchmark de categoría: ${b.packedWeightKg} kg/unidad.`)
+  if (!ai.weightKg && b.packedWeightKg <= 0) assumptions.push('Peso embalado no verificado; no se aplica un fallback genérico.')
+  if (b.volumeCbm > 0) assumptions.push(`Volumen logístico estimado con benchmark de categoría: ${b.volumeCbm} m³/unidad.`)
+  else assumptions.push('Volumen embalado no verificado; no se aplica un fallback genérico.')
   if (!unitPriceUsd) assumptions.push('No se pudo verificar el precio automáticamente; el análisis económico requiere una estimación de precio.')
   if (!detectedMoq && moq) assumptions.push(`MOQ estimado con benchmark de categoría: ${moq} unidades.`)
-  if (!moq) assumptions.push('MOQ no verificado; se usa 100 unidades como base de escenarios.')
+  if (!moq) assumptions.push('MOQ no verificado; no se generan cantidades de escenario hasta contar con una hipótesis explícita.')
   if (b.marketPriceArs) assumptions.push(`Precio argentino inicial estimado con benchmark de categoría: ARS ${b.marketPriceArs.toLocaleString('es-AR')}.`)
   else assumptions.push('Precio de mercado argentino aún no estimado para esta categoría.')
+  if (!originCountry) assumptions.push('País de origen no verificado; ShippingAPP no presume China ni aplica preferencias por origen.')
+  assumptions.push('Demanda mensual no observada: debe ser informada explícitamente por el usuario antes de recomendar cantidad.')
 
-  const verifiedCount = [fetched, !!unitPriceUsd, !!detectedMoq, !!ai.weightKg, !!ai.category].filter(Boolean).length
+  const verifiedCount = [fetched, !!unitPriceUsd, !!detectedMoq, !!ai.weightKg, !!ai.category, !!originCountry].filter(Boolean).length
   const fallbackCount = [!!category && !ai.category, !!moq && !detectedMoq, b.key !== 'generic'].filter(Boolean).length
   const overallConfidence = Math.min(92, 38 + verifiedCount * 10 + fallbackCount * 4)
 
@@ -226,19 +233,19 @@ async function analyze(rawUrl: string, env: Env) {
       moq,
       packedWeightKg,
       volumeCbm: b.volumeCbm,
-      originCountry: ai.originCountry || 'China (estimado)',
+      originCountry,
       imageUrl,
     },
     market: {
       estimatedPriceArs: b.marketPriceArs || null,
-      estimatedMonthlyDemand: b.monthlyDemand,
+      estimatedMonthlyDemand: 0,
       source: b.key === 'generic' ? 'Sin benchmark específico' : 'ShippingAPP category benchmark',
     },
     suggestedQuantities: quantitiesFromMoq(moq),
     confidence: {
       overall: overallConfidence,
       productSource: fetched ? 'verified/estimated' : 'estimated',
-      logistics: ai.weightKg ? 'medium' : b.key === 'generic' ? 'low' : 'benchmark',
+      logistics: ai.weightKg ? 'medium' : b.key === 'generic' ? 'missing' : 'benchmark',
       market: b.marketPriceArs ? 'benchmark' : 'missing',
     },
     assumptions,

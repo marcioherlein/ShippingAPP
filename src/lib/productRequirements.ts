@@ -29,11 +29,16 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
 
   const simCandidate = customs.simOpeningCandidate
   const simConfidence = customs.simOpeningConfidence ?? 'missing'
+  const simUsableForLookup = !!simCandidate && (simConfidence === 'high' || simConfidence === 'medium')
+  const customsLookupCode = simUsableForLookup ? simCandidate!.code : ncm
   const simRequirement: ProductRequirement = simCandidate
     ? {
         id: 'sim-opening', status: 'verify', title: `Confirmar apertura SIM candidata ${simCandidate.code}`,
         explanation: `ShippingAPP encontró una apertura oficial dentro de la NCM ${ncm}: ${simCandidate.description}. Confidence ${simConfidence.toUpperCase()}. La apertura SIM mejora la precisión declarativa y de intervenciones, pero la salida automática no constituye una clasificación vinculante.`,
-        nextStep: 'Contrastar la apertura con la ficha técnica y la nomenclatura vigente antes de oficializar la destinación o resolver intervenciones asociadas.', source: 'ARCA',
+        nextStep: simUsableForLookup
+          ? 'Contrastar la apertura con la ficha técnica y la nomenclatura vigente antes de oficializar la destinación o resolver intervenciones asociadas.'
+          : 'La apertura puede mostrarse como hipótesis, pero por su baja confianza no se usa como referencia automática más específica; fortalecer evidencia antes de apoyarse en el sufijo.',
+        source: 'ARCA',
       }
     : {
         id: 'sim-opening', status: 'verify', title: 'Confirmar si corresponde una apertura SIM más específica',
@@ -53,12 +58,12 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
     {
       id: 'interventions', status: 'verify', title: 'Consultar intervenciones previas y organismos',
       explanation: 'CIVUCE vincula posiciones arancelarias con intervenciones potenciales de organismos. La NCM o apertura SIM sola no demuestra que una intervención aplique o no al producto concreto.',
-      nextStep: `Consultar ${simCandidate?.code || ncm} para importación en CIVUCE y revisar cada intervención contra las características del producto.`, source: 'CIVUCE',
+      nextStep: `Consultar ${customsLookupCode} para importación en CIVUCE y revisar cada intervención contra las características del producto.${simCandidate && !simUsableForLookup ? ` La SIM ${simCandidate.code} queda como hipótesis LOW y no reemplaza la NCM en este paso.` : ''}`, source: 'CIVUCE',
     },
     {
       id: 'prohibitions', status: 'verify', title: 'Revisar prohibiciones y restricciones asociadas',
       explanation: 'CIVUCE informa normativa sobre prohibiciones potencialmente asociada a la mercadería. ShippingAPP no interpreta “sin dato” como “sin prohibición”.',
-      nextStep: `Revisar prohibiciones de importación vinculadas a ${simCandidate?.code || ncm} y su alcance material.`, source: 'CIVUCE',
+      nextStep: `Revisar prohibiciones de importación vinculadas a ${customsLookupCode} y su alcance material.`, source: 'CIVUCE',
     },
     {
       id: 'trade-remedies', status: 'verify', title: 'Revisar antidumping, compensatorios y medidas específicas',

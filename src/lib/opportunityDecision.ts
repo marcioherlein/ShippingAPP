@@ -27,6 +27,7 @@ type DecisionArgs = {
   taxContext: ScenarioTaxContext
   economicsReady: boolean
   marketP25Ars?: number | null
+  manualOverrideActive?: boolean
 }
 
 const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, Number.isFinite(value) ? value : min))
@@ -195,9 +196,12 @@ function robustDecision(analysis: ProductAnalysisV2, inputs: Inputs, context: Sc
   }
 }
 
-export function buildOpportunityDecision({ analysis, inputs, taxContext, economicsReady, marketP25Ars }: DecisionArgs): OpportunityDecision {
+export function buildOpportunityDecision({ analysis, inputs, taxContext, economicsReady, marketP25Ars, manualOverrideActive = false }: DecisionArgs): OpportunityDecision {
   if (!analysis) return incompleteDecision(null, ['producto analizado'])
-  if (!economicsReady) return incompleteDecision(analysis, missingAutomaticEvidence(analysis))
+  if (!economicsReady) {
+    const missing = manualOverrideActive ? ['USD/ARS BCRA'] : missingAutomaticEvidence(analysis)
+    return incompleteDecision(analysis, missing)
+  }
   if (!Number.isFinite(inputs.monthlyDemand) || inputs.monthlyDemand <= 0) return instantDecision(analysis, inputs, taxContext)
   return robustDecision(analysis, inputs, taxContext, marketP25Ars)
 }

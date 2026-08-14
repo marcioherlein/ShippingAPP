@@ -1,7 +1,9 @@
 import { classifyNcm, type NcmCandidate } from './ncmClassifier'
+import type { NcmSimOpening } from './ncmCatalog'
 
 export type CustomsProfile = {
   ncmCandidate: string | null
+  simOpeningCandidate: NcmSimOpening | null
   classificationConfidence: 'high' | 'medium' | 'low' | 'missing'
   dutyRatePct: number | null
   dutyRateStatus: 'candidate' | 'missing'
@@ -36,13 +38,14 @@ export function customsProfileFor(
   if (classification.status === 'candidate' && classification.top) {
     return {
       ncmCandidate: classification.top.code,
+      simOpeningCandidate: classification.top.simOpening,
       classificationConfidence: classification.confidence,
       dutyRatePct: classification.top.dutyRatePct,
       dutyRateStatus: classification.top.dutyRatePct === null ? 'missing' : 'candidate',
       statisticsRatePct: 3,
       statisticsPreferenceStatus,
       interventionsStatus: 'verify_vuce',
-      source: `${classification.catalog.sourceLabel}. Catálogo seed parcial; NCM ${classification.top.code} candidata, no dictamen. Verificar Arancel Integrado/CIVUCE vigente.${originNote}`,
+      source: `${classification.catalog.sourceLabel}. Catálogo seed parcial; NCM ${classification.top.code} candidata, no dictamen.${classification.top.simOpening ? ` Apertura SIM candidata ${classification.top.simOpening.code}.` : ''} Verificar Arancel Integrado/CIVUCE vigente.${originNote}`,
       reviewedAt: REVIEWED_AT,
       description: classification.top.description,
       alternatives: classification.alternatives,
@@ -55,6 +58,7 @@ export function customsProfileFor(
 
   return {
     ncmCandidate: null,
+    simOpeningCandidate: null,
     classificationConfidence: 'missing',
     dutyRatePct: null,
     dutyRateStatus: 'missing',

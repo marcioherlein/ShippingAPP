@@ -1,5 +1,7 @@
+import { readAlibabaSource, type BrowserRun } from './alibabaSource'
+
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
-type Env = { AI: AI; ASSETS: { fetch: (request: Request) => Promise<Response> } }
+type Env = { AI: AI; ASSETS: { fetch: (request: Request) => Promise<Response> }; BROWSER: BrowserRun }
 
 type Extracted = {
   name?: string | null
@@ -168,22 +170,9 @@ export function quantitiesFromMoq(moq: number | null) {
 
 async function analyze(rawUrl: string, env: Env) {
   const url = normalizeAlibabaUrl(rawUrl)
-  let html = ''
-  let fetched = false
-  try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/0.2.1; +https://shippingapp.workers.dev)',
-        'accept': 'text/html,application/xhtml+xml',
-        'accept-language': 'en-US,en;q=0.8',
-      },
-      redirect: 'follow',
-    })
-    if (response.ok) {
-      html = await response.text()
-      fetched = html.length > 500
-    }
-  } catch { /* fallback below */ }
+  const sourceRead = await readAlibabaSource(url, env.BROWSER)
+  const html = sourceRead.html
+  const fetched = sourceRead.quality > 0
 
   const structured = fetched ? findProductJsonLd(html) : {}
   const title = fetched ? (meta(html, 'og:title') || meta(html, 'twitter:title')) : null
@@ -205,7 +194,9 @@ async function analyze(rawUrl: string, env: Env) {
   const originCountry = ai.originCountry || ''
   const assumptions: string[] = []
 
-  if (!fetched) assumptions.push('Alibaba no expuso el contenido completo; parte del perfil se estimó desde el link.')
+  if (sourceRead.mode === 'browser') assumptions.push('Alibaba requirió Browser Run: el HTML renderizado mejoró la lectura directa.')
+  if (sourceRead.mode === 'partial') assumptions.push('Alibaba sólo expuso contenido parcial; Browser Run no logró mejorar la lectura.')
+  if (sourceRead.mode === 'blocked') assumptions.push('Alibaba bloqueó o no expuso contenido utilizable tanto al fetch directo como a Browser Run; el perfil se limita a lo identificable desde el link.')
   if (!ai.category && category) assumptions.push(`Categoría detectada por reglas del título/descripción: ${category}.`)
   if (!ai.weightKg && b.packedWeightKg > 0) assumptions.push(`Peso logístico estimado con benchmark de categoría: ${b.packedWeightKg} kg/unidad.`)
   if (!ai.weightKg && b.packedWeightKg <= 0) assumptions.push('Peso embalado no verificado; no se aplica un fallback genérico.')
@@ -219,13 +210,22 @@ async function analyze(rawUrl: string, env: Env) {
   if (!originCountry) assumptions.push('País de origen no verificado; ShippingAPP no presume China ni aplica preferencias por origen.')
   assumptions.push('Demanda mensual no observada: debe ser informada explícitamente por el usuario antes de recomendar cantidad.')
 
-  const verifiedCount = [fetched, !!unitPriceUsd, !!detectedMoq, !!ai.weightKg, !!ai.category, !!originCountry].filter(Boolean).length
+  const strongSourceRead = sourceRead.mode === 'direct' || sourceRead.mode === 'browser'
+  const verifiedCount = [strongSourceRead, !!unitPriceUsd, !!detectedMoq, !!ai.weightKg, !!ai.category, !!originCountry].filter(Boolean).length
   const fallbackCount = [!!category && !ai.category, !!moq && !detectedMoq, b.key !== 'generic'].filter(Boolean).length
   const overallConfidence = Math.min(92, 38 + verifiedCount * 10 + fallbackCount * 4)
 
   return {
     sourceUrl: url.toString(),
     fetched,
+    sourceRead: {
+      mode: sourceRead.mode,
+      quality: sourceRead.quality,
+      directStatus: sourceRead.directStatus,
+      browserAttempted: sourceRead.browserAttempted,
+      browserMsUsed: sourceRead.browserMsUsed,
+      reason: sourceRead.reason,
+    },
     product: {
       name,
       category: category || 'Sin clasificar',
@@ -244,7 +244,7 @@ async function analyze(rawUrl: string, env: Env) {
     suggestedQuantities: quantitiesFromMoq(moq),
     confidence: {
       overall: overallConfidence,
-      productSource: fetched ? 'verified/estimated' : 'estimated',
+      productSource: sourceRead.mode,
       logistics: ai.weightKg ? 'medium' : b.key === 'generic' ? 'missing' : 'benchmark',
       market: b.marketPriceArs ? 'benchmark' : 'missing',
     },

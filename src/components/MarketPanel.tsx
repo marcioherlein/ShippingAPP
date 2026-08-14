@@ -16,11 +16,11 @@ export default function MarketPanel({ inputs, setInputs }: Props) {
       </div>
       <div className="field-grid">
         <NumberField label="Precio de venta local" value={inputs.marketPriceArs} prefix="$" suffix="ARS" onChange={(value) => setInputs({ ...inputs, marketPriceArs: value })} />
-        <NumberField label="Tipo de cambio" value={inputs.usdArs} prefix="$" suffix="ARS/USD" onChange={(value) => setInputs({ ...inputs, usdArs: value })} />
+        <NumberField label="Tipo de cambio BCRA REF" value={inputs.usdArs} step={0.0001} prefix="$" suffix="ARS/USD" readOnly onChange={() => {}} />
         <NumberField label="Hipótesis de demanda mensual" value={inputs.monthlyDemand} suffix="unid." onChange={(value) => setInputs({ ...inputs, monthlyDemand: Math.max(0, value) })} />
         <NumberField label="Capital disponible" value={inputs.capitalAvailableUsd} prefix="USD" onChange={(value) => setInputs({ ...inputs, capitalAvailableUsd: value })} />
       </div>
-      <p className="assumption-note">La demanda no se infiere de stock ni publicaciones de Mercado Libre. Ingresá tu propia hipótesis para habilitar meses de inventario, Economic score y recomendación de cantidad.</p>
+      <p className="assumption-note">El FX se hidrata automáticamente desde BCRA REF / Comunicación A 3500 y no se edita silenciosamente. La demanda no se infiere de stock ni publicaciones de Mercado Libre: ingresá tu propia hipótesis para habilitar inventario, Robust score y recomendación de cantidad.</p>
     </section>
   )
 }

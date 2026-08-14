@@ -9,6 +9,7 @@ import UrlAnalyzer from './components/UrlAnalyzer'
 import ClientChecklist from './components/ClientChecklist'
 import RegulatoryPanel from './components/RegulatoryPanel'
 import MarketEvidence from './components/MarketEvidence'
+import FxEvidence from './components/FxEvidence'
 import RobustQuantityPanel from './components/RobustQuantityPanel'
 import ExpertOverridePanel from './components/ExpertOverridePanel'
 import NcmIntelligencePanel from './components/NcmIntelligencePanel'
@@ -62,6 +63,7 @@ export default function App() {
 
     {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
     {analysis && <MarketEvidence analysis={analysis} />}
+    {analysis && <FxEvidence analysis={analysis} />}
     {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
 
     {analysis && economicsReady && <>

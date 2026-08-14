@@ -184,13 +184,14 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
   }
 
   if (localStrong && (!fullStrong || local.ncmCandidate !== full.code)) {
+    const fullAlternative: NcmCandidate | null = full.code !== local.ncmCandidate ? {
+      code: full.code, description: full.label, dutyRatePct: null, score: 0,
+      reasons: ['Alternativa full-catalog de menor confianza.'], simOpening: null,
+    } : null
     const kept = {
       ...local,
       source: `${local.source} Full-catalog devolvió ${full.code} con confidence ${full.confidence}; no desplaza el seed especializado fuerte.`,
-      alternatives: addUniqueAlternative([...local.alternatives], {
-        code: full.code, description: full.label, dutyRatePct: null, score: 0,
-        reasons: ['Alternativa full-catalog de menor confianza.'], simOpening: null,
-      }).slice(0, 4),
+      alternatives: addUniqueAlternative([...local.alternatives], fullAlternative).slice(0, 4),
       rationale: [...local.rationale, ...full.rationale],
       missingFacts: [...new Set([...local.missingFacts, ...full.missingFacts])],
       catalogScope: `Full ARCA snapshot (${full.catalogRecordCount} NCM) + seed especializado`,

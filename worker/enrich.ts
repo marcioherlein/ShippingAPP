@@ -1,6 +1,7 @@
 import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
+import { resolveSimOpening } from './simHydration'
 
 type Env = { AI: { run: (model: string, input: unknown) => Promise<unknown> }; ASSETS: { fetch: (request: Request) => Promise<Response> } }
 
@@ -30,7 +31,22 @@ export default {
         const facts = validFacts(await request.json())
         if (!facts) return json({ error: 'Faltan datos del producto para clasificar.' }, 400)
         const index = await loadNcmIndex(request.url, env.ASSETS)
-        return json(await classifyFullNcm(index, env.AI, facts))
+        const classification = await classifyFullNcm(index, env.AI, facts)
+        if (classification.status !== 'candidate' || !classification.code) return json({ ...classification, sim: null })
+
+        try {
+          const sim = await resolveSimOpening(request.url, env.ASSETS, env.AI, classification.code, facts)
+          return json({ ...classification, sim })
+        } catch (error) {
+          return json({
+            ...classification,
+            sim: {
+              status: 'unavailable', ncmCode: classification.code, ncmLabel: classification.label,
+              candidate: null, alternatives: [], confidence: 'missing', missingFacts: [], sourceDate: classification.sourceDate,
+              rationale: [`No se pudo hidratar la apertura SIM: ${error instanceof Error ? error.message : 'unknown error'}. La NCM candidata se conserva; no se inventa un sufijo.`],
+            },
+          })
+        }
       } catch (error) {
         return json({
           error: 'No pudimos consultar el índice NCM completo. ShippingAPP debe degradar al clasificador local sin inventar una posición.',

@@ -19,12 +19,13 @@ export default function NcmIntelligencePanel({ analysis }: { analysis: ProductAn
         <div><span className="eyebrow">NCM Intelligence · MVP 1.0</span><h2>{customs.ncmCandidate ? `NCM candidata ${customs.ncmCandidate}` : 'Clasificación todavía no resuelta'}</h2></div>
         <span className={`confidence ${customs.classificationConfidence === 'high' ? 'good' : 'warning'}`}>{customs.classificationConfidence.toUpperCase()}</span>
       </div>
-      <p className="reg-intro">El clasificador está restringido al catálogo versionado cargado en ShippingAPP. No puede inventar una posición fuera de ese catálogo. La cobertura actual es parcial y la salida sigue siendo screening, no una clasificación vinculante.</p>
+      <p className="reg-intro">El clasificador está restringido al catálogo oficial versionado cargado en ShippingAPP. No puede inventar una posición fuera de ese catálogo. La cobertura clasificatoria actual es parcial y la salida sigue siendo screening, no una clasificación vinculante.</p>
 
       <div className="fact-grid">
-        <div><span>Descripción</span><b>{customs.description || 'Sin posición candidata'}</b></div>
+        <div><span>Descripción NCM</span><b>{customs.description || 'Sin posición candidata'}</b></div>
+        <div><span>Apertura SIM candidata</span><b>{customs.simOpeningCandidate ? `${customs.simOpeningCandidate.code} · ${customs.simOpeningCandidate.description}` : 'No resuelta automáticamente'}</b></div>
         <div><span>Derecho candidato</span><b>{customs.dutyRatePct === null ? 'Pendiente' : `${customs.dutyRatePct}%`}</b></div>
-        <div><span>Fuente catálogo</span><b>{customs.catalogSourceDate}</b></div>
+        <div><span>Fuente oficial</span><b>ARCA · {customs.catalogSourceDate}</b></div>
         <div><span>Intervenciones</span><b>VERIFICAR CIVUCE</b></div>
       </div>
 

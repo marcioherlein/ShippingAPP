@@ -19,7 +19,8 @@ export const defaultInputs: Inputs = {
   gainsPerceptionPct: 6,
   iibbPerceptionPct: 0,
   marketPriceArs: 120000,
-  usdArs: 1300,
+  // 0 means “not loaded”. Runtime scans must hydrate BCRA REF evidence.
+  usdArs: 0,
   monthlyDemand: 40,
   // 0 means “not provided”. Capital is optional and must never be fabricated.
   capitalAvailableUsd: 0,

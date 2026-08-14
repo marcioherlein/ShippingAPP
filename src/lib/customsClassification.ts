@@ -36,16 +36,22 @@ export function customsProfileFor(
 
   const classification = classifyNcm({ name: productName, category })
   if (classification.status === 'candidate' && classification.top) {
+    const confidenceAllowsEconomics = classification.confidence === 'high' || classification.confidence === 'medium'
+    const usableDuty = confidenceAllowsEconomics ? classification.top.dutyRatePct : null
+    const confidenceNote = confidenceAllowsEconomics
+      ? ''
+      : ' Confidence LOW: el candidato se muestra para investigación, pero su derecho no alimenta economics hasta validación/override.'
+
     return {
       ncmCandidate: classification.top.code,
       simOpeningCandidate: classification.top.simOpening,
       classificationConfidence: classification.confidence,
-      dutyRatePct: classification.top.dutyRatePct,
-      dutyRateStatus: classification.top.dutyRatePct === null ? 'missing' : 'candidate',
+      dutyRatePct: usableDuty,
+      dutyRateStatus: usableDuty === null ? 'missing' : 'candidate',
       statisticsRatePct: 3,
       statisticsPreferenceStatus,
       interventionsStatus: 'verify_vuce',
-      source: `${classification.catalog.sourceLabel}. Catálogo seed parcial; NCM ${classification.top.code} candidata, no dictamen.${classification.top.simOpening ? ` Apertura SIM candidata ${classification.top.simOpening.code}.` : ''} Verificar Arancel Integrado/CIVUCE vigente.${originNote}`,
+      source: `${classification.catalog.sourceLabel}. Catálogo seed parcial; NCM ${classification.top.code} candidata, no dictamen.${classification.top.simOpening ? ` Apertura SIM candidata ${classification.top.simOpening.code}.` : ''}${confidenceNote} Verificar Arancel Integrado/CIVUCE vigente.${originNote}`,
       reviewedAt: REVIEWED_AT,
       description: classification.top.description,
       alternatives: classification.alternatives,

@@ -86,7 +86,17 @@ const sourcePriority: Record<FreightRateRecord['sourceType'], number> = { quote:
 export function selectFreightRate(records: FreightRateRecord[], mode: FreightRateRecord['mode'], origin: string, destination: string, asOfIso: string): FreightRateSelection | null {
   const o = normalizeText(origin)
   const d = normalizeText(destination)
-  const eligible = records.filter((rate) => rate.mode === mode && normalizeText(rate.origin) === o && normalizeText(rate.destination) === d && freightRateStatus(rate, asOfIso) === 'valid')
+  const asOf = Date.parse(asOfIso)
+  if (!Number.isFinite(asOf)) return null
+  const eligible = records.filter((rate) => {
+    const receivedAt = Date.parse(rate.receivedAt)
+    return rate.mode === mode
+      && normalizeText(rate.origin) === o
+      && normalizeText(rate.destination) === d
+      && freightRateStatus(rate, asOfIso) === 'valid'
+      && Number.isFinite(receivedAt)
+      && receivedAt <= asOf
+  })
   eligible.sort((a, b) => sourcePriority[b.sourceType] - sourcePriority[a.sourceType] || Date.parse(b.receivedAt) - Date.parse(a.receivedAt) || a.provider.localeCompare(b.provider))
   const record = eligible[0]
   return record ? { record, pendingFixedChargesUsd: quoteFixedCharges(record) } : null

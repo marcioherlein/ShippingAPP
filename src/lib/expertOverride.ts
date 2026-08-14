@@ -82,13 +82,20 @@ export function validateExpertOverride(draft: ExpertOverrideDraft): ExpertOverri
   }
 }
 
+function quantitiesFromManualMoq(moq: number) {
+  return [...new Set([
+    moq,
+    Math.ceil(moq * 1.5 / 10) * 10,
+    moq * 2,
+    moq * 3,
+  ])].sort((a, b) => a - b)
+}
+
 export function applyExpertOverride(inputs: Inputs, override: ExpertOverride): Inputs {
-  const existingQuantities = inputs.quantities.filter((quantity) => Number.isFinite(quantity) && quantity >= override.moq)
-  const quantities = [...new Set([override.moq, ...existingQuantities])].sort((a, b) => a - b)
   return {
     ...inputs,
     priceTiers: [{ minQuantity: override.moq, unitPriceUsd: override.supplierUnitPriceUsd }],
-    quantities,
+    quantities: quantitiesFromManualMoq(override.moq),
     weightKg: override.unitWeightKg,
     volumeCbm: override.unitVolumeCbm,
     marketPriceArs: override.marketPriceArs,

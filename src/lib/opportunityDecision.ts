@@ -77,7 +77,11 @@ function incompleteDecision(analysis: ProductAnalysisV2 | null, missing: string[
 }
 
 function instantDecision(analysis: ProductAnalysisV2, inputs: Inputs, context: ScenarioTaxContext): OpportunityDecision {
-  const moq = Math.max(1, analysis.product.moq || Math.min(...inputs.quantities.filter((q) => q > 0)))
+  const activeQuantities = inputs.quantities.filter((q) => Number.isFinite(q) && q > 0)
+  if (!activeQuantities.length) return incompleteDecision(analysis, ['cantidad / MOQ activo'])
+  // The economic case may have been replaced by Expert Override. Use the active
+  // scenario floor rather than silently reverting to the originally extracted MOQ.
+  const moq = Math.min(...activeQuantities)
   const result = cheapestMoqScenario({ ...inputs, monthlyDemand: 0 }, context, moq)
   const margin = result.marginPct
   const hasCapital = inputs.capitalAvailableUsd > 0
@@ -96,7 +100,7 @@ function instantDecision(analysis: ProductAnalysisV2, inputs: Inputs, context: S
       : capitalBlocked ? 'BORDERLINE · CAPITAL GAP' : 'BORDERLINE · DEMAND PENDING'
 
   const reasons = [
-    `MOQ ${moq} u. · ${result.mode === 'air' ? 'aéreo' : 'marítimo'} · costo económico ${usd(result.economicLandedUnitUsd)}/u.`,
+    `MOQ económico activo ${moq} u. · ${result.mode === 'air' ? 'aéreo' : 'marítimo'} · costo económico ${usd(result.economicLandedUnitUsd)}/u.`,
     `Margen bruto de screening ${pct(margin)} al precio local observado.`,
     `Cash inicial estimado ${usd(result.cashRequiredUsd)}.`,
   ]

@@ -1,0 +1,3 @@
+id,provider,mode,origin,destination,currency,rate,rateUnit,minimumUsd,originChargesUsd,destinationChargesUsd,otherSurchargesUsd,validFrom,validTo,sourceType,receivedAt
+example-air,Forwarder A,air,Shanghai,Buenos Aires,USD,6.5,kg,120,50,80,20,2026-08-01,2026-08-31,rate_sheet,2026-08-10
+example-lcl,Forwarder A,sea_lcl,Shanghai,Buenos Aires,USD,150,wm,250,90,160,35,2026-08-01,2026-08-31,rate_sheet,2026-08-10

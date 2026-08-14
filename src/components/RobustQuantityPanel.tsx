@@ -41,10 +41,10 @@ export default function RobustQuantityPanel({ inputs, context, marketP25Ars }: P
   const stable = !optimization.selectionChanges
   const negativeDownside = selected.worstMarginPct < 0
   const priceHelp = empiricalFloor
-    ? `P25 live disponible: ${ars(empiricalFloor)}`
+    ? `P25 live disponible: ${ars(empiricalFloor)}. Ingresá 0 para desactivar el stress de precio.`
     : rawP25
-      ? `P25 live: ${ars(rawP25)}; no está por debajo del precio base actual.`
-      : 'P25 live no disponible; editá un piso manual si querés stress de precio.'
+      ? `P25 live: ${ars(rawP25)}; no está por debajo del precio base actual. Ingresá 0 para desactivar el stress de precio.`
+      : 'P25 live no disponible. Editá un piso manual; 0 desactiva el stress de precio.'
 
   return <section className="regulatory-card">
     <div className="reg-card-head">

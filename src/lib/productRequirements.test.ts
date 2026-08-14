@@ -20,6 +20,34 @@ describe('NCM-driven requirements adversarial rules', () => {
     expect(requirements.find((item) => item.id === 'technical-regulations')?.status).toBe('verify')
   })
 
+  it('keeps even a strong SIM candidate in VERIFY before declaration', () => {
+    const customs = customsProfileFor('Padel racket', 'China', 'Padel racket')
+    expect(customs.simOpeningCandidate?.code).toBe('9506.59.00.900Z')
+    const sim = buildProductRequirements(customs, 'China').find((item) => item.id === 'sim-opening')
+    expect(sim?.status).toBe('verify')
+    expect(sim?.title).toContain('9506.59.00.900Z')
+    expect(sim?.explanation).toContain('no constituye una clasificación vinculante')
+  })
+
+  it('requires SIM resolution separately when NCM exists but the opening is unresolved', () => {
+    const customs = {
+      ...customsProfileFor('Padel racket', 'China', 'Padel racket'),
+      simOpeningCandidate: null,
+      simOpeningConfidence: 'low' as const,
+    }
+    const sim = buildProductRequirements(customs, 'China').find((item) => item.id === 'sim-opening')
+    expect(sim?.status).toBe('verify')
+    expect(sim?.title).toContain('Confirmar')
+    expect(sim?.explanation).toContain('conflicto')
+  })
+
+  it('uses the SIM candidate as the more specific CIVUCE lookup reference without claiming applicability', () => {
+    const customs = customsProfileFor('Padel racket', 'China', 'Padel racket')
+    const interventions = buildProductRequirements(customs, 'China').find((item) => item.id === 'interventions')
+    expect(interventions?.status).toBe('verify')
+    expect(interventions?.nextStep).toContain('9506.59.00.900Z')
+  })
+
   it('does not auto-apply origin preference for Mercosur text', () => {
     const customs = customsProfileFor('Padel racket', 'Brazil', 'Padel racket')
     const origin = buildProductRequirements(customs, 'Brazil').find((item) => item.id === 'origin')

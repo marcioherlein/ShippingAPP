@@ -1,0 +1,15 @@
+name: ARCA Parser Validate
+on:
+  push:
+    branches: [feature/ncm-intelligence]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -fL 'https://serviciosweb.afip.gob.ar/aduana/arancelintegrado/archivos/arancel.zip' -o /tmp/a.zip
+      - run: mkdir /tmp/a && unzip -q /tmp/a.zip -d /tmp/a
+      - run: node scripts/parse-arca-nomenclador.mjs "$(find /tmp/a -name 'nomenclador_*.txt' | head -1)" /tmp/index.json
+      - run: node -e "const x=require('/tmp/index.json'); const m=new Map(x.records.map(r=>[r.code,r])); if(x.meta.sourceDate!=='2026-08-14'||x.meta.recordCount<5000||!m.get('9506.59.00')?.simOpenings.some(s=>s.code==='9506.59.00.900Z')||m.has('0000.01.01')) process.exit(1); console.log(x.meta)"

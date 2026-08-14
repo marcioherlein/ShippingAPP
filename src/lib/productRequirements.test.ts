@@ -46,4 +46,13 @@ describe('NCM-driven requirements adversarial rules', () => {
     const evidence = buildProductRequirements(customs, 'China').find((item) => item.id === 'classification-evidence')
     if (customs.ncmCandidate) expect(evidence?.status).toBe('verify')
   })
+
+  it('explains that a missing duty on LOW confidence is a safety gate, not a missing tariff record', () => {
+    const customs = customsProfileFor('Racket sports equipment', 'China', 'sport racket paddle')
+    expect(customs.classificationConfidence).toBe('low')
+    expect(customs.dutyRatePct).toBeNull()
+    const tariff = buildProductRequirements(customs, 'China').find((item) => item.id === 'tariff-current')
+    expect(tariff?.explanation).toContain('retiene deliberadamente')
+    expect(tariff?.explanation).toContain('no es ausencia de tasa')
+  })
 })

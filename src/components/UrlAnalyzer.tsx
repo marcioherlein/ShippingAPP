@@ -3,6 +3,15 @@ import { analyzeAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnaly
 
 type Props = { onAnalysis: (analysis: ProductAnalysisV2) => void; analysis?: ProductAnalysisV2 | null }
 
+function readLabel(analysis: ProductAnalysisV2) {
+  const mode = analysis.sourceRead?.mode
+  if (mode === 'direct') return 'Alibaba · lectura directa'
+  if (mode === 'browser') return 'Alibaba · Browser Run'
+  if (mode === 'partial') return 'Alibaba · lectura parcial'
+  if (mode === 'blocked') return 'Alibaba · bloqueado'
+  return analysis.fetched ? 'Alibaba · contenido leído' : 'Alibaba · contenido no disponible'
+}
+
 export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
@@ -35,7 +44,8 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
     {loading && <div className="analysis-progress"><b>Construyendo business case…</b><span>Extrayendo producto, estimando logística y resolviendo clasificación soportada.</span></div>}
     {analysis && !loading && <div className="extraction-card">
       <div className="extraction-top"><div><span className="eyebrow">Producto detectado</span><h2>{analysis.product.name}</h2><p>{analysis.product.category}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div><span className="confidence">{analysis.confidence.overall}% confidence</span></div>
-      <div className="fact-grid"><div><span>Precio proveedor</span><b>{analysis.product.unitPriceUsd ? `USD ${analysis.product.unitPriceUsd.toFixed(2)}` : 'No verificado'}</b></div><div><span>MOQ</span><b>{analysis.product.moq ? `${analysis.product.moq} u.` : 'No verificado'}</b></div><div><span>NCM candidato</span><b>{analysis.customs.ncmCandidate || 'Pendiente'}</b></div><div><span>Derecho candidato</span><b>{dutyLabel}</b></div></div>
+      <div className="fact-grid"><div><span>Precio proveedor</span><b>{analysis.product.unitPriceUsd ? `USD ${analysis.product.unitPriceUsd.toFixed(2)}` : 'No verificado'}</b></div><div><span>MOQ</span><b>{analysis.product.moq ? `${analysis.product.moq} u.` : 'No verificado'}</b></div><div><span>NCM candidato</span><b>{analysis.customs.ncmCandidate || 'Pendiente'}</b></div><div><span>Derecho candidato</span><b>{dutyLabel}</b></div><div><span>Lectura de fuente</span><b>{readLabel(analysis)}</b></div><div><span>Browser Run</span><b>{analysis.sourceRead?.browserAttempted ? `${analysis.sourceRead.browserMsUsed ? `${(analysis.sourceRead.browserMsUsed / 1000).toFixed(1)}s` : 'intentado'}` : 'No necesario'}</b></div></div>
+      {analysis.sourceRead && <div className="customs-note"><b>{analysis.sourceRead.mode.toUpperCase()}</b><span>{analysis.sourceRead.reason}</span></div>}
       <div className="customs-note"><b>{classificationLabel}</b><span>{analysis.customs.source} · Revisado {analysis.customs.reviewedAt}. Intervenciones: verificar en CIVUCE/VUCE.</span></div>
       <details className="assumptions"><summary>Ver supuestos y calidad de datos</summary><ul>{analysis.assumptions.map((item) => <li key={item}>{item}</li>)}</ul></details>
     </div>}

@@ -94,8 +94,8 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
 
   const sameAsLocal = local.ncmCandidate === full.code
   const usableLocalDuty = sameAsLocal && fullStrong ? local.dutyRatePct : null
-  const combinedAlternatives = apiAlternatives(full)
-  for (const candidate of local.alternatives) addUniqueAlternative(combinedAlternatives, candidate)
+  let combinedAlternatives = apiAlternatives(full)
+  for (const candidate of local.alternatives) combinedAlternatives = addUniqueAlternative(combinedAlternatives, candidate)
 
   return {
     ...local,

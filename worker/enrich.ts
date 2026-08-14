@@ -3,8 +3,13 @@ import { analyzeArgentinaMarket } from './catalogProvider'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
+import type { BrowserRun } from './alibabaSource'
 
-type Env = { AI: { run: (model: string, input: unknown) => Promise<unknown> }; ASSETS: { fetch: (request: Request) => Promise<Response> } }
+type Env = {
+  AI: { run: (model: string, input: unknown) => Promise<unknown> }
+  ASSETS: { fetch: (request: Request) => Promise<Response> }
+  BROWSER: BrowserRun
+}
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,

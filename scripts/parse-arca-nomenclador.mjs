@@ -7,7 +7,9 @@ function sourceDateFromFilename(filePath) {
 }
 
 function validNcm(code) {
-  return /^\d{4}\.\d{2}\.\d{2}$/.test(code)
+  if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code)) return false
+  const chapter = Number(code.slice(0, 2))
+  return Number.isInteger(chapter) && chapter >= 1 && chapter <= 97
 }
 
 function ncmFromRawCode(rawCode) {

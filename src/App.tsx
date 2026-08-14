@@ -31,9 +31,6 @@ export default function App() {
   const [expertOverride, setExpertOverride] = useState<ExpertOverride | null>(null)
   const [client, setClient] = useState<ClientProfileV3>(defaultClientProfileV3)
   const taxContext = useMemo<ScenarioTaxContext>(() => ({ entityType: client.entityType, taxStatus: client.taxStatus, purpose: client.purpose, statisticsExempt: false, vatPerceptionExempt: client.entityType === 'individual' && client.purpose === 'own_use', gainsPerceptionExempt: false }), [client])
-  const results = useMemo(() => calculateV2(inputs, taxContext), [inputs, taxContext])
-  const rows = useMemo(() => bestRowsV2(results), [results])
-  const selected = useMemo(() => recommendV2(results), [results])
   const regulatoryChecks = useMemo(() => analysis ? buildRegulatoryChecksV4(analysis, client, expertOverride) : [], [analysis, client, expertOverride])
   const marketP25Ars = analysis && !expertOverride ? Number((analysis.market as any).details?.p25Ars) || null : null
 
@@ -41,6 +38,12 @@ export default function App() {
   const fxReady = !!analysis && analysis.fx?.status === 'live' && !!analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0
   const economicsReady = automaticReady || (!!expertOverride && fxReady)
   const decisionReady = quantityDecisionReady(economicsReady, inputs.monthlyDemand)
+
+  // With fail-closed FX/customs defaults, do not even execute scenario math until
+  // evidence is ready. This prevents hidden Infinity/NaN states before a scan.
+  const results = useMemo(() => economicsReady && inputs.usdArs > 0 ? calculateV2(inputs, taxContext) : [], [inputs, taxContext, economicsReady])
+  const rows = useMemo(() => bestRowsV2(results), [results])
+  const selected = useMemo(() => recommendV2(results), [results])
   const opportunityDecision = useMemo(() => buildOpportunityDecision({
     analysis, inputs, taxContext, economicsReady, marketP25Ars, manualOverrideActive: !!expertOverride,
   }), [analysis, inputs, taxContext, economicsReady, marketP25Ars, expertOverride])

@@ -1,0 +1,48 @@
+name: NCM Index Seed
+on:
+  push:
+    branches: [feature/full-ncm-retrieval]
+permissions:
+  contents: write
+jobs:
+  seed:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/full-ncm-retrieval
+      - name: Build official search snapshot
+        run: |
+          curl -fL --retry 3 'https://serviciosweb.afip.gob.ar/aduana/arancelintegrado/archivos/arancel.zip' -o /tmp/a.zip
+          mkdir -p /tmp/a && unzip -q /tmp/a.zip -d /tmp/a
+          NOM=$(find /tmp/a -name 'nomenclador_*.txt' | head -1)
+          node scripts/build-ncm-search-index.mjs "$NOM" public/data/ncm-index.json
+      - name: Validate snapshot anchors
+        run: |
+          node - <<'NODE'
+          const fs=require('fs')
+          const x=JSON.parse(fs.readFileSync('public/data/ncm-index.json','utf8'))
+          const m=new Map(x.records.map(r=>[r.code,r]))
+          const assert=(ok,msg)=>{if(!ok) throw new Error(msg)}
+          assert(x.meta.sourceDate==='2026-08-14', `unexpected source date ${x.meta.sourceDate}`)
+          assert(x.meta.recordCount>10000, `small catalog ${x.meta.recordCount}`)
+          assert(x.meta.tariffDataIncluded===false, 'search index must not contain unmapped tariff fields')
+          const racket=m.get('9506.59.00')
+          assert(racket, 'missing 9506.59.00')
+          assert(racket.searchText.includes('raquetas de tenis'), 'missing parent racket context')
+          assert(racket.simOpenings.some(s=>s.code==='9506.59.00.900Z'), 'missing SIM 900Z')
+          assert(!m.has('0000.01.01'), 'utility code leaked into index')
+          console.log(x.meta, 'bytes', fs.statSync('public/data/ncm-index.json').size)
+          NODE
+      - name: Commit snapshot if changed
+        run: |
+          if git diff --quiet -- public/data/ncm-index.json; then
+            echo 'NCM index unchanged'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/data/ncm-index.json
+          git commit -m 'data: seed official ARCA NCM search index'
+          git push origin HEAD:feature/full-ncm-retrieval

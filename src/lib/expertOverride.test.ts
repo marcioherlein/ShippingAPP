@@ -68,10 +68,10 @@ describe('expert override adversarial rules', () => {
     expect(applied.priceTiers).toEqual([{ minQuantity: 200, unitPriceUsd: 18.5 }])
   })
 
-  it('never generates scenario quantities below the user-supplied MOQ', () => {
+  it('derives scenario quantities only from the user-supplied MOQ', () => {
     const override = validateExpertOverride(validDraft).value!
-    const applied = applyExpertOverride({ ...defaultInputs, quantities: [50, 100, 300, 500] }, override)
-    expect(applied.quantities).toEqual([200, 300, 500])
+    const applied = applyExpertOverride({ ...defaultInputs, quantities: [50, 100, 333, 777] }, override)
+    expect(applied.quantities).toEqual([200, 300, 400, 600])
   })
 
   it('replaces previous demand with explicit manual demand', () => {

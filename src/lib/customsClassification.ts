@@ -1,9 +1,14 @@
 import { classifyNcm, type NcmCandidate } from './ncmClassifier'
 import type { NcmSimOpening } from './ncmCatalog'
 
+export type SimEvidenceConfidence = 'high' | 'medium' | 'low' | 'missing'
+
 export type CustomsProfile = {
   ncmCandidate: string | null
   simOpeningCandidate?: NcmSimOpening | null
+  simOpeningConfidence?: SimEvidenceConfidence
+  simAlternatives?: NcmSimOpening[]
+  simSource?: string
   classificationConfidence: 'high' | 'medium' | 'low' | 'missing'
   dutyRatePct: number | null
   dutyRateStatus: 'candidate' | 'missing'
@@ -45,6 +50,9 @@ export function customsProfileFor(
     return {
       ncmCandidate: classification.top.code,
       simOpeningCandidate: classification.top.simOpening,
+      simOpeningConfidence: classification.top.simOpening ? classification.confidence : 'missing',
+      simAlternatives: [],
+      simSource: classification.top.simOpening ? 'Seed especializado ARCA 95.06' : 'SIM pendiente',
       classificationConfidence: classification.confidence,
       dutyRatePct: usableDuty,
       dutyRateStatus: usableDuty === null ? 'missing' : 'candidate',
@@ -65,6 +73,9 @@ export function customsProfileFor(
   return {
     ncmCandidate: null,
     simOpeningCandidate: null,
+    simOpeningConfidence: 'missing',
+    simAlternatives: [],
+    simSource: 'SIM pendiente de NCM',
     classificationConfidence: 'missing',
     dutyRatePct: null,
     dutyRateStatus: 'missing',

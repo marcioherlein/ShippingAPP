@@ -14,6 +14,7 @@ function initialDraft(analysis: ProductAnalysisV2): ExpertOverrideDraft {
     unitWeightKg: analysis.product.packedWeightKg > 0 ? analysis.product.packedWeightKg : null,
     unitVolumeCbm: analysis.product.volumeCbm > 0 ? analysis.product.volumeCbm : null,
     marketPriceArs: analysis.market.estimatedPriceArs,
+    monthlyDemand: analysis.market.estimatedMonthlyDemand > 0 ? analysis.market.estimatedMonthlyDemand : null,
   }
 }
 
@@ -44,6 +45,7 @@ export default function ExpertOverridePanel({ analysis, onApply }: Props) {
       <NumberInput label="Peso embalado / unidad" help="kg cobrables antes de volumetría." value={draft.unitWeightKg} step={0.001} onChange={(v) => set('unitWeightKg', v)} error={submitted ? validation.errors.unitWeightKg : undefined} />
       <NumberInput label="Volumen embalado / unidad" help="m³ por unidad; necesario para aéreo volumétrico y LCL." value={draft.unitVolumeCbm} step={0.0001} onChange={(v) => set('unitVolumeCbm', v)} error={submitted ? validation.errors.unitVolumeCbm : undefined} />
       <NumberInput label="Benchmark local" help="ARS por unidad. Debe ser un comparable que puedas defender." value={draft.marketPriceArs} step={1000} onChange={(v) => set('marketPriceArs', v)} error={submitted ? validation.errors.marketPriceArs : undefined} />
+      <NumberInput label="Ventas mensuales esperadas" help="Hipótesis explícita para inventario/robustez; no se hereda la demanda demo." value={draft.monthlyDemand} onChange={(v) => set('monthlyDemand', v)} error={submitted ? validation.errors.monthlyDemand : undefined} />
     </div>
 
     <label className="readiness-field" style={{ marginTop: 14 }}><span><input type="checkbox" checked={draft.userCheckedOfficialSource} onChange={(e) => set('userCheckedOfficialSource', e.target.checked)} /> Verifiqué NCM/derecho contra una fuente oficial</span><small>Esto registra tu declaración; ShippingAPP igualmente mantendrá NCM y derecho en VERIFICAR hasta contar con validación independiente.</small></label>

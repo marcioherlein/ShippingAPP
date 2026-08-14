@@ -63,4 +63,14 @@ describe('regulatory readiness adversarial rules', () => {
     const profile = { ...defaultClientProfileV3, mipyme: 'yes' } as const
     expect(check(profile, 'fx-v3')?.status).toBe('verify')
   })
+
+  it('blocks missing TAD access when conformity work is still pending', () => {
+    const profile = { ...defaultClientProfileV3, technicalRegulation: 'applies_pending', tadAccess: 'no' } as const
+    expect(check(profile, 'tad')?.status).toBe('blocker')
+  })
+
+  it('does not re-block a technically compliant product only because TAD access is unavailable', () => {
+    const profile = { ...defaultClientProfileV3, technicalRegulation: 'applies_ready', tadAccess: 'no' } as const
+    expect(check(profile, 'tad')?.status).toBe('verify')
+  })
 })

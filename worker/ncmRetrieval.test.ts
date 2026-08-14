@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyFullNcm, retrieveNcmCandidates, sanitizeAiRanking, type NcmSearchIndex } from './ncmRetrieval'
+import { canonicalToken, classifyFullNcm, retrieveNcmCandidates, sanitizeAiRanking, type NcmSearchIndex } from './ncmRetrieval'
 
 const index: NcmSearchIndex = {
   meta: {
@@ -8,6 +8,7 @@ const index: NcmSearchIndex = {
     simOpeningsIncluded: false, recordShape: '[ncmCode,label]',
   },
   records: [
+    ['0101.30.00', ''],
     ['9506.59.00', 'Raquetas de tenis, bádminton o similares, incluso sin cordaje > Las demás'],
     ['9506.40.00', 'Artículos y material para tenis de mesa'],
     ['9506.51.00', 'Raquetas de tenis, incluso sin cordaje'],
@@ -32,6 +33,18 @@ describe('full NCM deterministic retrieval', () => {
     const result = retrieveNcmCandidates(index, ['convertidor eléctrico estático', 'fuente alimentación'], { name: 'USB-C power adapter' })
     expect(result.some((item) => item.code === '8504.40.90')).toBe(true)
     expect(result[0]?.code).toBe('8504.40.90')
+  })
+
+  it('canonicalizes ordinary Spanish plural forms without damaging tenis', () => {
+    expect(canonicalToken('raquetas')).toBe('raqueta')
+    expect(canonicalToken('similares')).toBe('similar')
+    expect(canonicalToken('convertidores')).toBe('convertidor')
+    expect(canonicalToken('tenis')).toBe('tenis')
+  })
+
+  it('never returns an official row whose source label is empty', () => {
+    const result = retrieveNcmCandidates(index, ['animal vivo asno', 'asno vivo'], { name: 'asno' })
+    expect(result.some((item) => item.code === '0101.30.00')).toBe(false)
   })
 
   it('does not return candidates for generic stopword-only input', () => {

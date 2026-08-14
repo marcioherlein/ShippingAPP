@@ -1,0 +1,35 @@
+name: ARCA Tariff Probe
+
+on:
+  push:
+    branches: [feature/ncm-intelligence]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official ARCA archive
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 3 --retry-delay 2 'https://serviciosweb.afip.gob.ar/aduana/arancelintegrado/archivos/arancel.zip' -o /tmp/arancel.zip
+          ls -lh /tmp/arancel.zip
+          file /tmp/arancel.zip
+          unzip -l /tmp/arancel.zip
+      - name: Inspect archive structure
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/arancel && mkdir -p /tmp/arancel
+          unzip -q /tmp/arancel.zip -d /tmp/arancel
+          find /tmp/arancel -maxdepth 2 -type f -printf '%p\n'
+          for f in /tmp/arancel/*; do
+            [ -f "$f" ] || continue
+            echo "===== $f ====="
+            file "$f" || true
+            wc -c "$f" || true
+            head -n 5 "$f" 2>/dev/null || true
+          done

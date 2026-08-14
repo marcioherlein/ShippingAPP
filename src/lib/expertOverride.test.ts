@@ -11,6 +11,7 @@ const validDraft = {
   unitWeightKg: 0.42,
   unitVolumeCbm: 0.0035,
   marketPriceArs: 95000,
+  monthlyDemand: 25,
   userCheckedOfficialSource: false,
   sourceNote: '',
 }
@@ -52,6 +53,10 @@ describe('expert override adversarial rules', () => {
     expect(validateExpertOverride({ ...validDraft, marketPriceArs: null }).valid).toBe(false)
   })
 
+  it('fails closed when monthly demand is missing instead of inheriting demo demand', () => {
+    expect(validateExpertOverride({ ...validDraft, monthlyDemand: null }).valid).toBe(false)
+  })
+
   it('requires a source note when user claims an official-source check', () => {
     expect(validateExpertOverride({ ...validDraft, userCheckedOfficialSource: true, sourceNote: '' }).valid).toBe(false)
     expect(validateExpertOverride({ ...validDraft, userCheckedOfficialSource: true, sourceNote: 'ARCA Arancel Integrado 14/08/2026' }).valid).toBe(true)
@@ -67,6 +72,12 @@ describe('expert override adversarial rules', () => {
     const override = validateExpertOverride(validDraft).value!
     const applied = applyExpertOverride({ ...defaultInputs, quantities: [50, 100, 300, 500] }, override)
     expect(applied.quantities).toEqual([200, 300, 500])
+  })
+
+  it('replaces previous demand with explicit manual demand', () => {
+    const override = validateExpertOverride(validDraft).value!
+    const applied = applyExpertOverride({ ...defaultInputs, monthlyDemand: 999 }, override)
+    expect(applied.monthlyDemand).toBe(25)
   })
 
   it('does not silently alter unrelated tax or freight assumptions', () => {

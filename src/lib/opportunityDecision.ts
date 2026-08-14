@@ -103,6 +103,7 @@ function instantDecision(analysis: ProductAnalysisV2, inputs: Inputs, context: S
 
   const warnings = [
     'Este verdict todavía no usa velocidad de venta: una buena diferencia de precio no demuestra demanda.',
+    ...(hasCapital ? [] : ['Capital no informado: el screening no evalúa si el MOQ es financiable para este usuario.']),
     'Arancel, NCM/SIM e intervenciones siguen siendo screening hasta validación aplicable.',
   ]
 
@@ -123,7 +124,7 @@ function instantDecision(analysis: ProductAnalysisV2, inputs: Inputs, context: S
     warnings,
     nextActions: [
       'Ingresar una hipótesis de demanda mensual para pasar al Robust Decision.',
-      ...(inputs.capitalAvailableUsd <= 0 ? ['Opcional: informar capital disponible para evaluar factibilidad financiera.'] : []),
+      ...(hasCapital ? [] : ['Opcional: informar capital disponible para evaluar factibilidad financiera.']),
     ],
   }
 }
@@ -160,14 +161,21 @@ function robustDecision(analysis: ProductAnalysisV2, inputs: Inputs, context: Sc
   if (weakDownside) warnings.push('El margen de downside queda por debajo del colchón de 15%.')
   if (excessiveInventory) warnings.push('El downside supera 9 meses de inventario.')
   if (capitalBlocked) warnings.push('Ningún escenario robusto entra en el capital informado.')
+  if (!hasCapital) warnings.push('Capital no informado: el Robust Decision no evalúa factibilidad financiera ni affordability.')
   warnings.push('La demanda ingresada es una hipótesis del usuario, no ventas observadas por ShippingAPP.')
+
+  const label = verdict === 'attractive'
+    ? hasCapital ? 'ATTRACTIVE' : 'ATTRACTIVE · CAPITAL UNCHECKED'
+    : verdict === 'avoid' ? 'AVOID' : hasCapital ? 'BORDERLINE' : 'BORDERLINE · CAPITAL UNCHECKED'
 
   return {
     verdict,
     stage: 'robust_decision',
-    label: verdict === 'attractive' ? 'ATTRACTIVE' : verdict === 'avoid' ? 'AVOID' : 'BORDERLINE',
+    label,
     summary: verdict === 'attractive'
-      ? 'La oportunidad conserva margen, capital e inventario razonables bajo los stresses definidos.'
+      ? hasCapital
+        ? 'La oportunidad conserva margen, capital e inventario razonables bajo los stresses definidos.'
+        : 'La oportunidad conserva margen e inventario razonables bajo stress; la factibilidad de capital todavía no fue evaluada.'
       : verdict === 'avoid'
         ? 'El caso no sobrevive una condición crítica de margen, capital o stress.'
         : 'El caso puede funcionar, pero el downside todavía es demasiado sensible para una señal fuerte.',
@@ -178,7 +186,11 @@ function robustDecision(analysis: ProductAnalysisV2, inputs: Inputs, context: Sc
     reasons,
     warnings,
     nextActions: verdict === 'attractive'
-      ? ['Validar la demanda con evidencia comercial antes de comprar.', 'Confirmar aduana/flete vigentes antes de ejecutar la operación.']
+      ? [
+          'Validar la demanda con evidencia comercial antes de comprar.',
+          ...(hasCapital ? [] : ['Informar capital disponible si querés evaluar factibilidad financiera.']),
+          'Confirmar aduana/flete vigentes antes de ejecutar la operación.',
+        ]
       : ['Atacar primero el warning más material y volver a correr el caso.'],
   }
 }

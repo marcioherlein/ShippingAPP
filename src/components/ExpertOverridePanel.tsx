@@ -14,7 +14,7 @@ function initialDraft(analysis: ProductAnalysisV2): ExpertOverrideDraft {
     unitWeightKg: analysis.product.packedWeightKg > 0 ? analysis.product.packedWeightKg : null,
     unitVolumeCbm: analysis.product.volumeCbm > 0 ? analysis.product.volumeCbm : null,
     marketPriceArs: analysis.market.estimatedPriceArs,
-    monthlyDemand: analysis.market.estimatedMonthlyDemand > 0 ? analysis.market.estimatedMonthlyDemand : null,
+    monthlyDemand: null,
   }
 }
 
@@ -35,7 +35,7 @@ export default function ExpertOverridePanel({ analysis, onApply }: Props) {
 
   return <section className="regulatory-card">
     <div className="reg-card-head"><div><span className="eyebrow">Expert override</span><h2>Completar evidencia para habilitar el business case</h2></div><span className="confidence warning">Manual · VERIFICAR</span></div>
-    <p className="reg-intro">Usá esta vía sólo cuando tengas datos concretos del proveedor, producto y mercado. Los campos prellenados provienen del análisis actual; los vacíos no se reemplazan por defaults de la demo. Aplicar este formulario habilita una estimación económica, no una aprobación aduanera.</p>
+    <p className="reg-intro">Usá esta vía sólo cuando tengas datos concretos del proveedor, producto y mercado. Los campos prellenados provienen del análisis actual; los vacíos no se reemplazan por defaults de la demo. La demanda siempre queda vacía porque ShippingAPP no observa ventas reales. Aplicar este formulario habilita una estimación económica, no una aprobación aduanera.</p>
 
     <div className="readiness-grid">
       <label className="readiness-field"><span>NCM</span><small>8 dígitos. Se normaliza como 0000.00.00.</small><input value={draft.ncm} onChange={(e) => set('ncm', e.target.value)} placeholder="Ej. 8504.40.90" />{submitted && validation.errors.ncm && <small className="error">{validation.errors.ncm}</small>}</label>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { ars, pct, usd } from '../lib/format'
 import { optimizeRobust, type RobustCandidate } from '../lib/robustOptimizer'
 import type { Inputs, ScenarioTaxContext } from '../lib/types'
@@ -23,9 +23,15 @@ function bestPerQuantity(candidates: RobustCandidate[]) {
 }
 
 export default function RobustQuantityPanel({ inputs, context, marketP25Ars }: Props) {
-  const empiricalFloor = marketP25Ars && marketP25Ars > 0 ? Math.min(marketP25Ars, inputs.marketPriceArs) : null
+  const rawP25 = marketP25Ars && marketP25Ars > 0 ? marketP25Ars : null
+  const empiricalFloor = rawP25 !== null && rawP25 < inputs.marketPriceArs ? rawP25 : null
   const [demandDownPct, setDemandDownPct] = useState(30)
   const [priceFloorArs, setPriceFloorArs] = useState(empiricalFloor ?? inputs.marketPriceArs)
+
+  useEffect(() => {
+    setPriceFloorArs((current) => Math.min(inputs.marketPriceArs, Math.max(0, current)))
+  }, [inputs.marketPriceArs])
+
   const optimization = useMemo(() => optimizeRobust(inputs, context, { demandDownPct, marketFloorArs: priceFloorArs }), [inputs, context, demandDownPct, priceFloorArs])
   const selected = optimization.robustRecommendation
   const base = optimization.baseRecommendation
@@ -34,6 +40,11 @@ export default function RobustQuantityPanel({ inputs, context, marketP25Ars }: P
   if (!selected || !base) return null
   const stable = !optimization.selectionChanges
   const negativeDownside = selected.worstMarginPct < 0
+  const priceHelp = empiricalFloor
+    ? `P25 live disponible: ${ars(empiricalFloor)}`
+    : rawP25
+      ? `P25 live: ${ars(rawP25)}; no está por debajo del precio base actual.`
+      : 'P25 live no disponible; editá un piso manual si querés stress de precio.'
 
   return <section className="regulatory-card">
     <div className="reg-card-head">
@@ -43,8 +54,8 @@ export default function RobustQuantityPanel({ inputs, context, marketP25Ars }: P
     <p className="reg-intro">Criterio maximin: para cada cantidad y modo, ShippingAPP toma el peor Economic score entre los escenarios visibles y recomienda la alternativa financiable con el mejor peor resultado. No asigna probabilidades.</p>
 
     <div className="readiness-grid">
-      <label className="readiness-field"><span>Stress de demanda</span><small>Supuesto editable; no es forecast.</small><input type="number" min="0" max="100" step="5" value={demandDownPct} onChange={(e) => setDemandDownPct(Number(e.target.value))} /></label>
-      <label className="readiness-field"><span>Piso de precio local</span><small>{empiricalFloor ? `P25 live disponible: ${ars(empiricalFloor)}` : 'P25 live no disponible; editá un piso manual si querés stress de precio.'}</small><input type="number" min="0" step="1000" value={priceFloorArs} onChange={(e) => setPriceFloorArs(Number(e.target.value))} /></label>
+      <label className="readiness-field"><span>Stress de demanda</span><small>Supuesto editable; no es forecast.</small><input type="number" min="0" max="100" step="5" value={demandDownPct} onChange={(e) => setDemandDownPct(Math.min(100, Math.max(0, Number(e.target.value) || 0)))} /></label>
+      <label className="readiness-field"><span>Piso de precio local</span><small>{priceHelp}</small><input type="number" min="0" max={inputs.marketPriceArs} step="1000" value={priceFloorArs} onChange={(e) => setPriceFloorArs(Math.min(inputs.marketPriceArs, Math.max(0, Number(e.target.value) || 0)))} /></label>
     </div>
     {empiricalFloor && priceFloorArs !== empiricalFloor && <button type="button" onClick={() => setPriceFloorArs(empiricalFloor)}>Restaurar P25 live</button>}
 
@@ -64,7 +75,7 @@ export default function RobustQuantityPanel({ inputs, context, marketP25Ars }: P
         <div><span>Score base</span><b>{selected.baseScore}/100</b></div>
         <div><span>Caída de score</span><b>{selected.scoreDrop} pts</b></div>
         <div><span>Cash inicial</span><b>{usd(selected.base.cashRequiredUsd)}</b></div>
-        <div><span>Piso usado</span><b>{optimization.stress.marketFloorArs ? ars(optimization.stress.marketFloorArs) : 'Sin stress precio'}</b></div>
+        <div><span>Piso usado</span><b>{optimization.stress.marketFloorArs && optimization.stress.marketFloorArs < inputs.marketPriceArs ? ars(optimization.stress.marketFloorArs) : 'Sin stress precio'}</b></div>
       </div>
     </div>
 

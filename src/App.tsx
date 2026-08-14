@@ -9,16 +9,19 @@ import UrlAnalyzer from './components/UrlAnalyzer'
 import ClientChecklist from './components/ClientChecklist'
 import RegulatoryPanel from './components/RegulatoryPanel'
 import MarketEvidence from './components/MarketEvidence'
+import FxEvidence from './components/FxEvidence'
 import RobustQuantityPanel from './components/RobustQuantityPanel'
 import ExpertOverridePanel from './components/ExpertOverridePanel'
 import NcmIntelligencePanel from './components/NcmIntelligencePanel'
+import OpportunityDecisionPanel from './components/OpportunityDecisionPanel'
 import { defaultInputs } from './data/defaults'
 import { bestRowsV2, calculateV2, recommendV2 } from './lib/optimizerV2'
 import { applyAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { buildRegulatoryChecksV4 } from './lib/regulatoryV4'
 import { defaultClientProfileV3, type ClientProfileV3 } from './lib/regulatoryV3'
 import { applyExpertOverride, type ExpertOverride } from './lib/expertOverride'
-import { automaticEvidenceReady, missingAutomaticEvidence, quantityDecisionReady } from './lib/decisionReadiness'
+import { automaticEvidenceReady, quantityDecisionReady } from './lib/decisionReadiness'
+import { buildOpportunityDecision } from './lib/opportunityDecision'
 import type { ScenarioTaxContext } from './lib/types'
 
 export default function App() {
@@ -28,15 +31,22 @@ export default function App() {
   const [expertOverride, setExpertOverride] = useState<ExpertOverride | null>(null)
   const [client, setClient] = useState<ClientProfileV3>(defaultClientProfileV3)
   const taxContext = useMemo<ScenarioTaxContext>(() => ({ entityType: client.entityType, taxStatus: client.taxStatus, purpose: client.purpose, statisticsExempt: false, vatPerceptionExempt: client.entityType === 'individual' && client.purpose === 'own_use', gainsPerceptionExempt: false }), [client])
-  const results = useMemo(() => calculateV2(inputs, taxContext), [inputs, taxContext])
-  const rows = useMemo(() => bestRowsV2(results), [results])
-  const selected = useMemo(() => recommendV2(results), [results])
   const regulatoryChecks = useMemo(() => analysis ? buildRegulatoryChecksV4(analysis, client, expertOverride) : [], [analysis, client, expertOverride])
   const marketP25Ars = analysis && !expertOverride ? Number((analysis.market as any).details?.p25Ars) || null : null
 
   const automaticReady = !!analysis && automaticEvidenceReady(analysis)
-  const economicsReady = automaticReady || !!expertOverride
+  const fxReady = !!analysis && analysis.fx?.status === 'live' && !!analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0
+  const economicsReady = automaticReady || (!!expertOverride && fxReady)
   const decisionReady = quantityDecisionReady(economicsReady, inputs.monthlyDemand)
+
+  // With fail-closed FX/customs defaults, do not even execute scenario math until
+  // evidence is ready. This prevents hidden Infinity/NaN states before a scan.
+  const results = useMemo(() => economicsReady && inputs.usdArs > 0 ? calculateV2(inputs, taxContext) : [], [inputs, taxContext, economicsReady])
+  const rows = useMemo(() => bestRowsV2(results), [results])
+  const selected = useMemo(() => recommendV2(results), [results])
+  const opportunityDecision = useMemo(() => buildOpportunityDecision({
+    analysis, inputs, taxContext, economicsReady, marketP25Ars, manualOverrideActive: !!expertOverride,
+  }), [analysis, inputs, taxContext, economicsReady, marketP25Ars, expertOverride])
 
   const handleAnalysis = (next: ProductAnalysisV2) => {
     setExpertOverride(null)
@@ -50,18 +60,19 @@ export default function App() {
     setInputs((current) => applyExpertOverride(current, override))
   }
 
-  const missingAutomatic = analysis ? missingAutomaticEvidence(analysis) : []
-
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.2</span></header>
+    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.3</span></header>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
+
+    {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
     {analysis && <MarketEvidence analysis={analysis} />}
+    {analysis && <FxEvidence analysis={analysis} />}
     {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
 
     {analysis && economicsReady && <>
       {expertOverride
-        ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. ShippingAPP no convierte esos datos en validación aduanera; NCM/derecho permanecen en VERIFICAR.</div>
-        : <div className="analysis-banner"><b>Estimación instantánea.</b> Precio local basado en comparables publicados; la demanda no se infiere de Mercado Libre. Confirmá una hipótesis mensual antes de usar score o recomendación de cantidad. La NCM se busca contra la snapshot completa del nomenclador ARCA y luego se hidratan aperturas SIM del capítulo correspondiente. NCM/SIM siguen siendo candidatos; el arancel automático sólo se conserva cuando existe evidencia tarifaria separada suficientemente fuerte. Intervenciones, origen preferencial, reglamentos técnicos y medidas comerciales permanecen sujetos a verificación.</div>}
+        ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. El FX sigue viniendo de BCRA REF; ShippingAPP no convierte el override en validación aduanera.</div>
+        : <div className="analysis-banner"><b>Opportunity screening.</b> El verdict instantáneo usa unit economics del MOQ sin inventar demanda. Cuando ingresás una hipótesis mensual, pasa a Robust Decision con stress de demanda -30% y precio P25 cuando existe. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening y las intervenciones/reglamentos permanecen sujetos a verificación.</div>}
 
       <div className="workspace">
         <aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>
@@ -70,19 +81,18 @@ export default function App() {
             <div className="sticky-results"><div className="result-heading"><span className="eyebrow">Business case estimado</span><h2>{product || 'Producto sin nombre'}</h2></div><Recommendation result={selected} capitalAvailableUsd={inputs.capitalAvailableUsd} /></div>
             <ScenarioTable rows={rows} selected={selected} />
             <RobustQuantityPanel key={`${analysis.sourceUrl}:${marketP25Ars ?? 'manual'}`} inputs={inputs} context={taxContext} marketP25Ars={marketP25Ars} />
-            <section className="method-card"><h3>Cómo se calcula el score</h3><p>Margen sobre costo económico 40% · eficiencia del capital 30% · inventario 20% · capacidad de financiar el capital inicial 10%.</p><p>El score mide atractivo económico, no habilitación legal ni demanda observada. El optimizador robusto compara ese mismo score bajo escenarios adversos visibles, sin probabilidades implícitas.</p></section>
-          </> : <section className="partial-card"><span className="eyebrow">Quantity decision locked</span><h2>Confirmá una hipótesis de demanda mensual</h2><p>Los datos de producto, mercado y costos están listos para seguir ajustando, pero ShippingAPP no muestra “Recomendado”, meses de inventario, Economic score ni cantidad robusta hasta que ingreses una demanda mensual mayor a 0 en “Mercado y capital”.</p><p>Mercado Libre aporta publicaciones y precios de screening; no observamos ventas reales.</p></section>}
+            <section className="method-card"><h3>Cómo se calcula el score</h3><p>Margen sobre costo económico 40% · eficiencia del capital 30% · inventario 20% · capacidad de financiar el capital inicial 10% cuando el capital fue informado.</p><p>Si el capital no se informa, esa dimensión no recibe puntos gratis: se normalizan sólo las dimensiones observadas. El score mide atractivo económico, no habilitación legal ni demanda observada.</p></section>
+          </> : <section className="partial-card"><span className="eyebrow">Robust Decision pendiente</span><h2>Agregá una hipótesis de demanda para optimizar cantidad.</h2><p>El Instant Screening de arriba ya evalúa unit economics y cash del MOQ. ShippingAPP recién muestra “cantidad recomendada”, inventario y Robust score cuando ingresás demanda mensual mayor a 0.</p><p>Mercado Libre aporta publicaciones y precios de screening; no observamos ventas reales.</p></section>}
         </section>
       </div>
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
     {analysis && !economicsReady && <>
-      <section className="partial-card"><span className="eyebrow">Análisis parcial</span><h2>Falta evidencia crítica para calcular sin heredar defaults de la demo.</h2><p>Campos pendientes: {missingAutomatic.join(', ') || 'evidencia manual requerida'}. ShippingAPP no reutiliza precios, pesos, volúmenes, demanda ni aranceles de otro producto.</p></section>
       <ExpertOverridePanel key={analysis.sourceUrl} analysis={analysis} onApply={handleExpertOverride} />
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto y MOQ</span><p>Extraemos lo visible de la publicación.</p></div><div><b>02</b><span>NCM + SIM</span><p>Retrieval ARCA completo + apertura SIM por capítulo.</p></div><div><b>03</b><span>Requirements</span><p>Arancel, CIVUCE, restricciones, reglamentos y origen a resolver.</p></div><div><b>04</b><span>Decisión robusta</span><p>Economics + readiness + cantidad con demanda explícita.</p></div></section>}
+    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto</span><p>Extraemos precio, MOQ y características visibles.</p></div><div><b>02</b><span>Mercado argentino</span><p>Buscamos comparables y rango de precio local.</p></div><div><b>03</b><span>Importabilidad</span><p>NCM/SIM, landed cost y requisitos como motores internos.</p></div><div><b>04</b><span>Opportunity Decision</span><p>¿Vale la pena seguir? Unit economics primero; stress y cantidad después.</p></div></section>}
   </main>
 }

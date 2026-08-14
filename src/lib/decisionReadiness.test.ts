@@ -6,6 +6,7 @@ const analysis: ProductAnalysisV2 = {
   sourceUrl: 'https://www.alibaba.com/product-detail/test', fetched: true,
   product: { name: 'Product', category: 'Padel racket', unitPriceUsd: 25, moq: 300, packedWeightKg: 0.65, volumeCbm: 0.006, originCountry: 'China', imageUrl: null },
   market: { estimatedPriceArs: 200000, estimatedMonthlyDemand: 40, source: 'test' },
+  fx: { status: 'live', arsPerUsd: 1491.8387, sourceDate: '2026-08-13', source: 'BCRA · Dólar Referencia Comunicación A 3500', code: 'REF', note: 'test' },
   suggestedQuantities: [300, 500], confidence: { overall: 80, productSource: 'verified', logistics: 'medium', market: 'medium' }, assumptions: [],
   customs: { ncmCandidate: '9506.59.00', classificationConfidence: 'medium', dutyRatePct: 20, dutyRateStatus: 'candidate', statisticsRatePct: 3, statisticsPreferenceStatus: 'none', interventionsStatus: 'verify_vuce', source: 'test', reviewedAt: '2026-08-13' },
 }
@@ -34,6 +35,11 @@ describe('decision readiness adversarial rules', () => {
 
   it('fails closed on missing market benchmark', () => {
     expect(missingAutomaticEvidence({ ...analysis, market: { ...analysis.market, estimatedPriceArs: null } })).toContain('benchmark local')
+  })
+
+  it('fails closed when BCRA REF is unavailable', () => {
+    expect(missingAutomaticEvidence({ ...analysis, fx: { ...analysis.fx!, status: 'unavailable', arsPerUsd: null } })).toContain('USD/ARS BCRA')
+    expect(missingAutomaticEvidence({ ...analysis, fx: undefined })).toContain('USD/ARS BCRA')
   })
 
   it('fails closed on missing duty/classification', () => {

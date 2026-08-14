@@ -1,4 +1,4 @@
-import { NCM_CATALOG, NCM_CATALOG_META, type NcmCatalogRow } from './ncmCatalog'
+import { NCM_CATALOG, NCM_CATALOG_META, type NcmCatalogRow, type NcmSimOpening } from './ncmCatalog'
 
 export type NcmProductFacts = {
   name?: string | null
@@ -13,6 +13,7 @@ export type NcmCandidate = {
   dutyRatePct: number | null
   score: number
   reasons: string[]
+  simOpening: NcmSimOpening | null
 }
 
 export type NcmClassification = {
@@ -36,6 +37,12 @@ function sourceText(facts: NcmProductFacts) {
 function wordMatch(text: string, token: string) {
   const t = normalize(token)
   return text.includes(t)
+}
+
+function resolveSimOpening(row: NcmCatalogRow, text: string): NcmSimOpening | null {
+  const openings = row.simOpenings || []
+  const matches = openings.filter((opening) => opening.matchTerms.some((term) => wordMatch(text, term)))
+  return matches.length === 1 ? matches[0] : null
 }
 
 function scoreRow(row: NcmCatalogRow, facts: NcmProductFacts): NcmCandidate {
@@ -69,13 +76,11 @@ function scoreRow(row: NcmCatalogRow, facts: NcmProductFacts): NcmCandidate {
     }
   }
 
-  // Specificity rules inside the pilot heading. They mimic the hierarchy of the
-  // nomenclature instead of letting a generic keyword win by raw frequency.
   if (row.code === '9506.51.00' && /\btennis\b|\btenis\b/.test(text) && !/padel|badminton|pickleball/.test(text)) {
     score += 55
     reasons.push('La subpartida específica de raqueta de tenis tiene prioridad frente a residuales.')
   }
-  if (row.code === '9506.59.00' && /padel|badminton|pickleball/.test(text) && /(racket|racquet|paddle|paleta|raqueta)/.test(text)) {
+  if (row.code === '9506.59.00' && /padel|badminton|squash|pickleball/.test(text) && /(racket|racquet|paddle|paleta|raqueta)/.test(text)) {
     score += 65
     reasons.push('Deporte de raqueta similar distinto de tenis: candidato residual específico 9506.59.00.')
   }
@@ -88,14 +93,17 @@ function scoreRow(row: NcmCatalogRow, facts: NcmProductFacts): NcmCandidate {
     reasons.push('La posición residual general pierde prioridad frente a una subpartida específica de raquetas.')
   }
 
-  return { code: row.code, description: row.description, dutyRatePct: row.dutyRatePct, score, reasons }
+  const simOpening = resolveSimOpening(row, text)
+  if (simOpening) reasons.push(`Apertura SIM compatible observada en el archivo oficial: ${simOpening.code} — ${simOpening.description}.`)
+
+  return { code: row.code, description: row.description, dutyRatePct: row.dutyRatePct, score, reasons, simOpening }
 }
 
 function missingFactsFor(facts: NcmProductFacts, top: NcmCandidate | null) {
   const missing: string[] = []
   const text = sourceText(facts)
   if (!facts.name && !facts.category) missing.push('Identidad o categoría del producto')
-  if (!facts.functionText && !/(padel|tennis|tenis|badminton|pickleball|table tennis|tenis de mesa|ping pong|gym|fitness|athletics)/.test(text)) {
+  if (!facts.functionText && !/(padel|tennis|tenis|badminton|squash|pickleball|table tennis|tenis de mesa|ping pong|gym|fitness|athletics)/.test(text)) {
     missing.push('Función/uso principal')
   }
   if (top?.code === '9506.59.00' && !/(racket|racquet|paddle|paleta|raqueta)/.test(text)) {
@@ -110,10 +118,6 @@ export function classifyNcm(facts: NcmProductFacts): NcmClassification {
     .filter((candidate) => candidate.score > 0)
     .sort((a, b) => b.score - a.score)
 
-  // 20 points requires at least two short positive signals (for example
-  // “racket” + “paddle”) or one strong catalogue phrase. That is enough to
-  // surface a LOW-confidence candidate and alternatives, but still rejects
-  // generic terms such as “sports equipment” that score only once.
   if (!ranked.length || ranked[0].score < 20) {
     return {
       status: 'missing', top: null, alternatives: [], confidence: 'missing',
@@ -138,8 +142,8 @@ export function classifyNcm(facts: NcmProductFacts): NcmClassification {
     confidence,
     missingFacts,
     rationale: [
-      `El candidato surge de un ranking limitado al catálogo NCM cargado; no se permite código fuera del catálogo.`,
-      ...top.reasons.slice(0, 4),
+      'El candidato surge de un ranking limitado al catálogo NCM cargado; no se permite código fuera del catálogo.',
+      ...top.reasons.slice(0, 5),
       ...(second ? [`Diferencia frente al segundo candidato: ${gap} puntos.`] : []),
     ],
     catalog: NCM_CATALOG_META,

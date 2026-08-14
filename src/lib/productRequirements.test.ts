@@ -41,11 +41,23 @@ describe('NCM-driven requirements adversarial rules', () => {
     expect(sim?.explanation).toContain('conflicto')
   })
 
-  it('uses the SIM candidate as the more specific CIVUCE lookup reference without claiming applicability', () => {
+  it('uses a medium/high SIM candidate as the more specific CIVUCE lookup reference without claiming applicability', () => {
     const customs = customsProfileFor('Padel racket', 'China', 'Padel racket')
     const interventions = buildProductRequirements(customs, 'China').find((item) => item.id === 'interventions')
     expect(interventions?.status).toBe('verify')
     expect(interventions?.nextStep).toContain('9506.59.00.900Z')
+  })
+
+  it('does not use a LOW SIM hypothesis as the CIVUCE lookup key', () => {
+    const customs = {
+      ...customsProfileFor('Padel racket', 'China', 'Padel racket'),
+      simOpeningCandidate: { code: '9506.59.00.100F', description: 'Raquetas de badminton', matchTerms: [] },
+      simOpeningConfidence: 'low' as const,
+    }
+    const interventions = buildProductRequirements(customs, 'China').find((item) => item.id === 'interventions')
+    expect(interventions?.nextStep).toContain('Consultar 9506.59.00 ')
+    expect(interventions?.nextStep).toContain('9506.59.00.100F')
+    expect(interventions?.nextStep).toContain('no reemplaza la NCM')
   })
 
   it('does not auto-apply origin preference for Mercosur text', () => {

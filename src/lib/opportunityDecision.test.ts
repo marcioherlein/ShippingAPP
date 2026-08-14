@@ -67,9 +67,9 @@ describe('Opportunity Decision Engine', () => {
     expect(decision.nextActions.join(' ')).toContain('demanda')
   })
 
-  it('rejects weak unit economics even before demand is supplied', () => {
-    const weak = inputs({ marketPriceArs: 50000 })
-    const a = analysis({ market: { ...(analysis().market as any), estimatedPriceArs: 50000 } as any })
+  it('rejects genuinely weak unit economics even before demand is supplied', () => {
+    const weak = inputs({ marketPriceArs: 40000 })
+    const a = analysis({ market: { ...(analysis().market as any), estimatedPriceArs: 40000 } as any })
     const decision = buildOpportunityDecision({ analysis: a, inputs: weak, taxContext: context, economicsReady: true })
     expect(decision.verdict).toBe('avoid')
     expect(decision.result?.marginPct).toBeLessThan(0.15)
@@ -97,13 +97,13 @@ describe('Opportunity Decision Engine', () => {
     expect(decision.reasons.join(' ')).toContain('Robust score')
   })
 
-  it('does not call a case attractive when the observed price floor destroys downside margin', () => {
+  it('does not call a case attractive when the observed price floor truly destroys downside margin', () => {
     const decision = buildOpportunityDecision({
       analysis: analysis(),
       inputs: inputs({ monthlyDemand: 30, capitalAvailableUsd: 25000 }),
       taxContext: context,
       economicsReady: true,
-      marketP25Ars: 50000,
+      marketP25Ars: 40000,
     })
     expect(decision.stage).toBe('robust_decision')
     expect(decision.verdict).not.toBe('attractive')

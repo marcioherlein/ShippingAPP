@@ -34,7 +34,7 @@ export function buildRegulatoryChecksV4(analysis: ProductAnalysis, client: Clien
     group: 'customs',
     status: 'verify',
     title: 'Business case habilitado con evidencia manual',
-    detail: `Precio proveedor, MOQ, peso, volumen, benchmark local, NCM y derecho fueron aportados por el usuario. Origen de evidencia: user_supplied. ${override.userCheckedOfficialSource ? 'Existe una referencia oficial declarada por el usuario, no verificada por ShippingAPP.' : 'No se declaró verificación oficial del NCM/derecho.'}`,
+    detail: `Precio proveedor, MOQ, peso, volumen, benchmark local, demanda mensual, NCM y derecho fueron aportados por el usuario. Origen de evidencia: user_supplied. ${override.userCheckedOfficialSource ? 'Existe una referencia oficial declarada por el usuario, no verificada por ShippingAPP.' : 'No se declaró verificación oficial del NCM/derecho.'}`,
     sourceIds: override.userCheckedOfficialSource ? ['tariff'] : [],
     financialEffect: 'both',
   }

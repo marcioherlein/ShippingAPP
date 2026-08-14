@@ -1,5 +1,18 @@
-import type { CustomsProfile } from './customsClassification'
+import type { CustomsProfile, SimEvidenceConfidence } from './customsClassification'
 import type { NcmCandidate } from './ncmClassifier'
+import type { NcmSimOpening } from './ncmCatalog'
+
+export type FullSimApiResult = {
+  status: 'candidate' | 'single' | 'missing' | 'not_found' | 'unavailable'
+  ncmCode: string
+  ncmLabel: string | null
+  candidate: { code: string; label: string; score: number } | null
+  alternatives: Array<{ code: string; label: string; score: number }>
+  confidence: 'high' | 'medium' | 'low' | 'missing'
+  rationale: string[]
+  missingFacts: string[]
+  sourceDate: string | null
+}
 
 export type FullNcmApiResult = {
   status: 'candidate' | 'missing'
@@ -14,6 +27,7 @@ export type FullNcmApiResult = {
   source: string
   catalogRecordCount: number
   retrievalMode: 'ai_reranked' | 'deterministic_fallback' | 'missing'
+  sim?: FullSimApiResult | null
 }
 
 export type FullNcmFacts = {
@@ -24,7 +38,7 @@ export type FullNcmFacts = {
   description?: string | null
 }
 
-function strong(confidence: CustomsProfile['classificationConfidence'] | FullNcmApiResult['confidence']) {
+function strong(confidence: CustomsProfile['classificationConfidence'] | FullNcmApiResult['confidence'] | SimEvidenceConfidence) {
   return confidence === 'high' || confidence === 'medium'
 }
 
@@ -42,6 +56,98 @@ function apiAlternatives(result: FullNcmApiResult): NcmCandidate[] {
 function addUniqueAlternative(items: NcmCandidate[], candidate: NcmCandidate | null) {
   if (!candidate || items.some((item) => item.code === candidate.code)) return items
   return [...items, candidate]
+}
+
+function validSimForNcm(code: string, ncmCode: string) {
+  return /^\d{4}\.\d{2}\.\d{2}\.\d{3}[A-Z]$/.test(code) && code.startsWith(`${ncmCode}.`)
+}
+
+function apiSimOpening(value: FullSimApiResult['candidate'], ncmCode: string): NcmSimOpening | null {
+  if (!value || !validSimForNcm(value.code, ncmCode)) return null
+  return { code: value.code, description: value.label, matchTerms: [] }
+}
+
+function apiSimAlternatives(sim: FullSimApiResult | null | undefined, ncmCode: string) {
+  if (!sim) return []
+  return sim.alternatives
+    .filter((item) => validSimForNcm(item.code, ncmCode))
+    .map((item) => ({ code: item.code, description: item.label, matchTerms: [] }))
+    .slice(0, 4)
+}
+
+function mergeUniqueSim(items: NcmSimOpening[], candidate: NcmSimOpening | null) {
+  if (!candidate || items.some((item) => item.code === candidate.code)) return items
+  return [...items, candidate]
+}
+
+function applySimEvidence(base: CustomsProfile, full: FullNcmApiResult): CustomsProfile {
+  const ncmCode = base.ncmCandidate
+  const sim = full.sim
+  if (!ncmCode || !sim || sim.ncmCode !== ncmCode) return base
+
+  const fullCandidate = apiSimOpening(sim.candidate, ncmCode)
+  const fullAlternatives = apiSimAlternatives(sim, ncmCode)
+  const localCandidate = base.simOpeningCandidate ?? null
+  const localConfidence = base.simOpeningConfidence ?? (localCandidate ? base.classificationConfidence : 'missing')
+
+  if (['missing', 'not_found', 'unavailable'].includes(sim.status) || !fullCandidate) {
+    return {
+      ...base,
+      simOpeningConfidence: localCandidate ? localConfidence : 'missing',
+      simAlternatives: base.simAlternatives ?? [],
+      simSource: localCandidate
+        ? `${base.simSource || 'Seed especializado'} · SIM full-catalog ${sim.status}; se conserva evidencia local.`
+        : `SIM full-catalog ${sim.status}; no se inventa apertura.`,
+      rationale: [...base.rationale, ...sim.rationale],
+      missingFacts: [...new Set([...base.missingFacts, ...sim.missingFacts])],
+    }
+  }
+
+  if (localCandidate && localCandidate.code === fullCandidate.code) {
+    return {
+      ...base,
+      simOpeningCandidate: localCandidate,
+      simOpeningConfidence: strong(sim.confidence) && strong(localConfidence) ? 'high' : localConfidence,
+      simAlternatives: fullAlternatives.filter((item) => item.code !== localCandidate.code),
+      simSource: `Seed especializado + snapshot SIM ARCA ${sim.sourceDate || full.sourceDate}: coincidencia ${localCandidate.code}.`,
+      rationale: [...base.rationale, ...sim.rationale, `SIM seed/full coinciden en ${localCandidate.code}.`],
+      missingFacts: [...new Set([...base.missingFacts, ...sim.missingFacts])],
+    }
+  }
+
+  if (localCandidate && strong(localConfidence) && strong(sim.confidence) && localCandidate.code !== fullCandidate.code) {
+    return {
+      ...base,
+      simOpeningCandidate: null,
+      simOpeningConfidence: 'low',
+      simAlternatives: mergeUniqueSim([localCandidate, ...fullAlternatives], fullCandidate).slice(0, 4),
+      simSource: `CONFLICTO SIM: seed ${localCandidate.code} vs full ${fullCandidate.code}. NCM ${ncmCode} se conserva; apertura requiere validación.`,
+      rationale: [...base.rationale, ...sim.rationale, `CONFLICTO SIM fuerte: ${localCandidate.code} vs ${fullCandidate.code}. El conflicto no cambia la NCM ni el derecho NCM-level de screening, pero bloquea el sufijo automático.`],
+      missingFacts: [...new Set([...base.missingFacts, ...sim.missingFacts, 'Resolver conflicto de apertura SIM antes de declarar/intervenciones'])],
+    }
+  }
+
+  if (localCandidate && strong(localConfidence) && !strong(sim.confidence) && localCandidate.code !== fullCandidate.code) {
+    return {
+      ...base,
+      simOpeningCandidate: localCandidate,
+      simOpeningConfidence: localConfidence,
+      simAlternatives: mergeUniqueSim([...(base.simAlternatives ?? []), ...fullAlternatives], fullCandidate).filter((item) => item.code !== localCandidate.code).slice(0, 4),
+      simSource: `${base.simSource || 'Seed especializado'} · full SIM alternativo ${fullCandidate.code} con confidence ${sim.confidence}; no desplaza seed fuerte.`,
+      rationale: [...base.rationale, ...sim.rationale],
+      missingFacts: [...new Set([...base.missingFacts, ...sim.missingFacts])],
+    }
+  }
+
+  return {
+    ...base,
+    simOpeningCandidate: fullCandidate,
+    simOpeningConfidence: sim.confidence,
+    simAlternatives: fullAlternatives.filter((item) => item.code !== fullCandidate.code),
+    simSource: `Snapshot SIM ARCA ${sim.sourceDate || full.sourceDate} · ${sim.status} · ${sim.confidence}.`,
+    rationale: [...base.rationale, ...sim.rationale, `Apertura SIM full-catalog candidata: ${fullCandidate.code}.`],
+    missingFacts: [...new Set([...base.missingFacts, ...sim.missingFacts])],
+  }
 }
 
 export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiResult): CustomsProfile {
@@ -66,6 +172,7 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
     return {
       ...local,
       classificationConfidence: 'low', dutyRatePct: null, dutyRateStatus: 'missing', simOpeningCandidate: null,
+      simOpeningConfidence: 'missing', simAlternatives: [], simSource: 'SIM no evaluada por conflicto NCM.',
       alternatives: addUniqueAlternative([...local.alternatives], conflictAlternative).slice(0, 4),
       missingFacts: [...new Set([...local.missingFacts, ...full.missingFacts, 'Resolver conflicto entre candidatos NCM antes de usar aranceles'])],
       rationale: [...local.rationale, ...full.rationale, `CONFLICTO: seed ${local.ncmCandidate} vs full-catalog ${full.code}. Economics bloqueado.`],
@@ -77,19 +184,21 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
   }
 
   if (localStrong && (!fullStrong || local.ncmCandidate !== full.code)) {
-    return {
+    const fullAlternative: NcmCandidate | null = full.code !== local.ncmCandidate ? {
+      code: full.code, description: full.label, dutyRatePct: null, score: 0,
+      reasons: ['Alternativa full-catalog de menor confianza.'], simOpening: null,
+    } : null
+    const kept = {
       ...local,
       source: `${local.source} Full-catalog devolvió ${full.code} con confidence ${full.confidence}; no desplaza el seed especializado fuerte.`,
-      alternatives: addUniqueAlternative([...local.alternatives], {
-        code: full.code, description: full.label, dutyRatePct: null, score: 0,
-        reasons: ['Alternativa full-catalog de menor confianza.'], simOpening: null,
-      }).slice(0, 4),
+      alternatives: addUniqueAlternative([...local.alternatives], fullAlternative).slice(0, 4),
       rationale: [...local.rationale, ...full.rationale],
       missingFacts: [...new Set([...local.missingFacts, ...full.missingFacts])],
       catalogScope: `Full ARCA snapshot (${full.catalogRecordCount} NCM) + seed especializado`,
       catalogSourceDate: full.sourceDate,
       reviewedAt: full.sourceDate,
     }
+    return full.code === local.ncmCandidate ? applySimEvidence(kept, full) : kept
   }
 
   const sameAsLocal = local.ncmCandidate === full.code
@@ -97,10 +206,13 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
   let combinedAlternatives = apiAlternatives(full)
   for (const candidate of local.alternatives) combinedAlternatives = addUniqueAlternative(combinedAlternatives, candidate)
 
-  return {
+  const merged: CustomsProfile = {
     ...local,
     ncmCandidate: full.code,
     simOpeningCandidate: sameAsLocal ? local.simOpeningCandidate ?? null : null,
+    simOpeningConfidence: sameAsLocal ? local.simOpeningConfidence ?? 'missing' : 'missing',
+    simAlternatives: sameAsLocal ? local.simAlternatives ?? [] : [],
+    simSource: sameAsLocal ? local.simSource : 'SIM pendiente de hidratación full-catalog.',
     classificationConfidence: full.confidence,
     dutyRatePct: usableLocalDuty,
     dutyRateStatus: usableLocalDuty === null ? 'missing' : 'candidate',
@@ -110,9 +222,10 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
     rationale: [...full.rationale, ...(sameAsLocal ? local.rationale : []), ...(usableLocalDuty === null ? ['Full-catalog retrieval no contiene semántica tarifaria validada; el derecho permanece pendiente.'] : ['El candidato full-catalog coincide con el seed especializado; se conserva el derecho candidato del seed para screening.'])],
     source: `${full.source} · Full snapshot ${full.sourceDate}, ${full.catalogRecordCount} NCM. ${full.retrievalMode}. ${usableLocalDuty === null ? 'Derecho no resuelto por el índice full-catalog.' : 'Coincide con seed especializado; derecho candidato conservado para screening.'}`,
     reviewedAt: full.sourceDate,
-    catalogScope: `Full ARCA snapshot (${full.catalogRecordCount} posiciones NCM); retrieval sin datos tarifarios ni SIM globales`,
+    catalogScope: `Full ARCA snapshot (${full.catalogRecordCount} posiciones NCM); retrieval NCM + hidratación SIM por capítulo; datos tarifarios/CIVUCE siguen separados`,
     catalogSourceDate: full.sourceDate,
   }
+  return applySimEvidence(merged, full)
 }
 
 export async function classifyNcmRemote(facts: FullNcmFacts): Promise<FullNcmApiResult> {

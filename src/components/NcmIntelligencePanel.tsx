@@ -13,42 +13,54 @@ export default function NcmIntelligencePanel({ analysis }: { analysis: ProductAn
   const customs = analysis.customs
   const requirements = useMemo(() => buildProductRequirements(customs, analysis.product.originCountry), [customs, analysis.product.originCountry])
   const fullCatalog = customs.catalogScope.includes('Full ARCA snapshot')
+  const simConfidence = customs.simOpeningConfidence ?? 'missing'
+  const simCandidate = customs.simOpeningCandidate
+  const simLabel = simCandidate
+    ? `${simCandidate.code} · ${simCandidate.description}`
+    : simConfidence === 'low'
+      ? 'Pendiente por conflicto / baja confianza'
+      : 'No resuelta automáticamente'
 
   return <section className="regulatory-section">
     <section className="regulatory-card">
       <div className="reg-card-head">
-        <div><span className="eyebrow">NCM Intelligence · MVP 1.1</span><h2>{customs.ncmCandidate ? `NCM candidata ${customs.ncmCandidate}` : 'Clasificación todavía no resuelta'}</h2></div>
+        <div><span className="eyebrow">NCM + SIM Intelligence · MVP 1.2</span><h2>{customs.ncmCandidate ? `NCM candidata ${customs.ncmCandidate}` : 'Clasificación todavía no resuelta'}</h2></div>
         <span className={`confidence ${customs.classificationConfidence === 'high' ? 'good' : 'warning'}`}>{customs.classificationConfidence.toUpperCase()}</span>
       </div>
       <p className="reg-intro">{fullCatalog
-        ? 'La búsqueda se ejecutó contra la snapshot completa cargada del nomenclador ARCA. La IA sólo puede reordenar una shortlist de códigos existentes: no puede crear una NCM. Esta capa resuelve candidatos; aranceles, aperturas SIM fuera del seed especializado e intervenciones se validan por separado.'
+        ? 'La NCM se busca contra la snapshot completa del nomenclador ARCA. Después, ShippingAPP carga sólo el capítulo SIM correspondiente y puede reordenar exclusivamente las aperturas oficiales de esa NCM. La IA no puede crear ni cambiar códigos. NCM y SIM siguen siendo candidatos de screening; aranceles e intervenciones CIVUCE se validan por separado.'
         : 'El full-catalog no amplió la clasificación y ShippingAPP conserva el clasificador seed fail-closed. La salida sigue siendo screening, no una clasificación vinculante.'}</p>
 
       <div className="fact-grid">
         <div><span>Descripción NCM</span><b>{customs.description || 'Sin posición candidata'}</b></div>
-        <div><span>Apertura SIM candidata</span><b>{customs.simOpeningCandidate ? `${customs.simOpeningCandidate.code} · ${customs.simOpeningCandidate.description}` : 'No hidratada / no resuelta'}</b></div>
+        <div><span>Apertura SIM candidata</span><b>{simLabel}</b><small>{simCandidate ? `${simConfidence.toUpperCase()} confidence · VERIFICAR` : 'VERIFICAR antes de declarar'}</small></div>
         <div><span>Derecho candidato</span><b>{customs.dutyRatePct === null ? 'Pendiente de validación tarifaria' : `${customs.dutyRatePct}% · screening`}</b></div>
-        <div><span>Fuente NCM</span><b>ARCA · snapshot {customs.catalogSourceDate}</b></div>
+        <div><span>Fuente NCM/SIM</span><b>ARCA · snapshot {customs.catalogSourceDate}</b></div>
         <div><span>Intervenciones</span><b>VERIFICAR CIVUCE</b></div>
       </div>
+
+      {customs.simSource && <div className="analysis-banner"><b>Evidencia SIM:</b> {customs.simSource}</div>}
+      {customs.simAlternatives && customs.simAlternatives.length > 0 && <div className="docs-list">
+        {customs.simAlternatives.map((opening) => <div className="doc-row" key={opening.code}><span>SIM alternativa</span><div><b>{opening.code} · {opening.description}</b><p>Existe dentro de la misma NCM candidata. No se usa como apertura declarativa mientras no sea la candidata principal con evidencia suficiente.</p></div><i>○</i></div>)}
+      </div>}
 
       {customs.rationale.length > 0 && <div className="assumptions"><b>Por qué llegó acá</b><ul>{customs.rationale.map((item) => <li key={item}>{item}</li>)}</ul></div>}
       {customs.missingFacts.length > 0 && <div className="analysis-banner"><b>Datos que mejorarían la clasificación:</b> {customs.missingFacts.join(' · ')}</div>}
 
       {customs.alternatives.length > 0 && <div className="docs-list">
-        {customs.alternatives.map((candidate) => <div className="doc-row" key={candidate.code}><span>Alternativa</span><div><b>{candidate.code} · {candidate.description}</b><p>Score relativo {candidate.score}. Se conserva como alternativa para revisión; no se usa en el landed cost mientras no sea el candidato principal con evidencia suficiente.</p></div><i>○</i></div>)}
+        {customs.alternatives.map((candidate) => <div className="doc-row" key={candidate.code}><span>NCM alternativa</span><div><b>{candidate.code} · {candidate.description}</b><p>Score relativo {candidate.score}. Se conserva como alternativa para revisión; no se usa en el landed cost mientras no sea el candidato principal con evidencia suficiente.</p></div><i>○</i></div>)}
       </div>}
 
       <div className="source-links">
         <a href={sourceUrls.ARCA} target="_blank" rel="noreferrer">ARCA Arancel Integrado ↗</a>
         <a href={sourceUrls.CIVUCE} target="_blank" rel="noreferrer">CIVUCE ↗</a>
       </div>
-      <p className="docs-note">Cobertura de clasificación: {customs.catalogScope}. La snapshot global no contiene semántica tarifaria ni aperturas SIM; no confundir cobertura NCM con cobertura completa de requisitos.</p>
+      <p className="docs-note">Cobertura: {customs.catalogScope}. La hidratación SIM usa assets oficiales por capítulo y no contiene campos tarifarios. Tener NCM/SIM candidata no equivale a conocer el derecho, intervenciones, prohibiciones o reglamentos aplicables.</p>
     </section>
 
     <section className="regulatory-card">
       <div className="reg-card-head"><div><span className="eyebrow">Requirements Intelligence</span><h2>Qué hay que resolver para esta mercadería</h2></div></div>
-      <p className="reg-intro">La NCM dispara búsquedas y verificaciones; no demuestra por sí sola que una intervención, prohibición o reglamento técnico aplique o no. ShippingAPP mantiene en VERIFICAR lo que CIVUCE todavía no fue consultado de forma estructurada.</p>
+      <p className="reg-intro">La NCM y su apertura SIM mejoran la precisión de la consulta, pero no demuestran por sí solas que una intervención, prohibición o reglamento técnico aplique o no. ShippingAPP mantiene en VERIFICAR lo que CIVUCE todavía no fue consultado de forma estructurada.</p>
       <div className="requirement-groups">
         <div className="requirement-group">
           {requirements.map((item) => <article className={`requirement ${item.status}`} key={item.id}>

@@ -3,7 +3,7 @@ import type { NcmSimOpening } from './ncmCatalog'
 
 export type CustomsProfile = {
   ncmCandidate: string | null
-  simOpeningCandidate: NcmSimOpening | null
+  simOpeningCandidate?: NcmSimOpening | null
   classificationConfidence: 'high' | 'medium' | 'low' | 'missing'
   dutyRatePct: number | null
   dutyRateStatus: 'candidate' | 'missing'

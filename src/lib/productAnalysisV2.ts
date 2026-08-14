@@ -1,14 +1,31 @@
 import { analyzeAlibabaUrl, applyAnalysis, type ProductAnalysis } from './productAnalysis'
 import { customsProfileFor, type CustomsProfile } from './customsClassification'
+import { classifyNcmRemote, mergeFullCustomsProfile } from './fullNcmClient'
 import type { Inputs } from './types'
 
 export type ProductAnalysisV2 = ProductAnalysis & { customs: CustomsProfile }
 
 export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
   const base = await analyzeAlibabaUrl(url)
-  const customs = customsProfileFor(base.product.category, base.product.originCountry, base.product.name)
+  const localCustoms = customsProfileFor(base.product.category, base.product.originCountry, base.product.name)
+  let customs = localCustoms
+
+  try {
+    const full = await classifyNcmRemote({
+      name: base.product.name,
+      category: base.product.category,
+    })
+    customs = mergeFullCustomsProfile(localCustoms, full)
+  } catch {
+    customs = {
+      ...localCustoms,
+      source: `${localCustoms.source} Full-catalog retrieval no disponible; fallback seed fail-closed.`,
+      rationale: [...localCustoms.rationale, 'No se pudo consultar la snapshot full-catalog; no se amplió ni inventó la clasificación.'],
+    }
+  }
+
   const market = customs.dutyRatePct === null
-    ? { ...base.market, estimatedPriceArs: null, source: `${base.market.source} · economics blocked pending customs classification` }
+    ? { ...base.market, estimatedPriceArs: null, source: `${base.market.source} · economics blocked pending customs classification/tariff` }
     : base.market
   return { ...base, market, customs }
 }

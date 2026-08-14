@@ -21,10 +21,31 @@ function isSimOpening(rawCode) {
   return /^\d{4}\.\d{2}\.\d{2}\.\d{3}[A-Z]$/.test(rawCode)
 }
 
+function isBaseNcm(rawCode) {
+  return validNcm(rawCode)
+}
+
+function codeDigits(rawCode) {
+  return rawCode.replace(/[^0-9]/g, '')
+}
+
+function cleanDescription(value) {
+  return value.trim().replace(/^[-\s]+/, '').replace(/\s+/g, ' ').trim()
+}
+
+function lineageFor(activeGroups, rawCode) {
+  const digits = codeDigits(rawCode)
+  return activeGroups
+    .filter((group) => digits.startsWith(group.digits) && group.digits.length < digits.length)
+    .map((group) => group.description)
+    .filter(Boolean)
+}
+
 export function parseNomencladorText(text, sourceFile = 'nomenclador_unknown.txt') {
   const rows = new Map()
   let parsedLines = 0
   let malformedLines = 0
+  let activeGroups = []
 
   for (const line of text.split(/\r?\n/)) {
     if (!line.startsWith('2@')) continue
@@ -35,26 +56,41 @@ export function parseNomencladorText(text, sourceFile = 'nomenclador_unknown.txt
     }
 
     const rawCode = parts[1].trim()
+    const rawDigits = codeDigits(rawCode)
+    const description = cleanDescription(parts[10])
     const ncm = ncmFromRawCode(rawCode)
+
+    // ARCA interleaves grouping rows such as 9506.5 and 9506.51.00.2 with
+    // actual NCM/SIM rows. Preserve those labels as lineage instead of losing
+    // critical semantics when a leaf is merely called “Las demás”.
+    const groupLike = rawDigits.length >= 4 && !isBaseNcm(rawCode) && !isSimOpening(rawCode)
+    if (groupLike && description) {
+      activeGroups = activeGroups.filter((group) => rawDigits.startsWith(group.digits) && group.digits.length < rawDigits.length)
+      activeGroups.push({ rawCode, digits: rawDigits, description })
+    }
+
     if (!ncm) continue
     parsedLines += 1
 
-    const description = parts[10].trim().replace(/\s+/g, ' ')
     const rawTariffFields = parts.slice(2, 8).map((value) => value.trim())
     const unitCode = parts[8].trim() || null
-
     const current = rows.get(ncm) || {
       code: ncm,
       description: null,
+      context: [],
       simOpenings: [],
     }
 
-    if (rawCode === ncm && description) current.description = description.replace(/^-+/, '').trim()
+    if (isBaseNcm(rawCode)) {
+      current.description = description || current.description
+      current.context = lineageFor(activeGroups, rawCode)
+    }
 
     if (isSimOpening(rawCode)) {
       current.simOpenings.push({
         code: rawCode,
         description: description || null,
+        context: lineageFor(activeGroups, rawCode),
         rawTariffFields,
         unitCode,
       })
@@ -64,7 +100,13 @@ export function parseNomencladorText(text, sourceFile = 'nomenclador_unknown.txt
   }
 
   const records = [...rows.values()]
-    .map((row) => ({ ...row, simOpenings: row.simOpenings.sort((a, b) => a.code.localeCompare(b.code)) }))
+    .map((row) => ({
+      ...row,
+      context: [...new Set(row.context)],
+      simOpenings: row.simOpenings
+        .map((opening) => ({ ...opening, context: [...new Set(opening.context)] }))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    }))
     .sort((a, b) => a.code.localeCompare(b.code))
 
   return {
@@ -72,7 +114,7 @@ export function parseNomencladorText(text, sourceFile = 'nomenclador_unknown.txt
       source: 'ARCA Arancel Integrado',
       sourceFile: path.basename(sourceFile),
       sourceDate: sourceDateFromFilename(sourceFile),
-      parserSchema: 1,
+      parserSchema: 2,
       tariffFieldSemantics: 'UNMAPPED_RAW_FIELDS',
       parsedLines,
       malformedLines,

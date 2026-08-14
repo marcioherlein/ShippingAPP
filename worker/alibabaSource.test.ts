@@ -10,7 +10,7 @@ function response(html: string, status = 200, headers: Record<string, string> = 
 const richHtml = `<!doctype html><html><head>
 <meta property="og:title" content="Carbon Fiber Padel Racket Wholesale">
 <script type="application/ld+json">{"@type":"Product","name":"Carbon Fiber Padel Racket","offers":{"price":"25.50"}}</script>
-</head><body><div>US $25.50 MOQ: 300 pieces product-detail supplier</div></body></html>`
+</head><body><div>US $25.50 MOQ: 300 pieces product-detail supplier ${'carbon fiber padel racket wholesale factory specification '.repeat(12)}</div></body></html>`
 
 const partialHtml = `<!doctype html><html><head>
 <meta property="og:title" content="Carbon Fiber Padel Racket Wholesale">
@@ -19,7 +19,8 @@ const partialHtml = `<!doctype html><html><head>
 const blockedHtml = `<!doctype html><html><head><title>Security verification</title></head><body>${'Verify that you are human CAPTCHA unusual traffic '.repeat(30)}</body></html>`
 
 describe('Alibaba source quality', () => {
-  it('recognizes multiple hard product signals', () => {
+  it('recognizes multiple hard product signals in a page-sized response', () => {
+    expect(richHtml.length).toBeGreaterThan(500)
     expect(alibabaHtmlQuality(richHtml)).toBeGreaterThanOrEqual(4)
   })
 

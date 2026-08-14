@@ -1,5 +1,14 @@
 import type { Inputs } from './types'
 
+export type FxEvidence = {
+  status: 'live' | 'unavailable'
+  arsPerUsd: number | null
+  sourceDate: string | null
+  source: string
+  code: 'REF'
+  note: string
+}
+
 export type ProductAnalysis = {
   sourceUrl: string
   fetched: boolean
@@ -18,6 +27,7 @@ export type ProductAnalysis = {
     estimatedMonthlyDemand: number
     source: string
   }
+  fx?: FxEvidence
   suggestedQuantities: number[]
   confidence: {
     overall: number
@@ -42,13 +52,18 @@ export async function analyzeAlibabaUrl(url: string): Promise<ProductAnalysis> {
 export function applyAnalysis(current: Inputs, analysis: ProductAnalysis): Inputs {
   const price = analysis.product.unitPriceUsd
   const moq = analysis.product.moq || analysis.suggestedQuantities[0] || 100
+  const liveFx = analysis.fx?.status === 'live' && analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0
+    ? analysis.fx.arsPerUsd
+    : 0
   return {
     ...current,
     quantities: analysis.suggestedQuantities,
     priceTiers: price ? [{ minQuantity: moq, unitPriceUsd: price }] : current.priceTiers,
     weightKg: analysis.product.packedWeightKg,
     volumeCbm: analysis.product.volumeCbm,
-    marketPriceArs: analysis.market.estimatedPriceArs || current.marketPriceArs,
+    // New scans cannot inherit another product's local benchmark or FX.
+    marketPriceArs: analysis.market.estimatedPriceArs || 0,
+    usdArs: liveFx,
     monthlyDemand: analysis.market.estimatedMonthlyDemand || current.monthlyDemand,
   }
 }

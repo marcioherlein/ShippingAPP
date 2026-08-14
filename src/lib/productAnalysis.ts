@@ -9,9 +9,19 @@ export type FxEvidence = {
   note: string
 }
 
+export type SourceReadEvidence = {
+  mode: 'direct' | 'browser' | 'partial' | 'blocked'
+  quality: number
+  directStatus: number | null
+  browserAttempted: boolean
+  browserMsUsed: number | null
+  reason: string
+}
+
 export type ProductAnalysis = {
   sourceUrl: string
   fetched: boolean
+  sourceRead?: SourceReadEvidence
   product: {
     name: string
     category: string

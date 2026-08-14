@@ -1,0 +1,26 @@
+name: NCM Hierarchy Probe
+on:
+  push:
+    branches: [feature/full-ncm-retrieval]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -fL 'https://serviciosweb.afip.gob.ar/aduana/arancelintegrado/archivos/arancel.zip' -o /tmp/a.zip
+      - run: mkdir /tmp/a && unzip -q /tmp/a.zip -d /tmp/a
+      - name: Show hierarchy around 95.06
+        run: |
+          NOM=$(find /tmp/a -name 'nomenclador_*.txt' | head -1)
+          python - "$NOM" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          lines=p.read_text(encoding='latin-1').splitlines()
+          for i,line in enumerate(lines):
+              if '@95.06@' in line or line.startswith('2@9506.11.00@'):
+                  for x in lines[max(0,i-12):i+25]: print(x)
+                  break
+          PY

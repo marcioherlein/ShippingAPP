@@ -14,7 +14,7 @@ const analysis: ProductAnalysis = {
 
 const override: ExpertOverride = {
   ncm: '8504.40.90', dutyRatePct: 16, supplierUnitPriceUsd: 18.5, moq: 200,
-  unitWeightKg: 0.42, unitVolumeCbm: 0.0035, marketPriceArs: 95000,
+  unitWeightKg: 0.42, unitVolumeCbm: 0.0035, marketPriceArs: 95000, monthlyDemand: 25,
   userCheckedOfficialSource: false, sourceNote: '', evidenceOrigin: 'user_supplied',
 }
 

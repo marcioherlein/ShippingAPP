@@ -21,12 +21,16 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
     }]
   }
 
+  const tariffExplanation = customs.classificationConfidence === 'low'
+    ? 'Existe un candidato NCM, pero su confianza es LOW. ShippingAPP retiene deliberadamente la alícuota del cálculo económico hasta fortalecer la clasificación o recibir evidencia manual; no es ausencia de tasa, es un gate de confianza.'
+    : customs.dutyRatePct === null
+      ? 'La clasificación candidata no tiene una alícuota utilizable en la evidencia cargada; no se completa con un porcentaje genérico.'
+      : `El screening usa ${customs.dutyRatePct}% como derecho candidato. La alícuota final puede depender de actualización normativa, origen, régimen o preferencia aplicable.`
+
   const requirements: ProductRequirement[] = [
     {
       id: 'tariff-current', status: 'verify', title: `Confirmar alícuota vigente para NCM ${ncm}`,
-      explanation: customs.dutyRatePct === null
-        ? 'El catálogo seed no tiene una alícuota utilizable para esta posición.'
-        : `El screening usa ${customs.dutyRatePct}% como derecho candidato. La alícuota final puede depender de actualización normativa, origen, régimen o preferencia aplicable.`,
+      explanation: tariffExplanation,
       nextStep: 'Contrastar la posición y alícuota contra el Arancel Integrado vigente al momento del análisis.', source: 'ARCA',
     },
     {

@@ -22,6 +22,7 @@ export type RobustCandidate = {
 export type RobustOptimization = {
   stress: { demandDownPct: number; marketFloorArs: number | null }
   scenarios: StressRun[]
+  candidates: RobustCandidate[]
   baseRecommendation?: Result
   robustRecommendation?: RobustCandidate
   selectionChanges: boolean
@@ -78,16 +79,17 @@ export function aggregateRobustCandidates(runs: StressRun[]): RobustCandidate[] 
     const scenarioResults = runs.map((run) => ({ id: run.id, result: maps.get(run.id)?.get(k) })).filter((item): item is { id: StressCase; result: Result } => !!item.result)
     if (scenarioResults.length !== runs.length) continue
     const scores = scenarioResults.map((item) => item.result.score)
+    const robustScore = Math.min(...scores)
     candidates.push({
       quantity: baseResult.quantity,
       mode: baseResult.mode,
       base: baseResult,
       scenarioResults,
-      robustScore: Math.min(...scores),
+      robustScore,
       worstMarginPct: Math.min(...scenarioResults.map((item) => item.result.marginPct)),
       worstInventoryMonths: Math.max(...scenarioResults.map((item) => item.result.inventoryMonths)),
       baseScore: baseResult.score,
-      scoreDrop: baseResult.score - Math.min(...scores),
+      scoreDrop: baseResult.score - robustScore,
       affordable: scenarioResults.every((item) => item.result.affordable),
     })
   }
@@ -105,9 +107,10 @@ export function selectRobustCandidate(candidates: RobustCandidate[]) {
 export function optimizeRobust(inputs: Inputs, context: ScenarioTaxContext, stress: RobustStress): RobustOptimization {
   const normalized = normalizeStress(inputs, stress)
   const scenarios = buildStressRuns(inputs, context, normalized)
+  const candidates = aggregateRobustCandidates(scenarios)
   const base = scenarios.find((run) => run.id === 'base')
   const baseRecommendation = base ? recommendV2(base.results) : undefined
-  const robustRecommendation = selectRobustCandidate(aggregateRobustCandidates(scenarios))
+  const robustRecommendation = selectRobustCandidate(candidates)
   const selectionChanges = !!baseRecommendation && !!robustRecommendation && (baseRecommendation.quantity !== robustRecommendation.quantity || baseRecommendation.mode !== robustRecommendation.mode)
-  return { stress: normalized, scenarios, baseRecommendation, robustRecommendation, selectionChanges }
+  return { stress: normalized, scenarios, candidates, baseRecommendation, robustRecommendation, selectionChanges }
 }

@@ -30,6 +30,18 @@ describe('freight rate import adversarial rules', () => {
     expect(result.records).toHaveLength(0)
   })
 
+  it('rejects invalid received dates instead of leaving sort order undefined', () => {
+    const result = parse(row({ receivedAt: 'not-a-date' }))
+    expect(result.records).toHaveLength(0)
+    expect(result.issues[0].message).toContain('receivedAt')
+  })
+
+  it('rejects duplicate rate IDs', () => {
+    const result = parse(row({ id: 'same' }), row({ id: 'same', provider: 'Forwarder B' }))
+    expect(result.records).toHaveLength(1)
+    expect(result.issues[0].message).toContain('duplicado')
+  })
+
   it('does not select an expired rate', () => {
     const records = parse(row({ validTo: '2026-08-12' })).records
     expect(selectFreightRate(records, 'air', 'Shanghai', 'Buenos Aires', '2026-08-14')).toBeNull()

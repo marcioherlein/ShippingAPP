@@ -53,7 +53,7 @@ export default function App() {
   const missingAutomatic = analysis ? missingAutomaticEvidence(analysis) : []
 
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.1</span></header>
+    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.2</span></header>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
     {analysis && <MarketEvidence analysis={analysis} />}
     {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
@@ -61,7 +61,7 @@ export default function App() {
     {analysis && economicsReady && <>
       {expertOverride
         ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. ShippingAPP no convierte esos datos en validación aduanera; NCM/derecho permanecen en VERIFICAR.</div>
-        : <div className="analysis-banner"><b>Estimación instantánea.</b> Precio local basado en comparables publicados; la demanda no se infiere de Mercado Libre. Confirmá una hipótesis mensual antes de usar score o recomendación de cantidad. La NCM se busca contra la snapshot completa cargada del nomenclador ARCA y sigue siendo candidata; el arancel automático sólo se conserva cuando existe evidencia separada suficientemente fuerte. Intervenciones, origen preferencial, reglamentos técnicos y medidas comerciales permanecen sujetos a verificación.</div>}
+        : <div className="analysis-banner"><b>Estimación instantánea.</b> Precio local basado en comparables publicados; la demanda no se infiere de Mercado Libre. Confirmá una hipótesis mensual antes de usar score o recomendación de cantidad. La NCM se busca contra la snapshot completa del nomenclador ARCA y luego se hidratan aperturas SIM del capítulo correspondiente. NCM/SIM siguen siendo candidatos; el arancel automático sólo se conserva cuando existe evidencia tarifaria separada suficientemente fuerte. Intervenciones, origen preferencial, reglamentos técnicos y medidas comerciales permanecen sujetos a verificación.</div>}
 
       <div className="workspace">
         <aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>
@@ -83,6 +83,6 @@ export default function App() {
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto y MOQ</span><p>Extraemos lo visible de la publicación.</p></div><div><b>02</b><span>NCM Intelligence</span><p>Retrieval sobre la snapshot completa ARCA + shortlist restringida.</p></div><div><b>03</b><span>Requirements</span><p>Arancel, CIVUCE, restricciones, reglamentos y origen a resolver.</p></div><div><b>04</b><span>Decisión robusta</span><p>Economics + readiness + cantidad con demanda explícita.</p></div></section>}
+    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto y MOQ</span><p>Extraemos lo visible de la publicación.</p></div><div><b>02</b><span>NCM + SIM</span><p>Retrieval ARCA completo + apertura SIM por capítulo.</p></div><div><b>03</b><span>Requirements</span><p>Arancel, CIVUCE, restricciones, reglamentos y origen a resolver.</p></div><div><b>04</b><span>Decisión robusta</span><p>Economics + readiness + cantidad con demanda explícita.</p></div></section>}
   </main>
 }

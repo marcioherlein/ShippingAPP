@@ -32,7 +32,7 @@ const baseInputs = {
   capitalAvailableUsd: 0,
 }
 
-describe('Opportunity Decision missing-capital boundaries', () => {
+describe('Opportunity Decision missing-capital / manual-evidence boundaries', () => {
   it('does not treat absent capital as a financing failure in instant screening', () => {
     const decision = buildOpportunityDecision({ analysis, inputs: { ...baseInputs, monthlyDemand: 0 }, taxContext: context, economicsReady: true })
     expect(decision.verdict).toBe('attractive')
@@ -48,5 +48,19 @@ describe('Opportunity Decision missing-capital boundaries', () => {
       expect(decision.summary).toContain('factibilidad de capital')
     }
     expect(decision.warnings.join(' ')).toContain('Capital no informado')
+  })
+
+  it('keeps Expert Override incomplete when the independent BCRA FX layer is unavailable', () => {
+    const decision = buildOpportunityDecision({
+      analysis,
+      inputs: { ...baseInputs, usdArs: 0, monthlyDemand: 45 },
+      taxContext: context,
+      economicsReady: false,
+      manualOverrideActive: true,
+    })
+    expect(decision.verdict).toBe('incomplete')
+    expect(decision.summary).toContain('USD/ARS BCRA')
+    expect(decision.summary).not.toContain('precio proveedor')
+    expect(decision.result).toBeNull()
   })
 })

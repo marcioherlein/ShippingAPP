@@ -51,8 +51,8 @@ type AiExpansion = { searchTerms: string[]; missingFacts: string[] }
 type AiRanking = { ranking: Array<{ code: string; reason?: string }>; confidence?: 'high' | 'medium' | 'low'; missingFacts?: string[] }
 
 const STOPWORDS = new Set([
-  'de','del','la','las','el','los','un','una','unos','unas','y','o','e','para','por','con','sin','en','al','se','su','sus','que','como','tipo','otros','otras','demas','demás',
-  'the','of','and','or','for','with','without','in','a','an','to','other','others','product','producto','articulo','artículo','material','materials','equipment','equipo',
+  'de','del','la','las','el','los','un','una','unos','unas','y','o','e','para','por','con','sin','en','al','se','su','sus','que','como','tipo','otro','otra','dema',
+  'the','of','and','or','for','with','without','in','a','an','to','other','product','producto','articulo','material','equipment','equipo',
 ])
 
 export function normalizeText(value: string | null | undefined) {
@@ -65,8 +65,21 @@ export function normalizeText(value: string | null | undefined) {
     .trim()
 }
 
+export function canonicalToken(value: string) {
+  let token = normalizeText(value)
+  if (!token || token.length < 3) return token
+  // Conservative singularization for retrieval only. Avoid fuzzy/edit-distance
+  // matching: it can cross customs concepts. This handles ordinary Spanish
+  // plural/adjective forms such as raquetas→raqueta, similares→similar and
+  // convertidores→convertidor while preserving words like tenis.
+  if (token.length > 6 && token.endsWith('es') && !token.endsWith('ies')) token = token.slice(0, -2)
+  else if (token.length > 4 && token.endsWith('s') && !token.endsWith('is') && !token.endsWith('us')) token = token.slice(0, -1)
+  return token
+}
+
 function tokens(value: string) {
-  return [...new Set(normalizeText(value).split(' ').filter((token) => token.length >= 3 && !STOPWORDS.has(token)))]
+  const raw = normalizeText(value).split(' ')
+  return [...new Set(raw.map(canonicalToken).filter((token) => token.length >= 3 && !STOPWORDS.has(token)))]
 }
 
 function safeTerms(values: unknown): string[] {
@@ -77,10 +90,6 @@ function safeTerms(values: unknown): string[] {
     .filter((value) => value.length >= 3 && value.length <= 100)
     .filter((value) => !/\b\d{4}[.]?\d{2}[.]?\d{2}\b/.test(value))
   )].slice(0, 14)
-}
-
-function factsText(facts: NcmProductFacts) {
-  return [facts.name, facts.category, facts.material, facts.functionText, facts.description].filter(Boolean).join(' ')
 }
 
 export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25): NcmRetrievalCandidate[] {

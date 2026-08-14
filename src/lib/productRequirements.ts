@@ -27,21 +27,38 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
       ? 'La clasificación candidata no tiene una alícuota utilizable en la evidencia cargada; no se completa con un porcentaje genérico.'
       : `El screening usa ${customs.dutyRatePct}% como derecho candidato. La alícuota final puede depender de actualización normativa, origen, régimen o preferencia aplicable.`
 
+  const simCandidate = customs.simOpeningCandidate
+  const simConfidence = customs.simOpeningConfidence ?? 'missing'
+  const simRequirement: ProductRequirement = simCandidate
+    ? {
+        id: 'sim-opening', status: 'verify', title: `Confirmar apertura SIM candidata ${simCandidate.code}`,
+        explanation: `ShippingAPP encontró una apertura oficial dentro de la NCM ${ncm}: ${simCandidate.description}. Confidence ${simConfidence.toUpperCase()}. La apertura SIM mejora la precisión declarativa y de intervenciones, pero la salida automática no constituye una clasificación vinculante.`,
+        nextStep: 'Contrastar la apertura con la ficha técnica y la nomenclatura vigente antes de oficializar la destinación o resolver intervenciones asociadas.', source: 'ARCA',
+      }
+    : {
+        id: 'sim-opening', status: 'verify', title: 'Confirmar si corresponde una apertura SIM más específica',
+        explanation: simConfidence === 'low'
+          ? `La NCM ${ncm} se conserva, pero ShippingAPP detectó conflicto o evidencia insuficiente entre aperturas SIM. No se eligió un sufijo automático para evitar falsa precisión.`
+          : `La NCM ${ncm} está identificada, pero no quedó una apertura SIM automática suficientemente sustentada. Esto no invalida la NCM; significa que el detalle declarativo debe revisarse por separado.`,
+        nextStep: 'Revisar las aperturas SIM oficiales de la NCM y aportar las características técnicas que permitan distinguirlas.', source: 'ARCA',
+      }
+
   const requirements: ProductRequirement[] = [
     {
       id: 'tariff-current', status: 'verify', title: `Confirmar alícuota vigente para NCM ${ncm}`,
       explanation: tariffExplanation,
       nextStep: 'Contrastar la posición y alícuota contra el Arancel Integrado vigente al momento del análisis.', source: 'ARCA',
     },
+    simRequirement,
     {
       id: 'interventions', status: 'verify', title: 'Consultar intervenciones previas y organismos',
-      explanation: 'CIVUCE vincula posiciones arancelarias con intervenciones potenciales de organismos. La NCM sola no demuestra que una intervención aplique o no al producto concreto.',
-      nextStep: `Consultar ${ncm} para importación en CIVUCE y revisar cada intervención contra las características del producto.`, source: 'CIVUCE',
+      explanation: 'CIVUCE vincula posiciones arancelarias con intervenciones potenciales de organismos. La NCM o apertura SIM sola no demuestra que una intervención aplique o no al producto concreto.',
+      nextStep: `Consultar ${simCandidate?.code || ncm} para importación en CIVUCE y revisar cada intervención contra las características del producto.`, source: 'CIVUCE',
     },
     {
       id: 'prohibitions', status: 'verify', title: 'Revisar prohibiciones y restricciones asociadas',
       explanation: 'CIVUCE informa normativa sobre prohibiciones potencialmente asociada a la mercadería. ShippingAPP no interpreta “sin dato” como “sin prohibición”.',
-      nextStep: `Revisar prohibiciones de importación vinculadas a ${ncm} y su alcance material.`, source: 'CIVUCE',
+      nextStep: `Revisar prohibiciones de importación vinculadas a ${simCandidate?.code || ncm} y su alcance material.`, source: 'CIVUCE',
     },
     {
       id: 'trade-remedies', status: 'verify', title: 'Revisar antidumping, compensatorios y medidas específicas',

@@ -29,6 +29,12 @@ describe('robust quantity optimizer adversarial rules', () => {
     expect(normalizeStress(defaultInputs, { demandDownPct: -10, marketFloorArs: null }).demandDownPct).toBe(0)
   })
 
+  it('treats a zero price floor as price-stress off', () => {
+    const normalized = normalizeStress(defaultInputs, { demandDownPct: 0, marketFloorArs: 0 })
+    expect(normalized.marketFloorArs).toBeNull()
+    expect(buildStressRuns(defaultInputs, context, { demandDownPct: 0, marketFloorArs: 0 }).map((item) => item.id)).toEqual(['base'])
+  })
+
   it('never lets a supposed price floor raise the base market price', () => {
     expect(normalizeStress(defaultInputs, { demandDownPct: 0, marketFloorArs: defaultInputs.marketPriceArs * 2 }).marketFloorArs).toBe(defaultInputs.marketPriceArs)
   })

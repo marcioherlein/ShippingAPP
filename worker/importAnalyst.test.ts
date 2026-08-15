@@ -32,6 +32,11 @@ describe('AI Import Analyst boundaries', () => {
     expect(parsed.scenarioPatch).toBeNull()
   })
 
+  it('never coerces null or empty scenario values to zero', () => {
+    expect(parseAnalystModelResponse({ answer: 'Sin cambios', scenarioPatch: { monthlyDemand: null, capitalAvailableUsd: null } }).scenarioPatch).toBeNull()
+    expect(parseAnalystModelResponse({ answer: 'Sin cambios', scenarioPatch: { monthlyDemand: '', capitalAvailableUsd: '   ' } }).scenarioPatch).toBeNull()
+  })
+
   it('sanitizes context before it reaches the model', async () => {
     const run = vi.fn(async (_model: string, input: any) => {
       const serialized = JSON.stringify(input)

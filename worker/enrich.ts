@@ -3,6 +3,7 @@ import { analyzeArgentinaMarket } from './catalogProvider'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
+import { runImportAnalyst } from './importAnalyst'
 import type { BrowserRun } from './alibabaSource'
 
 type Env = {
@@ -31,6 +32,15 @@ function validFacts(body: any): NcmProductFacts | null {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+
+    if (url.pathname === '/api/chat' && request.method === 'POST') {
+      try {
+        const result = await runImportAnalyst(env.AI, await request.json())
+        return json(result.body, result.status)
+      } catch {
+        return json({ error: 'La solicitud del AI Import Analyst no es válida.' }, 400)
+      }
+    }
 
     if (url.pathname === '/api/ncm-classify' && request.method === 'POST') {
       try {

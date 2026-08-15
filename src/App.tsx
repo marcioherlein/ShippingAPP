@@ -14,6 +14,7 @@ import RobustQuantityPanel from './components/RobustQuantityPanel'
 import ExpertOverridePanel from './components/ExpertOverridePanel'
 import NcmIntelligencePanel from './components/NcmIntelligencePanel'
 import OpportunityDecisionPanel from './components/OpportunityDecisionPanel'
+import ImportAnalyst from './components/ImportAnalyst'
 import { defaultInputs } from './data/defaults'
 import { bestRowsV2, calculateV2, recommendV2 } from './lib/optimizerV2'
 import { applyAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
@@ -61,10 +62,11 @@ export default function App() {
   }
 
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.3</span></header>
+    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.4</span></header>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
 
     {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
+    {analysis && <ImportAnalyst key={analysis.sourceUrl} analysis={analysis} inputs={inputs} decision={opportunityDecision} onApplyScenario={setInputs} />}
     {analysis && <MarketEvidence analysis={analysis} />}
     {analysis && <FxEvidence analysis={analysis} />}
     {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
@@ -72,7 +74,7 @@ export default function App() {
     {analysis && economicsReady && <>
       {expertOverride
         ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. El FX sigue viniendo de BCRA REF; ShippingAPP no convierte el override en validación aduanera.</div>
-        : <div className="analysis-banner"><b>Opportunity screening.</b> El verdict instantáneo usa unit economics del MOQ sin inventar demanda. Cuando ingresás una hipótesis mensual, pasa a Robust Decision con stress de demanda -30% y precio P25 cuando existe. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening y las intervenciones/reglamentos permanecen sujetos a verificación.</div>}
+        : <div className="analysis-banner"><b>Opportunity screening.</b> El verdict instantáneo usa unit economics del MOQ sin inventar demanda. Cuando ingresás una hipótesis mensual —manualmente o desde AI Import Analyst— pasa a Robust Decision con stress de demanda -30% y precio P25 cuando existe. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening y las intervenciones/reglamentos permanecen sujetos a verificación.</div>}
 
       <div className="workspace">
         <aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>
@@ -82,7 +84,7 @@ export default function App() {
             <ScenarioTable rows={rows} selected={selected} />
             <RobustQuantityPanel key={`${analysis.sourceUrl}:${marketP25Ars ?? 'manual'}`} inputs={inputs} context={taxContext} marketP25Ars={marketP25Ars} />
             <section className="method-card"><h3>Cómo se calcula el score</h3><p>Margen sobre costo económico 40% · eficiencia del capital 30% · inventario 20% · capacidad de financiar el capital inicial 10% cuando el capital fue informado.</p><p>Si el capital no se informa, esa dimensión no recibe puntos gratis: se normalizan sólo las dimensiones observadas. El score mide atractivo económico, no habilitación legal ni demanda observada.</p></section>
-          </> : <section className="partial-card"><span className="eyebrow">Robust Decision pendiente</span><h2>Agregá una hipótesis de demanda para optimizar cantidad.</h2><p>El Instant Screening de arriba ya evalúa unit economics y cash del MOQ. ShippingAPP recién muestra “cantidad recomendada”, inventario y Robust score cuando ingresás demanda mensual mayor a 0.</p><p>Mercado Libre aporta publicaciones y precios de screening; no observamos ventas reales.</p></section>}
+          </> : <section className="partial-card"><span className="eyebrow">Robust Decision pendiente</span><h2>Agregá una hipótesis de demanda para optimizar cantidad.</h2><p>El Instant Screening de arriba ya evalúa unit economics y cash del MOQ. Podés escribir la demanda en “Mercado y capital” o decírsela al AI Import Analyst. ShippingAPP recién muestra “cantidad recomendada”, inventario y Robust score cuando la demanda mensual es mayor a 0.</p><p>Mercado Libre aporta publicaciones y precios de screening; no observamos ventas reales.</p></section>}
         </section>
       </div>
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
@@ -93,6 +95,6 @@ export default function App() {
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto</span><p>Extraemos precio, MOQ y características visibles.</p></div><div><b>02</b><span>Mercado argentino</span><p>Buscamos comparables y rango de precio local.</p></div><div><b>03</b><span>Importabilidad</span><p>NCM/SIM, landed cost y requisitos como motores internos.</p></div><div><b>04</b><span>Opportunity Decision</span><p>¿Vale la pena seguir? Unit economics primero; stress y cantidad después.</p></div></section>}
+    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto</span><p>Extraemos precio, MOQ y características visibles.</p></div><div><b>02</b><span>Mercado argentino</span><p>Buscamos comparables y rango de precio local.</p></div><div><b>03</b><span>Importabilidad</span><p>NCM/SIM, landed cost y requisitos como motores internos.</p></div><div><b>04</b><span>AI Decision</span><p>Opportunity Decision + analista conversacional grounded en el mismo caso.</p></div></section>}
   </main>
 }

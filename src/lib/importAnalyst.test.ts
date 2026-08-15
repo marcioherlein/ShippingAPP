@@ -76,4 +76,10 @@ describe('AI Import Analyst client boundaries', () => {
     const after = applyAnalystScenario(before, { monthlyDemand: -1, capitalAvailableUsd: Number.POSITIVE_INFINITY })
     expect(after).toEqual(before)
   })
+
+  it('treats null and empty scenario values as no-op rather than zero', () => {
+    const before = { ...defaultInputs, monthlyDemand: 12, capitalAvailableUsd: 5000 }
+    expect(applyAnalystScenario(before, { monthlyDemand: null, capitalAvailableUsd: null } as any)).toEqual(before)
+    expect(applyAnalystScenario(before, { monthlyDemand: '', capitalAvailableUsd: ' ' } as any)).toEqual(before)
+  })
 })

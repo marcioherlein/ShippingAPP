@@ -83,14 +83,21 @@ export function buildAnalystContext(analysis: ProductAnalysisV2, inputs: Inputs,
   }
 }
 
+function numeric(value: unknown) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value !== 'string' || !value.trim()) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function sanitizePatch(value: unknown): AnalystScenarioPatch | null {
   if (!value || typeof value !== 'object') return null
   const patch: AnalystScenarioPatch = {}
-  const demand = Number((value as any).monthlyDemand)
-  const capital = Number((value as any).capitalAvailableUsd)
+  const demand = numeric((value as any).monthlyDemand)
+  const capital = numeric((value as any).capitalAvailableUsd)
 
-  if (Number.isFinite(demand) && demand >= 0 && demand <= 1_000_000) patch.monthlyDemand = Math.round(demand)
-  if (Number.isFinite(capital) && capital >= 0 && capital <= 1_000_000_000) patch.capitalAvailableUsd = Math.round(capital * 100) / 100
+  if (demand !== null && demand >= 0 && demand <= 1_000_000) patch.monthlyDemand = Math.round(demand)
+  if (capital !== null && capital >= 0 && capital <= 1_000_000_000) patch.capitalAvailableUsd = Math.round(capital * 100) / 100
   return Object.keys(patch).length ? patch : null
 }
 

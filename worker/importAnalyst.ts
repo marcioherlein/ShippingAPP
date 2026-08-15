@@ -31,8 +31,10 @@ function text(value: unknown, max: number) {
 }
 
 function finite(value: unknown) {
-  const n = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(n) ? n : null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value !== 'string' || !value.trim()) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function cleanHistory(value: unknown): AnalystHistoryMessage[] {

@@ -18,10 +18,11 @@ describe('Alibaba discovery URL/parser adversaries', () => {
     expect(url.searchParams.get('IndexArea')).toBe('product_en')
   })
 
-  it('normalizes only real https Alibaba product-detail URLs', () => {
+  it('normalizes only known public https Alibaba product-detail hosts', () => {
     expect(canonicalAlibabaProductUrl('//www.alibaba.com/product-detail/Test_1601234567890.html?spm=x')).toBe('https://www.alibaba.com/product-detail/Test_1601234567890.html')
     expect(canonicalAlibabaProductUrl('/product-detail/Test_1601234567890.html')).toBe('https://www.alibaba.com/product-detail/Test_1601234567890.html')
-    expect(canonicalAlibabaProductUrl('https://seller.alibaba.com/product-detail/Test_1601234567890.html')).toBe('https://www.alibaba.com/product-detail/Test_1601234567890.html')
+    expect(canonicalAlibabaProductUrl('https://m.alibaba.com/product-detail/Test_1601234567890.html')).toBe('https://www.alibaba.com/product-detail/Test_1601234567890.html')
+    expect(canonicalAlibabaProductUrl('https://seller.alibaba.com/product-detail/Test_1601234567890.html')).toBeNull()
     expect(canonicalAlibabaProductUrl('http://www.alibaba.com/product-detail/Test_1601234567890.html')).toBeNull()
     expect(canonicalAlibabaProductUrl('https://alibaba.com.evil.example/product-detail/Test_1601234567890.html')).toBeNull()
     expect(canonicalAlibabaProductUrl('https://www.alibaba.com/trade/search?SearchText=test')).toBeNull()
@@ -57,6 +58,11 @@ describe('Alibaba discovery URL/parser adversaries', () => {
       evidence: 'live',
     })
     expect(Object.keys(result)).toEqual(['title', 'url', 'evidence'])
+  })
+
+  it('rejects ambiguous whole-card body text when no explicit title evidence exists', () => {
+    const html = '<a href="/product-detail/Card_1600000000010.html"><div>Carbon Padel Racket $25 MOQ 100 pieces 20 sold</div></a>'
+    expect(extractAlibabaProductLinks(html)).toEqual([])
   })
 })
 

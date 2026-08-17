@@ -12,6 +12,13 @@ function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 }
 
+function usableOrigin(value: string | undefined | null) {
+  const actual = value?.trim()
+  if (!actual) return null
+  if (/\b(?:estimated|estimado|estimate|inferred|inferido|benchmark|assumed|supuesto)\b/i.test(normalize(actual))) return null
+  return actual
+}
+
 export function checkDiscoveryConstraints(analysis: ProductAnalysisV2, constraints: DiscoveryConstraints): ConstraintCheck[] {
   const checks: ConstraintCheck[] = []
 
@@ -40,26 +47,26 @@ export function checkDiscoveryConstraints(analysis: ProductAnalysisV2, constrain
   }
 
   if (constraints.originCountry) {
-    const actual = analysis.product.originCountry?.trim()
+    const actual = usableOrigin(analysis.product.originCountry)
     checks.push(actual ? {
       id: 'origin', label: `Origen ${constraints.originCountry}`,
       status: normalize(actual) === normalize(constraints.originCountry) ? 'pass' : 'fail',
       detail: `Origen estructurado del producto: ${actual}.`,
     } : {
       id: 'origin', label: `Origen ${constraints.originCountry}`, status: 'pending',
-      detail: 'El país de origen no quedó verificado en la publicación.',
+      detail: 'El país de origen no quedó verificado de forma suficientemente limpia en la publicación.',
     })
   }
 
   for (const excluded of constraints.excludedOriginCountries) {
-    const actual = analysis.product.originCountry?.trim()
+    const actual = usableOrigin(analysis.product.originCountry)
     checks.push(actual ? {
       id: 'origin_excluded', label: `Origen ≠ ${excluded}`,
       status: normalize(actual) !== normalize(excluded) ? 'pass' : 'fail',
       detail: `Origen estructurado del producto: ${actual}.`,
     } : {
       id: 'origin_excluded', label: `Origen ≠ ${excluded}`, status: 'pending',
-      detail: 'El país de origen no quedó verificado en la publicación.',
+      detail: 'El país de origen no quedó verificado de forma suficientemente limpia en la publicación.',
     })
   }
 

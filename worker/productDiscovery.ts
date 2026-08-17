@@ -29,6 +29,13 @@ const BOT_PATTERNS = [
   /security verification/i,
 ]
 
+const CARD_COMMERCE_PATTERNS = [
+  /(?:US\s*\$|USD\s*|\$)\s*\d/i,
+  /\bMOQ\b/i,
+  /min(?:imum)?\.?\s*(?:order|order quantity)/i,
+  /\b\d[\d,.]*\s+sold\b/i,
+]
+
 function cleanText(value: string) {
   return value
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
@@ -64,7 +71,7 @@ export function canonicalAlibabaProductUrl(rawHref: string, base = 'https://www.
     const url = new URL(rawHref.trim(), base)
     const host = url.hostname.toLowerCase()
     if (url.protocol !== 'https:') return null
-    if (!(host === 'alibaba.com' || host.endsWith('.alibaba.com'))) return null
+    if (!['alibaba.com', 'www.alibaba.com', 'm.alibaba.com'].includes(host)) return null
     if (!/^\/product-detail\//i.test(url.pathname)) return null
     if (!/\.html?$/i.test(url.pathname)) return null
     url.protocol = 'https:'
@@ -91,6 +98,7 @@ export function extractAlibabaProductLinks(html: string, maxResults = 8): Discov
 
     const titleAttr = attr(tag, 'title') || attr(tag, 'aria-label')
     const bodyText = cleanText(match[3])
+    if (!titleAttr && CARD_COMMERCE_PATTERNS.some((pattern) => pattern.test(bodyText))) continue
     const title = cleanText(titleAttr || bodyText).slice(0, 300)
     if (title.length < 8) continue
 

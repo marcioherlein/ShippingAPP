@@ -4,6 +4,7 @@ export type DiscoveryConstraints = {
   maxUnitPriceUsd: number | null
   maxMoq: number | null
   originCountry: string | null
+  excludedOriginCountries: string[]
   lowMoqPreference: boolean
 }
 
@@ -90,6 +91,15 @@ function capturedNumber(text: string, patterns: RegExp[]) {
   return null
 }
 
+function hasExcludedCountry(text: string, alias: string) {
+  const a = normalize(alias).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return [
+    new RegExp(`\\b(?:no|sin|excepto|except|excluding|exclude)\\s+(?:de\\s+)?${a}\\b`, 'i'),
+    new RegExp(`\\b(?:menos|salvo)\\s+${a}\\b`, 'i'),
+    new RegExp(`\\bcualquier(?:\\s+origen)?\\s+menos\\s+${a}\\b`, 'i'),
+  ].some((pattern) => pattern.test(text))
+}
+
 export function parseDiscoveryConstraints(userText: string): DiscoveryConstraints {
   const normalized = normalize(userText)
   const maxUnitPriceUsd = capturedNumber(normalized, [
@@ -102,14 +112,24 @@ export function parseDiscoveryConstraints(userText: string): DiscoveryConstraint
   const lowMoqPreference = /\b(?:moq bajo|moq baja|low moq|pedido minimo bajo)\b/i.test(normalized)
 
   let originCountry: string | null = null
+  const excludedOriginCountries: string[] = []
   for (const [alias, canonical] of Object.entries(COUNTRY_ALIASES)) {
-    if (new RegExp(`\\b${normalize(alias)}\\b`, 'i').test(normalized)) {
-      originCountry = canonical
-      break
+    const present = new RegExp(`\\b${normalize(alias)}\\b`, 'i').test(normalized)
+    if (!present) continue
+    if (hasExcludedCountry(normalized, alias)) {
+      if (!excludedOriginCountries.includes(canonical)) excludedOriginCountries.push(canonical)
+      continue
     }
+    if (!originCountry) originCountry = canonical
   }
 
-  return { maxUnitPriceUsd, maxMoq: maxMoq ? Math.round(maxMoq) : null, originCountry, lowMoqPreference }
+  return {
+    maxUnitPriceUsd,
+    maxMoq: maxMoq ? Math.round(maxMoq) : null,
+    originCountry,
+    excludedOriginCountries,
+    lowMoqPreference,
+  }
 }
 
 function rankOne(query: string, result: DiscoveryResult) {
@@ -134,6 +154,7 @@ export function rankDiscoveryResponse(source: DiscoveryResponse, userText: strin
   if (constraints.maxUnitPriceUsd !== null) pending.push(`precio ≤ USD ${constraints.maxUnitPriceUsd}`)
   if (constraints.maxMoq !== null) pending.push(`MOQ ≤ ${constraints.maxMoq}`)
   if (constraints.originCountry) pending.push(`origen ${constraints.originCountry}`)
+  for (const country of constraints.excludedOriginCountries) pending.push(`origen ≠ ${country}`)
   if (constraints.lowMoqPreference) pending.push('preferencia por MOQ bajo')
 
   return {

@@ -43,9 +43,7 @@ export default function App() {
   const results = useMemo(() => economicsReady && inputs.usdArs > 0 ? calculateV2(inputs, taxContext) : [], [inputs, taxContext, economicsReady])
   const rows = useMemo(() => bestRowsV2(results), [results])
   const selected = useMemo(() => recommendV2(results), [results])
-  const opportunityDecision = useMemo(() => buildOpportunityDecision({
-    analysis, inputs, taxContext, economicsReady, marketP25Ars, manualOverrideActive: !!expertOverride,
-  }), [analysis, inputs, taxContext, economicsReady, marketP25Ars, expertOverride])
+  const opportunityDecision = useMemo(() => buildOpportunityDecision({ analysis, inputs, taxContext, economicsReady, marketP25Ars, manualOverrideActive: !!expertOverride }), [analysis, inputs, taxContext, economicsReady, marketP25Ars, expertOverride])
 
   const handleAnalysis = (next: ProductAnalysisV2) => {
     setExpertOverride(null)
@@ -54,14 +52,19 @@ export default function App() {
     setInputs((current) => ({ ...applyAnalysisV2(current, next), monthlyDemand: 0 }))
   }
 
+  const handleDiscoveryCapital = (capitalUsd: number) => {
+    if (!Number.isFinite(capitalUsd) || capitalUsd <= 0) return
+    setInputs((current) => ({ ...current, capitalAvailableUsd: capitalUsd }))
+  }
+
   const handleExpertOverride = (override: ExpertOverride) => {
     setExpertOverride(override)
     setInputs((current) => applyExpertOverride(current, override))
   }
 
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.7</span></header>
-    <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
+    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.8</span></header>
+    <UrlAnalyzer onAnalysis={handleAnalysis} onDiscoveryCapital={handleDiscoveryCapital} analysis={analysis} />
 
     {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
     {analysis && <ImportAnalyst key={analysis.sourceUrl} analysis={analysis} inputs={inputs} decision={opportunityDecision} onApplyScenario={setInputs} />}
@@ -72,7 +75,7 @@ export default function App() {
     {analysis && economicsReady && <>
       {expertOverride
         ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. El FX sigue viniendo de BCRA REF; ShippingAPP no convierte el override en validación aduanera.</div>
-        : <div className="analysis-banner"><b>Opportunity screening.</b> El verdict instantáneo usa unit economics del MOQ sin inventar demanda. Cuando ingresás una hipótesis mensual —manualmente o desde AI Import Analyst— pasa a Robust Decision con stress de demanda -30% y precio P25 cuando existe. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening y las intervenciones/reglamentos permanecen sujetos a verificación.</div>}
+        : <div className="analysis-banner"><b>Opportunity screening.</b> El verdict instantáneo usa unit economics del MOQ sin inventar demanda. Si informaste capital durante discovery, se conserva como input del usuario y affordability se evalúa recién contra cash required. FX usa BCRA REF; NCM/SIM y arancel siguen siendo screening.</div>}
 
       <div className="workspace">
         <aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>
@@ -81,8 +84,8 @@ export default function App() {
             <div className="sticky-results"><div className="result-heading"><span className="eyebrow">Business case estimado</span><h2>{product || 'Producto sin nombre'}</h2></div><Recommendation result={selected} capitalAvailableUsd={inputs.capitalAvailableUsd} /></div>
             <ScenarioTable rows={rows} selected={selected} />
             <RobustQuantityPanel key={`${analysis.sourceUrl}:${marketP25Ars ?? 'manual'}`} inputs={inputs} context={taxContext} marketP25Ars={marketP25Ars} />
-            <section className="method-card"><h3>Cómo se calcula el score</h3><p>Margen sobre costo económico 40% · eficiencia del capital 30% · inventario 20% · capacidad de financiar el capital inicial 10% cuando el capital fue informado.</p><p>Si el capital no se informa, esa dimensión no recibe puntos gratis: se normalizan sólo las dimensiones observadas. El score mide atractivo económico, no habilitación legal ni demanda observada.</p></section>
-          </> : <section className="partial-card"><span className="eyebrow">Robust Decision pendiente</span><h2>Agregá una hipótesis de demanda para optimizar cantidad.</h2><p>El Instant Screening de arriba ya evalúa unit economics y cash del MOQ. Podés escribir la demanda en “Mercado y capital” o decírsela al AI Import Analyst. ShippingAPP recién muestra “cantidad recomendada”, inventario y Robust score cuando la demanda mensual es mayor a 0.</p><p>Mercado Libre aporta publicaciones y precios de screening; no observamos ventas reales.</p></section>}
+            <section className="method-card"><h3>Cómo se calcula el score</h3><p>Margen sobre costo económico 40% · eficiencia del capital 30% · inventario 20% · capacidad de financiar el capital inicial 10% cuando el capital fue informado.</p><p>Si el capital no se informa, esa dimensión no recibe puntos gratis: se normalizan sólo las dimensiones observadas.</p></section>
+          </> : <section className="partial-card"><span className="eyebrow">Robust Decision pendiente</span><h2>Agregá una hipótesis de demanda para optimizar cantidad.</h2><p>El Instant Screening ya evalúa unit economics, cash del MOQ y —si lo informaste— tu capital disponible. ShippingAPP recién recomienda cantidad cuando la demanda mensual es mayor a 0.</p></section>}
         </section>
       </div>
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
@@ -93,6 +96,6 @@ export default function App() {
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Buscar con criterios</span><p>Producto, origen, precio/MOQ objetivo o exclusiones; validamos después de abrir la fuente.</p></div><div><b>02</b><span>Mercado argentino</span><p>Buscamos comparables y rango de precio local.</p></div><div><b>03</b><span>Importabilidad</span><p>NCM/SIM, landed cost y requisitos como motores internos.</p></div><div><b>04</b><span>AI Decision</span><p>Opportunity Decision + analista conversacional grounded en el mismo caso.</p></div></section>}
+    {!analysis && <section className="value-strip"><div><b>01</b><span>Objetivo + capital</span><p>Decime qué buscás, restricciones y cuánto capital querés comprometer.</p></div><div><b>02</b><span>Producto real</span><p>Discovery devuelve sólo publicaciones Alibaba con URL fuente.</p></div><div><b>03</b><span>Landed cost</span><p>Producto, mercado, FX, NCM/SIM, impuestos y logística.</p></div><div><b>04</b><span>¿Entra en tu capital?</span><p>Affordability se decide recién con cash required calculado.</p></div></section>}
   </main>
 }

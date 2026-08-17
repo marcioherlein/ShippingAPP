@@ -43,8 +43,12 @@ export async function runProductIntake(message: string, priorFacts: IntakeFacts)
   })
   const data = await response.json() as IntakeResult & { error?: string }
   if (!response.ok) throw new Error(data.error || 'No pudimos procesar la descripción del producto.')
-  if (!data.analysis) return data
-  return { ...data, analysis: await enrichProductAnalysisV2(data.analysis) }
+  if (!data.analysis) {
+    const { analysis: _analysis, error: _error, ...rest } = data
+    return rest
+  }
+  const { analysis, error: _error, ...rest } = data
+  return { ...rest, analysis: await enrichProductAnalysisV2(analysis) }
 }
 
 export function isAlibabaUrl(value: string) {

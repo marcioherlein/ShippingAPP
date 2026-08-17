@@ -98,7 +98,7 @@ function nextQuestion(missing: string[]) {
   const first = missing[0]
   if (first === 'producto / categoría') return '¿Qué producto concreto querés evaluar? Describilo con su función y material si los conocés.'
   if (first === 'precio proveedor') return '¿Cuál es el precio unitario del proveedor en USD? Si hay un rango, pasame el precio aplicable al MOQ que estás evaluando.'
-  if (first === 'MOQ') return '¿Cuál es el MOQ o pedido mínimo del proveedor?'
+  if (first === 'MOQ') return '¿Cuál es el MOQ o pedido mínimo de ese proveedor? Es supplier-specific, así que no lo voy a inferir por categoría.'
   if (first === 'peso embalado por unidad') return '¿Tenés el peso embalado por unidad? No voy a inventarlo si esta categoría no tiene benchmark soportado.'
   return '¿Tenés el volumen embalado por unidad en m³? Si sólo tenés dimensiones del bulto, todavía no las convierto automáticamente en esta versión.'
 }
@@ -131,16 +131,13 @@ function applySupportedBenchmarks(facts: IntakeFacts) {
   const next = { ...facts }
   const assumptions: string[] = []
   const factSources: IntakeResult['factSources'] = {
+    // MOQ is supplier-specific and is never promoted from a category benchmark
+    // in conversational intake, even if a legacy scanner benchmark contains one.
     moq: facts.moq ? 'user' : 'missing',
     packedWeightKg: facts.packedWeightKg ? 'user' : 'missing',
     volumeCbm: facts.volumeCbm ? 'user' : 'missing',
   }
 
-  if (!next.moq && b.defaultMoq) {
-    next.moq = b.defaultMoq
-    factSources.moq = 'benchmark'
-    assumptions.push(`MOQ ${b.defaultMoq} u. aplicado desde benchmark soportado de categoría; no proviene del usuario/proveedor.`)
-  }
   if (!next.packedWeightKg && b.packedWeightKg > 0) {
     next.packedWeightKg = b.packedWeightKg
     factSources.packedWeightKg = 'benchmark'

@@ -4,6 +4,7 @@ import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrie
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
+import { runConversationalIntake } from './conversationalIntake'
 import type { BrowserRun } from './alibabaSource'
 
 type Env = {
@@ -29,6 +30,75 @@ function validFacts(body: any): NcmProductFacts | null {
   return facts.name || facts.category || facts.description ? facts : null
 }
 
+async function hydrateMarketAndFx(data: any) {
+  const [market, fx] = await Promise.all([
+    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || ''),
+    fetchBcraReferenceFx(),
+  ])
+  const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
+
+  if (market.status !== 'live' || !market.suggestedPriceArs) {
+    data.market = { ...data.market, estimatedPriceArs: null, source: `${market.source} · ${market.status}`, details: market }
+    data.assumptions = [...prior, 'Mercado local no confirmado: no se reutiliza el benchmark histórico.']
+  } else {
+    data.market = { ...data.market, estimatedPriceArs: Math.round(market.suggestedPriceArs), source: market.source, details: market }
+    data.assumptions = [...prior, `Precio local de screening basado en ${market.comparableCount} comparables activos.`, 'La demanda mensual sigue siendo un supuesto editable; no se infiere del stock público.']
+    data.confidence = { ...data.confidence, market: `live-${market.confidence}` }
+  }
+
+  data.fx = fx
+  data.assumptions = [
+    ...data.assumptions,
+    fx.status === 'live' && fx.arsPerUsd
+      ? `FX de screening: ARS ${fx.arsPerUsd.toFixed(4)}/USD · BCRA REF Comunicación A 3500 · ${fx.sourceDate}.`
+      : 'FX BCRA REF no disponible: economics bloqueado; no se reutiliza una tasa anterior.',
+  ]
+  return data
+}
+
+function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConversationalIntake>>) {
+  const facts = intake.facts
+  const benchmarked = Object.values(intake.factSources).filter((source) => source === 'benchmark').length
+  const explicit = Object.values(intake.factSources).filter((source) => source === 'user').length
+  const overall = Math.max(45, Math.min(85, 58 + explicit * 7 - benchmarked * 3 + (facts.originCountry ? 5 : 0)))
+
+  return {
+    sourceUrl: `chat://product-intake/${Date.now()}`,
+    fetched: false,
+    product: {
+      name: facts.name || facts.category || 'Producto descrito por el usuario',
+      category: facts.category || 'Sin clasificar',
+      unitPriceUsd: facts.unitPriceUsd,
+      moq: facts.moq,
+      packedWeightKg: facts.packedWeightKg || 0,
+      volumeCbm: facts.volumeCbm || 0,
+      originCountry: facts.originCountry || '',
+      imageUrl: null,
+      material: facts.material,
+      functionText: facts.functionText,
+      description: facts.description,
+    },
+    market: {
+      estimatedPriceArs: null,
+      estimatedMonthlyDemand: 0,
+      source: 'Conversational intake · market pending',
+    },
+    suggestedQuantities: intake.suggestedQuantities,
+    confidence: {
+      overall,
+      productSource: 'user-conversation',
+      logistics: benchmarked ? 'mixed-user-benchmark' : 'user-provided',
+      market: 'pending',
+    },
+    assumptions: [
+      'Producto y datos comerciales estructurados desde una conversación del usuario; ShippingAPP no los verificó contra una publicación o proforma.',
+      ...intake.assumptions,
+      ...(facts.originCountry ? [] : ['País de origen no verificado; no se presume China ni tratamiento preferencial.']),
+      'Demanda mensual no observada: debe ser informada explícitamente antes de recomendar cantidad.',
+    ],
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
@@ -39,6 +109,17 @@ export default {
         return json(result.body, result.status)
       } catch {
         return json({ error: 'La solicitud del AI Import Analyst no es válida.' }, 400)
+      }
+    }
+
+    if (url.pathname === '/api/intake' && request.method === 'POST') {
+      try {
+        const intake = await runConversationalIntake(env.AI, await request.json())
+        if (intake.status !== 'ready') return json(intake)
+        const analysis = await hydrateMarketAndFx(conversationalAnalysis(intake))
+        return json({ ...intake, analysis })
+      } catch {
+        return json({ error: 'No pudimos procesar el intake conversacional.' }, 400)
       }
     }
 
@@ -75,32 +156,6 @@ export default {
     const response = await baseWorker.fetch(request.clone(), env)
     if (!response.ok) return response
     const data = await response.json() as any
-
-    // Independent evidence layers are fetched in parallel. A failure in one
-    // never fabricates data for the other.
-    const [market, fx] = await Promise.all([
-      analyzeArgentinaMarket(data.product?.name || '', data.product?.category || ''),
-      fetchBcraReferenceFx(),
-    ])
-    const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
-
-    if (market.status !== 'live' || !market.suggestedPriceArs) {
-      data.market = { ...data.market, estimatedPriceArs: null, source: `${market.source} · ${market.status}`, details: market }
-      data.assumptions = [...prior, 'Mercado local no confirmado: no se reutiliza el benchmark histórico.']
-    } else {
-      data.market = { ...data.market, estimatedPriceArs: Math.round(market.suggestedPriceArs), source: market.source, details: market }
-      data.assumptions = [...prior, `Precio local de screening basado en ${market.comparableCount} comparables activos.`, 'La demanda mensual sigue siendo un supuesto editable; no se infiere del stock público.']
-      data.confidence = { ...data.confidence, market: `live-${market.confidence}` }
-    }
-
-    data.fx = fx
-    data.assumptions = [
-      ...data.assumptions,
-      fx.status === 'live' && fx.arsPerUsd
-        ? `FX de screening: ARS ${fx.arsPerUsd.toFixed(4)}/USD · BCRA REF Comunicación A 3500 · ${fx.sourceDate}.`
-        : 'FX BCRA REF no disponible: economics bloqueado; no se reutiliza una tasa anterior.',
-    ]
-
-    return json(data)
+    return json(await hydrateMarketAndFx(data))
   },
 }

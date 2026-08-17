@@ -2,6 +2,7 @@ export type DiscoveryConstraints = {
   maxUnitPriceUsd: number | null
   maxMoq: number | null
   originCountry: string | null
+  excludedOriginCountries: string[]
   lowMoqPreference: boolean
 }
 

@@ -6,4 +6,18 @@
 .intake-message.user { justify-self: end; background: #172033; color: #fff; }
 .intake-message.assistant { justify-self: start; background: #f1f4f9; color: #273248; border: 1px solid #e0e5ee; }
 .intake-message.assistant span { color: #5468ff; }
-@media (max-width: 760px) { .intake-message { max-width: 94%; } }
+.discovery-card { max-width: 1060px; margin-top: 22px; padding: 20px; border: 1px solid #dce2eb; border-radius: 18px; background: #fff; }
+.discovery-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.discovery-head h2 { margin: 4px 0 6px; }
+.discovery-head p { margin: 0; color: #5f6b7a; }
+.discovery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.discovery-item { border: 1px solid #e1e6ef; border-radius: 14px; padding: 15px; background: #f9fbfd; }
+.discovery-item > span { display: block; font-size: 10px; font-weight: 800; letter-spacing: .07em; color: #5468ff; }
+.discovery-item h3 { font-size: 15px; line-height: 1.35; margin: 8px 0; }
+.discovery-item p { margin: 0; color: #667085; font-size: 12px; line-height: 1.45; }
+.discovery-actions { display: flex; align-items: center; gap: 9px; margin-top: 14px; }
+.discovery-actions a, .discovery-actions button { border: 0; border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.discovery-actions a { color: #344054; background: #eef2f6; text-decoration: none; }
+.discovery-actions button { color: #fff; background: #172033; }
+.discovery-actions button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 760px) { .intake-message { max-width: 94%; } .discovery-head { flex-direction: column; } .discovery-grid { grid-template-columns: 1fr; } }

@@ -5,6 +5,7 @@ import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
 import { runConversationalIntake } from './conversationalIntake'
+import { discoverAlibabaProducts } from './productDiscovery'
 import type { BrowserRun } from './alibabaSource'
 
 type Env = {
@@ -28,6 +29,13 @@ function validFacts(body: any): NcmProductFacts | null {
     description: typeof body.description === 'string' ? body.description.slice(0, 1500) : null,
   }
   return facts.name || facts.category || facts.description ? facts : null
+}
+
+function discoveryQuery(body: unknown) {
+  const raw = body && typeof body === 'object' ? (body as any).query : null
+  if (typeof raw !== 'string') return null
+  const query = raw.trim().replace(/\s+/g, ' ').slice(0, 220)
+  return query.length >= 2 ? query : null
 }
 
 async function hydrateMarketAndFx(data: any) {
@@ -60,9 +68,6 @@ export function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConv
   const facts = intake.facts
   const benchmarked = Object.values(intake.factSources).filter((source) => source === 'benchmark').length
   const explicit = Object.values(intake.factSources).filter((source) => source === 'user').length
-
-  // A user can supply every field and still be wrong. Until the commercial facts
-  // are corroborated by a supplier page/proforma, source confidence is capped.
   const overall = Math.max(40, Math.min(65, 45 + explicit * 6 - benchmarked * 4 + (facts.originCountry ? 3 : 0)))
 
   return {
@@ -81,11 +86,7 @@ export function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConv
       functionText: facts.functionText,
       description: facts.description,
     },
-    market: {
-      estimatedPriceArs: null,
-      estimatedMonthlyDemand: 0,
-      source: 'Conversational intake · market pending',
-    },
+    market: { estimatedPriceArs: null, estimatedMonthlyDemand: 0, source: 'Conversational intake · market pending' },
     suggestedQuantities: intake.suggestedQuantities,
     confidence: {
       overall,
@@ -124,6 +125,16 @@ export default {
         return json({ ...intake, analysis })
       } catch {
         return json({ error: 'No pudimos procesar el intake conversacional.' }, 400)
+      }
+    }
+
+    if (url.pathname === '/api/discover' && request.method === 'POST') {
+      try {
+        const query = discoveryQuery(await request.json())
+        if (!query) return json({ error: 'Ingresá una búsqueda de producto válida.' }, 400)
+        return json(await discoverAlibabaProducts(query, env.BROWSER))
+      } catch {
+        return json({ error: 'No pudimos ejecutar la búsqueda live de Alibaba.' }, 503)
       }
     }
 

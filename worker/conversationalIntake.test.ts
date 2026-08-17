@@ -82,7 +82,7 @@ describe('conversational intake adversarial boundaries', () => {
 
   it('merges only newly explicit facts into trusted prior state', async () => {
     const result = await runConversationalIntake(ai({
-      intent: 'analyze_product', searchQuery: null,
+      intent: 'analyze_product', startsNewCase: false, searchQuery: null,
       facts: { ...emptyFacts, packedWeightKg: 1.2, volumeCbm: 0.01 },
     }), {
       message: 'El peso embalado es 1.2 kg y ocupa 0.01 m3',
@@ -94,6 +94,45 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.facts.moq).toBe(50)
     expect(result.facts.packedWeightKg).toBe(1.2)
     expect(result.status).toBe('ready')
+  })
+
+  it('drops all supplier-specific facts when the user switches to a different product', async () => {
+    const result = await runConversationalIntake(ai({
+      intent: 'analyze_product', startsNewCase: false, searchQuery: null,
+      facts: { ...emptyFacts, name: 'USB-C 65W power adapter', category: 'Power adapter', originCountry: 'China' },
+    }), {
+      message: 'Ahora quiero evaluar un cargador USB-C de 65W',
+      priorFacts: {
+        ...emptyFacts, name: 'IANONI Watermelon Padel Racket', category: 'Padel racket',
+        unitPriceUsd: 25.5, moq: 300, packedWeightKg: 0.65, volumeCbm: 0.006, originCountry: 'China',
+      },
+    })
+
+    expect(result.facts.name).toBe('USB-C 65W power adapter')
+    expect(result.facts.unitPriceUsd).toBeNull()
+    expect(result.facts.moq).toBeNull()
+    expect(result.facts.packedWeightKg).toBeNull()
+    expect(result.facts.volumeCbm).toBeNull()
+    expect(result.status).toBe('needs_input')
+    expect(result.assumptions.join(' ')).toContain('caso anterior')
+  })
+
+  it('keeps supplier facts when the user merely expands the same product identity', async () => {
+    const result = await runConversationalIntake(ai({
+      intent: 'analyze_product', startsNewCase: false, searchQuery: null,
+      facts: { ...emptyFacts, name: 'IANONI Watermelon Padel Racket carbon' },
+    }), {
+      message: 'Es la IANONI Watermelon Padel Racket de carbono',
+      priorFacts: {
+        ...emptyFacts, name: 'IANONI Watermelon Padel Racket', category: 'Padel racket',
+        unitPriceUsd: 25.5, moq: 300, packedWeightKg: 0.65, volumeCbm: 0.006, originCountry: 'China',
+      },
+    })
+
+    expect(result.facts.unitPriceUsd).toBe(25.5)
+    expect(result.facts.moq).toBe(300)
+    expect(result.status).toBe('ready')
+    expect(result.assumptions.join(' ')).not.toContain('caso anterior')
   })
 
   it('degrades safely when the intake model fails instead of guessing facts', async () => {

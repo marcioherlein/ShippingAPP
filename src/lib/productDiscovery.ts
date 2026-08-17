@@ -4,6 +4,7 @@ export type DiscoveryConstraints = {
   originCountry: string | null
   excludedOriginCountries: string[]
   lowMoqPreference: boolean
+  availableCapitalUsd: number | null
 }
 
 export type ProductDiscoveryItem = {

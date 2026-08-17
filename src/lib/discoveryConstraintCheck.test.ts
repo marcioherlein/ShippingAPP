@@ -36,11 +36,17 @@ describe('discovery constraint checks after deep analysis', () => {
     expect(checks.map((item) => item.status)).toEqual(['pending', 'pending', 'pending'])
   })
 
+  it('keeps qualified or estimated origin evidence pending instead of treating it as verified', () => {
+    expect(checkDiscoveryConstraints(analysis({ originCountry: 'China (estimated)' }), constraints).find((item) => item.id === 'origin')?.status).toBe('pending')
+    expect(checkDiscoveryConstraints(analysis({ originCountry: 'China benchmark' }), constraints).find((item) => item.id === 'origin')?.status).toBe('pending')
+  })
+
   it('fails an excluded origin only after the selected listing resolves to that origin', () => {
     const base: DiscoveryConstraints = { maxUnitPriceUsd: null, maxMoq: null, originCountry: null, excludedOriginCountries: ['China'], lowMoqPreference: false }
     expect(checkDiscoveryConstraints(analysis({ originCountry: 'China' }), base)[0].status).toBe('fail')
     expect(checkDiscoveryConstraints(analysis({ originCountry: 'Pakistan' }), base)[0].status).toBe('pass')
     expect(checkDiscoveryConstraints(analysis({ originCountry: '' }), base)[0].status).toBe('pending')
+    expect(checkDiscoveryConstraints(analysis({ originCountry: 'China estimated' }), base)[0].status).toBe('pending')
   })
 
   it('never converts qualitative low-MOQ preference into an invented numeric pass/fail threshold', () => {

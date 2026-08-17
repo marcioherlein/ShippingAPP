@@ -26,11 +26,12 @@ describe('/api/discover', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('returns only source-backed live products from direct Alibaba HTML', async () => {
+  it('returns source-backed products ranked by visible title while hard constraints stay pending', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(product(1) + product(2) + product(3), { status: 200 })))
     const e = env()
     const response = await worker.fetch(new Request('https://shippingapp.example/api/discover', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: 'carbon padel' }),
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'carbon padel', userText: 'carbon padel de China hasta USD 30 MOQ hasta 100' }),
     }), e)
     const body: any = await response.json()
     expect(response.status).toBe(200)
@@ -38,6 +39,9 @@ describe('/api/discover', () => {
     expect(body.results).toHaveLength(3)
     expect(body.results.every((item: any) => item.url.startsWith('https://www.alibaba.com/product-detail/'))).toBe(true)
     expect(body.results.every((item: any) => item.evidence === 'live')).toBe(true)
+    expect(body.results.every((item: any) => ['strong', 'partial', 'weak'].includes(item.titleMatch))).toBe(true)
+    expect(body.constraints).toEqual({ maxUnitPriceUsd: 30, maxMoq: 100, originCountry: 'China', lowMoqPreference: false })
+    expect(body.constraintsNote).toContain('pendientes de validar')
     expect(e.BROWSER.quickAction).not.toHaveBeenCalled()
   })
 
@@ -50,6 +54,7 @@ describe('/api/discover', () => {
     const body: any = await response.json()
     expect(body.status).toBe('unavailable')
     expect(body.results).toEqual([])
+    expect(body.constraints).toBeDefined()
     expect(e.BROWSER.quickAction).toHaveBeenCalledTimes(1)
   })
 })

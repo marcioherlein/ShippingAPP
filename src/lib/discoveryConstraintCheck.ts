@@ -2,7 +2,7 @@ import type { ProductAnalysisV2 } from './productAnalysisV2'
 import type { DiscoveryConstraints } from './productDiscovery'
 
 export type ConstraintCheck = {
-  id: 'price' | 'moq' | 'origin' | 'low_moq'
+  id: 'price' | 'moq' | 'origin' | 'origin_excluded' | 'low_moq'
   label: string
   status: 'pass' | 'fail' | 'pending'
   detail: string
@@ -47,6 +47,18 @@ export function checkDiscoveryConstraints(analysis: ProductAnalysisV2, constrain
       detail: `Origen estructurado del producto: ${actual}.`,
     } : {
       id: 'origin', label: `Origen ${constraints.originCountry}`, status: 'pending',
+      detail: 'El país de origen no quedó verificado en la publicación.',
+    })
+  }
+
+  for (const excluded of constraints.excludedOriginCountries) {
+    const actual = analysis.product.originCountry?.trim()
+    checks.push(actual ? {
+      id: 'origin_excluded', label: `Origen ≠ ${excluded}`,
+      status: normalize(actual) !== normalize(excluded) ? 'pass' : 'fail',
+      detail: `Origen estructurado del producto: ${actual}.`,
+    } : {
+      id: 'origin_excluded', label: `Origen ≠ ${excluded}`, status: 'pending',
       detail: 'El país de origen no quedó verificado en la publicación.',
     })
   }

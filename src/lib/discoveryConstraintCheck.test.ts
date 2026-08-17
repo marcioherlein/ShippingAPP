@@ -16,7 +16,7 @@ function analysis(overrides: Partial<ProductAnalysisV2['product']> = {}): Produc
   }
 }
 
-const constraints: DiscoveryConstraints = { maxUnitPriceUsd: 30, maxMoq: 100, originCountry: 'China', lowMoqPreference: false }
+const constraints: DiscoveryConstraints = { maxUnitPriceUsd: 30, maxMoq: 100, originCountry: 'China', excludedOriginCountries: [], lowMoqPreference: false }
 
 describe('discovery constraint checks after deep analysis', () => {
   it('passes only constraints supported by deep-read product facts', () => {
@@ -36,9 +36,16 @@ describe('discovery constraint checks after deep analysis', () => {
     expect(checks.map((item) => item.status)).toEqual(['pending', 'pending', 'pending'])
   })
 
+  it('fails an excluded origin only after the selected listing resolves to that origin', () => {
+    const base: DiscoveryConstraints = { maxUnitPriceUsd: null, maxMoq: null, originCountry: null, excludedOriginCountries: ['China'], lowMoqPreference: false }
+    expect(checkDiscoveryConstraints(analysis({ originCountry: 'China' }), base)[0].status).toBe('fail')
+    expect(checkDiscoveryConstraints(analysis({ originCountry: 'Pakistan' }), base)[0].status).toBe('pass')
+    expect(checkDiscoveryConstraints(analysis({ originCountry: '' }), base)[0].status).toBe('pending')
+  })
+
   it('never converts qualitative low-MOQ preference into an invented numeric pass/fail threshold', () => {
     const checks = checkDiscoveryConstraints(analysis({ moq: 300 }), {
-      maxUnitPriceUsd: null, maxMoq: null, originCountry: null, lowMoqPreference: true,
+      maxUnitPriceUsd: null, maxMoq: null, originCountry: null, excludedOriginCountries: [], lowMoqPreference: true,
     })
     expect(checks).toHaveLength(1)
     expect(checks[0].id).toBe('low_moq')

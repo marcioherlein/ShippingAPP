@@ -20,7 +20,7 @@ function analysisWithCustoms(customs: ProductAnalysisV2['customs'], fx: ProductA
   }
 }
 
-describe('ProductAnalysisV2 customs/FX state isolation', () => {
+describe('ProductAnalysisV2 customs/FX/state isolation', () => {
   it('clears a prior product duty when the new classification withholds duty', () => {
     const previous = { ...defaultInputs, dutyRatePct: 35, dutyRateVerified: true }
     const low = customsProfileFor('Racket sports equipment', 'China', 'sport racket paddle')
@@ -59,5 +59,24 @@ describe('ProductAnalysisV2 customs/FX state isolation', () => {
     }))
     expect(applied.usdArs).toBe(1491.8387)
     expect(applied.usdArs).not.toBe(2000)
+  })
+
+  it('resets prior demand instead of carrying it into a new product', () => {
+    const previous = { ...defaultInputs, monthlyDemand: 77 }
+    const padel = customsProfileFor('Padel racket', 'China', 'Padel racket')
+    const applied = applyAnalysisV2(previous, analysisWithCustoms(padel))
+    expect(applied.monthlyDemand).toBe(0)
+  })
+
+  it('clears old price tiers and quantities when the new product lacks commercial evidence', () => {
+    const previous = { ...defaultInputs, quantities: [300, 600], priceTiers: [{ minQuantity: 300, unitPriceUsd: 25 }] }
+    const low = customsProfileFor('Generic device', '', 'Unknown device')
+    const next = analysisWithCustoms(low)
+    next.product = { ...next.product, unitPriceUsd: null, moq: null }
+    next.suggestedQuantities = []
+
+    const applied = applyAnalysisV2(previous, next)
+    expect(applied.quantities).toEqual([])
+    expect(applied.priceTiers).toEqual([])
   })
 })

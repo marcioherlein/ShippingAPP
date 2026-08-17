@@ -40,8 +40,6 @@ export default function App() {
   const economicsReady = automaticReady || (!!expertOverride && fxReady)
   const decisionReady = quantityDecisionReady(economicsReady, inputs.monthlyDemand)
 
-  // With fail-closed FX/customs defaults, do not even execute scenario math until
-  // evidence is ready. This prevents hidden Infinity/NaN states before a scan.
   const results = useMemo(() => economicsReady && inputs.usdArs > 0 ? calculateV2(inputs, taxContext) : [], [inputs, taxContext, economicsReady])
   const rows = useMemo(() => bestRowsV2(results), [results])
   const selected = useMemo(() => recommendV2(results), [results])
@@ -62,7 +60,7 @@ export default function App() {
   }
 
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.4</span></header>
+    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.5</span></header>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
 
     {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
@@ -95,6 +93,6 @@ export default function App() {
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Producto</span><p>Extraemos precio, MOQ y características visibles.</p></div><div><b>02</b><span>Mercado argentino</span><p>Buscamos comparables y rango de precio local.</p></div><div><b>03</b><span>Importabilidad</span><p>NCM/SIM, landed cost y requisitos como motores internos.</p></div><div><b>04</b><span>AI Decision</span><p>Opportunity Decision + analista conversacional grounded en el mismo caso.</p></div></section>}
+    {!analysis && <section className="value-strip"><div><b>01</b><span>Chat o link</span><p>Describí el producto o pegá Alibaba; preguntamos sólo lo que falta.</p></div><div><b>02</b><span>Mercado argentino</span><p>Buscamos comparables y rango de precio local.</p></div><div><b>03</b><span>Importabilidad</span><p>NCM/SIM, landed cost y requisitos como motores internos.</p></div><div><b>04</b><span>AI Decision</span><p>Opportunity Decision + analista conversacional grounded en el mismo caso.</p></div></section>}
   </main>
 }

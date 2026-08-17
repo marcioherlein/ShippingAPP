@@ -31,6 +31,9 @@ export type ProductAnalysis = {
     volumeCbm: number
     originCountry: string
     imageUrl: string | null
+    material?: string | null
+    functionText?: string | null
+    description?: string | null
   }
   market: {
     estimatedPriceArs: number | null
@@ -61,19 +64,20 @@ export async function analyzeAlibabaUrl(url: string): Promise<ProductAnalysis> {
 
 export function applyAnalysis(current: Inputs, analysis: ProductAnalysis): Inputs {
   const price = analysis.product.unitPriceUsd
-  const moq = analysis.product.moq || analysis.suggestedQuantities[0] || 100
+  const moq = analysis.product.moq || analysis.suggestedQuantities[0] || null
   const liveFx = analysis.fx?.status === 'live' && analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0
     ? analysis.fx.arsPerUsd
     : 0
   return {
     ...current,
+    // Every product analysis owns its commercial state. Missing evidence resets
+    // the previous case instead of silently inheriting it.
     quantities: analysis.suggestedQuantities,
-    priceTiers: price ? [{ minQuantity: moq, unitPriceUsd: price }] : current.priceTiers,
+    priceTiers: price && moq ? [{ minQuantity: moq, unitPriceUsd: price }] : [],
     weightKg: analysis.product.packedWeightKg,
     volumeCbm: analysis.product.volumeCbm,
-    // New scans cannot inherit another product's local benchmark or FX.
     marketPriceArs: analysis.market.estimatedPriceArs || 0,
     usdArs: liveFx,
-    monthlyDemand: analysis.market.estimatedMonthlyDemand || current.monthlyDemand,
+    monthlyDemand: analysis.market.estimatedMonthlyDemand > 0 ? analysis.market.estimatedMonthlyDemand : 0,
   }
 }

@@ -5,8 +5,7 @@ import type { Inputs } from './types'
 
 export type ProductAnalysisV2 = ProductAnalysis & { customs: CustomsProfile }
 
-export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
-  const base = await analyzeAlibabaUrl(url)
+export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<ProductAnalysisV2> {
   const localCustoms = customsProfileFor(base.product.category, base.product.originCountry, base.product.name)
   let customs = localCustoms
 
@@ -14,6 +13,9 @@ export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV
     const full = await classifyNcmRemote({
       name: base.product.name,
       category: base.product.category,
+      material: base.product.material ?? null,
+      functionText: base.product.functionText ?? null,
+      description: base.product.description ?? null,
     })
     customs = mergeFullCustomsProfile(localCustoms, full)
   } catch {
@@ -28,6 +30,10 @@ export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV
   // blocks landed-cost economics through decisionReadiness, but must not erase
   // a valid local-market observation that is still useful to the user.
   return { ...base, customs }
+}
+
+export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
+  return enrichProductAnalysisV2(await analyzeAlibabaUrl(url))
 }
 
 export function applyAnalysisV2(current: Inputs, analysis: ProductAnalysisV2): Inputs {

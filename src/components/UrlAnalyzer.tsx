@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { analyzeAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import { emptyIntakeFacts, isAlibabaUrl, runProductIntake, type IntakeFacts } from '../lib/productIntake'
-import { discoverProducts, type ProductDiscoveryResponse } from '../lib/productDiscovery'
+import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
+import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
 
 type Props = { onAnalysis: (analysis: ProductAnalysisV2) => void; analysis?: ProductAnalysisV2 | null }
 type ThreadMessage = { role: 'user' | 'assistant'; content: string }
@@ -19,7 +20,7 @@ function readLabel(analysis: ProductAnalysisV2) {
 const starters = [
   'Paleta de pádel carbono, China, USD 25,50',
   'Quiero evaluar un cargador USB-C de 65W',
-  'Buscame paletas de pádel de carbono con MOQ bajo',
+  'Buscame paletas de pádel de carbono de China, hasta USD 30, MOQ hasta 100',
 ]
 
 export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
@@ -27,18 +28,25 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
   const [facts, setFacts] = useState<IntakeFacts>(emptyIntakeFacts())
   const [messages, setMessages] = useState<ThreadMessage[]>([])
   const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(null)
+  const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const analyzeRealUrl = async (url: string, fromDiscovery = false) => {
+  const constraintChecks = useMemo(
+    () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],
+    [analysis, selectedConstraints],
+  )
+
+  const analyzeRealUrl = async (url: string, fromDiscovery = false, constraints: DiscoveryConstraints | null = null) => {
     setFacts(emptyIntakeFacts())
     const next = await analyzeAlibabaUrlV2(url)
+    setSelectedConstraints(fromDiscovery ? constraints : null)
     onAnalysis(next)
     setDiscovery(null)
     setMessages((current) => [...current, {
       role: 'assistant',
       content: fromDiscovery
-        ? 'Producto seleccionado y analizado desde su URL real de Alibaba. Ya podés revisar Opportunity Decision, mercado e importabilidad.'
+        ? 'Producto seleccionado y analizado desde su URL real de Alibaba. Ahora también verifiqué las restricciones comerciales que sí aparecen en la publicación.'
         : 'Link analizado. Ya podés revisar Opportunity Decision, mercado, importabilidad y preguntarle al AI Import Analyst.',
     }])
   }
@@ -51,6 +59,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
     setLoading(true)
     setError('')
     setDiscovery(null)
+    setSelectedConstraints(null)
 
     try {
       if (isAlibabaUrl(value)) {
@@ -63,12 +72,12 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
 
       if (result.status === 'discovery_pending' && result.searchQuery) {
         setMessages((current) => [...current, { role: 'assistant', content: 'Entendí la búsqueda. Consultando Alibaba en vivo; sólo voy a mostrar productos respaldados por una URL real.' }])
-        const live = await discoverProducts(result.searchQuery)
+        const live = await discoverProducts(result.searchQuery, value)
         setDiscovery(live)
         setMessages((current) => [...current, {
           role: 'assistant',
           content: live.status === 'live'
-            ? `Encontré ${live.results.length} productos con fuente Alibaba real. Elegí uno para correr el análisis completo.`
+            ? `Encontré ${live.results.length} productos con fuente Alibaba real. Los ordené por relevancia visible; precio, MOQ y origen siguen pendientes hasta abrir cada publicación.`
             : live.note,
         }])
         return
@@ -84,10 +93,10 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
   }
 
   const selectDiscovery = async (url: string) => {
-    if (loading) return
+    if (loading || !discovery) return
     setLoading(true)
     setError('')
-    try { await analyzeRealUrl(url, true) }
+    try { await analyzeRealUrl(url, true, discovery.constraints) }
     catch (err) { setError(err instanceof Error ? err.message : 'No pudimos analizar el producto seleccionado.') }
     finally { setLoading(false) }
   }
@@ -136,7 +145,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value.slice(0, 1800))}
-          placeholder="Ej: buscame paletas de pádel de carbono — o pegá un link de Alibaba"
+          placeholder="Ej: buscame paletas de carbono hasta USD 30, MOQ hasta 100 — o pegá Alibaba"
           disabled={loading}
           aria-label="Producto, búsqueda o link para analizar"
         />
@@ -150,11 +159,13 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
         <div><span className="eyebrow">Experimental live search</span><h2>Resultados Alibaba</h2><p>{discovery.note}</p></div>
         <span className="confidence">{discovery.mode === 'browser' ? 'Browser Run' : discovery.mode === 'direct' ? 'Direct' : 'Unavailable'}</span>
       </div>
+      <div className="discovery-constraints"><b>Tu criterio</b><span>{discovery.constraintsNote}</span></div>
       {discovery.results.length > 0 ? <div className="discovery-grid">
         {discovery.results.map((item) => <article key={item.url} className="discovery-item">
-          <span>ALIBABA · LIVE SOURCE</span>
+          <div className="discovery-item-top"><span>ALIBABA · LIVE SOURCE</span><small className={`match-${item.titleMatch}`}>{item.titleMatch.toUpperCase()} TITLE MATCH</small></div>
           <h3>{item.title}</h3>
-          <p>Precio, MOQ y proveedor se validan recién al abrir esta publicación; no se infieren desde el resultado de búsqueda.</p>
+          {item.matchedTerms.length > 0 && <p>Match visible: {item.matchedTerms.join(' · ')}</p>}
+          <p>Precio, MOQ y origen no se validan desde la tarjeta de búsqueda. Elegí el producto para verificar esas restricciones contra la publicación.</p>
           <div className="discovery-actions">
             <a href={item.url} target="_blank" rel="noreferrer">Ver fuente</a>
             <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>Analizar</button>
@@ -174,6 +185,10 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
         <div><span>Fuente del producto</span><b>{readLabel(analysis)}</b></div>
         <div><span>Browser Run</span><b>{conversational ? 'No aplica' : analysis.sourceRead?.browserAttempted ? `${analysis.sourceRead.browserMsUsed ? `${(analysis.sourceRead.browserMsUsed / 1000).toFixed(1)}s` : 'intentado'}` : 'No necesario'}</b></div>
       </div>
+      {constraintChecks.length > 0 && <div className="constraint-checks">
+        <b>Restricciones de tu búsqueda · verificadas después de abrir la publicación</b>
+        <div>{constraintChecks.map((check) => <span key={check.id} className={`constraint-${check.status}`} title={check.detail}>{check.status.toUpperCase()} · {check.label}</span>)}</div>
+      </div>}
       {analysis.sourceRead && <div className="customs-note"><b>{analysis.sourceRead.mode.toUpperCase()}</b><span>{analysis.sourceRead.reason}</span></div>}
       {conversational && <div className="customs-note"><b>USER-SUPPLIED</b><span>Los datos comerciales provienen de la conversación y no fueron verificados contra proveedor/proforma.</span></div>}
       <div className="customs-note"><b>{classificationLabel}</b><span>{analysis.customs.source} · Revisado {analysis.customs.reviewedAt}. Intervenciones: verificar en CIVUCE/VUCE.</span></div>

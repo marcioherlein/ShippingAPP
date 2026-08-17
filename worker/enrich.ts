@@ -6,6 +6,7 @@ import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
 import { runConversationalIntake } from './conversationalIntake'
 import { discoverAlibabaProducts } from './productDiscovery'
+import { rankDiscoveryResponse } from './discoveryRanking'
 import type { BrowserRun } from './alibabaSource'
 
 type Env = {
@@ -31,11 +32,11 @@ function validFacts(body: any): NcmProductFacts | null {
   return facts.name || facts.category || facts.description ? facts : null
 }
 
-function discoveryQuery(body: unknown) {
-  const raw = body && typeof body === 'object' ? (body as any).query : null
-  if (typeof raw !== 'string') return null
-  const query = raw.trim().replace(/\s+/g, ' ').slice(0, 220)
-  return query.length >= 2 ? query : null
+function discoveryRequest(body: unknown) {
+  const raw = body && typeof body === 'object' ? body as any : {}
+  const query = typeof raw.query === 'string' ? raw.query.trim().replace(/\s+/g, ' ').slice(0, 220) : ''
+  const userText = typeof raw.userText === 'string' ? raw.userText.trim().replace(/\s+/g, ' ').slice(0, 500) : query
+  return query.length >= 2 ? { query, userText: userText || query } : null
 }
 
 async function hydrateMarketAndFx(data: any) {
@@ -130,9 +131,10 @@ export default {
 
     if (url.pathname === '/api/discover' && request.method === 'POST') {
       try {
-        const query = discoveryQuery(await request.json())
-        if (!query) return json({ error: 'Ingresá una búsqueda de producto válida.' }, 400)
-        return json(await discoverAlibabaProducts(query, env.BROWSER))
+        const parsed = discoveryRequest(await request.json())
+        if (!parsed) return json({ error: 'Ingresá una búsqueda de producto válida.' }, 400)
+        const source = await discoverAlibabaProducts(parsed.query, env.BROWSER)
+        return json(rankDiscoveryResponse(source, parsed.userText))
       } catch {
         return json({ error: 'No pudimos ejecutar la búsqueda live de Alibaba.' }, 503)
       }

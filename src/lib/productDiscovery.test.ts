@@ -9,7 +9,7 @@ describe('product discovery client', () => {
       expect(JSON.parse(String(init?.body))).toEqual({ query: 'carbon padel', userText: 'carbon padel hasta USD 30' })
       return new Response(JSON.stringify({
         status: 'live', mode: 'direct', query: 'carbon padel', browserAttempted: false, browserMsUsed: null, note: 'live',
-        constraints: { maxUnitPriceUsd: 30, maxMoq: null, originCountry: null, lowMoqPreference: false },
+        constraints: { maxUnitPriceUsd: 30, maxMoq: null, originCountry: null, excludedOriginCountries: [], lowMoqPreference: false },
         constraintsNote: 'precio pendiente',
         results: [{
           title: 'Real Product', url: 'https://www.alibaba.com/product-detail/Real_1600000000001.html', evidence: 'live',
@@ -22,6 +22,7 @@ describe('product discovery client', () => {
     expect(result.results[0].evidence).toBe('live')
     expect(result.results[0].url).toContain('alibaba.com/product-detail/')
     expect(result.constraints.maxUnitPriceUsd).toBe(30)
+    expect(result.constraints.excludedOriginCountries).toEqual([])
   })
 
   it('surfaces backend failure instead of manufacturing fallback products', async () => {

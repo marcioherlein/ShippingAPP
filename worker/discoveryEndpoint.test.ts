@@ -40,9 +40,21 @@ describe('/api/discover', () => {
     expect(body.results.every((item: any) => item.url.startsWith('https://www.alibaba.com/product-detail/'))).toBe(true)
     expect(body.results.every((item: any) => item.evidence === 'live')).toBe(true)
     expect(body.results.every((item: any) => ['strong', 'partial', 'weak'].includes(item.titleMatch))).toBe(true)
-    expect(body.constraints).toEqual({ maxUnitPriceUsd: 30, maxMoq: 100, originCountry: 'China', lowMoqPreference: false })
+    expect(body.constraints).toEqual({ maxUnitPriceUsd: 30, maxMoq: 100, originCountry: 'China', excludedOriginCountries: [], lowMoqPreference: false })
     expect(body.constraintsNote).toContain('pendientes de validar')
     expect(e.BROWSER.quickAction).not.toHaveBeenCalled()
+  })
+
+  it('keeps excluded origin separate from required origin', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(product(1) + product(2) + product(3), { status: 200 })))
+    const response = await worker.fetch(new Request('https://shippingapp.example/api/discover', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'carbon padel', userText: 'carbon padel no China' }),
+    }), env())
+    const body: any = await response.json()
+    expect(body.constraints.originCountry).toBeNull()
+    expect(body.constraints.excludedOriginCountries).toEqual(['China'])
+    expect(body.constraintsNote).toContain('origen ≠ China')
   })
 
   it('returns unavailable with an empty list when no real product links can be sourced', async () => {

@@ -6,6 +6,7 @@ export type DiscoveryConstraints = {
   originCountry: string | null
   excludedOriginCountries: string[]
   lowMoqPreference: boolean
+  availableCapitalUsd: number | null
 }
 
 export type RankedDiscoveryResult = DiscoveryResult & {
@@ -23,19 +24,12 @@ const STOPWORDS = new Set([
   'a', 'an', 'and', 'the', 'for', 'with', 'from', 'to', 'of', 'find', 'search', 'show', 'product', 'products', 'supplier', 'suppliers',
   'de', 'del', 'la', 'las', 'el', 'los', 'un', 'una', 'unos', 'unas', 'con', 'para', 'por', 'que', 'quiero', 'busca', 'buscame', 'buscar', 'producto', 'productos',
   'low', 'bajo', 'baja', 'moq', 'minimum', 'minimo', 'mínimo', 'order', 'pedido', 'usd', 'us', 'under', 'below', 'hasta', 'max', 'maximo', 'máximo',
+  'capital', 'presupuesto', 'budget', 'tengo', 'dispongo', 'cuento',
 ])
 
 const COUNTRY_ALIASES: Record<string, string> = {
-  china: 'China',
-  pakistan: 'Pakistan',
-  india: 'India',
-  vietnam: 'Vietnam',
-  indonesia: 'Indonesia',
-  brazil: 'Brazil',
-  brasil: 'Brazil',
-  turkey: 'Turkey',
-  turquia: 'Turkey',
-  'turquía': 'Turkey',
+  china: 'China', pakistan: 'Pakistan', india: 'India', vietnam: 'Vietnam', indonesia: 'Indonesia',
+  brazil: 'Brazil', brasil: 'Brazil', turkey: 'Turkey', turquia: 'Turkey', 'turquía': 'Turkey',
 }
 
 function normalize(value: string) {
@@ -59,13 +53,12 @@ function tokens(value: string) {
   return result
 }
 
-function parseLocalizedNumber(raw: string) {
+function parseLocalizedNumber(raw: string, multiplierToken = '') {
   const cleaned = raw.replace(/\s+/g, '').replace(/[^\d.,]/g, '')
   if (!cleaned) return null
   const comma = cleaned.lastIndexOf(',')
   const dot = cleaned.lastIndexOf('.')
   let normalized = cleaned
-
   if (comma >= 0 && dot >= 0) {
     const decimal = comma > dot ? ',' : '.'
     const thousands = decimal === ',' ? /\./g : /,/g
@@ -77,15 +70,16 @@ function parseLocalizedNumber(raw: string) {
     const decimals = cleaned.length - dot - 1
     normalized = decimals === 3 ? cleaned.replace(/\./g, '') : cleaned
   }
-
-  const value = Number(normalized)
-  return Number.isFinite(value) && value > 0 ? value : null
+  let value = Number(normalized)
+  if (!Number.isFinite(value) || value <= 0) return null
+  if (/^(?:k|mil)$/i.test(multiplierToken.trim())) value *= 1000
+  return value
 }
 
 function capturedNumber(text: string, patterns: RegExp[]) {
   for (const pattern of patterns) {
     const match = text.match(pattern)
-    const value = match?.[1] ? parseLocalizedNumber(match[1]) : null
+    const value = match?.[1] ? parseLocalizedNumber(match[1], match?.[2] || '') : null
     if (value !== null) return value
   }
   return null
@@ -103,11 +97,15 @@ function hasExcludedCountry(text: string, alias: string) {
 export function parseDiscoveryConstraints(userText: string): DiscoveryConstraints {
   const normalized = normalize(userText)
   const maxUnitPriceUsd = capturedNumber(normalized, [
-    /(?:hasta|menos de|no mas de|max(?:imo)?|under|below)\s*(?:usd|us\$|\$)\s*([\d.,]+)/i,
-    /(?:usd|us\$|\$)\s*([\d.,]+)\s*(?:o menos|max(?:imo)?)/i,
+    /(?:hasta|menos de|no mas de|max(?:imo)?|under|below)\s*(?:usd|us\$|\$)\s*([\d.,]+)(?:\s*(k|mil))?/i,
+    /(?:usd|us\$|\$)\s*([\d.,]+)(?:\s*(k|mil))?\s*(?:o menos|max(?:imo)?)/i,
   ])
   const maxMoq = capturedNumber(normalized, [
     /(?:moq|pedido minimo|min(?:imum)? order)\s*(?:de|hasta|max(?:imo)?|<=|under|below)?\s*([\d.,]+)/i,
+  ])
+  const availableCapitalUsd = capturedNumber(normalized, [
+    /(?:tengo|dispongo de|cuento con|capital(?: disponible)?|presupuesto|budget)\s*(?:de\s*)?(?:usd|us\$|\$)\s*([\d.,]+)(?:\s*(k|mil))?/i,
+    /(?:usd|us\$|\$)\s*([\d.,]+)(?:\s*(k|mil))?\s*(?:de\s+)?(?:capital|presupuesto|budget)/i,
   ])
   const lowMoqPreference = /\b(?:moq bajo|moq baja|low moq|pedido minimo bajo)\b/i.test(normalized)
 
@@ -129,6 +127,7 @@ export function parseDiscoveryConstraints(userText: string): DiscoveryConstraint
     originCountry,
     excludedOriginCountries,
     lowMoqPreference,
+    availableCapitalUsd,
   }
 }
 
@@ -138,8 +137,7 @@ function rankOne(query: string, result: DiscoveryResult) {
   const matchedTerms = queryTerms.filter((term) => titleTerms.has(term))
   const ratio = queryTerms.length ? matchedTerms.length / queryTerms.length : 0
   const titleMatch: RankedDiscoveryResult['titleMatch'] = ratio >= 0.67 && matchedTerms.length >= 2
-    ? 'strong'
-    : matchedTerms.length > 0 ? 'partial' : 'weak'
+    ? 'strong' : matchedTerms.length > 0 ? 'partial' : 'weak'
   return { ...result, titleMatch, matchedTerms, score: ratio * 100 + matchedTerms.length }
 }
 
@@ -156,13 +154,14 @@ export function rankDiscoveryResponse(source: DiscoveryResponse, userText: strin
   if (constraints.originCountry) pending.push(`origen ${constraints.originCountry}`)
   for (const country of constraints.excludedOriginCountries) pending.push(`origen ≠ ${country}`)
   if (constraints.lowMoqPreference) pending.push('preferencia por MOQ bajo')
+  if (constraints.availableCapitalUsd !== null) pending.push(`capital disponible USD ${constraints.availableCapitalUsd} · affordability se evalúa con landed cost`)
 
   return {
     ...source,
     results: ranked,
     constraints,
     constraintsNote: pending.length
-      ? `Restricciones solicitadas pendientes de validar en la publicación: ${pending.join(' · ')}.`
+      ? `Criterios capturados; los de producto se validan en la publicación y el capital recién contra landed cost: ${pending.join(' · ')}.`
       : 'Sin restricciones comerciales duras detectadas; el orden usa sólo relevancia visible del título.',
   }
 }

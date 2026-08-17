@@ -56,11 +56,14 @@ async function hydrateMarketAndFx(data: any) {
   return data
 }
 
-function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConversationalIntake>>) {
+export function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConversationalIntake>>) {
   const facts = intake.facts
   const benchmarked = Object.values(intake.factSources).filter((source) => source === 'benchmark').length
   const explicit = Object.values(intake.factSources).filter((source) => source === 'user').length
-  const overall = Math.max(45, Math.min(85, 58 + explicit * 7 - benchmarked * 3 + (facts.originCountry ? 5 : 0)))
+
+  // A user can supply every field and still be wrong. Until the commercial facts
+  // are corroborated by a supplier page/proforma, source confidence is capped.
+  const overall = Math.max(40, Math.min(65, 45 + explicit * 6 - benchmarked * 4 + (facts.originCountry ? 3 : 0)))
 
   return {
     sourceUrl: `chat://product-intake/${Date.now()}`,
@@ -86,12 +89,13 @@ function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConversatio
     suggestedQuantities: intake.suggestedQuantities,
     confidence: {
       overall,
-      productSource: 'user-conversation',
-      logistics: benchmarked ? 'mixed-user-benchmark' : 'user-provided',
+      productSource: 'user-supplied-unverified',
+      logistics: benchmarked ? 'mixed-user-benchmark' : 'user-supplied-unverified',
       market: 'pending',
     },
     assumptions: [
       'Producto y datos comerciales estructurados desde una conversación del usuario; ShippingAPP no los verificó contra una publicación o proforma.',
+      'La confidence del producto conversacional está limitada hasta corroborar los datos comerciales con una fuente de proveedor.',
       ...intake.assumptions,
       ...(facts.originCountry ? [] : ['País de origen no verificado; no se presume China ni tratamiento preferencial.']),
       'Demanda mensual no observada: debe ser informada explícitamente antes de recomendar cantidad.',

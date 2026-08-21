@@ -77,7 +77,7 @@ describe('Mercado Libre authenticated market benchmark', () => {
       const url = String(input)
       if (url.includes('/domain_discovery/search')) return json([{ category_id: 'MLA123', category_name: 'Paletas de pádel', attributes: [] }])
       if (url.includes('/sites/MLA/search')) return json({ results: marketSearchResults() })
-      if (url.includes('/items/MLA1/sale_price')) return json({ amount: 155000, currency_id: 'ARS' })
+      if (url.includes('/items/MLA1/sale_price')) return json({ amount: 305000, currency_id: 'ARS' })
       return json({ error: 'price unavailable' }, 503)
     })
 

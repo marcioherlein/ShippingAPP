@@ -27,6 +27,19 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.factSources).toEqual({ moq: 'user', packedWeightKg: 'user', volumeCbm: 'user' })
   })
 
+  it('asks search-vs-analysis for a bare product even when the AI parser is healthy', async () => {
+    const result = await runConversationalIntake(ai({
+      intent: 'analyze_product', startsNewCase: false, searchQuery: null,
+      facts: { ...emptyFacts, name: 'Paletas de padel', category: 'Padel racket' },
+    }), { message: 'Paletas de padel' })
+
+    expect(result.status).toBe('clarify')
+    expect(result.intent).toBe('clarify')
+    expect(result.facts.name).toBe('Paletas de padel')
+    expect(result.message).toContain('¿Querés que busque opciones en Alibaba')
+    expect(result.assumptions.join(' ')).not.toContain('parser local conservador')
+  })
+
   it('uses supported padel logistics benchmarks but still requires supplier-specific MOQ', async () => {
     const result = await runConversationalIntake(ai({
       intent: 'analyze_product', searchQuery: null,

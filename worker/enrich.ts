@@ -7,6 +7,7 @@ import { runImportAnalyst } from './importAnalyst'
 import { runConversationalIntake } from './conversationalIntake'
 import { discoverAlibabaProducts } from './productDiscovery'
 import { rankDiscoveryResponse } from './discoveryRanking'
+import { checkAiHealth } from './aiHealth'
 import type { BrowserRun } from './alibabaSource'
 
 type Env = {
@@ -108,6 +109,11 @@ export function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConv
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+
+    if (url.pathname === '/api/health/ai' && request.method === 'GET') {
+      const health = await checkAiHealth(env.AI)
+      return json(health, health.status === 'ok' ? 200 : 503)
+    }
 
     if (url.pathname === '/api/chat' && request.method === 'POST') {
       try {

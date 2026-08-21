@@ -135,6 +135,30 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.assumptions.join(' ')).not.toContain('caso anterior')
   })
 
+  it('recovers a bare product phrase locally when the AI parser is unavailable', async () => {
+    const brokenAi = { run: async () => { throw new Error('down') } }
+    const result = await runConversationalIntake(brokenAi, { message: 'Paletas de padel' })
+
+    expect(result.status).toBe('clarify')
+    expect(result.intent).toBe('clarify')
+    expect(result.facts.name).toBe('Paletas de padel')
+    expect(result.message).toContain('¿Querés que busque opciones en Alibaba')
+    expect(result.assumptions.join(' ')).toContain('parser local conservador')
+  })
+
+  it('recovers an explicit search request locally and reuses the remembered product', async () => {
+    const brokenAi = { run: async () => { throw new Error('down') } }
+    const result = await runConversationalIntake(brokenAi, {
+      message: 'Buscame opciones',
+      priorFacts: { ...emptyFacts, name: 'Paletas de padel' },
+    })
+
+    expect(result.status).toBe('discovery_pending')
+    expect(result.intent).toBe('discover_products')
+    expect(result.searchQuery).toBe('Paletas de padel')
+    expect(result.assumptions.join(' ')).toContain('parser local conservador')
+  })
+
   it('degrades safely when the intake model fails instead of guessing facts', async () => {
     const brokenAi = { run: async () => { throw new Error('down') } }
     const result = await runConversationalIntake(brokenAi, {

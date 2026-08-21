@@ -134,6 +134,7 @@ function nextQuestion(missing: string[]) {
 function compactProductPhrase(value: string) {
   return value
     .replace(/^\s*(?:buscame|buscáme|busca|buscá|buscar|encontrame|encontrá|encontrar|quiero\s+(?:buscar|encontrar)|mostrame|mostrá)\s+/i, '')
+    .replace(/^\s*(?:quiero\s+evaluar|evaluar|analizame|analízame|analiza|analizá)\s+(?:un|una|el|la)?\s*/i, '')
     .replace(/^\s*(?:opciones|proveedores|productos)\s+(?:de|para)\s+/i, '')
     .trim()
 }
@@ -151,6 +152,11 @@ function explicitMoq(value: string) {
 
 function obviousDiscovery(value: string) {
   return /^(?:\s*)(?:buscame|buscáme|busca|buscá|buscar|encontrame|encontrá|encontrar|quiero\s+(?:buscar|encontrar)|mostrame|mostrá)\b/i.test(value)
+}
+
+function obviousAnalysis(value: string) {
+  return /^(?:\s*)(?:quiero\s+evaluar|evaluar|analizame|analízame|analiza|analizá)\b/i.test(value)
+    || /\b(?:tengo\s+(?:un|una)\s+proveedor|cotizaci[oó]n|proforma)\b/i.test(value)
 }
 
 function unsafeFallbackText(value: string) {
@@ -199,7 +205,7 @@ function deterministicExtract(message: string, prior: IntakeFacts) {
       unitPriceUsd: explicitUsd(message),
       moq: explicitMoq(message),
     }),
-    bareProduct: explicitUsd(message) === null && explicitMoq(message) === null,
+    bareProduct: !obviousAnalysis(message) && explicitUsd(message) === null && explicitMoq(message) === null,
   }
 }
 
@@ -324,9 +330,10 @@ export async function runConversationalIntake(ai: AI, body: unknown): Promise<In
   const shouldOfferSearchChoice = !!benchmarked.facts.name
     && !benchmarked.facts.unitPriceUsd
     && !benchmarked.facts.moq
+    && !obviousAnalysis(message)
     && looksLikeBareProduct(message)
 
-  if ((shouldOfferSearchChoice || (deterministicFallbackUsed && parsed.bareProduct)) && benchmarked.facts.name) {
+  if ((shouldOfferSearchChoice || (deterministicFallbackUsed && parsed.bareProduct && !obviousAnalysis(message))) && benchmarked.facts.name) {
     return {
       status: 'clarify', intent: 'clarify',
       message: `Entendí “${benchmarked.facts.name}”. ¿Querés que busque opciones en Alibaba o ya tenés un proveedor/producto concreto para analizar?`,

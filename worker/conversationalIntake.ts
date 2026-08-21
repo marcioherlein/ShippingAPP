@@ -145,7 +145,7 @@ function explicitUsd(value: string) {
 }
 
 function explicitMoq(value: string) {
-  const match = value.match(/\b(?:MOQ|pedido\s+m[ií]nimo|min(?:imo|\.)?\s+de\s+compra)\s*(?:de|:|=)?\s*([0-9]+)/i)
+  const match = value.match(/\b(?:MOQ|pedido\s+m[ií]nimo|m[ií]n(?:imo|\.)?\s+de\s+compra)\s*(?:de|:|=|hasta)?\s*([0-9]+)/i)
   return match ? positive(Number(match[1]), 10_000_000) : null
 }
 
@@ -321,8 +321,12 @@ export async function runConversationalIntake(ai: AI, body: unknown): Promise<In
   const merged = mergeFacts(resetPrior ? emptyFacts() : prior, parsed.facts)
   const benchmarked = applySupportedBenchmarks(merged)
   const missing = missingFor(benchmarked.facts)
+  const shouldOfferSearchChoice = !!benchmarked.facts.name
+    && !benchmarked.facts.unitPriceUsd
+    && !benchmarked.facts.moq
+    && looksLikeBareProduct(message)
 
-  if (deterministicFallbackUsed && parsed.bareProduct && benchmarked.facts.name) {
+  if ((shouldOfferSearchChoice || (deterministicFallbackUsed && parsed.bareProduct)) && benchmarked.facts.name) {
     return {
       status: 'clarify', intent: 'clarify',
       message: `Entendí “${benchmarked.facts.name}”. ¿Querés que busque opciones en Alibaba o ya tenés un proveedor/producto concreto para analizar?`,
@@ -331,7 +335,10 @@ export async function runConversationalIntake(ai: AI, body: unknown): Promise<In
       factSources: benchmarked.factSources,
       missingFields: missing,
       suggestedQuantities: quantitiesFromMoq(benchmarked.facts.moq),
-      assumptions: ['Producto reconocido con parser local conservador porque el parser AI no respondió.', ...benchmarked.assumptions],
+      assumptions: [
+        ...(deterministicFallbackUsed ? ['Producto reconocido con parser local conservador porque el parser AI no respondió.'] : []),
+        ...benchmarked.assumptions,
+      ],
     }
   }
 

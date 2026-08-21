@@ -40,6 +40,28 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.assumptions.join(' ')).not.toContain('parser local conservador')
   })
 
+  it('does not re-ask search-vs-analysis when the user explicitly says they want to evaluate', async () => {
+    const result = await runConversationalIntake(ai({
+      intent: 'analyze_product', startsNewCase: false, searchQuery: null,
+      facts: { ...emptyFacts, name: 'USB-C 65W power adapter', category: 'Power adapter' },
+    }), { message: 'Quiero evaluar un cargador USB-C de 65W' })
+
+    expect(result.status).toBe('needs_input')
+    expect(result.intent).toBe('analyze_product')
+    expect(result.message).toContain('precio unitario del proveedor')
+    expect(result.message).not.toContain('busque opciones')
+  })
+
+  it('preserves explicit evaluate intent even when the AI parser is down', async () => {
+    const brokenAi = { run: async () => { throw new Error('down') } }
+    const result = await runConversationalIntake(brokenAi, { message: 'Quiero evaluar un cargador USB-C de 65W' })
+
+    expect(result.status).toBe('needs_input')
+    expect(result.intent).toBe('analyze_product')
+    expect(result.facts.name).toBe('cargador USB-C de 65W')
+    expect(result.message).toContain('precio unitario del proveedor')
+  })
+
   it('uses supported padel logistics benchmarks but still requires supplier-specific MOQ', async () => {
     const result = await runConversationalIntake(ai({
       intent: 'analyze_product', searchQuery: null,

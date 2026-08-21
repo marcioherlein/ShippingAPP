@@ -13,6 +13,7 @@ type Env = {
   AI: { run: (model: string, input: unknown) => Promise<unknown> }
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   BROWSER: BrowserRun
+  MERCADOLIBRE_ACCESS_TOKEN?: string
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -39,19 +40,30 @@ function discoveryRequest(body: unknown) {
   return query.length >= 2 ? { query, userText: userText || query } : null
 }
 
-async function hydrateMarketAndFx(data: any) {
+async function hydrateMarketAndFx(data: any, env: Pick<Env, 'MERCADOLIBRE_ACCESS_TOKEN'>) {
   const [market, fx] = await Promise.all([
-    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || ''),
+    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '', {
+      accessToken: env.MERCADOLIBRE_ACCESS_TOKEN,
+    }),
     fetchBcraReferenceFx(),
   ])
   const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
 
   if (market.status !== 'live' || !market.suggestedPriceArs) {
     data.market = { ...data.market, estimatedPriceArs: null, source: `${market.source} · ${market.status}`, details: market }
-    data.assumptions = [...prior, 'Mercado local no confirmado: no se reutiliza el benchmark histórico.']
+    data.assumptions = [
+      ...prior,
+      market.status === 'configuration_required'
+        ? 'Mercado local bloqueado: falta configurar la autenticación oficial de Mercado Libre; ShippingAPP no promueve un precio público no autenticado a economics.'
+        : 'Mercado local no confirmado: no se reutiliza el benchmark histórico.',
+    ]
   } else {
     data.market = { ...data.market, estimatedPriceArs: Math.round(market.suggestedPriceArs), source: market.source, details: market }
-    data.assumptions = [...prior, `Precio local de screening basado en ${market.comparableCount} comparables activos.`, 'La demanda mensual sigue siendo un supuesto editable; no se infiere del stock público.']
+    data.assumptions = [
+      ...prior,
+      `Precio local de screening basado en ${market.comparableCount} comparables activos; ${market.effectivePriceCount} con sale_price efectivo.`,
+      'La demanda mensual sigue siendo un supuesto editable; no se infiere del stock público.',
+    ]
     data.confidence = { ...data.confidence, market: `live-${market.confidence}` }
   }
 
@@ -122,7 +134,7 @@ export default {
       try {
         const intake = await runConversationalIntake(env.AI, await request.json())
         if (intake.status !== 'ready') return json(intake)
-        const analysis = await hydrateMarketAndFx(conversationalAnalysis(intake))
+        const analysis = await hydrateMarketAndFx(conversationalAnalysis(intake), env)
         return json({ ...intake, analysis })
       } catch {
         return json({ error: 'No pudimos procesar el intake conversacional.' }, 400)
@@ -173,6 +185,6 @@ export default {
     const response = await baseWorker.fetch(request.clone(), env)
     if (!response.ok) return response
     const data = await response.json() as any
-    return json(await hydrateMarketAndFx(data))
+    return json(await hydrateMarketAndFx(data, env))
   },
 }

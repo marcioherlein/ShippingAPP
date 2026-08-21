@@ -203,6 +203,11 @@ function deterministicExtract(message: string, prior: IntakeFacts) {
   }
 }
 
+function parserFailureReason(error: unknown) {
+  const raw = error instanceof Error ? `${error.name}: ${error.message}` : String(error || 'unknown')
+  return raw.replace(/\s+/g, ' ').slice(0, 300)
+}
+
 async function extract(ai: AI, message: string, prior: IntakeFacts) {
   const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
     messages: [
@@ -218,7 +223,15 @@ async function extract(ai: AI, message: string, prior: IntakeFacts) {
   })
   const content = result?.response ?? result?.choices?.[0]?.message?.content
   if (!content) throw new Error('intake_ai_empty')
-  const parsed = typeof content === 'string' ? JSON.parse(content) : content
+
+  let parsed: any
+  try {
+    parsed = typeof content === 'string' ? JSON.parse(content) : content
+  } catch {
+    throw new Error('intake_ai_invalid_json')
+  }
+  if (!parsed || typeof parsed !== 'object') throw new Error('intake_ai_invalid_shape')
+
   return {
     intent: normalizeIntent(parsed?.intent),
     startsNewCase: parsed?.startsNewCase === true,
@@ -263,8 +276,13 @@ export async function runConversationalIntake(ai: AI, body: unknown): Promise<In
   let deterministicFallbackUsed = false
   try {
     parsed = await extract(ai, message, prior)
-  } catch {
+  } catch (error) {
     const fallback = deterministicExtract(message, prior)
+    console.error('shippingapp.intake_ai_parser_failure', {
+      reason: parserFailureReason(error),
+      fallback: fallback ? 'deterministic' : 'none',
+    })
+
     if (!fallback) {
       return {
         status: 'clarify', intent: 'clarify', message: 'No pude estructurar ese mensaje de forma confiable. Describime el producto o pegá un link de Alibaba.',

@@ -1,5 +1,6 @@
 import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
+import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
@@ -9,7 +10,7 @@ import { discoverAlibabaProducts } from './productDiscovery'
 import { rankDiscoveryResponse } from './discoveryRanking'
 import type { BrowserRun } from './alibabaSource'
 
-type Env = {
+type Env = MercadoLibreAuthEnv & {
   AI: { run: (model: string, input: unknown) => Promise<unknown> }
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   BROWSER: BrowserRun
@@ -39,19 +40,39 @@ function discoveryRequest(body: unknown) {
   return query.length >= 2 ? { query, userText: userText || query } : null
 }
 
-async function hydrateMarketAndFx(data: any) {
+async function hydrateMarketAndFx(data: any, env: Env) {
+  const mlAuth = await resolveMercadoLibreAccessToken(env)
   const [market, fx] = await Promise.all([
-    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || ''),
+    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '', {
+      accessToken: mlAuth.accessToken,
+    }),
     fetchBcraReferenceFx(),
   ])
+  if (mlAuth.status !== 'ready') {
+    market.warnings.push(mlAuth.reason)
+    if (mlAuth.status === 'unavailable') {
+      market.status = 'unavailable'
+      market.source = 'Mercado Libre Argentina API · OAuth unavailable'
+    }
+  }
+
   const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
 
   if (market.status !== 'live' || !market.suggestedPriceArs) {
     data.market = { ...data.market, estimatedPriceArs: null, source: `${market.source} · ${market.status}`, details: market }
-    data.assumptions = [...prior, 'Mercado local no confirmado: no se reutiliza el benchmark histórico.']
+    data.assumptions = [
+      ...prior,
+      market.status === 'configuration_required'
+        ? 'Mercado local bloqueado: falta configurar la autenticación oficial de Mercado Libre; ShippingAPP no promueve un precio público no autenticado a economics.'
+        : 'Mercado local no confirmado: no se reutiliza el benchmark histórico.',
+    ]
   } else {
     data.market = { ...data.market, estimatedPriceArs: Math.round(market.suggestedPriceArs), source: market.source, details: market }
-    data.assumptions = [...prior, `Precio local de screening basado en ${market.comparableCount} comparables activos.`, 'La demanda mensual sigue siendo un supuesto editable; no se infiere del stock público.']
+    data.assumptions = [
+      ...prior,
+      `Precio local de screening basado en ${market.comparableCount} comparables activos; ${market.effectivePriceCount} con sale_price efectivo.`,
+      'La demanda mensual sigue siendo un supuesto editable; no se infiere del stock público.',
+    ]
     data.confidence = { ...data.confidence, market: `live-${market.confidence}` }
   }
 
@@ -122,7 +143,7 @@ export default {
       try {
         const intake = await runConversationalIntake(env.AI, await request.json())
         if (intake.status !== 'ready') return json(intake)
-        const analysis = await hydrateMarketAndFx(conversationalAnalysis(intake))
+        const analysis = await hydrateMarketAndFx(conversationalAnalysis(intake), env)
         return json({ ...intake, analysis })
       } catch {
         return json({ error: 'No pudimos procesar el intake conversacional.' }, 400)
@@ -173,6 +194,6 @@ export default {
     const response = await baseWorker.fetch(request.clone(), env)
     if (!response.ok) return response
     const data = await response.json() as any
-    return json(await hydrateMarketAndFx(data))
+    return json(await hydrateMarketAndFx(data, env))
   },
 }

@@ -1,10 +1,11 @@
-import React, { FormEvent, useState } from 'react'
+import React, { FormEvent, useEffect, useState } from 'react'
 import {
   applyAnalystScenario,
   askImportAnalyst,
   type AnalystChatMessage,
   type AnalystScenarioPatch,
 } from '../lib/importAnalyst'
+import { pct, usd } from '../lib/format'
 import type { OpportunityDecision } from '../lib/opportunityDecision'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import type { Inputs } from '../lib/types'
@@ -20,6 +21,8 @@ const suggestions = [
   '¿Por qué llegaste a este verdict?',
   '¿Cuál es el dato más débil del análisis?',
   '¿Qué tendría que validar antes de comprar?',
+  '¿Qué pasa si vendo 20 por mes?',
+  'Tengo USD 15.000. ¿Me alcanza?',
 ]
 
 function id() {
@@ -33,6 +36,18 @@ function patchLabel(patch: AnalystScenarioPatch) {
   return values.join(' · ')
 }
 
+function deterministicResultText(decision: OpportunityDecision) {
+  const result = decision.result
+  const parts = [`Nuevo resultado: ${decision.label}.`]
+  if (result) {
+    parts.push(`Cantidad evaluada ${result.quantity} u. por ${result.mode === 'air' ? 'aéreo' : 'marítimo'}.`)
+    parts.push(`Cash requerido ${usd(result.cashRequiredUsd)} y margen ${pct(result.marginPct)}.`)
+  }
+  if (decision.robustCandidate) parts.push(`Robust score ${decision.robustCandidate.robustScore}/100.`)
+  if (decision.warnings.length) parts.push(`Principal límite: ${decision.warnings[0]}`)
+  return parts.join(' ')
+}
+
 export default function ImportAnalyst({ analysis, inputs, decision, onApplyScenario }: Props) {
   const [messages, setMessages] = useState<AnalystChatMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -40,6 +55,17 @@ export default function ImportAnalyst({ analysis, inputs, decision, onApplyScena
   const [error, setError] = useState('')
   const [pendingPatch, setPendingPatch] = useState<AnalystScenarioPatch | null>(null)
   const [pendingReason, setPendingReason] = useState<string | null>(null)
+  const [awaitingDeterministicResult, setAwaitingDeterministicResult] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!awaitingDeterministicResult) return
+    setMessages((current) => [...current, {
+      id: id(),
+      role: 'assistant',
+      content: `${awaitingDeterministicResult} ${deterministicResultText(decision)}`,
+    }])
+    setAwaitingDeterministicResult(null)
+  }, [decision, awaitingDeterministicResult])
 
   const send = async (raw: string) => {
     const message = raw.trim()
@@ -72,13 +98,9 @@ export default function ImportAnalyst({ analysis, inputs, decision, onApplyScena
 
   const apply = () => {
     if (!pendingPatch) return
-    onApplyScenario(applyAnalystScenario(inputs, pendingPatch))
     const label = patchLabel(pendingPatch)
-    setMessages((current) => [...current, {
-      id: id(),
-      role: 'assistant',
-      content: `Escenario aplicado: ${label}. ShippingAPP recalculó el business case con sus motores determinísticos.`,
-    }])
+    setAwaitingDeterministicResult(`Escenario aplicado (${label}).`)
+    onApplyScenario(applyAnalystScenario(inputs, pendingPatch))
     setPendingPatch(null)
     setPendingReason(null)
   }
@@ -126,6 +148,6 @@ export default function ImportAnalyst({ analysis, inputs, decision, onApplyScena
       />
       <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Pensando…' : 'Preguntar'}</button>
     </form>
-    <p className="analyst-footnote">Para escenarios, el chat sólo puede proponer demanda y capital. Precio, FX, NCM, arancel y flete permanecen vinculados a sus fuentes/motores.</p>
+    <p className="analyst-footnote">Para escenarios, el chat sólo puede proponer demanda y capital. Precio, FX, NCM, arancel y flete permanecen vinculados a sus fuentes/motores. Los resultados numéricos posteriores a “Aplicar” vienen del motor determinístico, no del LLM.</p>
   </section>
 }

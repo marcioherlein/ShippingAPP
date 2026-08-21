@@ -1,5 +1,6 @@
 import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
+import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
@@ -9,11 +10,10 @@ import { discoverAlibabaProducts } from './productDiscovery'
 import { rankDiscoveryResponse } from './discoveryRanking'
 import type { BrowserRun } from './alibabaSource'
 
-type Env = {
+type Env = MercadoLibreAuthEnv & {
   AI: { run: (model: string, input: unknown) => Promise<unknown> }
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   BROWSER: BrowserRun
-  MERCADOLIBRE_ACCESS_TOKEN?: string
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -40,13 +40,22 @@ function discoveryRequest(body: unknown) {
   return query.length >= 2 ? { query, userText: userText || query } : null
 }
 
-async function hydrateMarketAndFx(data: any, env: Pick<Env, 'MERCADOLIBRE_ACCESS_TOKEN'>) {
+async function hydrateMarketAndFx(data: any, env: Env) {
+  const mlAuth = await resolveMercadoLibreAccessToken(env)
   const [market, fx] = await Promise.all([
     analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '', {
-      accessToken: env.MERCADOLIBRE_ACCESS_TOKEN,
+      accessToken: mlAuth.accessToken,
     }),
     fetchBcraReferenceFx(),
   ])
+  if (mlAuth.status !== 'ready') {
+    market.warnings.push(mlAuth.reason)
+    if (mlAuth.status === 'unavailable') {
+      market.status = 'unavailable'
+      market.source = 'Mercado Libre Argentina API · OAuth unavailable'
+    }
+  }
+
   const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
 
   if (market.status !== 'live' || !market.suggestedPriceArs) {

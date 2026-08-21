@@ -146,6 +146,15 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.assumptions.join(' ')).toContain('parser local conservador')
   })
 
+  it('recovers a bare product phrase when the AI parser returns malformed JSON', async () => {
+    const malformedAi = { run: async () => ({ response: 'not-json' }) }
+    const result = await runConversationalIntake(malformedAi, { message: 'Paletas de padel' })
+
+    expect(result.status).toBe('clarify')
+    expect(result.facts.name).toBe('Paletas de padel')
+    expect(result.assumptions.join(' ')).toContain('parser local conservador')
+  })
+
   it('recovers an explicit search request locally and reuses the remembered product', async () => {
     const brokenAi = { run: async () => { throw new Error('down') } }
     const result = await runConversationalIntake(brokenAi, {

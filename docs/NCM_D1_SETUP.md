@@ -134,3 +134,5 @@ npx --yes wrangler@latest deploy --dry-run --outdir .wrangler-dry-run
 ```
 
 The suite includes a real-world Alibaba-title retrieval corpus. Exact 8-digit NCM assertions are used only for products whose commercial facts support that precision. Ambiguous products assert the correct heading/family and rely on the classifier's missing-fact/confidence logic rather than manufacturing certainty.
+
+A green CI run is required before this branch is eligible for merge. Corpus failures are treated as retrieval defects or insufficient-fact cases; they must not be bypassed by weakening the expectation to an unrelated code.

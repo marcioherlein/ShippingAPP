@@ -2,6 +2,8 @@ import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
+import { loadNcmIndexFromD1, lookupNcmTariff, type D1DatabaseLike } from './ncmDatabase'
+import { applyOfficialNcmLabelSupplements } from './ncmLabelSupplements'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
@@ -14,6 +16,7 @@ type Env = MercadoLibreAuthEnv & {
   AI: { run: (model: string, input: unknown) => Promise<unknown> }
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   BROWSER: BrowserRun
+  NCM_DB?: D1DatabaseLike
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -165,16 +168,26 @@ export default {
       try {
         const facts = validFacts(await request.json())
         if (!facts) return json({ error: 'Faltan datos del producto para clasificar.' }, 400)
-        const index = await loadNcmIndex(request.url, env.ASSETS)
+
+        // D1 is the preferred source of truth once NCM_DB is bound and hydrated.
+        // Until then, keep the current ARCA asset as a fail-safe so deployment is non-breaking.
+        const rawIndex = env.NCM_DB
+          ? await loadNcmIndexFromD1(env.NCM_DB)
+          : await loadNcmIndex(request.url, env.ASSETS)
+        const index = applyOfficialNcmLabelSupplements(rawIndex)
         const classification = await classifyFullNcm(index, env.AI, facts)
-        if (classification.status !== 'candidate' || !classification.code) return json({ ...classification, sim: null })
+        const tariff = await lookupNcmTariff(env.NCM_DB, classification.code)
+        if (classification.status !== 'candidate' || !classification.code) {
+          return json({ ...classification, tariff, sim: null })
+        }
 
         try {
           const sim = await resolveSimOpening(request.url, env.ASSETS, env.AI, classification.code, facts)
-          return json({ ...classification, sim })
+          return json({ ...classification, tariff, sim })
         } catch (error) {
           return json({
             ...classification,
+            tariff,
             sim: {
               status: 'unavailable', ncmCode: classification.code, ncmLabel: classification.label,
               candidate: null, alternatives: [], confidence: 'missing', missingFacts: [], sourceDate: classification.sourceDate,

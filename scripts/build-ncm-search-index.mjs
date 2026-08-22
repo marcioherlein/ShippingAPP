@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseNomencladorText } from './parse-arca-nomenclador.mjs'
 
-function uniqueText(parts) {
+function uniqueParts(parts) {
   const seen = new Set()
   const out = []
   for (const part of parts.filter(Boolean)) {
@@ -11,7 +11,35 @@ function uniqueText(parts) {
     seen.add(value)
     out.push(value)
   }
-  return out.join(' > ')
+  return out
+}
+
+function uniqueText(parts) {
+  return uniqueParts(parts).join(' > ')
+}
+
+function meaningfulWords(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/).filter((word) => word.length >= 4 && !['dema','otro','otra'].includes(word))
+}
+
+export function searchableLabel(record) {
+  const baseParts = uniqueParts([...(record.context || []), record.description])
+  const base = baseParts.join(' > ')
+
+  // A base NCM can legitimately exist with no useful textual leaf while its
+  // official SIM opening carries the product wording. Supplement only sparse
+  // base labels; do not pollute already-informative NCM labels with every SIM
+  // child description.
+  if (meaningfulWords(base).length >= 2) return base
+
+  const simParts = (record.simOpenings || []).flatMap((opening) => [
+    ...(opening.context || []),
+    opening.description,
+  ])
+  return uniqueText([...baseParts, ...simParts])
 }
 
 export function buildSearchIndex(text, sourceFile) {
@@ -26,12 +54,10 @@ export function buildSearchIndex(text, sourceFile) {
       recordCount: parsed.meta.recordCount,
       tariffDataIncluded: false,
       simOpeningsIncluded: false,
+      searchLabelPolicy: 'base NCM context/description; sparse labels supplemented from official SIM opening context',
       recordShape: '[ncmCode,label]',
     },
-    records: parsed.records.map((record) => [
-      record.code,
-      uniqueText([...record.context, record.description]),
-    ]),
+    records: parsed.records.map((record) => [record.code, searchableLabel(record)]),
   }
 }
 

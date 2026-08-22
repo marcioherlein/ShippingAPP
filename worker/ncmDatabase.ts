@@ -73,9 +73,11 @@ export async function loadNcmIndexFromD1(db: D1DatabaseLike): Promise<NcmSearchI
       `).bind(version.id).all<CodeRow>()
       const rows = Array.isArray(response.results) ? response.results : []
       const records: Array<[string, string]> = rows
-        .filter((row) => /^\d{4}\.\d{2}\.\d{2}$/.test(row.code) && typeof row.official_label === 'string' && row.official_label.trim().length > 0)
+        .filter((row) => /^\d{4}\.\d{2}\.\d{2}$/.test(row.code) && typeof row.official_label === 'string')
         .map((row) => [row.code, row.official_label.trim()])
 
+      // Empty official labels exist in the current ARCA snapshot and are preserved
+      // exactly as the static index does. Retrieval ignores empty labels later.
       if (records.length < 10000 || Math.abs(records.length - version.record_count) > 10) {
         throw new Error(`NCM D1 failed integrity checks (${records.length}/${version.record_count} usable records)`)
       }

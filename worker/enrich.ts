@@ -3,6 +3,7 @@ import { analyzeArgentinaMarket } from './catalogProvider'
 import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
 import { loadNcmIndexFromD1, lookupNcmTariff, type D1DatabaseLike } from './ncmDatabase'
+import { applyOfficialNcmLabelSupplements } from './ncmLabelSupplements'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
@@ -170,9 +171,10 @@ export default {
 
         // D1 is the preferred source of truth once NCM_DB is bound and hydrated.
         // Until then, keep the current ARCA asset as a fail-safe so deployment is non-breaking.
-        const index = env.NCM_DB
+        const rawIndex = env.NCM_DB
           ? await loadNcmIndexFromD1(env.NCM_DB)
           : await loadNcmIndex(request.url, env.ASSETS)
+        const index = applyOfficialNcmLabelSupplements(rawIndex)
         const classification = await classifyFullNcm(index, env.AI, facts)
         const tariff = await lookupNcmTariff(env.NCM_DB, classification.code)
         if (classification.status !== 'candidate' || !classification.code) {

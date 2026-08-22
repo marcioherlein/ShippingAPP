@@ -92,6 +92,19 @@ function safeTerms(values: unknown): string[] {
   )].slice(0, 14)
 }
 
+function baseTokenWeight(token: string) {
+  return token.length >= 9 ? 9 : token.length >= 6 ? 6 : 3
+}
+
+function rarityBonus(totalDocuments: number, documentFrequency: number) {
+  if (!totalDocuments || !documentFrequency) return 0
+  // Customs nouns such as "convertidor" or "secador" are much more useful
+  // than ubiquitous electrical/material words. A capped IDF-style bonus keeps
+  // rare discriminators from being crowded out by many sibling NCM leaves.
+  const idf = Math.log2((totalDocuments + 1) / (documentFrequency + 1))
+  return Math.max(0, Math.min(18, idf * 3))
+}
+
 export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25): NcmRetrievalCandidate[] {
   if (!index || index.meta.indexSchema !== 3 || !Array.isArray(index.records)) return []
   const rawPhrases = [...safeTerms(searchTerms), facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''].filter(Boolean)
@@ -99,32 +112,61 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
   const queryTokens = [...new Set(rawPhrases.flatMap(tokens))]
   if (queryTokens.length < 2 && phraseNorms.every((phrase) => phrase.split(' ').length < 2)) return []
 
-  const scored: NcmRetrievalCandidate[] = []
-  for (const row of index.records) {
-    if (!Array.isArray(row) || row.length < 2) continue
+  const prepared = index.records.flatMap((row) => {
+    if (!Array.isArray(row) || row.length < 2) return []
     const [code, label] = row
-    if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string') continue
+    if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string') return []
     const normalizedLabel = normalizeText(label)
-    if (!normalizedLabel) continue
-    const labelTokens = new Set(tokens(normalizedLabel))
+    if (!normalizedLabel) return []
+    return [{ code, label, normalizedLabel, labelTokens: new Set(tokens(normalizedLabel)) }]
+  })
+
+  const documentFrequency = new Map<string, number>()
+  for (const token of queryTokens) documentFrequency.set(token, 0)
+  for (const row of prepared) {
+    for (const token of queryTokens) {
+      if (row.labelTokens.has(token)) documentFrequency.set(token, (documentFrequency.get(token) || 0) + 1)
+    }
+  }
+
+  const cohesivePhrases = phraseNorms
+    .map((phrase) => ({ phrase, tokens: tokens(phrase) }))
+    .filter((item) => item.tokens.length >= 2 && item.tokens.length <= 5)
+
+  const scored: NcmRetrievalCandidate[] = []
+  for (const row of prepared) {
     const matchedTerms: string[] = []
     let score = 0
 
     for (const phrase of phraseNorms) {
-      if (phrase.split(' ').length >= 2 && normalizedLabel.includes(phrase)) {
+      if (phrase.split(' ').length >= 2 && row.normalizedLabel.includes(phrase)) {
         score += Math.min(30, 12 + phrase.length / 3)
         matchedTerms.push(phrase)
       }
     }
+
+    // Allow ordinary customs wording variations ("secadores para el cabello"
+    // vs "secador de cabello") without fuzzy spelling or semantic guessing.
+    // All meaningful tokens from the short phrase must be present.
+    for (const item of cohesivePhrases) {
+      if (row.normalizedLabel.includes(item.phrase)) continue
+      if (item.tokens.every((token) => row.labelTokens.has(token))) {
+        score += 8 + item.tokens.length * 4
+        matchedTerms.push(item.phrase)
+      }
+    }
+
     for (const token of queryTokens) {
-      if (!labelTokens.has(token)) continue
-      const weight = token.length >= 9 ? 9 : token.length >= 6 ? 6 : 3
+      if (!row.labelTokens.has(token)) continue
+      const weight = baseTokenWeight(token) + rarityBonus(prepared.length, documentFrequency.get(token) || 0)
       score += weight
       matchedTerms.push(token)
     }
 
     const distinctMatches = new Set(matchedTerms).size
-    if (score >= 8 && distinctMatches >= 2) scored.push({ code, label, score: Math.round(score * 100) / 100, matchedTerms: [...new Set(matchedTerms)] })
+    if (score >= 8 && distinctMatches >= 2) {
+      scored.push({ code: row.code, label: row.label, score: Math.round(score * 100) / 100, matchedTerms: [...new Set(matchedTerms)] })
+    }
   }
 
   return scored.sort((a, b) => b.score - a.score || a.code.localeCompare(b.code)).slice(0, Math.max(1, Math.min(50, limit)))

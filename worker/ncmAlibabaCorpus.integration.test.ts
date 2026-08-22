@@ -1,10 +1,12 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { retrieveNcmCandidates, type NcmProductFacts, type NcmSearchIndex } from './ncmRetrieval'
+import { applyOfficialNcmLabelSupplements } from './ncmLabelSupplements'
 
-const index = JSON.parse(
+const rawIndex = JSON.parse(
   fs.readFileSync(new URL('../public/data/ncm-index.json', import.meta.url), 'utf8'),
 ) as NcmSearchIndex
+const index = applyOfficialNcmLabelSupplements(rawIndex)
 
 type CorpusCase = {
   label: string

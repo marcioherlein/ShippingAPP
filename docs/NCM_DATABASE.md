@@ -21,27 +21,37 @@ Chapter, heading, subheading and section are derived from the NCM code. Spreadsh
 
 ## D1 schema
 
-Apply `db/ncm-schema.sql` to a new D1 database, then load the normalized seed SQL generated from the audited workbook.
+`db/ncm-schema.sql` defines the production schema. The normalized SQL seed is generated from the audited workbook and should be kept as `NCM_D1_seed_only.sql` while provisioning.
 
-Example provisioning commands:
+### Provisioning flow
+
+From the repository root while authenticated to the correct Cloudflare account:
 
 ```bash
-npx wrangler d1 create shippingapp-ncm
-npx wrangler d1 execute shippingapp-ncm --remote --file=db/ncm-schema.sql
-npx wrangler d1 execute shippingapp-ncm --remote --file=NCM_D1_seed_only.sql
+npm run ncm:d1:create
 ```
 
-After D1 creation, add the returned database ID to `wrangler.jsonc`:
+Cloudflare returns a `database_id`. Configure it without editing JSON manually:
 
-```jsonc
-"d1_databases": [
-  {
-    "binding": "NCM_DB",
-    "database_name": "shippingapp-ncm",
-    "database_id": "<CLOUDFLARE_DATABASE_ID>"
-  }
-]
+```bash
+npm run ncm:d1:configure -- <database_id>
 ```
+
+Then create the schema and load the normalized seed:
+
+```bash
+npm run ncm:d1:schema
+npm run ncm:d1:seed
+npm run ncm:d1:verify
+```
+
+The final verification must report:
+
+- `expected_records = 10434`
+- `actual_records = 10434`
+- `conflicts = 1`
+
+The configurator preserves any other D1 bindings and replaces an existing `NCM_DB` binding rather than duplicating it. It refuses placeholders and malformed database IDs.
 
 Do not invent or commit a database ID before the Cloudflare resource exists.
 

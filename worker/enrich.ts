@@ -2,7 +2,7 @@ import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
-import { lookupNcmTariff } from './ncmTariff'
+import { lookupNcmTariff, type D1DatabaseLike } from './ncmTariff'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
@@ -15,6 +15,7 @@ type Env = MercadoLibreAuthEnv & {
   AI: { run: (model: string, input: unknown) => Promise<unknown> }
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   BROWSER: BrowserRun
+  NCM_DB?: D1DatabaseLike
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -166,7 +167,7 @@ export default {
         const classification = await classifyFullNcm(index, env.AI, facts)
         if (classification.status !== 'candidate' || !classification.code) return json({ ...classification, tariff: null, sim: null })
 
-        const tariff = await lookupNcmTariff(request.url, env.ASSETS, classification.code)
+        const tariff = await lookupNcmTariff(env.NCM_DB, classification.code)
         try {
           const sim = await resolveSimOpening(request.url, env.ASSETS, env.AI, classification.code, facts)
           return json({ ...classification, tariff, sim })

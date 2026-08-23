@@ -1,6 +1,7 @@
 import { analyzeAlibabaUrl, applyAnalysis, type ProductAnalysis } from './productAnalysis'
 import { customsProfileFor, type CustomsProfile } from './customsClassification'
 import { classifyNcmRemote, mergeFullCustomsProfile } from './fullNcmClient'
+import { applyRemoteTariffEvidence } from './ncmTariffClient'
 import type { Inputs } from './types'
 
 export type ProductAnalysisV2 = ProductAnalysis & { customs: CustomsProfile }
@@ -17,7 +18,7 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
       functionText: base.product.functionText ?? null,
       description: base.product.description ?? null,
     })
-    customs = mergeFullCustomsProfile(localCustoms, full)
+    customs = applyRemoteTariffEvidence(mergeFullCustomsProfile(localCustoms, full), full)
   } catch {
     customs = {
       ...localCustoms,

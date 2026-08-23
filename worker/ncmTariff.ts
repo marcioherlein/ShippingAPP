@@ -1,17 +1,10 @@
-export type NcmTariffRecord = [code: string, aecPct: number | null, statisticsPct: number | null, ivaPct: number | null]
+export type D1StatementLike = {
+  bind: (...values: unknown[]) => D1StatementLike
+  first: <T = Record<string, unknown>>() => Promise<T | null>
+}
 
-export type NcmTariffShard = {
-  meta: {
-    sourceFile: string
-    sourceSha256: string
-    schemaVersion: number
-    sourceRows: number
-    occurrences: number
-    recordCount: number
-    conflictCount: number
-  }
-  prefix: string
-  records: NcmTariffRecord[]
+export type D1DatabaseLike = {
+  prepare: (sql: string) => D1StatementLike
 }
 
 export type NcmTariffResult = {
@@ -29,9 +22,16 @@ export type NcmTariffResult = {
   recordCount: number | null
 }
 
-type Assets = { fetch: (request: Request) => Promise<Response> }
-
-const shardCache = new Map<string, Promise<NcmTariffShard>>()
+type TariffRow = {
+  code: string
+  aec_pct: number | null
+  statistics_pct: number | null
+  iva_pct: number | null
+  status: string
+  source_file: string | null
+  source_sha256: string | null
+  record_count: number | null
+}
 
 function validRate(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
@@ -57,60 +57,42 @@ export function ncmHierarchy(code: string) {
   }
 }
 
-export function lookupTariffInShard(shard: NcmTariffShard, code: string): NcmTariffResult {
+function resultFromRow(code: string, row: TariffRow | null): NcmTariffResult {
   const hierarchy = ncmHierarchy(code)
   const base = {
     code,
     ...hierarchy,
-    source: `${shard.meta.sourceFile} · normalized tariff snapshot`,
-    sourceSha256: shard.meta.sourceSha256,
-    recordCount: shard.meta.recordCount,
+    source: row?.source_file ? `${row.source_file} · normalized D1 tariff snapshot` : 'NCM tariff D1 database',
+    sourceSha256: row?.source_sha256 ?? null,
+    recordCount: typeof row?.record_count === 'number' ? row.record_count : null,
   }
-  if (shard.meta.schemaVersion !== 1 || shard.prefix !== code[0] || !Array.isArray(shard.records)) {
-    return { status: 'unavailable', ...base, aecPct: null, statisticsPct: null, ivaPct: null }
-  }
-  const row = shard.records.find((record) => Array.isArray(record) && record[0] === code)
   if (!row) return { status: 'missing', ...base, aecPct: null, statisticsPct: null, ivaPct: null }
-  const [, aecPct, statisticsPct, ivaPct] = row
-  if (aecPct === null || statisticsPct === null || ivaPct === null) {
-    return { status: 'conflict', ...base, aecPct: null, statisticsPct: null, ivaPct: null }
-  }
-  if (!validRate(aecPct) || !validRate(statisticsPct) || !validRate(ivaPct)) {
+  if (row.status === 'conflict') return { status: 'conflict', ...base, aecPct: null, statisticsPct: null, ivaPct: null }
+  if (row.status !== 'ok' || !validRate(row.aec_pct) || !validRate(row.statistics_pct) || !validRate(row.iva_pct)) {
     return { status: 'unavailable', ...base, aecPct: null, statisticsPct: null, ivaPct: null }
   }
-  return { status: 'ok', ...base, aecPct, statisticsPct, ivaPct }
+  return { status: 'ok', ...base, aecPct: row.aec_pct, statisticsPct: row.statistics_pct, ivaPct: row.iva_pct }
 }
 
-async function loadShard(requestUrl: string, assets: Assets, prefix: string): Promise<NcmTariffShard> {
-  if (!/^[0-9]$/.test(prefix)) throw new Error('Invalid NCM tariff shard prefix')
-  if (!shardCache.has(prefix)) {
-    shardCache.set(prefix, (async () => {
-      const url = new URL(`/data/ncm-tariffs/${prefix}.json`, requestUrl)
-      const response = await assets.fetch(new Request(url.toString()))
-      if (!response.ok) throw new Error(`NCM tariff shard unavailable (${response.status})`)
-      const shard = await response.json() as NcmTariffShard
-      if (shard?.meta?.schemaVersion !== 1 || shard?.prefix !== prefix || !Array.isArray(shard.records) || shard.meta.recordCount < 10000) {
-        throw new Error('NCM tariff shard failed integrity checks')
-      }
-      return shard
-    })().catch((error) => {
-      shardCache.delete(prefix)
-      throw error
-    }))
-  }
-  return shardCache.get(prefix)!
-}
-
-export async function lookupNcmTariff(requestUrl: string, assets: Assets, code: string): Promise<NcmTariffResult> {
+export async function lookupNcmTariff(db: D1DatabaseLike | null | undefined, code: string): Promise<NcmTariffResult> {
   const hierarchy = ncmHierarchy(code)
   if (!hierarchy.chapter) {
     return { status: 'missing', code, ...hierarchy, aecPct: null, statisticsPct: null, ivaPct: null, source: 'Invalid NCM code', sourceSha256: null, recordCount: null }
   }
+  if (!db) {
+    return { status: 'unavailable', code, ...hierarchy, aecPct: null, statisticsPct: null, ivaPct: null, source: 'NCM tariff D1 binding not configured', sourceSha256: null, recordCount: null }
+  }
   try {
-    return lookupTariffInShard(await loadShard(requestUrl, assets, code[0]), code)
+    const row = await db.prepare(`
+      SELECT t.code, t.aec_pct, t.statistics_pct, t.iva_pct, t.status,
+             m.source_file, m.source_sha256, m.record_count
+      FROM ncm_tariffs t
+      LEFT JOIN ncm_dataset_meta m ON m.id = t.dataset_id
+      WHERE t.code = ?1 AND t.is_current = 1
+      LIMIT 1
+    `).bind(code).first<TariffRow>()
+    return resultFromRow(code, row)
   } catch {
-    return { status: 'unavailable', code, ...hierarchy, aecPct: null, statisticsPct: null, ivaPct: null, source: 'NCM tariff snapshot unavailable', sourceSha256: null, recordCount: null }
+    return { status: 'unavailable', code, ...hierarchy, aecPct: null, statisticsPct: null, ivaPct: null, source: 'NCM tariff D1 query failed', sourceSha256: null, recordCount: null }
   }
 }
-
-export function resetNcmTariffCacheForTests() { shardCache.clear() }

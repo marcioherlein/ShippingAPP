@@ -2,6 +2,7 @@ import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
+import { lookupNcmTariff } from './ncmTariff'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
@@ -43,9 +44,7 @@ function discoveryRequest(body: unknown) {
 async function hydrateMarketAndFx(data: any, env: Env) {
   const mlAuth = await resolveMercadoLibreAccessToken(env)
   const [market, fx] = await Promise.all([
-    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '', {
-      accessToken: mlAuth.accessToken,
-    }),
+    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '', { accessToken: mlAuth.accessToken }),
     fetchBcraReferenceFx(),
   ])
   if (mlAuth.status !== 'ready') {
@@ -57,7 +56,6 @@ async function hydrateMarketAndFx(data: any, env: Env) {
   }
 
   const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
-
   if (market.status !== 'live' || !market.suggestedPriceArs) {
     data.market = { ...data.market, estimatedPriceArs: null, source: `${market.source} · ${market.status}`, details: market }
     data.assumptions = [
@@ -91,7 +89,6 @@ export function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConv
   const benchmarked = Object.values(intake.factSources).filter((source) => source === 'benchmark').length
   const explicit = Object.values(intake.factSources).filter((source) => source === 'user').length
   const overall = Math.max(40, Math.min(65, 45 + explicit * 6 - benchmarked * 4 + (facts.originCountry ? 3 : 0)))
-
   return {
     sourceUrl: `chat://product-intake/${Date.now()}`,
     fetched: false,
@@ -167,14 +164,16 @@ export default {
         if (!facts) return json({ error: 'Faltan datos del producto para clasificar.' }, 400)
         const index = await loadNcmIndex(request.url, env.ASSETS)
         const classification = await classifyFullNcm(index, env.AI, facts)
-        if (classification.status !== 'candidate' || !classification.code) return json({ ...classification, sim: null })
+        if (classification.status !== 'candidate' || !classification.code) return json({ ...classification, tariff: null, sim: null })
 
+        const tariff = await lookupNcmTariff(request.url, env.ASSETS, classification.code)
         try {
           const sim = await resolveSimOpening(request.url, env.ASSETS, env.AI, classification.code, facts)
-          return json({ ...classification, sim })
+          return json({ ...classification, tariff, sim })
         } catch (error) {
           return json({
             ...classification,
+            tariff,
             sim: {
               status: 'unavailable', ncmCode: classification.code, ncmLabel: classification.label,
               candidate: null, alternatives: [], confidence: 'missing', missingFacts: [], sourceDate: classification.sourceDate,

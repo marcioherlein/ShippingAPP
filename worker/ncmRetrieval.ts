@@ -55,6 +55,10 @@ const STOPWORDS = new Set([
   'the','of','and','or','for','with','without','in','a','an','to','other','product','producto','articulo','material','equipment','equipo',
 ])
 
+const ACCESSORY_MARKERS = new Set([
+  'funda','estuche','cubierta','cover','case','pantalla','shade','cierre','zipper','accesorio','accessory','parte','part',
+])
+
 export function normalizeText(value: string | null | undefined) {
   return (value || '')
     .normalize('NFD')
@@ -68,11 +72,13 @@ export function normalizeText(value: string | null | undefined) {
 export function canonicalToken(value: string) {
   let token = normalizeText(value)
   if (!token || token.length < 3) return token
-  // Conservative singularization for retrieval only. Avoid fuzzy/edit-distance
-  // matching: it can cross customs concepts. This handles ordinary Spanish
-  // plural/adjective forms such as raquetas→raqueta, similares→similar and
-  // convertidores→convertidor while preserving words like tenis.
-  if (token.length > 6 && token.endsWith('es') && !token.endsWith('ies')) token = token.slice(0, -2)
+  // Conservative singularization for retrieval only. Words whose singular
+  // already ends in "e" commonly pluralize with a single "s" (inteligente →
+  // inteligentes; smartphone → smartphones), while consonant-ending Spanish
+  // nouns/adjectives commonly add "es" (similar → similares; convertidor →
+  // convertidores). Keep this narrow: fuzzy stemming can cross customs concepts.
+  if (token.length > 5 && (token.endsWith('ntes') || token.endsWith('phones'))) token = token.slice(0, -1)
+  else if (token.length > 6 && token.endsWith('es') && !token.endsWith('ies')) token = token.slice(0, -2)
   else if (token.length > 4 && token.endsWith('s') && !token.endsWith('is') && !token.endsWith('us')) token = token.slice(0, -1)
   return token
 }
@@ -80,6 +86,10 @@ export function canonicalToken(value: string) {
 function tokens(value: string) {
   const raw = normalizeText(value).split(' ')
   return [...new Set(raw.map(canonicalToken).filter((token) => token.length >= 3 && !STOPWORDS.has(token)))]
+}
+
+function hasAccessorySignal(value: string) {
+  return tokens(value).some((token) => ACCESSORY_MARKERS.has(token))
 }
 
 function safeTerms(values: unknown): string[] {
@@ -94,10 +104,22 @@ function safeTerms(values: unknown): string[] {
 
 export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25): NcmRetrievalCandidate[] {
   if (!index || index.meta.indexSchema !== 3 || !Array.isArray(index.records)) return []
-  const rawPhrases = [...safeTerms(searchTerms), facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''].filter(Boolean)
+  const safeSearchTerms = safeTerms(searchTerms)
+  const rawPhrases = [...safeSearchTerms, facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''].filter(Boolean)
   const phraseNorms = [...new Set(rawPhrases.map(normalizeText).filter((phrase) => phrase.length >= 4))]
   const queryTokens = [...new Set(rawPhrases.flatMap(tokens))]
   if (queryTokens.length < 2 && phraseNorms.every((phrase) => phrase.split(' ').length < 2)) return []
+
+  // Accessory-only listings are a common marketplace failure mode: a title may
+  // contain the parent product name ("desk lamp shade", "padel racket cover")
+  // and otherwise score strongly against the complete product. If the user/AI
+  // explicitly describes an accessory/part, reject labels that contain no
+  // accessory/part concept at all. This is deliberately fail-closed; an
+  // accessory can still be retrieved when the official label itself describes
+  // a cover, case, part, etc.
+  const accessoryIntent = hasAccessorySignal([
+    facts.name || '', facts.category || '', facts.functionText || '', facts.description || '', ...safeSearchTerms,
+  ].join(' '))
 
   const scored: NcmRetrievalCandidate[] = []
   for (const row of index.records) {
@@ -106,6 +128,7 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
     if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string') continue
     const normalizedLabel = normalizeText(label)
     if (!normalizedLabel) continue
+    if (accessoryIntent && !hasAccessorySignal(normalizedLabel)) continue
     const labelTokens = new Set(tokens(normalizedLabel))
     const matchedTerms: string[] = []
     let score = 0
@@ -134,7 +157,7 @@ async function expandSearchTerms(ai: AI, facts: NcmProductFacts): Promise<AiExpa
   try {
     const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
       messages: [
-        { role: 'system', content: 'You prepare search vocabulary for Argentina customs nomenclature retrieval. Return JSON only: {"searchTerms":[...],"missingFacts":[...]}. searchTerms must be Spanish customs/product nouns or short phrases describing what the product IS, its principal function, material/composition and important technical nature. Include useful synonyms/translations. NEVER output HS, NCM, tariff or numeric classification codes. Do not guess missing technical facts.' },
+        { role: 'system', content: 'You prepare search vocabulary for Argentina customs nomenclature retrieval. Return JSON only: {"searchTerms":[...],"missingFacts":[...]}. searchTerms must be Spanish customs/product nouns or short phrases describing what the product IS, its principal function, material/composition and important technical nature. Include useful synonyms/translations. NEVER output HS, NCM, tariff or numeric classification codes. Do not guess missing technical facts. Preserve whether the item is a complete product, accessory, replacement part, cover, case or component; never turn an accessory into its parent product.' },
         { role: 'user', content: JSON.stringify(facts) },
       ],
       response_format: { type: 'json_object' }, temperature: 0, max_completion_tokens: 350,
@@ -173,7 +196,7 @@ async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRet
   try {
     const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
       messages: [
-        { role: 'system', content: 'You rerank ONLY the supplied Argentina NCM candidates. Return JSON only: {"ranking":[{"code":"EXACT_ALLOWED_CODE","reason":"short reason"}],"confidence":"high|medium|low","missingFacts":[...]}. Never create a code. If product facts are insufficient, still rank only allowed codes but use low confidence and explain missing facts. Classification depends on objective product characteristics/function, never origin country, price or intended profit.' },
+        { role: 'system', content: 'You rerank ONLY the supplied Argentina NCM candidates. Return JSON only: {"ranking":[{"code":"EXACT_ALLOWED_CODE","reason":"short reason"}],"confidence":"high|medium|low","missingFacts":[...]}. Never create a code. If product facts are insufficient, still rank only allowed codes but use low confidence and explain missing facts. Classification depends on objective product characteristics/function, never origin country, price or intended profit. Never classify an accessory, cover, case, replacement part or component as the complete parent product.' },
         { role: 'user', content: JSON.stringify({ product: facts, allowedCandidates: shortlist.map(({ code, label }) => ({ code, label })) }) },
       ],
       response_format: { type: 'json_object' }, temperature: 0, max_completion_tokens: 550,

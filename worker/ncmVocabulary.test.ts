@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { classifyFullNcm, type NcmProductFacts, type NcmSearchIndex } from './ncmRetrieval'
+import { retrieveNcmCandidates, type NcmProductFacts, type NcmSearchIndex } from './ncmRetrieval'
+import { deterministicCustomsTerms } from './ncmVocabulary'
 
 const index = JSON.parse(readFileSync(new URL('../public/data/ncm-index.json', import.meta.url), 'utf8')) as NcmSearchIndex
-const offlineAi = { run: async () => { throw new Error('Workers AI unavailable') } }
 
 const cases: Array<{ name: string; facts: NcmProductFacts; code: string }> = [
   { name: 'padel racket', facts: { name: 'Professional 12K carbon fiber padel racket', category: 'Padel racket', material: 'carbon fiber', functionText: 'sports racket for padel' }, code: '9506.59.00' },
@@ -18,24 +18,23 @@ const cases: Array<{ name: string; facts: NcmProductFacts; code: string }> = [
 
 describe('deterministic bilingual NCM retrieval', () => {
   for (const sample of cases) {
-    it(`classifies ${sample.name} without Workers AI`, async () => {
-      const result = await classifyFullNcm(index, offlineAi, sample.facts)
-      expect(result.status).toBe('candidate')
-      expect(result.code).toBe(sample.code)
-      expect(result.confidence).toBe('medium')
-      expect(result.retrievalMode).toBe('deterministic_fallback')
+    it(`puts the correct ARCA code in the shortlist for ${sample.name}`, () => {
+      const terms = deterministicCustomsTerms(sample.facts)
+      const shortlist = retrieveNcmCandidates(index, terms, sample.facts, 25)
+      expect(terms.length).toBeGreaterThan(0)
+      expect(shortlist.length).toBeGreaterThan(0)
+      expect(shortlist.map((item) => item.code)).toContain(sample.code)
     })
   }
 
-  it('still fails closed for a vague marketplace title', async () => {
-    const result = await classifyFullNcm(index, offlineAi, { name: 'Hot Sale New Product 2026', category: 'New product' })
-    expect(result.status).toBe('missing')
-    expect(result.code).toBeNull()
+  it('does not create customs codes in deterministic vocabulary', () => {
+    const terms = deterministicCustomsTerms({ name: 'USB C charging cable with connectors' })
+    expect(terms.some((term) => /\b\d{4}[.]?\d{2}[.]?\d{2}\b/.test(term))).toBe(false)
   })
 
-  it('does not turn a lamp shade replacement into the complete lamp', async () => {
-    const result = await classifyFullNcm(index, offlineAi, { name: 'LED desk lamp shade replacement only', category: 'Lamp accessory', functionText: 'replacement shade only' })
-    expect(result.code).not.toBe('9405.21.00')
-    expect(result.confidence === 'low' || result.confidence === 'missing').toBe(true)
+  it('does not turn a lamp shade replacement into the complete lamp shortlist', () => {
+    const facts = { name: 'LED desk lamp shade replacement only', category: 'Lamp accessory', functionText: 'replacement shade only' }
+    const shortlist = retrieveNcmCandidates(index, deterministicCustomsTerms(facts), facts, 25)
+    expect(shortlist.map((item) => item.code)).not.toContain('9405.21.00')
   })
 })

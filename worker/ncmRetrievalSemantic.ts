@@ -6,6 +6,7 @@ import {
   type NcmRetrievalCandidate,
   type NcmSearchIndex,
 } from './ncmRetrieval'
+import { deterministicCustomsTerms } from './ncmVocabulary'
 import { semanticRerankNcmCandidates } from './ncmSemantic'
 
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
@@ -19,7 +20,43 @@ function semanticConfidence(items: NcmRetrievalCandidate[]): 'medium' | 'low' {
   const top = items[0]
   if (!top) return 'low'
   const distinct = new Set(top.matchedTerms).size
-  return top.score >= 32 && gap(items) >= 8 && distinct >= 3 ? 'medium' : 'low'
+  return top.score >= 32 && gap(items) >= 8 && distinct >= 2 ? 'medium' : 'low'
+}
+
+function mergeCandidatePools(...pools: NcmRetrievalCandidate[][]) {
+  const byCode = new Map<string, NcmRetrievalCandidate>()
+  for (const pool of pools) {
+    for (const candidate of pool) {
+      const existing = byCode.get(candidate.code)
+      if (!existing) {
+        byCode.set(candidate.code, candidate)
+        continue
+      }
+      // Preserve the strongest deterministic score while unioning evidence.
+      byCode.set(candidate.code, {
+        ...candidate,
+        score: Math.max(existing.score, candidate.score),
+        matchedTerms: [...new Set([...existing.matchedTerms, ...candidate.matchedTerms])],
+      })
+    }
+  }
+  return [...byCode.values()]
+}
+
+function identityTerms(facts: NcmProductFacts) {
+  // Product identity/function should survive even when broad material vocabulary
+  // floods the global shortlist. Material remains available in the full pool and
+  // in semantic reconciliation, but is deliberately not allowed to crowd the
+  // identity pool out of the top 50.
+  const identityFacts: NcmProductFacts = {
+    name: facts.name,
+    category: facts.category,
+    functionText: facts.functionText,
+    material: null,
+    description: null,
+  }
+  const genericMaterial = /^(materia textil|textil de poliester|diodos emisores de luz led)$/i
+  return deterministicCustomsTerms(identityFacts).filter((term) => !genericMaterial.test(term))
 }
 
 export async function classifyFullNcmWithSemantic(
@@ -28,7 +65,11 @@ export async function classifyFullNcmWithSemantic(
   facts: NcmProductFacts,
 ): Promise<FullNcmClassification> {
   const base = await classifyFullNcm(index, ai, facts)
-  const raw = retrieveNcmCandidates(index, base.searchTerms, facts, 50)
+
+  const fullPool = retrieveNcmCandidates(index, base.searchTerms, facts, 50)
+  const identityFacts: NcmProductFacts = { ...facts, material: null, description: null }
+  const identityPool = retrieveNcmCandidates(index, identityTerms(facts), identityFacts, 50)
+  const raw = mergeCandidatePools(identityPool, fullPool)
   const semantic = semanticRerankNcmCandidates(raw, facts)
   if (!semantic.length) return base
 

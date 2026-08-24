@@ -38,9 +38,10 @@ function clarificationAnswers(body: any): ClarificationAnswer[] {
     .slice(0, 3)
 }
 
-function validFacts(body: any, answers: ClarificationAnswer[] = []): NcmProductFacts | null {
+export function validFacts(body: any, answers: ClarificationAnswer[] = []): NcmProductFacts | null {
   if (!body || typeof body !== 'object') return null
   const baseDescription = typeof body.description === 'string' ? body.description.slice(0, 1500) : ''
+  const baseFunctionText = typeof body.functionText === 'string' ? body.functionText.slice(0, 700) : ''
   const clarificationContext = answers.length
     ? answers.map((item, index) => `Aclaración confirmada ${index + 1}: ${item.question} Respuesta del usuario: ${item.answer}`).join('\n')
     : ''
@@ -48,7 +49,10 @@ function validFacts(body: any, answers: ClarificationAnswer[] = []): NcmProductF
     name: typeof body.name === 'string' ? body.name.slice(0, 500) : null,
     category: typeof body.category === 'string' ? body.category.slice(0, 300) : null,
     material: typeof body.material === 'string' ? body.material.slice(0, 500) : null,
-    functionText: typeof body.functionText === 'string' ? body.functionText.slice(0, 700) : null,
+    // Clarification evidence is duplicated into functionText on purpose: the
+    // deterministic retrieval fallback consumes this field even when Workers AI
+    // expansion is unavailable. This keeps confirmed user facts useful offline.
+    functionText: [baseFunctionText, clarificationContext].filter(Boolean).join('\n').slice(0, 1800) || null,
     description: [baseDescription, clarificationContext].filter(Boolean).join('\n').slice(0, 2800) || null,
   }
   return facts.name || facts.category || facts.description ? facts : null
@@ -186,7 +190,13 @@ export default {
         if (!facts) return json({ error: 'Faltan datos del producto para clasificar.' }, 400)
         const index = await loadNcmIndex(request.url, env.ASSETS)
         const classification = await classifyFullNcm(index, env.AI, facts)
-        const clarification = await buildNcmClarification(env.AI, facts, classification, answers.length)
+        const clarification = await buildNcmClarification(
+          env.AI,
+          facts,
+          classification,
+          answers.length,
+          answers.map((item) => item.factKey || '').filter(Boolean),
+        )
 
         if (classification.status !== 'candidate' || !classification.code) {
           return json({ ...classification, clarification, tariff: null, sim: null })

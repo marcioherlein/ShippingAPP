@@ -32,8 +32,9 @@ const RULES: VocabularyRule[] = [
     when: /\b(padel|paddle)\b.*\b(racket|racquet)\b|\b(racket|racquet)\b.*\b(padel|paddle)\b/,
     // Do not inject "tenis" here. Padel and tennis can sit in neighboring
     // tariff children, so naming the neighboring sport creates false evidence.
-    // Official ARCA/SIM text and semantic alignment decide the child.
-    terms: ['raqueta de padel', 'raqueta de pádel', 'raqueta deportiva', 'otras raquetas deportivas'],
+    // "raquetas similares" still overlaps the official parent wording without
+    // asserting which neighboring sport the article belongs to.
+    terms: ['raqueta de padel', 'raqueta de pádel', 'raqueta deportiva', 'raquetas similares', 'otras raquetas deportivas'],
   },
   {
     when: /\b(racket|racquet)\b/,

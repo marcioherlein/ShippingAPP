@@ -165,7 +165,7 @@ async function expandSearchTerms(ai: AI, facts: NcmProductFacts): Promise<AiExpa
         { role: 'system', content: 'You prepare search vocabulary for Argentina customs nomenclature retrieval. Return JSON only: {"searchTerms":[...],"missingFacts":[...]}. searchTerms must be Spanish customs/product nouns or short phrases describing what the product IS, its principal function, material/composition and important technical nature. Include useful synonyms/translations. NEVER output HS, NCM, tariff or numeric classification codes. Do not guess missing technical facts. Preserve whether the item is a complete product, accessory, replacement part, cover, case or component; never turn an accessory into its parent product.' },
         { role: 'user', content: JSON.stringify(facts) },
       ],
-      response_format: { type: 'json_object' }, temperature: 0, max_completion_tokens: 350,
+      response_format: { type: 'json_object' }, temperature: 0, max_tokens: 350,
     })
     const content = result?.response ?? result?.choices?.[0]?.message?.content
     const parsed = typeof content === 'string' ? JSON.parse(content) : content
@@ -204,7 +204,7 @@ async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRet
         { role: 'system', content: 'You rerank ONLY the supplied Argentina NCM candidates. Return JSON only: {"ranking":[{"code":"EXACT_ALLOWED_CODE","reason":"short reason"}],"confidence":"high|medium|low","missingFacts":[...]}. Never create a code. If product facts are insufficient, still rank only allowed codes but use low confidence and explain missing facts. Classification depends on objective product characteristics/function, never origin country, price or intended profit. Never classify an accessory, cover, case, replacement part or component as the complete parent product.' },
         { role: 'user', content: JSON.stringify({ product: facts, allowedCandidates: shortlist.map(({ code, label }) => ({ code, label })) }) },
       ],
-      response_format: { type: 'json_object' }, temperature: 0, max_completion_tokens: 550,
+      response_format: { type: 'json_object' }, temperature: 0, max_tokens: 550,
     })
     const content = result?.response ?? result?.choices?.[0]?.message?.content
     return sanitizeAiRanking(content, shortlist)

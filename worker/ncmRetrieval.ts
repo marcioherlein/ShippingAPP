@@ -167,22 +167,29 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
     const [code, label] = row
     if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string') continue
     const normalizedLabel = normalizeText(label)
+    const normalizedLeaf = normalizeText(label.split('>').pop() || label)
     if (!normalizedLabel) continue
     if (accessoryIntent && !hasAccessorySignal(normalizedLabel)) continue
     const labelTokens = new Set(tokens(normalizedLabel))
+    const leafTokens = new Set(tokens(normalizedLeaf))
     const matchedTerms: string[] = []
     let score = 0
 
     for (const phrase of phraseNorms) {
-      if (phrase.split(' ').length >= 2 && normalizedLabel.includes(phrase)) {
-        score += Math.min(34, 14 + phrase.length / 3)
-        matchedTerms.push(phrase)
-      }
+      if (phrase.split(' ').length < 2 || !normalizedLabel.includes(phrase)) continue
+      score += Math.min(34, 14 + phrase.length / 3)
+      // A full-hierarchy label repeats parent concepts across many child NCMs.
+      // Matching the terminal ARCA description is more discriminating, so give
+      // it an additional bounded bonus rather than treating all hierarchy text
+      // as equally informative.
+      if (normalizedLeaf.includes(phrase)) score += Math.min(26, 12 + phrase.length / 4)
+      matchedTerms.push(phrase)
     }
     for (const token of queryTokens) {
       if (!labelTokens.has(token)) continue
       const weight = token.length >= 9 ? 9 : token.length >= 6 ? 6 : 3
       score += weight
+      if (leafTokens.has(token)) score += Math.min(5, Math.max(2, Math.round(weight / 2)))
       matchedTerms.push(token)
     }
 

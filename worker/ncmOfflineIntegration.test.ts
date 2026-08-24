@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { enrichNcmSearchIndex } from '../scripts/enrich-ncm-index-from-sim.mjs'
-import { classifyFullNcm, type NcmProductFacts, type NcmSearchIndex } from './ncmRetrieval'
+import { classifyFullNcm, retrieveNcmCandidates, type NcmProductFacts, type NcmSearchIndex } from './ncmRetrieval'
+import { deterministicCustomsTerms } from './ncmVocabulary'
 
 const rawIndex = JSON.parse(readFileSync(new URL('../public/data/ncm-index.json', import.meta.url), 'utf8')) as NcmSearchIndex
 const simDirectory = new URL('../public/data/sim/', import.meta.url)
@@ -24,14 +25,28 @@ const cases: Array<{ name: string; facts: NcmProductFacts; code: string }> = [
   { name: 'USB-C cable', facts: { name: 'USB C to USB C fast charging cable with connectors', category: 'USB cable', functionText: 'insulated electric conductor fitted with connectors' }, code: '8544.42.00' },
 ]
 
+function diagnostic(sample: (typeof cases)[number]) {
+  const searchTerms = [
+    ...deterministicCustomsTerms(sample.facts),
+    sample.facts.name || '',
+    sample.facts.category || '',
+    sample.facts.functionText || '',
+    sample.facts.material || '',
+  ].filter(Boolean)
+  return retrieveNcmCandidates(index, searchTerms, sample.facts, 10).map(({ code, score, matchedTerms, label }) => ({
+    code, score, matchedTerms, leaf: label.split('>').pop()?.trim(),
+  }))
+}
+
 describe('NCM end-to-end deterministic fallback', () => {
   for (const sample of cases) {
     it(`classifies ${sample.name} without Workers AI`, async () => {
       const result = await classifyFullNcm(index, offlineAi, sample.facts)
-      expect(result.status).toBe('candidate')
-      expect(result.code).toBe(sample.code)
-      expect(result.confidence).toBe('medium')
-      expect(result.retrievalMode).toBe('deterministic_fallback')
+      const detail = JSON.stringify({ expected: sample.code, actual: result.code, confidence: result.confidence, candidates: diagnostic(sample) }, null, 2)
+      expect(result.status, detail).toBe('candidate')
+      expect(result.code, detail).toBe(sample.code)
+      expect(result.confidence, detail).toBe('medium')
+      expect(result.retrievalMode, detail).toBe('deterministic_fallback')
     })
   }
 

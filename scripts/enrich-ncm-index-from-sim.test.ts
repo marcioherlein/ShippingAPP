@@ -7,14 +7,16 @@ describe('NCM search-text enrichment from official SIM data', () => {
       meta: { recordCount: 1, tariffDataIncluded: false, simOpeningsIncluded: false },
       records: [['4202.92.00', 'BAULES, MALETAS Y CONTINENTES SIMILARES > Los demás']],
     }
-    const sim = [{ records: [[
-      '4202.92.00',
-      'BAULES, MALETAS Y CONTINENTES SIMILARES > Los demás',
-      [
-        ['4202.92.00.100A', 'BAULES, MALETAS Y CONTINENTES SIMILARES > Los demás > Mochilas'],
-        ['4202.92.00.200B', 'BAULES, MALETAS Y CONTINENTES SIMILARES > Los demás > Bolsos de viaje'],
-      ],
-    ]]] }]
+    const sim = [{
+      records: [[
+        '4202.92.00',
+        'BAULES, MALETAS Y CONTINENTES SIMILARES > Los demás',
+        [
+          ['4202.92.00.100A', 'BAULES, MALETAS Y CONTINENTES SIMILARES > Los demás > Mochilas'],
+          ['4202.92.00.200B', 'BAULES, MALETAS Y CONTINENTES SIMILARES > Los demás > Bolsos de viaje'],
+        ],
+      ]],
+    }]
 
     const enriched = enrichNcmSearchIndex(base, sim)
     const label = enriched.records[0][1]

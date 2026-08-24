@@ -48,7 +48,13 @@ const RULES: VocabularyRule[] = [
   },
   {
     when: /\b(desk lamp|table lamp|reading light|table lighting|lighting fitting)\b/,
-    terms: ['lampara electrica de mesa escritorio', 'aparato electrico de alumbrado', 'aparatos de alumbrado', 'luminaria de mesa'],
+    terms: [
+      'lamparas electricas de mesa oficina cabecera o de pie',
+      'lampara electrica de mesa',
+      'aparato electrico de alumbrado',
+      'aparatos de alumbrado',
+      'luminaria de mesa',
+    ],
   },
   {
     when: /\b(backpack|rucksack|school bag)\b/,
@@ -74,7 +80,10 @@ const RULES: VocabularyRule[] = [
   },
   {
     when: /\b(led|light emitting diode|diodo emisor de luz)\b/,
-    terms: ['diodos emisores de luz led'],
+    terms: [
+      'diodos emisores de luz led',
+      'diseñadas para ser utilizadas unicamente con fuentes luminosas de diodos emisores de luz led',
+    ],
   },
   {
     when: /\b(rechargeable|recargable)\b.*\b(battery|bateria|accumulator|acumulador)\b|\b(battery|bateria|accumulator|acumulador)\b.*\b(rechargeable|recargable)\b/,

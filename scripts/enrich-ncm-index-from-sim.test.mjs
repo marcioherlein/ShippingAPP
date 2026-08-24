@@ -36,7 +36,7 @@ describe('official SIM enrichment for NCM search index', () => {
     const deskLamp = row(enriched, '9405.21.00')?.[1] || ''
 
     expect(smartphone.length).toBeGreaterThan(40)
-    expect(smartphone.toLowerCase()).toContain('smartphone')
+    expect(smartphone.toLowerCase()).toContain('telefonos inteligentes')
     expect(deskLamp.length).toBeGreaterThan(40)
     expect(deskLamp.toLowerCase()).toContain('led')
     expect(enriched.meta.simEnrichedLabelCount).toBeGreaterThan(0)

@@ -78,11 +78,6 @@ function usefulSimSegment(segment, specificBaseKey) {
   if (!text || text.length < 4 || text.length > 150) return false
   if (GENERIC_SIM_SEGMENTS.has(key)) return false
   if (/^[\d\W]+$/.test(text)) return false
-  // Compare terminal evidence only with the child-specific NCM path, not the
-  // giant heading text. Some headings enumerate many sibling article types
-  // (e.g. 42.02 mentions MOCHILAS everywhere); removing a terminal "Mochilas"
-  // merely because the parent heading also says it destroys the discriminating
-  // evidence that separates the exact child branch.
   if (specificBaseKey && specificBaseKey.includes(key)) return false
   return true
 }
@@ -90,18 +85,10 @@ function usefulSimSegment(segment, specificBaseKey) {
 function specificHierarchyKey(baseLabel) {
   const segments = hierarchySegments(baseLabel)
   if (!segments.length) return ''
-  // The first segment is normally the shared heading. Child path segments are
-  // the part that terminal SIM evidence should be deduplicated against.
   const specific = segments.length > 1 ? segments.slice(1) : segments
   return comparisonKey(specific.join(' > '))
 }
 
-// Keep the canonical ARCA label as the first part of every record, but expose a
-// bounded amount of official terminal SIM vocabulary for retrieval. This adds
-// words such as "mochilas" or a specific portable-machine subtype without ever
-// adding a new NCM/SIM code or tariff field. Only the last two hierarchy segments
-// of each official SIM label are considered so broad heading text does not drown
-// the product-specific evidence.
 export function officialSimSearchEvidence(labels, baseLabel, maxSegments = 8) {
   const specificBaseKey = specificHierarchyKey(baseLabel)
   const seen = new Set()
@@ -109,9 +96,13 @@ export function officialSimSearchEvidence(labels, baseLabel, maxSegments = 8) {
 
   for (const label of labels) {
     const segments = hierarchySegments(label)
+    const parentKey = comparisonKey(segments[0] || '')
     for (const segment of segments.slice(-2)) {
       const text = cleanText(segment)
       const key = comparisonKey(text)
+      // The first segment is the parent heading and is never terminal evidence.
+      // This also prevents synthetic two-level fixtures from re-adding ROOT.
+      if (segments.length > 1 && key === parentKey) continue
       if (!usefulSimSegment(text, specificBaseKey) || seen.has(key)) continue
       seen.add(key)
       evidence.push(text)

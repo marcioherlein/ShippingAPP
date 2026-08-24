@@ -81,4 +81,34 @@ describe('adaptive NCM clarification', () => {
     const result = await buildNcmClarification(ai, { name: 'USB cable' }, base, 0)
     expect(result).toBeNull()
   })
+
+  it('never repeats an already confirmed fact type', async () => {
+    const calls: any[] = []
+    const ai = { run: async (_model: string, input: unknown) => {
+      calls.push(input)
+      return { response: {
+        question: '¿El cable tiene conectores?', factKey: 'construction', reason: 'construction again',
+        options: [
+          { label: 'Sí', value: 'Tiene conectores.' },
+          { label: 'No', value: 'No tiene conectores.' },
+        ],
+      } }
+    } }
+    const result = await buildNcmClarification(ai, { name: 'USB cable' }, base, 1, ['construction'])
+    expect(result).toBeNull()
+    expect(calls[0].messages[1].content).toContain('alreadyConfirmedFactKeys')
+    expect(calls[0].messages[1].content).toContain('construction')
+  })
+
+  it('does not repeat the accessory scope fallback once product scope was answered', async () => {
+    const ai = { run: async () => { throw new Error('offline') } }
+    const result = await buildNcmClarification(
+      ai,
+      { name: 'LED desk lamp shade replacement only' },
+      { ...base, confidence: 'low' },
+      1,
+      ['product_scope'],
+    )
+    expect(result).toBeNull()
+  })
 })

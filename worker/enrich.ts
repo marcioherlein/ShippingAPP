@@ -1,7 +1,8 @@
 import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
-import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
+import { loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
+import { classifyFullNcmWithSemantic } from './ncmRetrievalSemantic'
 import { buildNcmClarification } from './ncmClarification'
 import { lookupNcmTariff, type D1DatabaseLike } from './ncmTariff'
 import { resolveSimOpening } from './simHydration'
@@ -189,7 +190,10 @@ export default {
         const facts = validFacts(body, answers)
         if (!facts) return json({ error: 'Faltan datos del producto para clasificar.' }, 400)
         const index = await loadNcmIndex(request.url, env.ASSETS)
-        const classification = await classifyFullNcm(index, env.AI, facts)
+        // Base retrieval is reconciled with objective product semantics before
+        // any clarification or tariff lookup. This prevents generic material
+        // words from outranking product identity while staying bounded to ARCA.
+        const classification = await classifyFullNcmWithSemantic(index, env.AI, facts)
         const clarification = await buildNcmClarification(
           env.AI,
           facts,

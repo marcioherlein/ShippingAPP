@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json && vite build",
+    "postbuild": "node scripts/enrich-ncm-index-from-sim.mjs public/data/ncm-index.json public/data/sim dist/data/ncm-index.json",
     "preview": "vite preview",
+    "ncm:index:enrich": "node scripts/enrich-ncm-index-from-sim.mjs public/data/ncm-index.json public/data/sim dist/data/ncm-index.json",
     "ncm:d1:create": "npx --yes wrangler@latest d1 create shippingapp-ncm",
     "ncm:d1:configure": "node scripts/configure-ncm-d1.mjs",
     "ncm:d1:schema": "npx --yes wrangler@latest d1 execute shippingapp-ncm --remote --file=db/ncm-schema.sql",
@@ -21,7 +23,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
+    "@types/react-dom": "^19.2.8",
     "@vitejs/plugin-react": "^6.0.4",
     "typescript": "^7.0.2",
     "vite": "^8.2.0"

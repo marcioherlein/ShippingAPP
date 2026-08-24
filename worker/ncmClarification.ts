@@ -61,6 +61,12 @@ function normalizedFactKeys(values: string[] = []): ClarificationFactKey[] {
   return [...new Set(values.filter((value): value is ClarificationFactKey => FACT_KEYS.includes(value as ClarificationFactKey)))]
 }
 
+function semanticOptionValue(label: string, value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (/^(true|false|yes|no|si|sí|1|0)$/.test(normalized)) return label
+  return value
+}
+
 function scopeFallback(
   facts: NcmProductFacts,
   round: number,
@@ -88,11 +94,15 @@ export async function buildNcmClarification(
   answeredCount: number,
   answeredFactKeysInput: string[] = [],
 ): Promise<NcmClarification | null> {
-  if (answeredCount >= 3 || classification.confidence === 'high') return null
-  const answeredFactKeys = normalizedFactKeys(answeredFactKeysInput)
+  // Clarification is for discriminating real candidates. When retrieval has no
+  // shortlist at all, asking arbitrary multiple-choice questions is misleading;
+  // the UI should instead ask for a better product description.
+  if (answeredCount >= 3 || classification.confidence === 'high' || classification.status !== 'candidate' || !classification.code) return null
+  if (classification.confidence === 'medium' && classification.alternatives.length === 0 && classification.missingFacts.length === 0) return null
 
+  const answeredFactKeys = normalizedFactKeys(answeredFactKeysInput)
   const candidates = [
-    ...(classification.code && classification.label ? [{ code: classification.code, label: classification.label }] : []),
+    { code: classification.code, label: classification.label || '' },
     ...classification.alternatives.slice(0, 3).map(({ code, label }) => ({ code, label })),
   ]
 
@@ -101,11 +111,11 @@ export async function buildNcmClarification(
       messages: [
         {
           role: 'system',
-          content: 'You design ONE short clarification question for an Argentina customs NCM screening flow. Write the question and answer labels in simple Spanish. Ask only for an objective product characteristic that could materially improve or distinguish the customs classification: whether it is the complete product vs accessory/replacement, principal function, material/composition, electrical nature, or construction. Provide 2 to 4 mutually useful answer options. Each option value must be a concise declarative fact that can be fed back into classification. Never mention or reveal NCM/HS/customs codes in the question or options. Never ask about price, origin, profitability, brand or intended resale. Do not ask a fact type listed in alreadyConfirmedFactKeys. If the supplied facts already answer a characteristic, do not ask it again. If no useful NEW clarification exists, return an empty question and empty options.'
+          content: 'You design ONE short clarification question for an Argentina customs NCM screening flow. Write the question and answer labels in simple Spanish. Ask only for an objective product characteristic that could materially distinguish the supplied customs candidates: whether it is the complete product vs accessory/replacement, principal function, material/composition, electrical nature, or construction. Provide 2 to 4 mutually useful answer options. Each option value must be a concise declarative product fact, never true/false. Never mention or reveal NCM/HS/customs codes in the question or options. Never ask about price, origin, profitability, brand or intended resale. Do not ask a fact type listed in alreadyConfirmedFactKeys. If the supplied facts already answer a characteristic, do not ask it again. If no useful NEW discriminating clarification exists, return an empty question and empty options.'
         },
         {
           role: 'user',
-          content: JSON.stringify({ product: facts, alreadyConfirmedFactKeys: answeredFactKeys, currentClassification: { status: classification.status, confidence: classification.confidence, missingFacts: classification.missingFacts, candidates } }),
+          content: JSON.stringify({ product: facts, alreadyConfirmedFactKeys: answeredFactKeys, currentClassification: { confidence: classification.confidence, missingFacts: classification.missingFacts, candidates } }),
         },
       ],
       response_format: { type: 'json_schema', json_schema: CLARIFICATION_SCHEMA },
@@ -119,11 +129,15 @@ export async function buildNcmClarification(
     const factKey = FACT_KEYS.includes(parsed?.factKey) ? parsed.factKey as ClarificationFactKey : 'other'
     const rawOptions = Array.isArray(parsed?.options) ? parsed.options : []
     const options = rawOptions
-      .map((item: any, index: number) => ({
-        id: `ncm-q${answeredCount + 1}-o${index + 1}`,
-        label: safeText(item?.label, 120),
-        value: safeText(item?.value, 300),
-      }))
+      .map((item: any, index: number) => {
+        const label = safeText(item?.label, 120)
+        const rawValue = safeText(item?.value, 300)
+        return {
+          id: `ncm-q${answeredCount + 1}-o${index + 1}`,
+          label,
+          value: semanticOptionValue(label, rawValue),
+        }
+      })
       .filter((item: NcmClarificationOption) => item.label.length >= 2 && item.value.length >= 3 && !containsCustomsCode(`${item.label} ${item.value}`))
       .slice(0, 4)
 

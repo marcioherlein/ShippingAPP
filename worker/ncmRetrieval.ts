@@ -50,7 +50,12 @@ export type FullNcmClassification = {
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
 
 type AiExpansion = { searchTerms: string[]; missingFacts: string[] }
-type AiRanking = { ranking: Array<{ code: string; reason?: string }>; confidence?: 'high' | 'medium' | 'low'; missingFacts?: string[] }
+type AiRanking = {
+  ranking: Array<{ code: string; reason?: string }>
+  confidence?: 'high' | 'medium' | 'low'
+  missingFacts?: string[]
+  attempted: boolean
+}
 
 // Structured AI is an optional enrichment layer. Retrieval itself must remain
 // useful without it, because marketplace language and customs language often
@@ -112,11 +117,6 @@ export function normalizeText(value: string | null | undefined) {
 export function canonicalToken(value: string) {
   let token = normalizeText(value)
   if (!token || token.length < 3) return token
-  // Conservative singularization for retrieval only. Words whose singular
-  // already ends in "e" commonly pluralize with a single "s" (inteligente →
-  // inteligentes; smartphone → smartphones), while consonant-ending Spanish
-  // nouns/adjectives commonly add "es" (similar → similares; convertidor →
-  // convertidores). Keep this narrow: fuzzy stemming can cross customs concepts.
   if (token.length > 5 && (token.endsWith('ntes') || token.endsWith('phones'))) token = token.slice(0, -1)
   else if (token.length > 6 && token.endsWith('es') && !token.endsWith('ies')) token = token.slice(0, -2)
   else if (token.length > 4 && token.endsWith('s') && !token.endsWith('is') && !token.endsWith('us')) token = token.slice(0, -1)
@@ -157,13 +157,6 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
   const queryTokens = [...new Set(rawPhrases.flatMap(tokens))]
   if (queryTokens.length < 2 && phraseNorms.every((phrase) => phrase.split(' ').length < 2)) return []
 
-  // Accessory-only listings are a common marketplace failure mode: a title may
-  // contain the parent product name ("desk lamp shade", "padel racket cover")
-  // and otherwise score strongly against the complete product. If the user/AI
-  // explicitly describes an accessory/part, reject labels that contain no
-  // accessory/part concept at all. This is deliberately fail-closed; an
-  // accessory can still be retrieved when the official label itself describes
-  // a cover, case, part, etc.
   const accessoryIntent = hasAccessorySignal([
     facts.name || '', facts.category || '', facts.functionText || '', facts.description || '', ...safeSearchTerms,
   ].join(' '))
@@ -236,7 +229,7 @@ export function sanitizeAiRanking(output: unknown, shortlist: NcmRetrievalCandid
   }
   const confidence = ['high','medium','low'].includes(parsed?.confidence) ? parsed.confidence : undefined
   const missingFacts = Array.isArray(parsed?.missingFacts) ? parsed.missingFacts.filter((v: unknown): v is string => typeof v === 'string').slice(0, 8) : []
-  return { ranking, confidence, missingFacts }
+  return { ranking, confidence, missingFacts, attempted: true }
 }
 
 async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRetrievalCandidate[]): Promise<AiRanking> {
@@ -251,7 +244,7 @@ async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRet
     const content = result?.response ?? result?.choices?.[0]?.message?.content
     return sanitizeAiRanking(content, shortlist)
   } catch {
-    return { ranking: [], missingFacts: [] }
+    return { ranking: [], missingFacts: [], attempted: false }
   }
 }
 
@@ -276,8 +269,6 @@ function chooseTop(shortlist: NcmRetrievalCandidate[], ranked: AiRanking) {
   const aiTop = shortlist.find((candidate) => candidate.code === aiTopCode)
   if (!aiTop) return deterministicTop
   const gapToDeterministic = deterministicTop.score - aiTop.score
-  // AI may reorder only genuinely close, weak deterministic candidates. Any
-  // such override remains LOW confidence and therefore cannot unlock tariffs.
   if (ranked.confidence === 'high' && gapToDeterministic <= 5) return aiTop
   return deterministicTop
 }
@@ -291,7 +282,10 @@ function deriveConfidence(
   const detConfidence = deterministicConfidence(shortlist)
   const aiTop = ranked.ranking[0]?.code
 
-  if (!ranked.ranking.length) return selected.code === deterministicTop.code ? detConfidence : 'low'
+  if (!ranked.ranking.length) {
+    if (ranked.attempted) return 'low'
+    return selected.code === deterministicTop.code ? detConfidence : 'low'
+  }
   if (selected.code !== deterministicTop.code) return 'low'
   if (aiTop !== deterministicTop.code) return 'low'
   if (ranked.confidence === 'low') return 'low'
@@ -304,8 +298,6 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   const expansion = await expandSearchTerms(ai, facts)
   const deterministicTerms = deterministicCustomsTerms(facts)
   const originalTerms = safeTerms([facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''])
-  // Always merge deterministic bilingual vocabulary, AI vocabulary and original
-  // facts. AI failure must never remove deterministic search evidence.
   const searchTerms = safeTerms([...deterministicTerms, ...expansion.searchTerms, ...originalTerms])
   const shortlist = retrieveNcmCandidates(index, searchTerms, facts, 25)
   if (!shortlist.length) {
@@ -336,7 +328,9 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
       ...(reason ? [reason] : []),
       `Retrieval determinístico: ${shortlist[0].code} score ${shortlist[0].score}.`,
       ...(aiTop && aiTop !== shortlist[0].code ? [`AI sugirió ${aiTop}; ${top.code === shortlist[0].code ? 'no desplazó' : 'reordenó sólo por cercanía'} la evidencia determinística.`] : []),
-      ...(!ranked.ranking.length ? ['Workers AI no produjo ranking utilizable; se aplicó sólo evidencia determinística y la confianza máxima queda limitada.'] : []),
+      ...(!ranked.ranking.length ? [ranked.attempted
+        ? 'Workers AI respondió, pero no produjo un ranking válido dentro de la shortlist; confianza reducida.'
+        : 'Workers AI no estuvo disponible; se aplicó sólo evidencia determinística y la confianza máxima queda limitada.'] : []),
     ],
     searchTerms, sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
     retrievalMode: ranked.ranking.length ? 'ai_reranked' : 'deterministic_fallback',

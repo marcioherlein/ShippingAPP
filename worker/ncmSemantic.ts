@@ -58,12 +58,12 @@ export function semanticAdjustment(candidate: NcmRetrievalCandidate, facts: NcmP
 
   // A backpack is not a wallet/card holder/handbag. The broad 42.02 heading
   // names many article types, so only the child path and SIM openings can
-  // distinguish siblings. Official SIM openings under the correct "other"
-  // branch explicitly contain "Mochilas".
+  // distinguish siblings. Explicit SIM openings saying "Mochilas" are direct
+  // article-identity evidence and outweigh generic material matches.
   if (/\b(backpack|rucksack|mochila|school bag)\b/.test(product)) {
-    if (/\bmochila/.test(simEvidence)) adjustment += 55
-    if (/articulos? de bolsillo|tarjeter|portachequera|billetera|portamonedas|pitillera/.test(specificEvidence)) adjustment -= 55
-    if (/bolsos? de mano|carteras?/.test(specificPath) && !/\bmochila/.test(simEvidence)) adjustment -= 42
+    if (/\bmochila/.test(simEvidence)) adjustment += 90
+    if (/art\s+culos? de bolsillo|articulos? de bolsillo|tarjeter|portachequera|billetera|portamonedas|pitillera/.test(specificEvidence)) adjustment -= 70
+    if (/bolsos? de mano|carteras?/.test(specificPath) && !/\bmochila/.test(simEvidence)) adjustment -= 55
   }
 
   // Desk/table lighting should outrank bulbs, sealed beams, ceiling/wall,

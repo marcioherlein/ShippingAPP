@@ -30,7 +30,10 @@ const ACCESSORY_INTENT = /\b(cover|case|replacement|shade|accessory|part|spare|r
 const RULES: VocabularyRule[] = [
   {
     when: /\b(padel|paddle)\b.*\b(racket|racquet)\b|\b(racket|racquet)\b.*\b(padel|paddle)\b/,
-    terms: ['raqueta de padel', 'raqueta deportiva', 'raquetas de tenis badminton o similares'],
+    // Do not inject "tenis" here. Padel and tennis can sit in neighboring
+    // tariff children, so naming the neighboring sport creates false evidence.
+    // Official ARCA/SIM text and semantic alignment decide the child.
+    terms: ['raqueta de padel', 'raqueta de pádel', 'raqueta deportiva', 'otras raquetas deportivas'],
   },
   {
     when: /\b(racket|racquet)\b/,
@@ -70,7 +73,7 @@ const RULES: VocabularyRule[] = [
   },
   {
     when: /\b(laptop|notebook computer|portable computer|portable automatic data processing machine)\b/,
-    terms: ['maquina automatica para tratamiento o procesamiento de datos portatil', 'maquinas automaticas para tratamiento o procesamiento de datos', 'computadora portatil'],
+    terms: ['maquina automatica para tratamiento o procesamiento de datos portatil', 'maquinas automaticas para tratamiento o procesamiento de datos', 'computadora portatil', 'notebook'],
   },
   {
     // USB-C is also a connector on chargers and devices. Require an actual cable

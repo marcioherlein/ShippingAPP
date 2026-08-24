@@ -43,6 +43,20 @@ describe('official SIM enrichment for NCM search index', () => {
     expect(enriched.meta.remainingBlankLabelCount).toBeLessThan(enriched.meta.originalBlankLabelCount)
   })
 
+  it('keeps terminal backpack identity on the correct 42.02 child instead of treating the parent heading as duplication', () => {
+    const base = readJson('public/data/ncm-index.json')
+    const sim42 = readJson('public/data/sim/42.json')
+    const enriched = enrichNcmSearchIndex(base, [sim42])
+    const backpackBranch = (row(enriched, '4202.92.00')?.[1] || '').toLowerCase()
+    const pocketBranch = (row(enriched, '4202.32.00')?.[1] || '').toLowerCase()
+
+    expect(backpackBranch).toContain('aperturas sim oficiales')
+    expect(backpackBranch).toContain('mochilas')
+    expect(pocketBranch).toContain('art')
+    expect(pocketBranch).toContain('bolsillo')
+    expect(pocketBranch.split('aperturas sim oficiales:')[1] || '').not.toContain('mochilas')
+  })
+
   it('never creates an NCM code that is absent from the canonical base index', () => {
     const base = {
       meta: { indexSchema: 3, tariffDataIncluded: false, simOpeningsIncluded: false },

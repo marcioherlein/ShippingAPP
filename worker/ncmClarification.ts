@@ -16,12 +16,15 @@ export type NcmClarification = {
 }
 
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
+type ClarificationFactKey = NcmClarification['factKey']
+
+const FACT_KEYS: ClarificationFactKey[] = ['product_scope', 'principal_function', 'material', 'electrical_type', 'construction', 'other']
 
 const CLARIFICATION_SCHEMA = {
   type: 'object',
   properties: {
     question: { type: 'string' },
-    factKey: { type: 'string', enum: ['product_scope', 'principal_function', 'material', 'electrical_type', 'construction', 'other'] },
+    factKey: { type: 'string', enum: FACT_KEYS },
     reason: { type: 'string' },
     options: {
       type: 'array',
@@ -54,7 +57,16 @@ function containsCustomsCode(value: string) {
   return /\b\d{4}[.]?\d{2}[.]?\d{2}\b/.test(value)
 }
 
-function scopeFallback(facts: NcmProductFacts, round: number): NcmClarification | null {
+function normalizedFactKeys(values: string[] = []): ClarificationFactKey[] {
+  return [...new Set(values.filter((value): value is ClarificationFactKey => FACT_KEYS.includes(value as ClarificationFactKey)))]
+}
+
+function scopeFallback(
+  facts: NcmProductFacts,
+  round: number,
+  answeredFactKeys: ClarificationFactKey[] = [],
+): NcmClarification | null {
+  if (answeredFactKeys.includes('product_scope')) return null
   const text = `${facts.name || ''} ${facts.category || ''} ${facts.description || ''}`.toLowerCase()
   if (!/(cover|case|replacement|shade|accessor|part|repuesto|funda|estuche|cubierta|parte)/.test(text)) return null
   return {
@@ -74,8 +86,10 @@ export async function buildNcmClarification(
   facts: NcmProductFacts,
   classification: FullNcmClassification,
   answeredCount: number,
+  answeredFactKeysInput: string[] = [],
 ): Promise<NcmClarification | null> {
   if (answeredCount >= 3 || classification.confidence === 'high') return null
+  const answeredFactKeys = normalizedFactKeys(answeredFactKeysInput)
 
   const candidates = [
     ...(classification.code && classification.label ? [{ code: classification.code, label: classification.label }] : []),
@@ -87,11 +101,11 @@ export async function buildNcmClarification(
       messages: [
         {
           role: 'system',
-          content: 'You design ONE short clarification question for an Argentina customs NCM screening flow. Write the question and answer labels in simple Spanish. Ask only for an objective product characteristic that could materially improve or distinguish the customs classification: whether it is the complete product vs accessory/replacement, principal function, material/composition, electrical nature, or construction. Provide 2 to 4 mutually useful answer options. Each option value must be a concise declarative fact that can be fed back into classification. Never mention or reveal NCM/HS/customs codes in the question or options. Never ask about price, origin, profitability, brand or intended resale. If the supplied facts already answer a characteristic, do not ask it again. If no useful clarification exists, return an empty question and empty options.'
+          content: 'You design ONE short clarification question for an Argentina customs NCM screening flow. Write the question and answer labels in simple Spanish. Ask only for an objective product characteristic that could materially improve or distinguish the customs classification: whether it is the complete product vs accessory/replacement, principal function, material/composition, electrical nature, or construction. Provide 2 to 4 mutually useful answer options. Each option value must be a concise declarative fact that can be fed back into classification. Never mention or reveal NCM/HS/customs codes in the question or options. Never ask about price, origin, profitability, brand or intended resale. Do not ask a fact type listed in alreadyConfirmedFactKeys. If the supplied facts already answer a characteristic, do not ask it again. If no useful NEW clarification exists, return an empty question and empty options.'
         },
         {
           role: 'user',
-          content: JSON.stringify({ product: facts, currentClassification: { status: classification.status, confidence: classification.confidence, missingFacts: classification.missingFacts, candidates } }),
+          content: JSON.stringify({ product: facts, alreadyConfirmedFactKeys: answeredFactKeys, currentClassification: { status: classification.status, confidence: classification.confidence, missingFacts: classification.missingFacts, candidates } }),
         },
       ],
       response_format: { type: 'json_schema', json_schema: CLARIFICATION_SCHEMA },
@@ -102,9 +116,7 @@ export async function buildNcmClarification(
     const parsed: any = parseResponse(result)
     const question = safeText(parsed?.question, 220)
     const reason = safeText(parsed?.reason, 320)
-    const factKey = ['product_scope', 'principal_function', 'material', 'electrical_type', 'construction', 'other'].includes(parsed?.factKey)
-      ? parsed.factKey as NcmClarification['factKey']
-      : 'other'
+    const factKey = FACT_KEYS.includes(parsed?.factKey) ? parsed.factKey as ClarificationFactKey : 'other'
     const rawOptions = Array.isArray(parsed?.options) ? parsed.options : []
     const options = rawOptions
       .map((item: any, index: number) => ({
@@ -115,7 +127,9 @@ export async function buildNcmClarification(
       .filter((item: NcmClarificationOption) => item.label.length >= 2 && item.value.length >= 3 && !containsCustomsCode(`${item.label} ${item.value}`))
       .slice(0, 4)
 
-    if (!question || containsCustomsCode(question) || options.length < 2) return scopeFallback(facts, answeredCount)
+    if (!question || containsCustomsCode(question) || options.length < 2 || answeredFactKeys.includes(factKey)) {
+      return scopeFallback(facts, answeredCount, answeredFactKeys)
+    }
     return {
       id: `ncm-q${answeredCount + 1}-${factKey}`,
       round: answeredCount + 1,
@@ -125,6 +139,6 @@ export async function buildNcmClarification(
       reason: reason || 'Este dato puede separar alternativas de clasificación que hoy no tienen evidencia suficiente.',
     }
   } catch {
-    return scopeFallback(facts, answeredCount)
+    return scopeFallback(facts, answeredCount, answeredFactKeys)
   }
 }

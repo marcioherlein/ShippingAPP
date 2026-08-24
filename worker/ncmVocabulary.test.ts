@@ -21,6 +21,15 @@ describe('deterministic bilingual NCM retrieval', () => {
     it(`puts the correct ARCA code in the shortlist for ${sample.name}`, () => {
       const terms = deterministicCustomsTerms(sample.facts)
       const shortlist = retrieveNcmCandidates(index, terms, sample.facts, 25)
+      const found = shortlist.some((item) => item.code === sample.code)
+      if (!found) {
+        console.error('NCM_VOCAB_DIAGNOSTIC', JSON.stringify({
+          sample: sample.name,
+          expected: index.records.find(([code]) => code === sample.code) || null,
+          terms,
+          shortlist: shortlist.map(({ code, label, score, matchedTerms }) => ({ code, label, score, matchedTerms })),
+        }))
+      }
       expect(terms.length).toBeGreaterThan(0)
       expect(shortlist.length).toBeGreaterThan(0)
       expect(shortlist.map((item) => item.code)).toContain(sample.code)

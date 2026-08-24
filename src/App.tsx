@@ -17,7 +17,8 @@ import OpportunityDecisionPanel from './components/OpportunityDecisionPanel'
 import ImportAnalyst from './components/ImportAnalyst'
 import { defaultInputs } from './data/defaults'
 import { bestRowsV2, calculateV2, recommendV2 } from './lib/optimizerV2'
-import { applyAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
+import { applyAnalysisV2, reclassifyProductAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
+import type { NcmClarificationOption } from './lib/ncmClarificationClient'
 import { buildRegulatoryChecksV4 } from './lib/regulatoryV4'
 import { defaultClientProfileV3, type ClientProfileV3 } from './lib/regulatoryV3'
 import { applyExpertOverride, type ExpertOverride } from './lib/expertOverride'
@@ -31,6 +32,8 @@ export default function App() {
   const [analysis, setAnalysis] = useState<ProductAnalysisV2 | null>(null)
   const [expertOverride, setExpertOverride] = useState<ExpertOverride | null>(null)
   const [client, setClient] = useState<ClientProfileV3>(defaultClientProfileV3)
+  const [ncmClarifying, setNcmClarifying] = useState(false)
+  const [ncmClarificationError, setNcmClarificationError] = useState<string | null>(null)
   const taxContext = useMemo<ScenarioTaxContext>(() => ({ entityType: client.entityType, taxStatus: client.taxStatus, purpose: client.purpose, statisticsExempt: false, vatPerceptionExempt: client.entityType === 'individual' && client.purpose === 'own_use', gainsPerceptionExempt: false }), [client])
   const regulatoryChecks = useMemo(() => analysis ? buildRegulatoryChecksV4(analysis, client, expertOverride) : [], [analysis, client, expertOverride])
   const marketP25Ars = analysis && !expertOverride ? Number((analysis.market as any).details?.p25Ars) || null : null
@@ -49,9 +52,29 @@ export default function App() {
 
   const handleAnalysis = (next: ProductAnalysisV2) => {
     setExpertOverride(null)
+    setNcmClarificationError(null)
+    setNcmClarifying(false)
     setAnalysis(next)
     setProduct(next.product.name)
     setInputs((current) => ({ ...applyAnalysisV2(current, next), monthlyDemand: 0 }))
+  }
+
+  const handleNcmClarification = async (option: NcmClarificationOption) => {
+    if (!analysis || ncmClarifying) return
+    setNcmClarifying(true)
+    setNcmClarificationError(null)
+    try {
+      const next = await reclassifyProductAnalysisV2(analysis, option)
+      setAnalysis(next)
+      setInputs((current) => {
+        const monthlyDemand = current.monthlyDemand
+        return { ...applyAnalysisV2(current, next), monthlyDemand }
+      })
+    } catch (error) {
+      setNcmClarificationError(error instanceof Error ? error.message : 'No pudimos reclasificar con esa respuesta.')
+    } finally {
+      setNcmClarifying(false)
+    }
   }
 
   const handleExpertOverride = (override: ExpertOverride) => {
@@ -67,7 +90,7 @@ export default function App() {
     {analysis && <ImportAnalyst key={analysis.sourceUrl} analysis={analysis} inputs={inputs} decision={opportunityDecision} onApplyScenario={setInputs} />}
     {analysis && <MarketEvidence analysis={analysis} />}
     {analysis && <FxEvidence analysis={analysis} />}
-    {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
+    {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} onClarify={handleNcmClarification} clarifying={ncmClarifying} clarificationError={ncmClarificationError} />}
 
     {analysis && economicsReady && <>
       {expertOverride

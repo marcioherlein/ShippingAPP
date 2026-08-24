@@ -7,7 +7,7 @@ import {
   type NcmSearchIndex,
 } from './ncmRetrieval'
 import { deterministicCustomsTerms } from './ncmVocabulary'
-import { semanticRerankNcmCandidates } from './ncmSemantic'
+import { semanticAdjustment, semanticRerankNcmCandidates } from './ncmSemantic'
 
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
 
@@ -32,7 +32,6 @@ function mergeCandidatePools(...pools: NcmRetrievalCandidate[][]) {
         byCode.set(candidate.code, candidate)
         continue
       }
-      // Preserve the strongest deterministic score while unioning evidence.
       byCode.set(candidate.code, {
         ...candidate,
         score: Math.max(existing.score, candidate.score),
@@ -44,10 +43,6 @@ function mergeCandidatePools(...pools: NcmRetrievalCandidate[][]) {
 }
 
 function identityTerms(facts: NcmProductFacts) {
-  // Product identity/function should survive even when broad material vocabulary
-  // floods the global shortlist. Material remains available in the full pool and
-  // in semantic reconciliation, but is deliberately not allowed to crowd the
-  // identity pool out of the top 50.
   const identityFacts: NcmProductFacts = {
     name: facts.name,
     category: facts.category,
@@ -57,6 +52,10 @@ function identityTerms(facts: NcmProductFacts) {
   }
   const genericMaterial = /^(materia textil|textil de poliester|diodos emisores de luz led)$/i
   return deterministicCustomsTerms(identityFacts).filter((term) => !genericMaterial.test(term))
+}
+
+function rawByCode(raw: NcmRetrievalCandidate[], code: string | null) {
+  return code ? raw.find((candidate) => candidate.code === code) ?? null : null
 }
 
 export async function classifyFullNcmWithSemantic(
@@ -76,6 +75,12 @@ export async function classifyFullNcmWithSemantic(
   const top = semantic[0]
   const confidence = semanticConfidence(semantic)
   const alternatives = semantic.slice(1, 4).map(({ code, label, score }) => ({ code, label, score }))
+  const baseRaw = rawByCode(raw, base.code)
+  const topRaw = rawByCode(raw, top.code)
+  const baseAdjustment = baseRaw ? semanticAdjustment(baseRaw, facts) : 0
+  const topAdjustment = topRaw ? semanticAdjustment(topRaw, facts) : 0
+  const semanticDelta = top.code !== base.code ? topAdjustment - baseAdjustment : 0
+  const strongContradiction = top.code !== base.code && semanticDelta >= 50
 
   if (confidence === 'medium') {
     const changed = base.code !== top.code
@@ -94,9 +99,6 @@ export async function classifyFullNcmWithSemantic(
     }
   }
 
-  // A viable but unresolved shortlist is more useful than `missing`: it lets the
-  // clarification layer ask for the actual discriminating characteristic while
-  // tariffs remain blocked. Never promote a low semantic tie to economics.
   if (base.status === 'missing') {
     return {
       ...base,
@@ -106,6 +108,26 @@ export async function classifyFullNcmWithSemantic(
       confidence: 'low',
       alternatives,
       rationale: [...base.rationale, 'La reconciliación encontró candidatos oficiales, pero no una ventaja suficiente; se requiere aclaración.'],
+    }
+  }
+
+  // Never preserve a base MEDIUM solely because lexical scoring liked it when
+  // objective child-path/SIM evidence strongly contradicts that branch. If the
+  // semantic winner is not yet decisive enough for MEDIUM, return it LOW so the
+  // clarification gate blocks tariffs and asks the user instead of promoting a
+  // contradicted code.
+  if (strongContradiction) {
+    return {
+      ...base,
+      status: 'candidate',
+      code: top.code,
+      label: top.label,
+      confidence: 'low',
+      alternatives,
+      rationale: [
+        ...base.rationale,
+        `La evidencia semántica contradice el candidato base (delta ${semanticDelta.toFixed(2)}); economics permanece bloqueado hasta aclarar.`,
+      ],
     }
   }
 

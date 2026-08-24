@@ -26,13 +26,13 @@ const cases = [
   {
     name: 'Android 5G smartphone',
     facts: { name: 'Unlocked Android 5G smartphone dual SIM mobile phone', category: 'Smartphone', functionText: 'cellular mobile telephone' },
-    hints: ['producto completo', 'telefono movil', 'telefono celular', 'smartphone', '5g', 'dual sim'],
+    hints: ['producto completo', 'telefono movil', 'telefono celular', 'telefono inteligente', 'smartphone', '5g', 'dual sim'],
     code: '8517.13.00', aec: 7, statistics: 3, iva: 21,
   },
   {
     name: 'LED desk lamp',
     facts: { name: 'Dimmable LED desk lamp table reading light', category: 'Desk lamp', functionText: 'electric table lighting fitting' },
-    hints: ['producto completo', 'lampara completa', 'aparato electrico de alumbrado', 'mesa', 'led'],
+    hints: ['producto completo', 'lampara completa', 'lampara electrica de mesa', 'aparato electrico de alumbrado', 'mesa', 'led'],
     code: '9405.21.00', aec: 18, statistics: 3, iva: 21,
   },
   {
@@ -129,6 +129,9 @@ for (const sample of cases) {
     expected: { code: sample.code, aec: sample.aec, statistics: sample.statistics, iva: sample.iva },
     actual: {
       http: response?.status ?? null,
+      statusText: response?.statusText ?? null,
+      error: data?.error ?? null,
+      detail: data?.detail ?? null,
       status: data?.status ?? null,
       code: data?.code ?? null,
       label: data?.label ?? null,

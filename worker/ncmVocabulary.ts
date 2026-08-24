@@ -59,7 +59,9 @@ const RULES: VocabularyRule[] = [
     terms: ['maquina automatica para tratamiento o procesamiento de datos portatil', 'maquinas automaticas para tratamiento o procesamiento de datos', 'computadora portatil'],
   },
   {
-    when: /\b(usb c|usb-c|usb cable|charging cable|electric conductor|insulated electric conductor)\b/,
+    // USB-C is also a connector on chargers and devices. Require an actual cable
+    // or conductor word before adding conductor vocabulary.
+    when: /\b(usb c cable|usb-c cable|usb cable|charging cable|cable with connectors|electric conductor|insulated electric conductor)\b/,
     terms: ['conductores electricos aislados', 'conductores electricos', 'cables electricos'],
   },
   {

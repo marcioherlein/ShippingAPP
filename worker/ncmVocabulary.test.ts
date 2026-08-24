@@ -1,11 +1,16 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { enrichNcmSearchIndex } from '../scripts/enrich-ncm-index-from-sim.mjs'
 import { retrieveNcmCandidates, type NcmProductFacts, type NcmSearchIndex } from './ncmRetrieval'
 import { deterministicCustomsTerms } from './ncmVocabulary'
 
-const index = JSON.parse(readFileSync(new URL('../public/data/ncm-index.json', import.meta.url), 'utf8')) as NcmSearchIndex
-const emptyLabels = index.records.filter(([, label]) => !String(label || '').trim()).map(([code]) => code)
-console.error('NCM_EMPTY_LABELS', JSON.stringify({ count: emptyLabels.length, codes: emptyLabels }))
+const rawIndex = JSON.parse(readFileSync(new URL('../public/data/ncm-index.json', import.meta.url), 'utf8')) as NcmSearchIndex
+const simDirectory = new URL('../public/data/sim/', import.meta.url)
+const simIndexes = readdirSync(simDirectory)
+  .filter((name) => /^\d{2}\.json$/.test(name))
+  .sort()
+  .map((name) => JSON.parse(readFileSync(new URL(name, simDirectory), 'utf8')))
+const index = enrichNcmSearchIndex(rawIndex, simIndexes) as NcmSearchIndex
 
 const cases: Array<{ name: string; facts: NcmProductFacts; code: string }> = [
   { name: 'padel racket', facts: { name: 'Professional 12K carbon fiber padel racket', category: 'Padel racket', material: 'carbon fiber', functionText: 'sports racket for padel' }, code: '9506.59.00' },
@@ -19,19 +24,17 @@ const cases: Array<{ name: string; facts: NcmProductFacts; code: string }> = [
 ]
 
 describe('deterministic bilingual NCM retrieval', () => {
+  it('uses the same SIM-enriched search index that is deployed by postbuild', () => {
+    expect(rawIndex.records.find(([code]) => code === '8517.13.00')?.[1]).toBe('')
+    expect(index.records.find(([code]) => code === '8517.13.00')?.[1]).toContain('Telefonos inteligentes')
+    expect(rawIndex.records.find(([code]) => code === '9405.21.00')?.[1]).toBe('')
+    expect(index.records.find(([code]) => code === '9405.21.00')?.[1].length).toBeGreaterThan(40)
+  })
+
   for (const sample of cases) {
     it(`puts the correct ARCA code in the shortlist for ${sample.name}`, () => {
       const terms = deterministicCustomsTerms(sample.facts)
       const shortlist = retrieveNcmCandidates(index, terms, sample.facts, 25)
-      const found = shortlist.some((item) => item.code === sample.code)
-      if (!found) {
-        console.error('NCM_VOCAB_DIAGNOSTIC', JSON.stringify({
-          sample: sample.name,
-          expected: index.records.find(([code]) => code === sample.code) || null,
-          terms,
-          shortlist: shortlist.map(({ code, label, score, matchedTerms }) => ({ code, label, score, matchedTerms })),
-        }))
-      }
       expect(terms.length).toBeGreaterThan(0)
       expect(shortlist.length).toBeGreaterThan(0)
       expect(shortlist.map((item) => item.code)).toContain(sample.code)

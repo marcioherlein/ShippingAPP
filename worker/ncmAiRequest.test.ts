@@ -12,7 +12,7 @@ const index: NcmSearchIndex = {
 }
 
 describe('NCM Workers AI request compatibility', () => {
-  it('uses a JSON-mode model and max_tokens for expansion and reranking', async () => {
+  it('uses documented JSON-schema mode and max_tokens for expansion and reranking', async () => {
     const calls: Array<{ model: string; input: any }> = []
     const outputs = [
       { response: { searchTerms: ['convertidor eléctrico estático', 'convertidores estáticos'], missingFacts: [] } },
@@ -30,9 +30,13 @@ describe('NCM Workers AI request compatibility', () => {
     expect(calls).toHaveLength(2)
     for (const call of calls) {
       expect(call.model).toBe(NCM_STRUCTURED_AI_MODEL)
-      expect(call.input.response_format).toEqual({ type: 'json_object' })
+      expect(call.input.response_format?.type).toBe('json_schema')
+      expect(call.input.response_format?.json_schema?.type).toBe('object')
+      expect(Array.isArray(call.input.response_format?.json_schema?.required)).toBe(true)
       expect(typeof call.input.max_tokens).toBe('number')
       expect(call.input).not.toHaveProperty('max_completion_tokens')
     }
+    expect(calls[0].input.response_format.json_schema.properties.searchTerms.type).toBe('array')
+    expect(calls[1].input.response_format.json_schema.properties.ranking.type).toBe('array')
   })
 })

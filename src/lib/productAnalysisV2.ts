@@ -13,8 +13,8 @@ import type { Inputs } from './types'
 
 export type ProductAnalysisV2 = ProductAnalysis & {
   customs: CustomsProfile
-  ncmClarification: NcmClarification | null
-  ncmClarificationAnswers: NcmClarificationAnswer[]
+  ncmClarification?: NcmClarification | null
+  ncmClarificationAnswers?: NcmClarificationAnswer[]
 }
 
 function fullFacts(base: ProductAnalysis): FullNcmFacts {
@@ -85,11 +85,12 @@ export async function reclassifyProductAnalysisV2(
   option: NcmClarificationOption,
 ): Promise<ProductAnalysisV2> {
   const clarification = current.ncmClarification
+  const priorAnswers = current.ncmClarificationAnswers ?? []
   if (!clarification) return current
-  if (current.ncmClarificationAnswers.length >= 3) return { ...current, ncmClarification: null }
+  if (priorAnswers.length >= 3) return { ...current, ncmClarification: null }
 
   const answers: NcmClarificationAnswer[] = [
-    ...current.ncmClarificationAnswers,
+    ...priorAnswers,
     { question: clarification.question, answer: option.value, factKey: clarification.factKey },
   ].slice(0, 3)
 

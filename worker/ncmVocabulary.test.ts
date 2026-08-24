@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { enrichNcmSearchIndex } from '../scripts/enrich-ncm-index-from-sim.mjs'
-import { classifyFullNcm, retrieveNcmCandidates, type NcmProductFacts, type NcmSearchIndex } from './ncmRetrieval'
+import { retrieveNcmCandidates, type NcmProductFacts, type NcmSearchIndex } from './ncmRetrieval'
 import { deterministicCustomsTerms } from './ncmVocabulary'
 
 const rawIndex = JSON.parse(readFileSync(new URL('../public/data/ncm-index.json', import.meta.url), 'utf8')) as NcmSearchIndex
@@ -23,11 +23,7 @@ const cases: Array<{ name: string; facts: NcmProductFacts; code: string }> = [
   { name: 'USB-C cable with connectors', facts: { name: 'USB C to USB C fast charging cable with connectors', category: 'USB cable', functionText: 'insulated electric conductor fitted with connectors' }, code: '8544.42.00' },
 ]
 
-const offlineAi = {
-  run: async () => { throw new Error('Workers AI unavailable in deterministic regression') },
-}
-
-describe('deterministic bilingual NCM retrieval', () => {
+describe('deterministic bilingual NCM retrieval vocabulary', () => {
   it('uses the same SIM-enriched search index that is deployed by postbuild', () => {
     expect(rawIndex.records.find(([code]) => code === '8517.13.00')?.[1]).toBe('')
     expect(index.records.find(([code]) => code === '8517.13.00')?.[1]).toContain('Telefonos inteligentes')
@@ -35,6 +31,9 @@ describe('deterministic bilingual NCM retrieval', () => {
     expect(index.records.find(([code]) => code === '9405.21.00')?.[1].length).toBeGreaterThan(40)
   })
 
+  // This suite tests vocabulary/retrieval recall only. Final candidate selection
+  // belongs to ncmOfflineIntegration, where semantic reconciliation can resolve
+  // sibling branches or deliberately keep them ambiguous.
   for (const sample of cases) {
     it(`puts the correct ARCA code in the shortlist for ${sample.name}`, () => {
       const terms = deterministicCustomsTerms(sample.facts)
@@ -42,14 +41,6 @@ describe('deterministic bilingual NCM retrieval', () => {
       expect(terms.length).toBeGreaterThan(0)
       expect(shortlist.length).toBeGreaterThan(0)
       expect(shortlist.map((item) => item.code)).toContain(sample.code)
-    })
-
-    it(`selects ${sample.code} without Workers AI for ${sample.name}`, async () => {
-      const result = await classifyFullNcm(index, offlineAi, sample.facts)
-      expect(result.status).toBe('candidate')
-      expect(result.code).toBe(sample.code)
-      expect(['medium', 'high']).toContain(result.confidence)
-      expect(result.retrievalMode).toBe('deterministic_fallback')
     })
   }
 

@@ -21,6 +21,8 @@ function normalize(value: string | null | undefined) {
     .trim()
 }
 
+const ACCESSORY_INTENT = /\b(cover|case|replacement|shade|accessory|part|spare|repuesto|funda|estuche|cubierta|pantalla|accesorio|parte|reemplazo)\b/
+
 // This is deliberately code-free. It only bridges common marketplace English
 // vocabulary to Spanish customs/product terminology so retrieval can work even
 // when Workers AI is unavailable or returns unusable structured output.
@@ -36,7 +38,13 @@ const RULES: VocabularyRule[] = [
   },
   {
     when: /\b(charger|wall charger|power adapter|power supply|static power converter|ac to dc|ac dc adapter)\b/,
-    terms: ['convertidor electrico estatico', 'convertidores electricos estaticos', 'adaptador de corriente', 'fuente de alimentacion'],
+    terms: [
+      'convertidor electrico estatico',
+      'convertidores electricos estaticos',
+      'convertidores estaticos los demas',
+      'adaptador de corriente',
+      'fuente de alimentacion',
+    ],
   },
   {
     when: /\b(lithium ion|lithium-ion|li ion|li-ion|18650)\b/,
@@ -104,6 +112,19 @@ export function deterministicCustomsTerms(facts: CustomsVocabularyFacts): string
     facts.description || '',
   ].join(' '))
   if (!text) return []
+
+  // Marketplace accessory listings frequently contain the name of the parent
+  // product ("desk lamp shade", "padel racket cover"). In that situation the
+  // parent-product vocabulary is actively dangerous: it can manufacture a
+  // strong shortlist for the complete article. Fail closed and search only for
+  // accessory/part language; the clarification layer can then ask whether the
+  // user actually imports the complete product.
+  if (ACCESSORY_INTENT.test(text)) {
+    const accessoryTerms = ['accesorio', 'parte', 'repuesto', 'componente']
+    if (/\b(cover|case|funda|estuche|cubierta)\b/.test(text)) accessoryTerms.push('funda', 'cubierta')
+    if (/\b(shade|pantalla)\b/.test(text)) accessoryTerms.push('pantalla', 'parte de aparato de alumbrado')
+    return [...new Set(accessoryTerms)].slice(0, 12)
+  }
 
   const terms: string[] = []
   for (const rule of RULES) {

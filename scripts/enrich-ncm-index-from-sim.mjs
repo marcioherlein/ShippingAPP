@@ -68,25 +68,72 @@ export function collectOfficialSimLabels(simIndexes) {
   return labelsByCode
 }
 
+const GENERIC_SIM_SEGMENTS = new Set([
+  'los demas', 'las demas', 'los demás', 'las demás', 'demas', 'demás', 'otros', 'otras',
+])
+
+function usefulSimSegment(segment, baseKey) {
+  const text = cleanText(segment)
+  const key = comparisonKey(text)
+  if (!text || text.length < 4 || text.length > 150) return false
+  if (GENERIC_SIM_SEGMENTS.has(key)) return false
+  if (/^[\d\W]+$/.test(text)) return false
+  if (baseKey.includes(key)) return false
+  return true
+}
+
+// Keep the canonical ARCA label as the first part of every record, but expose a
+// bounded amount of official terminal SIM vocabulary for retrieval. This adds
+// words such as "mochilas" or a specific portable-machine subtype without ever
+// adding a new NCM/SIM code or tariff field. Only the last two hierarchy segments
+// of each official SIM label are considered so broad heading text does not drown
+// the product-specific evidence.
+export function officialSimSearchEvidence(labels, baseLabel, maxSegments = 8) {
+  const baseKey = comparisonKey(baseLabel)
+  const seen = new Set()
+  const evidence = []
+
+  for (const label of labels) {
+    const segments = hierarchySegments(label)
+    for (const segment of segments.slice(-2)) {
+      const text = cleanText(segment)
+      const key = comparisonKey(text)
+      if (!usefulSimSegment(text, baseKey) || seen.has(key)) continue
+      seen.add(key)
+      evidence.push(text)
+      if (evidence.length >= maxSegments) return evidence
+    }
+  }
+  return evidence
+}
+
 export function enrichNcmSearchIndex(baseIndex, simIndexes) {
   if (!baseIndex || !Array.isArray(baseIndex.records)) throw new Error('Invalid NCM search index')
   const labelsByCode = collectOfficialSimLabels(simIndexes)
   let originalBlankLabelCount = 0
   let simEnrichedLabelCount = 0
+  let simEvidenceLabelCount = 0
   let remainingBlankLabelCount = 0
 
   const records = baseIndex.records.map((row) => {
     if (!Array.isArray(row) || row.length < 2) return row
     const [code, rawLabel] = row
     const label = cleanText(rawLabel)
-    if (label) return [code, label]
+    const officialSimLabels = labelsByCode.get(code) || []
+
+    if (label) {
+      const evidence = officialSimSearchEvidence(officialSimLabels, label)
+      if (!evidence.length) return [code, label]
+      simEvidenceLabelCount += 1
+      return [code, `${label} > Aperturas SIM oficiales: ${evidence.join(' | ')}`]
+    }
 
     originalBlankLabelCount += 1
-    const officialSimLabels = labelsByCode.get(code) || []
     const enrichedLabel = commonOfficialHierarchy(officialSimLabels)
     if (enrichedLabel) {
       simEnrichedLabelCount += 1
-      return [code, enrichedLabel]
+      const evidence = officialSimSearchEvidence(officialSimLabels, enrichedLabel)
+      return [code, evidence.length ? `${enrichedLabel} > Aperturas SIM oficiales: ${evidence.join(' | ')}` : enrichedLabel]
     }
 
     remainingBlankLabelCount += 1
@@ -105,9 +152,10 @@ export function enrichNcmSearchIndex(baseIndex, simIndexes) {
       recordCount: records.length,
       tariffDataIncluded: false,
       simOpeningsIncluded: false,
-      searchTextEnrichment: 'official-sim-common-hierarchy',
+      searchTextEnrichment: 'official-sim-terminal-vocabulary',
       originalBlankLabelCount,
       simEnrichedLabelCount,
+      simEvidenceLabelCount,
       remainingBlankLabelCount,
     },
     records,
@@ -141,6 +189,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(currentFil
     searchTextEnrichment: meta.searchTextEnrichment,
     originalBlankLabelCount: meta.originalBlankLabelCount,
     simEnrichedLabelCount: meta.simEnrichedLabelCount,
+    simEvidenceLabelCount: meta.simEvidenceLabelCount,
     remainingBlankLabelCount: meta.remainingBlankLabelCount,
   }, null, 2))
 }

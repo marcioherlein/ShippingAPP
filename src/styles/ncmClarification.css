@@ -1,0 +1,12 @@
+.ncm-clarification { margin: 18px 0; padding: 18px; border: 1px solid rgba(84,104,255,.22); border-radius: 16px; background: linear-gradient(180deg, rgba(238,240,255,.86), rgba(255,255,255,.96)); box-shadow: 0 10px 30px rgba(23,32,51,.05); }
+.ncm-clarification-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px; font-size: 11px; }
+.ncm-clarification-head span { color: #5468ff; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+.ncm-clarification-head b { color: #6d7790; font-size: 11px; }
+.ncm-clarification h3 { margin: 0 0 7px; color: #202a43; font-size: 18px; line-height: 1.35; }
+.ncm-clarification p { margin: 0; color: #68738a; font-size: 12px; line-height: 1.55; }
+.ncm-clarification-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 15px 0 11px; }
+.ncm-clarification-options .secondary { text-align: left; min-height: 44px; cursor: pointer; transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease; }
+.ncm-clarification-options .secondary:hover:not(:disabled) { transform: translateY(-1px); border-color: #98a4ff; box-shadow: 0 6px 16px rgba(84,104,255,.09); }
+.ncm-clarification-options .secondary:disabled { cursor: wait; opacity: .62; }
+.ncm-clarification small { display: block; color: #7b8498; font-size: 10px; line-height: 1.5; }
+@media (max-width: 620px) { .ncm-clarification-head { align-items: flex-start; flex-direction: column; } .ncm-clarification-options { grid-template-columns: 1fr; } }

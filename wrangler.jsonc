@@ -1,7 +1,7 @@
 {
   "name": "shippingapp",
   "compatibility_date": "2026-08-13",
-  "main": "./worker/enrich.ts",
+  "main": "./worker/enrichSemantic.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -9,5 +9,12 @@
     "run_worker_first": ["/api/*"]
   },
   "ai": { "binding": "AI" },
-  "browser": { "binding": "BROWSER" }
+  "browser": { "binding": "BROWSER" },
+  "d1_databases": [
+    {
+      "binding": "NCM_DB",
+      "database_name": "shippingapp-ncm",
+      "database_id": "347e0be2-b9ff-4cd2-9f0f-73e93297acbe"
+    }
+  ]
 }

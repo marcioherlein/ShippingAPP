@@ -1,7 +1,10 @@
 import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
-import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
+import { loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
+import { classifyFullNcmWithSemantic } from './ncmRetrievalSemantic'
+import { buildNcmClarification } from './ncmClarification'
+import { lookupNcmTariff, type D1DatabaseLike } from './ncmTariff'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
@@ -14,21 +17,44 @@ type Env = MercadoLibreAuthEnv & {
   AI: { run: (model: string, input: unknown) => Promise<unknown> }
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   BROWSER: BrowserRun
+  NCM_DB?: D1DatabaseLike
 }
+
+type ClarificationAnswer = { question: string; answer: string; factKey?: string }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json; charset=utf-8' },
 })
 
-function validFacts(body: any): NcmProductFacts | null {
+function clarificationAnswers(body: any): ClarificationAnswer[] {
+  if (!Array.isArray(body?.clarifications)) return []
+  return body.clarifications
+    .map((item: any) => ({
+      question: typeof item?.question === 'string' ? item.question.trim().replace(/\s+/g, ' ').slice(0, 220) : '',
+      answer: typeof item?.answer === 'string' ? item.answer.trim().replace(/\s+/g, ' ').slice(0, 320) : '',
+      factKey: typeof item?.factKey === 'string' ? item.factKey.trim().slice(0, 40) : undefined,
+    }))
+    .filter((item: ClarificationAnswer) => item.question.length >= 2 && item.answer.length >= 2)
+    .slice(0, 3)
+}
+
+export function validFacts(body: any, answers: ClarificationAnswer[] = []): NcmProductFacts | null {
   if (!body || typeof body !== 'object') return null
+  const baseDescription = typeof body.description === 'string' ? body.description.slice(0, 1500) : ''
+  const baseFunctionText = typeof body.functionText === 'string' ? body.functionText.slice(0, 700) : ''
+  const clarificationContext = answers.length
+    ? answers.map((item, index) => `Aclaración confirmada ${index + 1}: ${item.question} Respuesta del usuario: ${item.answer}`).join('\n')
+    : ''
   const facts: NcmProductFacts = {
     name: typeof body.name === 'string' ? body.name.slice(0, 500) : null,
     category: typeof body.category === 'string' ? body.category.slice(0, 300) : null,
     material: typeof body.material === 'string' ? body.material.slice(0, 500) : null,
-    functionText: typeof body.functionText === 'string' ? body.functionText.slice(0, 700) : null,
-    description: typeof body.description === 'string' ? body.description.slice(0, 1500) : null,
+    // Clarification evidence is duplicated into functionText on purpose: the
+    // deterministic retrieval fallback consumes this field even when Workers AI
+    // expansion is unavailable. This keeps confirmed user facts useful offline.
+    functionText: [baseFunctionText, clarificationContext].filter(Boolean).join('\n').slice(0, 1800) || null,
+    description: [baseDescription, clarificationContext].filter(Boolean).join('\n').slice(0, 2800) || null,
   }
   return facts.name || facts.category || facts.description ? facts : null
 }
@@ -43,9 +69,7 @@ function discoveryRequest(body: unknown) {
 async function hydrateMarketAndFx(data: any, env: Env) {
   const mlAuth = await resolveMercadoLibreAccessToken(env)
   const [market, fx] = await Promise.all([
-    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '', {
-      accessToken: mlAuth.accessToken,
-    }),
+    analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '', { accessToken: mlAuth.accessToken }),
     fetchBcraReferenceFx(),
   ])
   if (mlAuth.status !== 'ready') {
@@ -57,7 +81,6 @@ async function hydrateMarketAndFx(data: any, env: Env) {
   }
 
   const prior = (data.assumptions || []).filter((item: string) => !item.includes('Precio argentino inicial estimado'))
-
   if (market.status !== 'live' || !market.suggestedPriceArs) {
     data.market = { ...data.market, estimatedPriceArs: null, source: `${market.source} · ${market.status}`, details: market }
     data.assumptions = [
@@ -91,7 +114,6 @@ export function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConv
   const benchmarked = Object.values(intake.factSources).filter((source) => source === 'benchmark').length
   const explicit = Object.values(intake.factSources).filter((source) => source === 'user').length
   const overall = Math.max(40, Math.min(65, 45 + explicit * 6 - benchmarked * 4 + (facts.originCountry ? 3 : 0)))
-
   return {
     sourceUrl: `chat://product-intake/${Date.now()}`,
     fetched: false,
@@ -163,18 +185,42 @@ export default {
 
     if (url.pathname === '/api/ncm-classify' && request.method === 'POST') {
       try {
-        const facts = validFacts(await request.json())
+        const body = await request.json() as any
+        const answers = clarificationAnswers(body)
+        const facts = validFacts(body, answers)
         if (!facts) return json({ error: 'Faltan datos del producto para clasificar.' }, 400)
         const index = await loadNcmIndex(request.url, env.ASSETS)
-        const classification = await classifyFullNcm(index, env.AI, facts)
-        if (classification.status !== 'candidate' || !classification.code) return json({ ...classification, sim: null })
+        // Base retrieval is reconciled with objective product semantics before
+        // any clarification or tariff lookup. This prevents generic material
+        // words from outranking product identity while staying bounded to ARCA.
+        const classification = await classifyFullNcmWithSemantic(index, env.AI, facts)
+        const clarification = await buildNcmClarification(
+          env.AI,
+          facts,
+          classification,
+          answers.length,
+          answers.map((item) => item.factKey || '').filter(Boolean),
+        )
 
+        if (classification.status !== 'candidate' || !classification.code) {
+          return json({ ...classification, clarification, tariff: null, sim: null })
+        }
+
+        // A useful clarification question always wins over premature economics.
+        // LOW confidence also stays fail-closed even after the three-question cap.
+        if (clarification || classification.confidence === 'low') {
+          return json({ ...classification, clarification, tariff: null, sim: null })
+        }
+
+        const tariff = await lookupNcmTariff(env.NCM_DB, classification.code)
         try {
           const sim = await resolveSimOpening(request.url, env.ASSETS, env.AI, classification.code, facts)
-          return json({ ...classification, sim })
+          return json({ ...classification, clarification: null, tariff, sim })
         } catch (error) {
           return json({
             ...classification,
+            clarification: null,
+            tariff,
             sim: {
               status: 'unavailable', ncmCode: classification.code, ncmLabel: classification.label,
               candidate: null, alternatives: [], confidence: 'missing', missingFacts: [], sourceDate: classification.sourceDate,

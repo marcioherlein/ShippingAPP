@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
+import type { NcmClarificationOption } from '../lib/ncmClarificationClient'
 import { buildProductRequirements } from '../lib/productRequirements'
 
 const statusLabels = { pass: 'OK', blocker: 'BLOQUEA', verify: 'VERIFICAR', info: 'INFO' }
@@ -9,12 +10,21 @@ const sourceUrls = {
   VUCE: 'https://www.argentina.gob.ar/vuce',
 }
 
-export default function NcmIntelligencePanel({ analysis }: { analysis: ProductAnalysisV2 }) {
+type Props = {
+  analysis: ProductAnalysisV2
+  onClarify?: (option: NcmClarificationOption) => void | Promise<void>
+  clarifying?: boolean
+  clarificationError?: string | null
+}
+
+export default function NcmIntelligencePanel({ analysis, onClarify, clarifying = false, clarificationError = null }: Props) {
   const customs = analysis.customs
   const requirements = useMemo(() => buildProductRequirements(customs, analysis.product.originCountry), [customs, analysis.product.originCountry])
   const fullCatalog = customs.catalogScope.includes('Full ARCA snapshot')
   const simConfidence = customs.simOpeningConfidence ?? 'missing'
   const simCandidate = customs.simOpeningCandidate
+  const clarification = analysis.ncmClarification
+  const clarificationCount = analysis.ncmClarificationAnswers?.length ?? 0
   const simLabel = simCandidate
     ? `${simCandidate.code} · ${simCandidate.description}`
     : simConfidence === 'low'
@@ -30,6 +40,25 @@ export default function NcmIntelligencePanel({ analysis }: { analysis: ProductAn
       <p className="reg-intro">{fullCatalog
         ? 'La NCM se busca contra la snapshot completa del nomenclador ARCA. Después, ShippingAPP carga sólo el capítulo SIM correspondiente y puede reordenar exclusivamente las aperturas oficiales de esa NCM. La IA no puede crear ni cambiar códigos. NCM y SIM siguen siendo candidatos de screening; aranceles e intervenciones CIVUCE se validan por separado.'
         : 'El full-catalog no amplió la clasificación y ShippingAPP conserva el clasificador seed fail-closed. La salida sigue siendo screening, no una clasificación vinculante.'}</p>
+
+      {clarification && <div className="ncm-clarification">
+        <div className="ncm-clarification-head"><span>Confirmación necesaria · pregunta {clarification.round} de 3</span><b>Antes de calcular aranceles</b></div>
+        <h3>{clarification.question}</h3>
+        <p>{clarification.reason}</p>
+        <div className="ncm-clarification-options">
+          {clarification.options.map((option) => <button
+            type="button"
+            className="secondary"
+            key={option.id}
+            disabled={clarifying || !onClarify}
+            onClick={() => onClarify?.(option)}
+          >{clarifying ? 'Reclasificando…' : option.label}</button>)}
+        </div>
+        <small>ShippingAPP incorpora tu respuesta como evidencia y vuelve a clasificar. Si después de tres preguntas sigue habiendo ambigüedad, no inventa una tarifa.</small>
+      </div>}
+
+      {!clarification && clarificationCount >= 3 && customs.classificationConfidence === 'low' && <div className="analysis-banner"><b>Revisión necesaria:</b> la clasificación sigue con baja confianza después de tres aclaraciones. El landed cost automático permanece bloqueado hasta una revisión de NCM.</div>}
+      {clarificationError && <div className="analysis-banner"><b>No pudimos aplicar la aclaración:</b> {clarificationError}</div>}
 
       <div className="fact-grid">
         <div><span>Descripción NCM</span><b>{customs.description || 'Sin posición candidata'}</b></div>

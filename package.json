@@ -6,7 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json && vite build",
-    "preview": "vite preview"
+    "postbuild": "node scripts/enrich-ncm-index-from-sim.mjs public/data/ncm-index.json public/data/sim dist/data/ncm-index.json",
+    "preview": "vite preview",
+    "ncm:index:enrich": "node scripts/enrich-ncm-index-from-sim.mjs public/data/ncm-index.json public/data/sim dist/data/ncm-index.json",
+    "ncm:d1:create": "npx --yes wrangler@latest d1 create shippingapp-ncm",
+    "ncm:d1:configure": "node scripts/configure-ncm-d1.mjs",
+    "ncm:d1:schema": "npx --yes wrangler@latest d1 execute shippingapp-ncm --remote --file=db/ncm-schema.sql",
+    "ncm:d1:seed": "npx --yes wrangler@latest d1 execute shippingapp-ncm --remote --file=NCM_D1_seed_only.sql",
+    "ncm:d1:verify": "npx --yes wrangler@latest d1 execute shippingapp-ncm --remote --command=\"SELECT (SELECT record_count FROM ncm_dataset_meta ORDER BY id DESC LIMIT 1) AS expected_records, (SELECT COUNT(*) FROM ncm_tariffs WHERE is_current = 1) AS actual_records, (SELECT COUNT(*) FROM ncm_tariffs WHERE status = 'conflict' AND is_current = 1) AS conflicts;\"",
+    "ncm:preview:deploy": "npm run build && npx --yes wrangler@latest deploy --name shippingapp-ncm-preview",
+    "ncm:live:smoke": "node scripts/ncm-live-smoke.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",

@@ -32,22 +32,16 @@ export function semanticAdjustment(candidate: NcmRetrievalCandidate, facts: NcmP
   const specificEvidence = `${specificPath} ${simEvidence}`.trim()
   let adjustment = 0
 
-  // A functioning article must not drift into waste/scrap headings merely
-  // because those headings repeat the name of the article they contain.
   const productIsWaste = /\b(waste|scrap|used for recycling|desecho|desperdicio|residuo|chatarra|inservible)\b/.test(product)
   const labelIsWaste = /\b(desperdicio|desecho|residuo|chatarra|inservible)\b/.test(specificEvidence || canonical)
   if (!productIsWaste && labelIsWaste) adjustment -= 45
 
-  // Specific chemistry is stronger evidence than generic mentions of batteries.
   if (/\b(lithium ion|lithium|litio|18650)\b/.test(product)) {
     if (/iones? de litio/.test(specificEvidence || canonical)) adjustment += 32
     if (/plomo|cadmio|mercurio|pcb/.test(canonicalLeaf) && !/plomo|cadmio|mercurio|pcb/.test(product)) adjustment -= 30
     if (/desperdicio|desecho|residuo|chatarra/.test(specificEvidence)) adjustment -= 45
   }
 
-  // Product identity outranks a coincidental material word. A carbon-fibre
-  // padel racket must not drift into carbon paper or coal machinery merely
-  // because those labels contain "carbon" and "similar".
   if (/\bpadel\b/.test(product)) {
     const racketEvidence = /\braquet/.test(specificEvidence || canonical)
     if (racketEvidence) adjustment += 48
@@ -56,25 +50,24 @@ export function semanticAdjustment(candidate: NcmRetrievalCandidate, facts: NcmP
     if (/\bbadminton\b/.test(canonicalLeaf) && !/\braquet/.test(simEvidence)) adjustment -= 20
   }
 
-  // A backpack is not a wallet/card holder/handbag. The broad 42.02 heading
-  // names many article types, so only the child path and SIM openings can
-  // distinguish siblings. Explicit SIM openings saying "Mochilas" are direct
-  // article-identity evidence and outweigh generic material matches.
+  // The broad 42.02 heading repeats backpack/wallet/handbag terminology across
+  // every sibling, so only child path + SIM identity + exterior material should
+  // decide the branch. This uses objective article/material evidence, not codes.
   if (/\b(backpack|rucksack|mochila|school bag)\b/.test(product)) {
     if (/\bmochila/.test(simEvidence)) adjustment += 90
     if (/art\s+culos? de bolsillo|articulos? de bolsillo|tarjeter|portachequera|billetera|portamonedas|pitillera/.test(specificEvidence)) adjustment -= 70
     if (/bolsos? de mano|carteras?/.test(specificPath) && !/\bmochila/.test(simEvidence)) adjustment -= 55
+
+    const textileProduct = /\b(polyester|textile|textil|fabric|tela)\b/.test(product)
+    if (textileProduct && /hojas? de plastico o materia textil|materia textil/.test(specificPath)) adjustment += 35
+    if (textileProduct && /cuero natural|cuero regenerado/.test(specificPath)) adjustment -= 45
   }
 
-  // Desk/table lighting should outrank bulbs, sealed beams, ceiling/wall,
-  // vehicle and emergency-light branches.
   if (/\b(desk lamp|table lamp|reading light|lampara de mesa|luminaria de mesa)\b/.test(product)) {
     if (/mesa|oficina|cabecera|de pie/.test(specificEvidence)) adjustment += 34
     if (/faros?|sellados?|incandescencia|descarga|tubos?|bombill|techo|pared|vehicul|subacuat|emergencia|fotovoltaic/.test(specificEvidence)) adjustment -= 34
   }
 
-  // Explicit connector construction separates ordinary USB/data cables from
-  // coaxial, ignition, winding, optical and connector-less conductors.
   const connectorCable = /\b(cable|conductor)\b/.test(product) && /\b(connector|connectors|conexion|conectores)\b/.test(product)
   if (connectorCable) {
     if (/provistos? de piezas de conexion/.test(specificEvidence)) adjustment += 40
@@ -82,23 +75,17 @@ export function semanticAdjustment(candidate: NcmRetrievalCandidate, facts: NcmP
     if (/sin piezas de conexion/.test(simEvidence)) adjustment -= 45
   }
 
-  // An AC-to-DC wall charger is a static converter, not a motor, DC-to-DC
-  // converter, UPS or transformer. These are objective function contradictions.
   if (/\b(charger|wall charger|power adapter|ac to dc|adaptador de corriente)\b/.test(product)) {
     if (/convertidores? estaticos?/.test(specificEvidence || canonical) && /los demas/.test(specificEvidence || canonicalLeaf)) adjustment += 20
     if (/convertidores? de corriente continua/.test(specificEvidence) && /ac to dc/.test(product)) adjustment -= 30
     if (/alimentacion ininterrumpida|transformador|motor|generador/.test(specificEvidence)) adjustment -= 35
   }
 
-  // Smartphones should prefer the explicit smartphone child, rather than other
-  // apparatus in the same telecommunications heading.
   if (/\b(smartphone|telefono inteligente|smart phone)\b/.test(product)) {
     if (/telefonos? inteligentes?/.test(specificEvidence || canonical)) adjustment += 42
     if (/router|switch|modem|estacion base|aparatos para recepcion conversion/.test(specificEvidence)) adjustment -= 35
   }
 
-  // Portable computers must not drift to generic ADP "units". Subdivision
-  // inside the portable branch can still remain ambiguous and be clarified.
   if (/\b(laptop|notebook computer|portable computer)\b/.test(product)) {
     if (/portatil/.test(specificEvidence || canonical)) adjustment += 24
     if (/las demas unidades|placas de video|torre|rackeable/.test(specificEvidence)) adjustment -= 35

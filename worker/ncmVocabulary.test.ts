@@ -4,6 +4,8 @@ import { retrieveNcmCandidates, type NcmProductFacts, type NcmSearchIndex } from
 import { deterministicCustomsTerms } from './ncmVocabulary'
 
 const index = JSON.parse(readFileSync(new URL('../public/data/ncm-index.json', import.meta.url), 'utf8')) as NcmSearchIndex
+const emptyLabels = index.records.filter(([, label]) => !String(label || '').trim()).map(([code]) => code)
+console.error('NCM_EMPTY_LABELS', JSON.stringify({ count: emptyLabels.length, codes: emptyLabels }))
 
 const cases: Array<{ name: string; facts: NcmProductFacts; code: string }> = [
   { name: 'padel racket', facts: { name: 'Professional 12K carbon fiber padel racket', category: 'Padel racket', material: 'carbon fiber', functionText: 'sports racket for padel' }, code: '9506.59.00' },

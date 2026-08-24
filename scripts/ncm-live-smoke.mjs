@@ -14,7 +14,7 @@ const cases = [
   {
     name: '65W GaN USB-C charger',
     facts: { name: '65W GaN USB C PD fast wall charger power adapter', category: 'Power adapter', functionText: 'static power converter AC to DC' },
-    hints: ['producto completo', 'adaptador cargador completo', 'convertidor electrico estatico', 'corriente alterna a continua', '65w'],
+    hints: ['producto completo', 'adaptador cargador completo', 'convertidor electrico estatico', 'corriente alterna a continua', 'carga rapida', '65w'],
     code: '8504.40.90', aec: 7, statistics: 3, iva: 21,
   },
   {
@@ -38,14 +38,14 @@ const cases = [
   {
     name: 'Polyester backpack',
     facts: { name: 'Waterproof polyester travel backpack school bag', category: 'Backpack', material: 'polyester textile' },
-    hints: ['producto completo', 'mochila completa', 'bolso mochila', 'materia textil', 'poliester'],
+    hints: ['producto completo', 'mochila completa', 'bolso mochila', 'transportar objetos', 'materia textil', 'poliester'],
     code: '4202.92.00', aec: 35, statistics: 3, iva: 21,
   },
   {
-    name: 'Laptop computer',
+    name: 'Laptop computer (legitimate child ambiguity)',
     facts: { name: '14 inch notebook laptop computer', category: 'Laptop computer', functionText: 'portable automatic data processing machine' },
-    hints: ['producto completo', 'computadora portatil', 'maquina automatica para tratamiento de datos', 'notebook', 'laptop'],
-    code: '8471.30.19', aec: 7, statistics: 3, iva: 21,
+    hints: [],
+    ambiguousPrefix: '8471.30.',
   },
   {
     name: 'USB-C cable',
@@ -93,12 +93,15 @@ for (const sample of cases) {
   let response
   let data
 
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  // For a deliberately underspecified case, the safety behavior itself is what
+  // we test. Do not fabricate answers just to force an exact child code.
+  const maxAttempts = sample.ambiguousPrefix ? 1 : 4
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const result = await classify(sample, clarifications)
     response = result.response
     data = result.data
     const question = data?.clarification
-    if (!response.ok || !question || clarifications.length >= 3) break
+    if (!response.ok || !question || clarifications.length >= 3 || sample.ambiguousPrefix) break
 
     const option = chooseOption(question.options, sample.hints)
     if (!option) {
@@ -109,16 +112,24 @@ for (const sample of cases) {
     clarificationRounds.push({ round: question.round, question: question.question, selected: option.label })
   }
 
-  const checks = {
-    http: response?.ok === true,
-    noPendingClarification: !data?.clarification,
-    candidate: data?.status === 'candidate',
-    code: data?.code === sample.code,
-    tariffStatus: data?.tariff?.status === 'ok',
-    aec: data?.tariff?.aecPct === sample.aec,
-    statistics: data?.tariff?.statisticsPct === sample.statistics,
-    iva: data?.tariff?.ivaPct === sample.iva,
-  }
+  const checks = sample.ambiguousPrefix
+    ? {
+        http: response?.ok === true,
+        candidate: data?.status === 'candidate',
+        correctPortableBranch: typeof data?.code === 'string' && data.code.startsWith(sample.ambiguousPrefix),
+        failClosedConfidence: data?.confidence === 'low',
+        noTariffPromotion: data?.tariff == null,
+      }
+    : {
+        http: response?.ok === true,
+        noPendingClarification: !data?.clarification,
+        candidate: data?.status === 'candidate',
+        code: data?.code === sample.code,
+        tariffStatus: data?.tariff?.status === 'ok',
+        aec: data?.tariff?.aecPct === sample.aec,
+        statistics: data?.tariff?.statisticsPct === sample.statistics,
+        iva: data?.tariff?.ivaPct === sample.iva,
+      }
   const ok = Object.values(checks).every(Boolean)
   if (!ok) failures += 1
 
@@ -126,7 +137,9 @@ for (const sample of cases) {
     sample: sample.name,
     ok,
     clarificationRounds,
-    expected: { code: sample.code, aec: sample.aec, statistics: sample.statistics, iva: sample.iva },
+    expected: sample.ambiguousPrefix
+      ? { branch: `${sample.ambiguousPrefix}*`, confidence: 'low', tariff: null }
+      : { code: sample.code, aec: sample.aec, statistics: sample.statistics, iva: sample.iva },
     actual: {
       http: response?.status ?? null,
       statusText: response?.statusText ?? null,

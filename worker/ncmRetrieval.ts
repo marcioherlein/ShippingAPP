@@ -1,3 +1,5 @@
+import { deterministicCustomsTerms } from './ncmVocabulary'
+
 export type NcmIndexRecord = [code: string, label: string]
 
 export type NcmSearchIndex = {
@@ -50,9 +52,9 @@ type AI = { run: (model: string, input: unknown) => Promise<unknown> }
 type AiExpansion = { searchTerms: string[]; missingFacts: string[] }
 type AiRanking = { ranking: Array<{ code: string; reason?: string }>; confidence?: 'high' | 'medium' | 'low'; missingFacts?: string[] }
 
-// JSON Mode is a hard runtime dependency here: both vocabulary expansion and
-// constrained reranking expect structured objects. Keep this model on
-// Cloudflare's documented JSON Mode supported-model list.
+// Structured AI is an optional enrichment layer. Retrieval itself must remain
+// useful without it, because marketplace language and customs language often
+// differ and Workers AI can be temporarily unavailable.
 export const NCM_STRUCTURED_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast'
 
 const SEARCH_EXPANSION_SCHEMA = {
@@ -135,16 +137,23 @@ function safeTerms(values: unknown): string[] {
   return [...new Set(values
     .filter((value): value is string => typeof value === 'string')
     .map((value) => value.trim())
-    .filter((value) => value.length >= 3 && value.length <= 100)
+    .filter((value) => value.length >= 3 && value.length <= 180)
     .filter((value) => !/\b\d{4}[.]?\d{2}[.]?\d{2}\b/.test(value))
-  )].slice(0, 14)
+  )].slice(0, 28)
 }
 
 export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25): NcmRetrievalCandidate[] {
   if (!index || index.meta.indexSchema !== 3 || !Array.isArray(index.records)) return []
   const safeSearchTerms = safeTerms(searchTerms)
-  const rawPhrases = [...safeSearchTerms, facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''].filter(Boolean)
-  const phraseNorms = [...new Set(rawPhrases.map(normalizeText).filter((phrase) => phrase.length >= 4))]
+  const rawPhrases = [
+    ...safeSearchTerms,
+    facts.name || '',
+    facts.category || '',
+    facts.functionText || '',
+    facts.material || '',
+    facts.description || '',
+  ].filter(Boolean)
+  const phraseNorms = [...new Set(rawPhrases.map(normalizeText).filter((phrase) => phrase.length >= 4 && phrase.length <= 180))]
   const queryTokens = [...new Set(rawPhrases.flatMap(tokens))]
   if (queryTokens.length < 2 && phraseNorms.every((phrase) => phrase.split(' ').length < 2)) return []
 
@@ -173,7 +182,7 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
 
     for (const phrase of phraseNorms) {
       if (phrase.split(' ').length >= 2 && normalizedLabel.includes(phrase)) {
-        score += Math.min(30, 12 + phrase.length / 3)
+        score += Math.min(34, 14 + phrase.length / 3)
         matchedTerms.push(phrase)
       }
     }
@@ -234,8 +243,8 @@ async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRet
   try {
     const result: any = await ai.run(NCM_STRUCTURED_AI_MODEL, {
       messages: [
-        { role: 'system', content: 'You rerank ONLY the supplied Argentina NCM candidates. Return JSON only: {"ranking":[{"code":"EXACT_ALLOWED_CODE","reason":"short reason"}],"confidence":"high|medium|low","missingFacts":[...]}. Never create a code. If product facts are insufficient, still rank only allowed codes but use low confidence and explain missing facts. Classification depends on objective product characteristics/function, never origin country, price or intended profit. Never classify an accessory, cover, case, replacement part or component as the complete parent product.' },
-        { role: 'user', content: JSON.stringify({ product: facts, allowedCandidates: shortlist.map(({ code, label }) => ({ code, label })) }) },
+        { role: 'system', content: 'You review ONLY the supplied Argentina NCM candidates. Return JSON only: {"ranking":[{"code":"EXACT_ALLOWED_CODE","reason":"short reason"}],"confidence":"high|medium|low","missingFacts":[...]}. Never create a code. If product facts are insufficient, still rank only allowed codes but use low confidence and explain missing facts. Classification depends on objective product characteristics/function, never origin country, price or intended profit. Never classify an accessory, cover, case, replacement part or component as the complete parent product. Your ranking is advisory: deterministic evidence may remain controlling when it is materially stronger.' },
+        { role: 'user', content: JSON.stringify({ product: facts, allowedCandidates: shortlist.map(({ code, label, score }) => ({ code, label, score })) }) },
       ],
       response_format: jsonSchemaResponse(RANKING_SCHEMA), temperature: 0, max_tokens: 550,
     })
@@ -246,50 +255,88 @@ async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRet
   }
 }
 
-function deriveConfidence(shortlist: NcmRetrievalCandidate[], ranked: AiRanking): 'high' | 'medium' | 'low' {
-  if (!shortlist.length) return 'low'
+function scoreGap(shortlist: NcmRetrievalCandidate[]) {
+  if (!shortlist.length) return 0
+  return shortlist[1] ? shortlist[0].score - shortlist[1].score : shortlist[0].score
+}
+
+function deterministicConfidence(shortlist: NcmRetrievalCandidate[]): 'medium' | 'low' {
+  const top = shortlist[0]
+  if (!top) return 'low'
+  const distinct = new Set(top.matchedTerms).size
+  return top.score >= 32 && scoreGap(shortlist) >= 8 && distinct >= 3 ? 'medium' : 'low'
+}
+
+function chooseTop(shortlist: NcmRetrievalCandidate[], ranked: AiRanking) {
   const deterministicTop = shortlist[0]
+  const deterministicStrong = deterministicConfidence(shortlist) === 'medium'
+  const aiTopCode = ranked.ranking[0]?.code
+  if (!aiTopCode || aiTopCode === deterministicTop.code || deterministicStrong) return deterministicTop
+
+  const aiTop = shortlist.find((candidate) => candidate.code === aiTopCode)
+  if (!aiTop) return deterministicTop
+  const gapToDeterministic = deterministicTop.score - aiTop.score
+  // AI may reorder only genuinely close, weak deterministic candidates. Any
+  // such override remains LOW confidence and therefore cannot unlock tariffs.
+  if (ranked.confidence === 'high' && gapToDeterministic <= 5) return aiTop
+  return deterministicTop
+}
+
+function deriveConfidence(
+  shortlist: NcmRetrievalCandidate[],
+  ranked: AiRanking,
+  selected: NcmRetrievalCandidate,
+): 'high' | 'medium' | 'low' {
+  const deterministicTop = shortlist[0]
+  const detConfidence = deterministicConfidence(shortlist)
   const aiTop = ranked.ranking[0]?.code
-  const second = shortlist[1]
-  const gap = second ? deterministicTop.score - second.score : deterministicTop.score
-  if (aiTop === deterministicTop.code && deterministicTop.score >= 38 && gap >= 10 && ranked.confidence === 'high') return 'high'
-  if (aiTop === deterministicTop.code && deterministicTop.score >= 22 && gap >= 4 && ranked.confidence !== 'low') return 'medium'
-  return 'low'
+
+  if (!ranked.ranking.length) return selected.code === deterministicTop.code ? detConfidence : 'low'
+  if (selected.code !== deterministicTop.code) return 'low'
+  if (aiTop !== deterministicTop.code) return 'low'
+  if (ranked.confidence === 'low') return 'low'
+
+  if (deterministicTop.score >= 42 && scoreGap(shortlist) >= 12 && ranked.confidence === 'high') return 'high'
+  return detConfidence
 }
 
 export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmProductFacts): Promise<FullNcmClassification> {
   const expansion = await expandSearchTerms(ai, facts)
-  const fallbackTerms = safeTerms([facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''])
-  const searchTerms = expansion.searchTerms.length ? expansion.searchTerms : fallbackTerms
+  const deterministicTerms = deterministicCustomsTerms(facts)
+  const originalTerms = safeTerms([facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''])
+  // Always merge deterministic bilingual vocabulary, AI vocabulary and original
+  // facts. AI failure must never remove deterministic search evidence.
+  const searchTerms = safeTerms([...deterministicTerms, ...expansion.searchTerms, ...originalTerms])
   const shortlist = retrieveNcmCandidates(index, searchTerms, facts, 25)
   if (!shortlist.length) {
     return {
       status: 'missing', code: null, label: null, confidence: 'missing', alternatives: [],
-      missingFacts: expansion.missingFacts, rationale: ['El índice oficial no produjo una shortlist con evidencia textual suficiente; no se inventa una NCM.'],
+      missingFacts: [...new Set([...expansion.missingFacts, 'Describir con más precisión qué es el producto y su función principal.'])].slice(0, 8),
+      rationale: ['El índice oficial no produjo una shortlist con evidencia textual suficiente; no se inventa una NCM.'],
       searchTerms, sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount, retrievalMode: 'missing',
     }
   }
 
   const ranked = await rerankShortlist(ai, facts, shortlist)
-  const orderedCodes = ranked.ranking.map((item) => item.code)
-  const byCode = new Map(shortlist.map((candidate) => [candidate.code, candidate]))
-  const ordered = [
-    ...orderedCodes.map((code) => byCode.get(code)).filter((item): item is NcmRetrievalCandidate => !!item),
-    ...shortlist.filter((candidate) => !orderedCodes.includes(candidate.code)),
-  ]
-  const top = ordered[0]
-  const confidence = ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
+  const top = chooseTop(shortlist, ranked)
+  const confidence = deriveConfidence(shortlist, ranked, top)
+  const aiTop = ranked.ranking[0]?.code
   const reason = ranked.ranking.find((item) => item.code === top.code)?.reason
+  const alternatives = shortlist
+    .filter((candidate) => candidate.code !== top.code)
+    .slice(0, 3)
+    .map(({ code, label, score }) => ({ code, label, score }))
 
   return {
     status: 'candidate', code: top.code, label: top.label, confidence,
-    alternatives: ordered.slice(1, 4).map(({ code, label, score }) => ({ code, label, score })),
+    alternatives,
     missingFacts: [...new Set([...expansion.missingFacts, ...(ranked.missingFacts || [])])].slice(0, 8),
     rationale: [
-      'El candidato pertenece a la snapshot oficial ARCA; el modelo sólo pudo reordenar códigos de la shortlist determinística.',
+      'El candidato pertenece a la snapshot oficial ARCA; el retrieval determinístico controla la selección cuando su evidencia es fuerte.',
       ...(reason ? [reason] : []),
       `Retrieval determinístico: ${shortlist[0].code} score ${shortlist[0].score}.`,
-      ...(top.code !== shortlist[0].code ? [`AI rerank seleccionó ${top.code} dentro de la shortlist permitida.`] : []),
+      ...(aiTop && aiTop !== shortlist[0].code ? [`AI sugirió ${aiTop}; ${top.code === shortlist[0].code ? 'no desplazó' : 'reordenó sólo por cercanía'} la evidencia determinística.`] : []),
+      ...(!ranked.ranking.length ? ['Workers AI no produjo ranking utilizable; se aplicó sólo evidencia determinística y la confianza máxima queda limitada.'] : []),
     ],
     searchTerms, sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
     retrievalMode: ranked.ranking.length ? 'ai_reranked' : 'deterministic_fallback',

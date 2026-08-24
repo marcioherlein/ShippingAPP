@@ -1,7 +1,7 @@
 {
   "name": "shippingapp",
   "compatibility_date": "2026-08-13",
-  "main": "./worker/enrich.ts",
+  "main": "./worker/enrichSemantic.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

@@ -31,13 +31,13 @@ describe('deterministic bilingual NCM retrieval vocabulary', () => {
     expect(index.records.find(([code]) => code === '9405.21.00')?.[1].length).toBeGreaterThan(40)
   })
 
-  // This suite tests vocabulary/retrieval recall only. Final candidate selection
-  // belongs to ncmOfflineIntegration, where semantic reconciliation can resolve
-  // sibling branches or deliberately keep them ambiguous.
+  // This suite tests vocabulary/retrieval recall only. Use the full bounded pool
+  // of 50 that semantic reconciliation is allowed to inspect; final ranking is
+  // tested separately by ncmOfflineIntegration.
   for (const sample of cases) {
     it(`puts the correct ARCA code in the shortlist for ${sample.name}`, () => {
       const terms = deterministicCustomsTerms(sample.facts)
-      const shortlist = retrieveNcmCandidates(index, terms, sample.facts, 25)
+      const shortlist = retrieveNcmCandidates(index, terms, sample.facts, 50)
       expect(terms.length).toBeGreaterThan(0)
       expect(shortlist.length).toBeGreaterThan(0)
       expect(shortlist.map((item) => item.code)).toContain(sample.code)

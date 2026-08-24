@@ -50,6 +50,11 @@ type AI = { run: (model: string, input: unknown) => Promise<unknown> }
 type AiExpansion = { searchTerms: string[]; missingFacts: string[] }
 type AiRanking = { ranking: Array<{ code: string; reason?: string }>; confidence?: 'high' | 'medium' | 'low'; missingFacts?: string[] }
 
+// JSON Mode is a hard runtime dependency here: both vocabulary expansion and
+// constrained reranking expect structured objects. Keep this model on
+// Cloudflare's documented JSON Mode supported-model list.
+export const NCM_STRUCTURED_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast'
+
 const STOPWORDS = new Set([
   'de','del','la','las','el','los','un','una','unos','unas','y','o','e','para','por','con','sin','en','al','se','su','sus','que','como','tipo','otro','otra','dema',
   'the','of','and','or','for','with','without','in','a','an','to','other','product','producto','articulo','material','equipment','equipo',
@@ -155,7 +160,7 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
 
 async function expandSearchTerms(ai: AI, facts: NcmProductFacts): Promise<AiExpansion> {
   try {
-    const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
+    const result: any = await ai.run(NCM_STRUCTURED_AI_MODEL, {
       messages: [
         { role: 'system', content: 'You prepare search vocabulary for Argentina customs nomenclature retrieval. Return JSON only: {"searchTerms":[...],"missingFacts":[...]}. searchTerms must be Spanish customs/product nouns or short phrases describing what the product IS, its principal function, material/composition and important technical nature. Include useful synonyms/translations. NEVER output HS, NCM, tariff or numeric classification codes. Do not guess missing technical facts. Preserve whether the item is a complete product, accessory, replacement part, cover, case or component; never turn an accessory into its parent product.' },
         { role: 'user', content: JSON.stringify(facts) },
@@ -194,7 +199,7 @@ export function sanitizeAiRanking(output: unknown, shortlist: NcmRetrievalCandid
 
 async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRetrievalCandidate[]): Promise<AiRanking> {
   try {
-    const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
+    const result: any = await ai.run(NCM_STRUCTURED_AI_MODEL, {
       messages: [
         { role: 'system', content: 'You rerank ONLY the supplied Argentina NCM candidates. Return JSON only: {"ranking":[{"code":"EXACT_ALLOWED_CODE","reason":"short reason"}],"confidence":"high|medium|low","missingFacts":[...]}. Never create a code. If product facts are insufficient, still rank only allowed codes but use low confidence and explain missing facts. Classification depends on objective product characteristics/function, never origin country, price or intended profit. Never classify an accessory, cover, case, replacement part or component as the complete parent product.' },
         { role: 'user', content: JSON.stringify({ product: facts, allowedCandidates: shortlist.map(({ code, label }) => ({ code, label })) }) },

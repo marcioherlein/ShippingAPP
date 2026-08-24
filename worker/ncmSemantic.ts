@@ -11,73 +11,97 @@ function productText(facts: NcmProductFacts) {
 function parts(label: string) {
   const marker = '> Aperturas SIM oficiales:'
   const index = label.indexOf(marker)
-  const canonical = index >= 0 ? label.slice(0, index).trim() : label
-  const simEvidence = index >= 0 ? label.slice(index + marker.length).trim() : ''
-  const canonicalLeaf = canonical.split('>').pop()?.trim() || canonical
-  return { canonical: norm(canonical), canonicalLeaf: norm(canonicalLeaf), simEvidence: norm(simEvidence) }
+  const canonicalRaw = index >= 0 ? label.slice(0, index).trim() : label
+  const simRaw = index >= 0 ? label.slice(index + marker.length).trim() : ''
+  const pathParts = canonicalRaw.split('>').map((item) => item.trim()).filter(Boolean)
+  const canonicalLeafRaw = pathParts.at(-1) || canonicalRaw
+  // The first path element is usually the very broad heading text repeated in
+  // every sibling. For semantic discrimination, keep only the child path.
+  const specificPathRaw = pathParts.slice(1).join(' > ')
+  return {
+    canonical: norm(canonicalRaw),
+    canonicalLeaf: norm(canonicalLeafRaw),
+    specificPath: norm(specificPathRaw),
+    simEvidence: norm(simRaw),
+  }
 }
 
 export function semanticAdjustment(candidate: NcmRetrievalCandidate, facts: NcmProductFacts) {
   const product = productText(facts)
-  const { canonical, canonicalLeaf, simEvidence } = parts(candidate.label)
+  const { canonical, canonicalLeaf, specificPath, simEvidence } = parts(candidate.label)
+  const specificEvidence = `${specificPath} ${simEvidence}`.trim()
   let adjustment = 0
 
   // A functioning article must not drift into waste/scrap headings merely
   // because those headings repeat the name of the article they contain.
   const productIsWaste = /\b(waste|scrap|used for recycling|desecho|desperdicio|residuo|chatarra|inservible)\b/.test(product)
-  const labelIsWaste = /\b(desperdicio|desecho|residuo|chatarra|inservible)\b/.test(canonical)
+  const labelIsWaste = /\b(desperdicio|desecho|residuo|chatarra|inservible)\b/.test(specificEvidence || canonical)
   if (!productIsWaste && labelIsWaste) adjustment -= 45
 
   // Specific chemistry is stronger evidence than generic mentions of batteries.
   if (/\b(lithium ion|lithium|litio|18650)\b/.test(product)) {
-    if (/iones? de litio/.test(canonical)) adjustment += 32
+    if (/iones? de litio/.test(specificEvidence || canonical)) adjustment += 32
     if (/plomo|cadmio|mercurio|pcb/.test(canonicalLeaf) && !/plomo|cadmio|mercurio|pcb/.test(product)) adjustment -= 30
+    if (/desperdicio|desecho|residuo|chatarra/.test(specificEvidence)) adjustment -= 45
   }
 
-  // Marketplace racket names identify the sport. Do not let the neighboring
-  // tennis/badminton children win just because the common heading names them.
+  // Product identity outranks a coincidental material word. A carbon-fibre
+  // padel racket must not drift into carbon paper or coal machinery merely
+  // because those labels contain "carbon" and "similar".
   if (/\bpadel\b/.test(product)) {
+    const racketEvidence = /\braquet/.test(specificEvidence || canonical)
+    if (racketEvidence) adjustment += 48
+    else adjustment -= 42
     if (/\btenis\b/.test(canonicalLeaf)) adjustment -= 32
-    if (/\bbadminton\b/.test(canonicalLeaf)) adjustment -= 32
-    if (/\bpadel\b/.test(simEvidence)) adjustment += 32
+    if (/\bbadminton\b/.test(canonicalLeaf) && !/\braquet/.test(simEvidence)) adjustment -= 20
   }
 
-  // A backpack is neither a wallet/card holder nor a handbag. SIM terminal
-  // descriptors are official evidence and can resolve otherwise identical 4202
-  // parent wording without hard-coding any customs code.
+  // A backpack is not a wallet/card holder/handbag. The broad 42.02 heading
+  // names many article types, so only the child path and SIM openings can
+  // distinguish siblings. Official SIM openings under the correct "other"
+  // branch explicitly contain "Mochilas".
   if (/\b(backpack|rucksack|mochila|school bag)\b/.test(product)) {
-    if (/\bmochila/.test(simEvidence)) adjustment += 38
-    if (/tarjeter|portachequera|bolso de mano|bolsos de mano|articulos de bolsillo/.test(canonical + ' ' + simEvidence)) adjustment -= 32
+    if (/\bmochila/.test(simEvidence)) adjustment += 55
+    if (/articulos? de bolsillo|tarjeter|portachequera|billetera|portamonedas|pitillera/.test(specificEvidence)) adjustment -= 55
+    if (/bolsos? de mano|carteras?/.test(specificPath) && !/\bmochila/.test(simEvidence)) adjustment -= 42
   }
 
-  // Desk/table lighting should outrank ceiling/wall/vehicle/emergency branches.
+  // Desk/table lighting should outrank bulbs, sealed beams, ceiling/wall,
+  // vehicle and emergency-light branches.
   if (/\b(desk lamp|table lamp|reading light|lampara de mesa|luminaria de mesa)\b/.test(product)) {
-    if (/mesa|oficina|cabecera|de pie/.test(canonical)) adjustment += 28
-    if (/techo|pared|vehicul|subacuat|emergencia|fotovoltaic/.test(canonical + ' ' + simEvidence)) adjustment -= 28
+    if (/mesa|oficina|cabecera|de pie/.test(specificEvidence)) adjustment += 34
+    if (/faros?|sellados?|incandescencia|descarga|tubos?|bombill|techo|pared|vehicul|subacuat|emergencia|fotovoltaic/.test(specificEvidence)) adjustment -= 34
   }
 
   // Explicit connector construction separates ordinary USB/data cables from
   // coaxial, ignition, winding, optical and connector-less conductors.
   const connectorCable = /\b(cable|conductor)\b/.test(product) && /\b(connector|connectors|conexion|conectores)\b/.test(product)
   if (connectorCable) {
-    if (/provistos? de piezas de conexion/.test(canonicalLeaf)) adjustment += 35
-    if (/coaxial|bujia|vehicul|alambre para bobinar|fibra optica/.test(canonical)) adjustment -= 34
-    if (/sin piezas de conexion/.test(simEvidence)) adjustment -= 40
+    if (/provistos? de piezas de conexion/.test(specificEvidence)) adjustment += 40
+    if (/coaxial|bujia|vehicul|alambre para bobinar|fibra optica/.test(specificEvidence)) adjustment -= 38
+    if (/sin piezas de conexion/.test(simEvidence)) adjustment -= 45
   }
 
-  // An AC-to-DC wall charger is a static converter, not a DC-to-DC converter,
-  // UPS or transformer. These are objective function contradictions.
+  // An AC-to-DC wall charger is a static converter, not a motor, DC-to-DC
+  // converter, UPS or transformer. These are objective function contradictions.
   if (/\b(charger|wall charger|power adapter|ac to dc|adaptador de corriente)\b/.test(product)) {
-    if (/convertidores? estaticos?/.test(canonical) && /los demas/.test(canonicalLeaf)) adjustment += 14
-    if (/convertidores? de corriente continua/.test(canonicalLeaf) && /ac to dc/.test(product)) adjustment -= 26
-    if (/alimentacion ininterrumpida|transformador/.test(canonicalLeaf)) adjustment -= 30
+    if (/convertidores? estaticos?/.test(specificEvidence || canonical) && /los demas/.test(specificEvidence || canonicalLeaf)) adjustment += 20
+    if (/convertidores? de corriente continua/.test(specificEvidence) && /ac to dc/.test(product)) adjustment -= 30
+    if (/alimentacion ininterrumpida|transformador|motor|generador/.test(specificEvidence)) adjustment -= 35
+  }
+
+  // Smartphones should prefer the explicit smartphone child, rather than other
+  // apparatus in the same telecommunications heading.
+  if (/\b(smartphone|telefono inteligente|smart phone)\b/.test(product)) {
+    if (/telefonos? inteligentes?/.test(specificEvidence || canonical)) adjustment += 42
+    if (/router|switch|modem|estacion base|aparatos para recepcion conversion/.test(specificEvidence)) adjustment -= 35
   }
 
   // Portable computers must not drift to generic ADP "units". Subdivision
   // inside the portable branch can still remain ambiguous and be clarified.
   if (/\b(laptop|notebook computer|portable computer)\b/.test(product)) {
-    if (/portatil/.test(canonical)) adjustment += 20
-    if (/las demas unidades|placas de video|torre|rackeable/.test(canonical + ' ' + simEvidence)) adjustment -= 35
+    if (/portatil/.test(specificEvidence || canonical)) adjustment += 24
+    if (/las demas unidades|placas de video|torre|rackeable/.test(specificEvidence)) adjustment -= 35
     if (/tableta/.test(simEvidence) && !/\b(tablet|tableta)\b/.test(product)) adjustment -= 10
   }
 

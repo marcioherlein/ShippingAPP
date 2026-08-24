@@ -24,6 +24,7 @@ export default function NcmIntelligencePanel({ analysis, onClarify, clarifying =
   const simConfidence = customs.simOpeningConfidence ?? 'missing'
   const simCandidate = customs.simOpeningCandidate
   const clarification = analysis.ncmClarification
+  const clarificationCount = analysis.ncmClarificationAnswers?.length ?? 0
   const simLabel = simCandidate
     ? `${simCandidate.code} · ${simCandidate.description}`
     : simConfidence === 'low'
@@ -56,7 +57,7 @@ export default function NcmIntelligencePanel({ analysis, onClarify, clarifying =
         <small>ShippingAPP incorpora tu respuesta como evidencia y vuelve a clasificar. Si después de tres preguntas sigue habiendo ambigüedad, no inventa una tarifa.</small>
       </div>}
 
-      {!clarification && analysis.ncmClarificationAnswers.length >= 3 && customs.classificationConfidence === 'low' && <div className="analysis-banner"><b>Revisión necesaria:</b> la clasificación sigue con baja confianza después de tres aclaraciones. El landed cost automático permanece bloqueado hasta una revisión de NCM.</div>}
+      {!clarification && clarificationCount >= 3 && customs.classificationConfidence === 'low' && <div className="analysis-banner"><b>Revisión necesaria:</b> la clasificación sigue con baja confianza después de tres aclaraciones. El landed cost automático permanece bloqueado hasta una revisión de NCM.</div>}
       {clarificationError && <div className="analysis-banner"><b>No pudimos aplicar la aclaración:</b> {clarificationError}</div>}
 
       <div className="fact-grid">

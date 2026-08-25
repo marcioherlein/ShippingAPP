@@ -418,7 +418,9 @@ export async function runConversationalIntake(ai: AI, body: unknown): Promise<In
   if (isBareUrlMessage(message)) return clarifyBareUrl(prior)
 
   const deterministic = deterministicExtract(message, prior)
-  let parsed: Awaited<ReturnType<typeof extract>> | null = canUseDeterministicFirst(deterministic, prior) ? deterministic : null
+  let parsed: Awaited<ReturnType<typeof extract>> | null = deterministic?.intent === 'discover_products'
+    ? deterministic
+    : canUseDeterministicFirst(deterministic, prior) ? deterministic : null
 
   if (!parsed) {
     try {

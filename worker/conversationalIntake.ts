@@ -157,11 +157,7 @@ function inferExplicitIdentity(message: string) {
     }
   }
   if (/\b(cargador|charger|adaptador|power adapter)\b/.test(source) && /(usb\s*-?\s*c|65\s*w|corriente|notebook|celular|phone|laptop)/.test(source)) {
-    const firstClause = message.split(/[.;,]/)[0]?.trim()
-    return {
-      name: text(firstClause && /(cargador|charger|adaptador|power adapter)/i.test(firstClause) ? firstClause : 'Cargador USB-C', 300),
-      category: 'Power adapter',
-    }
+    return { name: 'USB-C 65W power adapter', category: 'Power adapter' }
   }
   return { name: null, category: null }
 }
@@ -209,11 +205,11 @@ function deterministicExtract(message: string, prior: IntakeFacts): Awaited<Retu
       /([0-9]{1,7})\s*(?:unidades|units|pcs|pieces)\s*(?:de\s*)?(?:moq|pedido\s*minimo|pedido\s*mínimo|minimum)/i,
     ], safeMessage, 10_000_000),
     packedWeightKg: decimalFrom([
-      /(?:peso\s*(?:embalado|unitario|por\s*unidad)?|packed\s*weight|weight)\s*[:：-]?\s*([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:kg|kilo|kilogram)/i,
+      /(?:peso\s*(?:embalado|unitario|por\s*unidad)?|packed\s*weight|weight)\s*(?:es|=|:|：|-)?\s*([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:kg|kilo|kilogram)/i,
       /([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:kg|kilo|kilogram)\s*(?:por\s*unidad|unit|u\.)/i,
     ], safeMessage, 1_000_000),
     volumeCbm: decimalFrom([
-      /(?:volumen|volume|cbm)\s*[:：-]?\s*([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:m3|m³|cbm)/i,
+      /(?:volumen|volume|cbm)\s*(?:es|=|:|：|-)?\s*([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:m3|m³|cbm)/i,
       /([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:m3|m³|cbm)\s*(?:por\s*unidad|unit|u\.)?/i,
     ], safeMessage, 100_000),
     originCountry: findOrigin(safeMessage),
@@ -235,6 +231,17 @@ function deterministicExtract(message: string, prior: IntakeFacts): Awaited<Retu
     searchQuery: null,
     facts,
   }
+}
+
+function hasCommercialFacts(facts: IntakeFacts) {
+  return [facts.unitPriceUsd, facts.moq, facts.packedWeightKg, facts.volumeCbm, facts.originCountry, facts.material, facts.functionText]
+    .some((item) => item !== null)
+}
+
+function canUseDeterministicFirst(parsed: Awaited<ReturnType<typeof extract>> | null, prior: IntakeFacts) {
+  if (!parsed || parsed.intent !== 'analyze_product') return false
+  if (!hasCommercialFacts(parsed.facts)) return false
+  return Boolean(parsed.facts.name || parsed.facts.category || prior.name || prior.category)
 }
 
 function missingFor(facts: IntakeFacts) {
@@ -320,12 +327,15 @@ export async function runConversationalIntake(ai: AI, body: unknown): Promise<In
   if (!message) throw new Error('missing_message')
   const prior = sanitizeIntakeFacts(raw.priorFacts ?? emptyFacts())
 
-  let parsed = deterministicExtract(message, prior)
+  const deterministic = deterministicExtract(message, prior)
+  let parsed: Awaited<ReturnType<typeof extract>> | null = canUseDeterministicFirst(deterministic, prior) ? deterministic : null
+
   if (!parsed) {
     try {
       parsed = await extract(ai, message, prior)
     } catch {
-      return clarifyFromPrior(prior)
+      if (!deterministic) return clarifyFromPrior(prior)
+      parsed = deterministic
     }
   }
 

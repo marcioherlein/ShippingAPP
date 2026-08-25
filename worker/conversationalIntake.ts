@@ -147,17 +147,67 @@ function findOrigin(message: string) {
   return text(match?.[1]?.trim(), 120)
 }
 
+function firstClause(message: string) {
+  return text(message.split(/[.;,]/)[0]?.trim(), 300)
+}
+
+function canonicalOrClause(message: string, canonical: string) {
+  const clause = firstClause(message)
+  return clause && clause.length >= 6 ? clause : canonical
+}
+
 function inferExplicitIdentity(message: string) {
   const source = normalized(message)
   if (/\bpadel\b/.test(source) && /\b(paleta|raqueta|racket|racquet|paddle)\b/.test(source)) {
-    const firstClause = message.split(/[.;,]/)[0]?.trim()
-    return {
-      name: text(firstClause && /p[aá]del/i.test(firstClause) ? firstClause : 'Paleta de pádel', 300),
-      category: 'Padel racket',
-    }
+    return { name: canonicalOrClause(message, 'Paleta de pádel'), category: 'Padel racket' }
   }
   if (/\b(cargador|charger|adaptador|power adapter)\b/.test(source) && /(usb\s*-?\s*c|65\s*w|corriente|notebook|celular|phone|laptop)/.test(source)) {
     return { name: 'USB-C 65W power adapter', category: 'Power adapter' }
+  }
+  if (/\b(bateria|battery|acumulador|18650)\b/.test(source) && /(litio|lithium|li\s*-?\s*ion|ion)/.test(source)) {
+    return { name: canonicalOrClause(message, 'Batería recargable de ion litio'), category: 'Lithium-ion battery' }
+  }
+  if (/\b(auricular|auriculares|headphones|earbuds)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Auriculares Bluetooth inalámbricos'), category: 'Wireless headphones' }
+  }
+  if (/\b(parlante|speaker|altavoz)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Parlante Bluetooth portátil'), category: 'Bluetooth speaker' }
+  }
+  if (/\b(mochila|backpack)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Mochila'), category: 'Backpack' }
+  }
+  if (/(botella|termo|frasco)\s+(termica|térmica)|vacuum\s+flask|insulated\s+bottle/.test(source)) {
+    return { name: canonicalOrClause(message, 'Botella térmica'), category: 'Vacuum flask' }
+  }
+  if (/\b(teclado|keyboard)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Teclado inalámbrico'), category: 'Computer keyboard' }
+  }
+  if (/\b(mouse|raton|ratón)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Mouse inalámbrico'), category: 'Computer mouse' }
+  }
+  if (/\b(lampara|lámpara|lamp)\b/.test(source) && /\bled\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Lámpara LED'), category: 'LED lamp' }
+  }
+  if (/\b(cafetera|coffee\s+maker|espresso)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Cafetera eléctrica'), category: 'Electric coffee maker' }
+  }
+  if (/\b(termotanque|calefon|calefón|water\s+heater)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Termotanque eléctrico'), category: 'Electric water heater' }
+  }
+  if (/\b(notebook|laptop)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Notebook portátil'), category: 'Laptop computer' }
+  }
+  if (/panel\s+solar|fotovoltaic|fotovoltaico|solar\s+panel/.test(source)) {
+    return { name: canonicalOrClause(message, 'Panel solar fotovoltaico'), category: 'Solar panel' }
+  }
+  if (/\b(camara|cámara|camera)\b/.test(source) && /(ip|wifi|seguridad|security)/.test(source)) {
+    return { name: canonicalOrClause(message, 'Cámara IP de seguridad'), category: 'Security camera' }
+  }
+  if (/\b(zapatillas|calzado|shoes|footwear|sneakers)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Zapatillas deportivas'), category: 'Sports shoes' }
+  }
+  if (/gafas\s+de\s+sol|anteojos\s+de\s+sol|sunglasses/.test(source)) {
+    return { name: canonicalOrClause(message, 'Gafas de sol'), category: 'Sunglasses' }
   }
   return { name: null, category: null }
 }
@@ -167,14 +217,34 @@ function inferExplicitMaterial(message: string) {
   const materials: string[] = []
   if (/fibra\s+de\s+carbono|carbon\s+fiber/.test(source)) materials.push('fibra de carbono')
   if (/\beva\b|nucleo\s+eva/.test(source)) materials.push('núcleo EVA')
-  if (/plastico/.test(source)) materials.push('plástico')
-  return materials.length ? materials.join(' / ') : null
+  if (/ion\s+litio|iones\s+de\s+litio|lithium/.test(source)) materials.push('ion litio')
+  if (/acero\s+inoxidable|stainless\s+steel/.test(source)) materials.push('acero inoxidable')
+  if (/poliester|poliéster|polyester/.test(source)) materials.push('poliéster')
+  if (/textil/.test(source)) materials.push('textil')
+  if (/caucho|rubber/.test(source)) materials.push('caucho')
+  if (/silicio|silicon/.test(source)) materials.push('silicio')
+  if (/polarizad/.test(source)) materials.push('lentes polarizadas')
+  if (/plastico|plástico|plastic/.test(source)) materials.push('plástico')
+  if (/metal|grafito|graphite/.test(source)) materials.push(source.includes('grafito') || source.includes('graphite') ? 'grafito' : 'metal')
+  return [...new Set(materials)].length ? [...new Set(materials)].join(' / ') : null
 }
 
 function inferExplicitFunction(message: string) {
   const source = normalized(message)
-  if (/uso\s+deportivo|sports?\s+use|jugar\s+padel|play\s+padel/.test(source)) return 'uso deportivo'
+  if (/uso\s+deportivo|sports?\s+use|jugar\s+padel|play\s+padel|calzado\s+deportivo/.test(source)) return 'uso deportivo'
   if (/convierte?\s+corriente|cargar\s+(?:celulares|notebooks)|charge\s+(?:phones|laptops)/.test(source)) return 'convierte corriente eléctrica para carga'
+  if (/acumula|recargable|battery|bateria|acumulador/.test(source)) return 'acumula energía eléctrica recargable'
+  if (/reproducir\s+audio|reproducir\s+sonido|audio|speaker|auricular/.test(source)) return 'reproducir audio'
+  if (/transportar|mochila|backpack/.test(source)) return 'transportar objetos personales'
+  if (/conservar\s+bebidas|calientes\s+o\s+frias|frías|insulated/.test(source)) return 'conservar temperatura de bebidas'
+  if (/entrada\s+de\s+datos|teclado|mouse|keyboard/.test(source)) return 'entrada de datos para computadora'
+  if (/iluminacion|iluminación|lamp|led/.test(source)) return 'iluminación eléctrica'
+  if (/preparar\s+cafe|preparar\s+café|espresso|coffee/.test(source)) return 'preparar café con energía eléctrica'
+  if (/calentar\s+agua|water\s+heater|termotanque/.test(source)) return 'calentar agua'
+  if (/procesamiento\s+automatico|procesamiento\s+automático|laptop|notebook/.test(source)) return 'procesamiento automático de datos portátil'
+  if (/generar\s+electricidad|solar|fotovoltaic/.test(source)) return 'generar electricidad por luz solar'
+  if (/capturar\s+video|seguridad|security\s+camera/.test(source)) return 'capturar video de seguridad'
+  if (/proteger\s+los\s+ojos|sunglasses|gafas\s+de\s+sol/.test(source)) return 'proteger los ojos del sol'
   return null
 }
 
@@ -202,15 +272,15 @@ function deterministicExtract(message: string, prior: IntakeFacts): Awaited<Retu
     moq: integerFrom([
       /\bmoq\s*[:：-]?\s*([0-9]{1,7})\b/i,
       /(?:pedido\s*minimo|pedido\s*mínimo|min(?:imum)?\.?\s*order)\s*[:：-]?\s*([0-9]{1,7})/i,
-      /([0-9]{1,7})\s*(?:unidades|units|pcs|pieces)\s*(?:de\s*)?(?:moq|pedido\s*minimo|pedido\s*mínimo|minimum)/i,
+      /([0-9]{1,7})\s*(?:unidades|units|pcs|pieces|pares|pairs)\s*(?:de\s*)?(?:moq|pedido\s*minimo|pedido\s*mínimo|minimum)/i,
     ], safeMessage, 10_000_000),
     packedWeightKg: decimalFrom([
       /(?:peso\s*(?:embalado|unitario|por\s*unidad)?|packed\s*weight|weight)\s*(?:es|=|:|：|-)?\s*([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:kg|kilo|kilogram)/i,
-      /([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:kg|kilo|kilogram)\s*(?:por\s*unidad|unit|u\.)/i,
+      /([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:kg|kilo|kilogram)\s*(?:por\s*unidad|por\s*par|unit|pair|u\.)/i,
     ], safeMessage, 1_000_000),
     volumeCbm: decimalFrom([
       /(?:volumen|volume|cbm)\s*(?:es|=|:|：|-)?\s*([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:m3|m³|cbm)/i,
-      /([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:m3|m³|cbm)\s*(?:por\s*unidad|unit|u\.)?/i,
+      /([0-9]{1,6}(?:[.,][0-9]{1,4})?)\s*(?:m3|m³|cbm)\s*(?:por\s*unidad|por\s*par|unit|pair|u\.)?/i,
     ], safeMessage, 100_000),
     originCountry: findOrigin(safeMessage),
     material: inferExplicitMaterial(safeMessage),

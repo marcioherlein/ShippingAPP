@@ -108,6 +108,7 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
     { code: '9506.40.00', terms: ['tenis de mesa', 'ping pong'], rationale: 'Producto identificado como artículo para tenis de mesa.' },
     { code: '9506.91.00', terms: ['mancuerna', 'gimnasio', 'fitness'], rationale: 'Producto identificado como artículo/equipo para ejercicio físico.' },
     { code: '4202.92.00', terms: ['mochila', 'backpack'], rationale: 'Producto identificado como mochila/bolso con superficie textil o plástica.' },
+    { code: '9617.00.10', terms: ['botella', 'termica'], rationale: 'Producto identificado como botella/termo isotérmico.' },
     { code: '8518.30.00', terms: ['auricular', 'headphones', 'earbuds'], rationale: 'Producto identificado como auriculares.' },
     { code: '8518.21.00', terms: ['parlante', 'speaker'], rationale: 'Producto identificado como altavoz/parlante portátil.' },
     { code: '8516.71.00', terms: ['cafetera', 'coffee maker', 'espresso'], rationale: 'Producto identificado como aparato eléctrico para preparar café.' },

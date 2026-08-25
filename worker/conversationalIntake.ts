@@ -117,7 +117,15 @@ function normalized(value: string) {
 
 function toNumber(value: string | undefined | null) {
   if (!value) return null
-  const n = Number(value.replace(/\./g, '').replace(',', '.'))
+  const trimmed = value.trim()
+  const hasComma = trimmed.includes(',')
+  const hasDot = trimmed.includes('.')
+  const normalizedValue = hasComma && hasDot
+    ? trimmed.replace(/\./g, '').replace(',', '.')
+    : hasComma
+      ? trimmed.replace(',', '.')
+      : trimmed
+  const n = Number(normalizedValue)
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
@@ -142,7 +150,7 @@ function findOrigin(message: string) {
 
 function inferExplicitIdentity(message: string) {
   const source = normalized(message)
-  if (/\b(padel|padel)\b/.test(source) && /\b(paleta|raqueta|racket|racquet|paddle)\b/.test(source)) {
+  if (/\bpadel\b/.test(source) && /\b(paleta|raqueta|racket|racquet|paddle)\b/.test(source)) {
     const firstClause = message.split(/[.;,]/)[0]?.trim()
     return {
       name: text(firstClause && /p[aá]del/i.test(firstClause) ? firstClause : 'Paleta de pádel', 300),
@@ -163,8 +171,8 @@ function inferExplicitMaterial(message: string) {
   const source = normalized(message)
   const materials: string[] = []
   if (/fibra\s+de\s+carbono|carbon\s+fiber/.test(source)) materials.push('fibra de carbono')
-  if (/\beva\b|nucleo\s+eva|núcleo\s+eva/.test(source)) materials.push('núcleo EVA')
-  if (/plastico|plástico/.test(source)) materials.push('plástico')
+  if (/\beva\b|nucleo\s+eva/.test(source)) materials.push('núcleo EVA')
+  if (/plastico/.test(source)) materials.push('plástico')
   return materials.length ? materials.join(' / ') : null
 }
 

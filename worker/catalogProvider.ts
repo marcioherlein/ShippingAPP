@@ -10,6 +10,22 @@ type MercadoLibreMarketOptions = {
 
 const API_ROOT = 'https://api.mercadolibre.com'
 
+type MlCallMode = 'authenticated' | 'public'
+
+class MercadoLibreApiError extends Error {
+  status: number
+  path: string
+  mode: MlCallMode
+
+  constructor(status: number, path: string, mode: MlCallMode) {
+    const authHint = status === 401 || status === 403 ? ' · revisar token/permisos' : ''
+    super(`Mercado Libre API ${status}${authHint}`)
+    this.status = status
+    this.path = path
+    this.mode = mode
+  }
+}
+
 function emptyResult(
   status: ArgentinaMarketResult['status'],
   query: string,
@@ -36,34 +52,60 @@ function emptyResult(
   }
 }
 
-function authHeaders(accessToken: string) {
+function requestHeaders(accessToken?: string | null) {
   return {
     accept: 'application/json',
-    authorization: `Bearer ${accessToken}`,
+    ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
     'user-agent': 'ShippingAPP/1.8',
   }
 }
 
-async function mercadoLibreGet<T>(fetchImpl: typeof fetch, path: string, accessToken: string): Promise<T> {
-  const response = await fetchImpl(`${API_ROOT}${path}`, { headers: authHeaders(accessToken) })
-  if (!response.ok) {
-    const authHint = response.status === 401 || response.status === 403 ? ' · revisar token/permisos' : ''
-    throw new Error(`Mercado Libre API ${response.status}${authHint}`)
-  }
+function isAuthRejected(error: unknown) {
+  return error instanceof MercadoLibreApiError && (error.status === 401 || error.status === 403)
+}
+
+async function mercadoLibreGet<T>(
+  fetchImpl: typeof fetch,
+  path: string,
+  accessToken?: string | null,
+  mode: MlCallMode = accessToken ? 'authenticated' : 'public',
+): Promise<T> {
+  const response = await fetchImpl(`${API_ROOT}${path}`, { headers: requestHeaders(accessToken) })
+  if (!response.ok) throw new MercadoLibreApiError(response.status, path, mode)
   return response.json() as Promise<T>
+}
+
+async function mercadoLibreSearchGet<T>(
+  fetchImpl: typeof fetch,
+  path: string,
+  accessToken: string,
+  warnings: string[],
+  label: string,
+): Promise<{ data: T; mode: 'authenticated' | 'public_fallback' }> {
+  try {
+    return { data: await mercadoLibreGet<T>(fetchImpl, path, accessToken, 'authenticated'), mode: 'authenticated' }
+  } catch (error) {
+    if (!isAuthRejected(error)) throw error
+    warnings.push(`${label}: Mercado Libre rechazó Bearer ${error instanceof MercadoLibreApiError ? error.status : ''}; se reintenta la búsqueda pública sin exponer ni reutilizar el token.`)
+    return { data: await mercadoLibreGet<T>(fetchImpl, path, null, 'public'), mode: 'public_fallback' }
+  }
 }
 
 async function predictCategory(
   fetchImpl: typeof fetch,
   query: string,
   accessToken: string,
-): Promise<MlDomainPrediction | null> {
-  const predictions = await mercadoLibreGet<MlDomainPrediction[]>(
-    fetchImpl,
-    `/sites/MLA/domain_discovery/search?limit=1&q=${encodeURIComponent(query)}`,
-    accessToken,
-  )
-  return Array.isArray(predictions) ? predictions[0] || null : null
+  warnings: string[],
+): Promise<{ prediction: MlDomainPrediction | null; mode: 'authenticated' | 'public_fallback' | 'unavailable' }> {
+  const path = `/sites/MLA/domain_discovery/search?limit=1&q=${encodeURIComponent(query)}`
+  try {
+    const result = await mercadoLibreSearchGet<MlDomainPrediction[]>(fetchImpl, path, accessToken, warnings, 'Category predictor')
+    const predictions = Array.isArray(result.data) ? result.data : []
+    return { prediction: predictions[0] || null, mode: result.mode }
+  } catch (error) {
+    warnings.push(`Category predictor unavailable: ${error instanceof Error ? error.message : 'unknown error'}. Search continues without category confinement.`)
+    return { prediction: null, mode: 'unavailable' }
+  }
 }
 
 async function effectiveSalePrice(
@@ -77,6 +119,7 @@ async function effectiveSalePrice(
       fetchImpl,
       `/items/${encodeURIComponent(item.id)}/sale_price?context=channel_marketplace`,
       accessToken,
+      'authenticated',
     )
     if (price.currency_id === 'ARS' && typeof price.amount === 'number' && Number.isFinite(price.amount) && price.amount > 0) {
       return { ...item, priceArs: price.amount, priceSource: 'sale_price' }
@@ -110,16 +153,17 @@ export async function analyzeArgentinaMarket(
   }
 
   try {
-    let prediction: MlDomainPrediction | null = null
-    try {
-      prediction = await predictCategory(fetchImpl, query, accessToken)
-    } catch (error) {
-      warnings.push(`Category predictor unavailable: ${error instanceof Error ? error.message : 'unknown error'}. Search continues without category confinement.`)
-    }
+    const predictionResult = await predictCategory(fetchImpl, query, accessToken, warnings)
+    const prediction = predictionResult.prediction
 
     const params = new URLSearchParams({ q: query, limit: '50' })
     if (prediction?.category_id) params.set('category', prediction.category_id)
-    const data = await mercadoLibreGet<MlSearch>(fetchImpl, `/sites/MLA/search?${params.toString()}`, accessToken)
+    const searchResult = await mercadoLibreSearchGet<MlSearch>(fetchImpl, `/sites/MLA/search?${params.toString()}`, accessToken, warnings, 'Search')
+    const data = searchResult.data
+    const marketSearchMode = searchResult.mode === 'public_fallback' || predictionResult.mode === 'public_fallback'
+      ? 'public search fallback after token validation'
+      : 'authenticated search'
+
     const raw = Array.isArray(data.results) ? data.results : []
     const seen = new Set<string>()
     const matches: MarketComparable[] = []
@@ -174,6 +218,7 @@ export async function analyzeArgentinaMarket(
     const fallbackPrices = accepted.length - effectivePriceCount
     if (fallbackPrices > 0) warnings.push(`${fallbackPrices} comparable(s) use authenticated search price because sale_price was unavailable.`)
     if (prediction?.category_id) warnings.push(`Search confined to predicted Mercado Libre category ${prediction.category_id}${prediction.category_name ? ` (${prediction.category_name})` : ''}.`)
+    if (marketSearchMode.includes('public')) warnings.push('MercadoLibre token was validated through /users/me, but listing search used the public search endpoint after Bearer was rejected for that endpoint.')
 
     const priceQuality: ArgentinaMarketResult['priceQuality'] = effectivePriceCount === accepted.length && accepted.length > 0
       ? 'effective_sale_price'
@@ -194,7 +239,7 @@ export async function analyzeArgentinaMarket(
       p75Ars,
       suggestedPriceArs,
       confidence,
-      source: `Mercado Libre Argentina API · authenticated${prediction?.category_id ? ' category search' : ' search'}${effectivePriceCount ? ' + effective sale_price' : ''}`,
+      source: `Mercado Libre Argentina API · ${marketSearchMode}${prediction?.category_id ? ' category search' : ' search'}${effectivePriceCount ? ' + effective sale_price' : ''}`,
       priceQuality,
       comparables: accepted.sort((a, b) => b.score - a.score).slice(0, 8),
       warnings,

@@ -106,6 +106,68 @@ export function parsebotConfigStatus(env: ParsebotEnv) {
   }
 }
 
+function alibabaProductId(url: URL) {
+  const fromHtml = url.pathname.match(/_(\d{8,})\.html/i)?.[1]
+  if (fromHtml) return fromHtml
+  return url.pathname.match(/(?:^|\/)(\d{8,})(?:\.html)?(?:$|\/)/i)?.[1] || null
+}
+
+type ParsebotAttempt = {
+  method: 'GET' | 'POST'
+  params: Record<string, string>
+}
+
+function withQuery(endpoint: string, params: Record<string, string>) {
+  const target = new URL(endpoint)
+  for (const [key, value] of Object.entries(params)) target.searchParams.set(key, value)
+  return target.toString()
+}
+
+async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotAttempt, signal: AbortSignal) {
+  const headers = {
+    accept: 'application/json',
+    'x-api-key': apiKey,
+    'user-agent': 'ShippingAPP/2.0 ParsebotAlibaba',
+  }
+  const response = attempt.method === 'GET'
+    ? await fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal })
+    : await fetch(endpoint, {
+      method: 'POST',
+      headers: { ...headers, 'content-type': 'application/json' },
+      body: JSON.stringify(attempt.params),
+      signal,
+    })
+  const text = await response.text()
+  let body: any = null
+  try { body = text ? JSON.parse(text) : null } catch { body = { raw_output: text } }
+  return { response, body }
+}
+
+function attemptLabel(attempt: ParsebotAttempt) {
+  return `${attempt.method} ${Object.keys(attempt.params).join('+')}`
+}
+
+function parsebotAttempts(url: URL): ParsebotAttempt[] {
+  const urlString = url.toString()
+  const productId = alibabaProductId(url)
+  const attempts: ParsebotAttempt[] = [
+    { method: 'GET', params: { url: urlString } },
+    { method: 'GET', params: { product_url: urlString } },
+    { method: 'GET', params: { alibaba_url: urlString } },
+  ]
+  if (productId) {
+    attempts.push(
+      { method: 'GET', params: { product_id: productId } },
+      { method: 'GET', params: { productId } },
+      { method: 'GET', params: { id: productId } },
+      { method: 'POST', params: { url: urlString, product_url: urlString, alibaba_url: urlString, product_id: productId, productId, id: productId } },
+    )
+  } else {
+    attempts.push({ method: 'POST', params: { url: urlString, product_url: urlString, alibaba_url: urlString } })
+  }
+  return attempts
+}
+
 export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Promise<ParsebotAlibabaResult> {
   const config = parsebotConfigStatus(env)
   if (!config.ready) {
@@ -130,54 +192,44 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
   }
 
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 22000)
+  const timeout = setTimeout(() => controller.abort(), 24000)
+  const failures: string[] = []
+  let lastStatus: number | undefined
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'application/json',
-        'x-api-key': env.PARSEBOT_API_KEY,
-        'user-agent': 'ShippingAPP/1.9 ParsebotAlibaba',
-      },
-      body: JSON.stringify({ url: url.toString(), product_url: url.toString(), alibaba_url: url.toString() }),
-      signal: controller.signal,
-    })
-    const text = await response.text()
-    let body: any = null
-    try { body = text ? JSON.parse(text) : null } catch { body = { raw_output: text } }
-    if (!response.ok || body?.status === 'error' || body?.status === 'timeout') {
-      return {
-        status: 'unavailable',
-        source: 'Parse.bot',
-        facts: null,
-        httpStatus: response.status,
-        warnings: [`Parse.bot returned ${body?.status || `HTTP ${response.status}`}; ShippingAPP will fall back to Browser Run.`],
+    for (const attempt of parsebotAttempts(url)) {
+      const { response, body } = await callParsebot(endpoint, env.PARSEBOT_API_KEY, attempt, controller.signal)
+      lastStatus = response.status
+      if (!response.ok || body?.status === 'error' || body?.status === 'timeout') {
+        failures.push(`${attemptLabel(attempt)} -> ${body?.status || `HTTP ${response.status}`}`)
+        continue
       }
-    }
-    const facts = normalizeFacts(body?.data ?? body)
-    const useful = Boolean(facts.name || facts.unitPriceUsd || facts.moq || facts.packedWeightKg || facts.imageUrl)
-    if (!useful) {
+      const facts = normalizeFacts(body?.data ?? body)
+      const useful = Boolean(facts.name || facts.unitPriceUsd || facts.moq || facts.packedWeightKg || facts.imageUrl)
+      if (!useful) {
+        failures.push(`${attemptLabel(attempt)} -> no usable product facts`)
+        continue
+      }
       return {
-        status: 'unavailable',
-        source: 'Parse.bot',
-        facts: null,
-        httpStatus: response.status,
-        warnings: ['Parse.bot responded but did not return usable product facts; ShippingAPP will fall back to Browser Run.'],
+        status: 'ready',
+        source: `Parse.bot · ${attemptLabel(attempt)}`,
+        facts,
+        executionTime: numberOrNull(body?.execution_time),
+        warnings: [],
       }
     }
     return {
-      status: 'ready',
+      status: 'unavailable',
       source: 'Parse.bot',
-      facts,
-      executionTime: numberOrNull(body?.execution_time),
-      warnings: [],
+      facts: null,
+      httpStatus: lastStatus,
+      warnings: [`Parse.bot did not return usable product facts (${failures.slice(0, 4).join('; ')}); ShippingAPP will fall back to Browser Run.`],
     }
   } catch (error) {
     return {
       status: 'unavailable',
       source: 'Parse.bot',
       facts: null,
+      httpStatus: lastStatus,
       warnings: [error instanceof Error ? `Parse.bot failed: ${error.message}` : 'Parse.bot failed; ShippingAPP will fall back to Browser Run.'],
     }
   } finally {

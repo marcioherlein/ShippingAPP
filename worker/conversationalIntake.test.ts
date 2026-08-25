@@ -43,6 +43,26 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.assumptions.join(' ')).toContain('benchmark soportado')
   })
 
+  it('uses deterministic fallback when the model fails but the user provided explicit padel facts', async () => {
+    const brokenAi = { run: async () => { throw new Error('down') } }
+    const result = await runConversationalIntake(brokenAi, {
+      message: 'Paleta de pádel de fibra de carbono, núcleo EVA, uso deportivo, origen China, precio proveedor USD 18, MOQ 300 unidades, peso embalado 0.65 kg por unidad.',
+    })
+
+    expect(result.status).toBe('ready')
+    expect(result.facts.name).toBe('Paleta de pádel de fibra de carbono')
+    expect(result.facts.category).toBe('Padel racket')
+    expect(result.facts.unitPriceUsd).toBe(18)
+    expect(result.facts.moq).toBe(300)
+    expect(result.facts.packedWeightKg).toBe(0.65)
+    expect(result.facts.volumeCbm).toBe(0.006)
+    expect(result.facts.originCountry).toBe('China')
+    expect(result.facts.material).toContain('fibra de carbono')
+    expect(result.facts.material).toContain('núcleo EVA')
+    expect(result.factSources).toEqual({ moq: 'user', packedWeightKg: 'user', volumeCbm: 'benchmark' })
+    expect(result.suggestedQuantities).toEqual([300, 450, 600, 900])
+  })
+
   it('fails closed for an unsupported category instead of inheriting generic logistics', async () => {
     const result = await runConversationalIntake(ai({
       intent: 'analyze_product', searchQuery: null,

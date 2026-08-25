@@ -18,6 +18,13 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: npx --yes vitest@3.2.4 run
-      - run: npm run build
-      - run: npx --yes wrangler@latest deploy --dry-run --outdir .wrangler-dry-run
+      - name: Unit and integration tests
+        run: npx --yes vitest@3.2.4 run
+      - name: Validate full ARCA NCM and SIM assets
+        run: node scripts/validate-nomenclador-assets.mjs
+      - name: Production build
+        run: npm run build
+      - name: Validate Cloudflare configuration
+        run: npx --yes wrangler@latest check
+      - name: Validate Cloudflare deployment bundle
+        run: npx --yes wrangler@latest deploy --dry-run --outdir .wrangler-dry-run

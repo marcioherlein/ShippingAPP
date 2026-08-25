@@ -28,3 +28,30 @@ jobs:
         run: npx --yes wrangler@latest check
       - name: Validate Cloudflare deployment bundle
         run: npx --yes wrangler@latest deploy --dry-run --outdir .wrangler-dry-run
+      - name: Runtime smoke test via Wrangler
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@latest dev --local --ip 127.0.0.1 --port 8787 > /tmp/wrangler-smoke.log 2>&1 &
+          WRANGLER_PID=$!
+          trap 'kill $WRANGLER_PID >/dev/null 2>&1 || true; cat /tmp/wrangler-smoke.log' EXIT
+
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:8787/api/runtime-smoke > /tmp/runtime-smoke.json; then
+              node - <<'NODE'
+          const fs = require('node:fs')
+          const body = JSON.parse(fs.readFileSync('/tmp/runtime-smoke.json', 'utf8'))
+          if (body.status !== 'ok') throw new Error(`runtime smoke failed: ${JSON.stringify(body)}`)
+          if (!body.checks?.workerResponded) throw new Error('Worker did not confirm response')
+          if (!body.checks?.assetsBinding) throw new Error('ASSETS binding missing')
+          if (body.checks?.ncmIndex?.sourceDate !== '2026-08-14') throw new Error('NCM asset date mismatch')
+          if ((body.checks?.ncmIndex?.records ?? 0) < 1000) throw new Error('NCM asset unexpectedly small')
+          if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('SIM asset date mismatch')
+          NODE
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo 'Runtime smoke endpoint did not become ready'
+          exit 1

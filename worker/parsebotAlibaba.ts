@@ -123,20 +123,30 @@ function withQuery(endpoint: string, params: Record<string, string>) {
   return target.toString()
 }
 
-async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotAttempt, signal: AbortSignal) {
+async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotAttempt, timeoutMs = 3500) {
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | null = null
   const headers = {
     accept: 'application/json',
     'x-api-key': apiKey,
-    'user-agent': 'ShippingAPP/2.0 ParsebotAlibaba',
+    'user-agent': 'ShippingAPP/2.1 ParsebotAlibaba',
   }
-  const response = attempt.method === 'GET'
-    ? await fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal })
-    : await fetch(endpoint, {
+  const request = attempt.method === 'GET'
+    ? fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal: controller.signal })
+    : fetch(endpoint, {
       method: 'POST',
       headers: { ...headers, 'content-type': 'application/json' },
       body: JSON.stringify(attempt.params),
-      signal,
+      signal: controller.signal,
     })
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new Error(`Parse.bot ${attempt.method} timeout after ${timeoutMs}ms`))
+    }, timeoutMs)
+  })
+  const response = await Promise.race([request, timeout])
+  if (timer) clearTimeout(timer)
   const text = await response.text()
   let body: any = null
   try { body = text ? JSON.parse(text) : null } catch { body = { raw_output: text } }
@@ -150,22 +160,18 @@ function attemptLabel(attempt: ParsebotAttempt) {
 function parsebotAttempts(url: URL): ParsebotAttempt[] {
   const urlString = url.toString()
   const productId = alibabaProductId(url)
-  const attempts: ParsebotAttempt[] = [
-    { method: 'GET', params: { url: urlString } },
-    { method: 'GET', params: { product_url: urlString } },
-    { method: 'GET', params: { alibaba_url: urlString } },
-  ]
   if (productId) {
-    attempts.push(
+    return [
       { method: 'GET', params: { product_id: productId } },
-      { method: 'GET', params: { productId } },
       { method: 'GET', params: { id: productId } },
-      { method: 'POST', params: { url: urlString, product_url: urlString, alibaba_url: urlString, product_id: productId, productId, id: productId } },
-    )
-  } else {
-    attempts.push({ method: 'POST', params: { url: urlString, product_url: urlString, alibaba_url: urlString } })
+      { method: 'GET', params: { url: urlString } },
+      { method: 'POST', params: { url: urlString, product_url: urlString, product_id: productId, id: productId } },
+    ]
   }
-  return attempts
+  return [
+    { method: 'GET', params: { url: urlString } },
+    { method: 'POST', params: { url: urlString, product_url: urlString } },
+  ]
 }
 
 export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Promise<ParsebotAlibabaResult> {
@@ -191,13 +197,18 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
     }
   }
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 24000)
   const failures: string[] = []
   let lastStatus: number | undefined
   try {
     for (const attempt of parsebotAttempts(url)) {
-      const { response, body } = await callParsebot(endpoint, env.PARSEBOT_API_KEY, attempt, controller.signal)
+      let result: Awaited<ReturnType<typeof callParsebot>>
+      try {
+        result = await callParsebot(endpoint, env.PARSEBOT_API_KEY, attempt)
+      } catch (error) {
+        failures.push(`${attemptLabel(attempt)} -> ${error instanceof Error ? error.message : 'timeout'}`)
+        continue
+      }
+      const { response, body } = result
       lastStatus = response.status
       if (!response.ok || body?.status === 'error' || body?.status === 'timeout') {
         failures.push(`${attemptLabel(attempt)} -> ${body?.status || `HTTP ${response.status}`}`)
@@ -232,7 +243,5 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
       httpStatus: lastStatus,
       warnings: [error instanceof Error ? `Parse.bot failed: ${error.message}` : 'Parse.bot failed; ShippingAPP will fall back to Browser Run.'],
     }
-  } finally {
-    clearTimeout(timeout)
   }
 }

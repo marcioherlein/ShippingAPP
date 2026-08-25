@@ -255,7 +255,7 @@ async function marketSearch(
   try {
     const searchResult = await mercadoLibreSearchGet<MlSearch>(fetchImpl, `/sites/MLA/search?${params.toString()}`, accessToken, warnings, 'Search')
     const searchMode = searchResult.mode === 'public_fallback' || predictionResult.mode === 'public_fallback'
-      ? 'public listing search fallback after token validation'
+      ? 'public search fallback after token validation'
       : 'authenticated listing search'
     return { data: searchResult.data, prediction, searchMode, sourceSuffix: prediction?.category_id ? 'category search' : 'search' }
   } catch (error) {
@@ -364,7 +364,7 @@ export async function analyzeArgentinaMarket(
 
     if (accepted.length < priced.length) warnings.push(`${priced.length - accepted.length} price outlier(s) excluded by IQR screening.`)
     const fallbackPrices = accepted.length - effectivePriceCount
-    if (fallbackPrices > 0) warnings.push(`${fallbackPrices} comparable(s) use search/listed price because effective sale_price was unavailable.`)
+    if (fallbackPrices > 0) warnings.push(`${fallbackPrices} comparable(s) use authenticated search price/listed price because effective sale_price was unavailable.`)
     if (prediction?.category_id) warnings.push(`Search confined to predicted Mercado Libre category ${prediction.category_id}${prediction.category_name ? ` (${prediction.category_name})` : ''}.`)
     if (search.searchMode.includes('public')) warnings.push('MercadoLibre token was validated through /users/me, but listing search used a public retry after Bearer was rejected for that endpoint.')
     if (!accepted.length && search.searchMode.includes('blocked')) warnings.push('MercadoLibre search access is blocked for this app; ShippingAPP keeps the market section as insufficient instead of promoting a fake benchmark.')

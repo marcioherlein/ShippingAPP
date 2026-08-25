@@ -93,10 +93,50 @@ function hasKvStore(env: Env) {
   return typeof env.MERCADOLIBRE_TOKEN_STORE?.get === 'function' && typeof env.MERCADOLIBRE_TOKEN_STORE?.put === 'function'
 }
 
-function mercadoLibreAuthStatus(auth: MercadoLibreAuthResult, env: Env) {
+type MercadoLibreApiAccess =
+  | { status: 'not_checked'; ok: false; reason: string }
+  | { status: 'ok'; ok: true; endpoint: string }
+  | { status: 'forbidden' | 'unavailable'; ok: false; endpoint: string; httpStatus?: number; reason: string }
+
+async function checkMercadoLibreApiAccess(auth: MercadoLibreAuthResult): Promise<MercadoLibreApiAccess> {
+  if (auth.status !== 'ready') {
+    return { status: 'not_checked', ok: false, reason: 'No access token available to validate against Mercado Libre.' }
+  }
+  const endpoint = 'https://api.mercadolibre.com/users/me'
+  try {
+    const response = await withTimeout(fetch(endpoint, {
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${auth.accessToken}`,
+        'user-agent': 'ShippingAPP/1.8',
+      },
+    }), 5000, 'Mercado Libre identity check timeout')
+    if (response.ok) return { status: 'ok', ok: true, endpoint: '/users/me' }
+    const reason = response.status === 401 || response.status === 403
+      ? 'Mercado Libre rejected the loaded token for authenticated API calls. Reauthorize the app after confirming permissions/scopes.'
+      : `Mercado Libre identity check returned HTTP ${response.status}.`
+    return {
+      status: response.status === 401 || response.status === 403 ? 'forbidden' : 'unavailable',
+      ok: false,
+      endpoint: '/users/me',
+      httpStatus: response.status,
+      reason,
+    }
+  } catch (error) {
+    return {
+      status: 'unavailable',
+      ok: false,
+      endpoint: '/users/me',
+      reason: error instanceof Error ? error.message : 'Mercado Libre identity check failed',
+    }
+  }
+}
+
+function mercadoLibreAuthStatus(auth: MercadoLibreAuthResult, env: Env, apiAccess?: MercadoLibreApiAccess) {
   return {
     status: auth.status,
     ready: auth.status === 'ready',
+    apiReady: apiAccess ? apiAccess.ok : auth.status === 'ready',
     tokenSource: auth.source,
     authMode: auth.source === 'static_access_token'
       ? 'temporary_access_token_secret'
@@ -110,6 +150,7 @@ function mercadoLibreAuthStatus(auth: MercadoLibreAuthResult, env: Env) {
       'MERCADOLIBRE_REFRESH_TOKEN',
       'MERCADOLIBRE_TOKEN_STORE',
     ],
+    ...(apiAccess ? { apiAccess } : {}),
     ...(auth.status === 'ready' ? {} : { reason: auth.reason }),
   }
 }
@@ -265,9 +306,10 @@ export default {
 
     if (url.pathname === '/api/mercadolibre/status' && request.method === 'GET') {
       const auth = await resolveMercadoLibreAccessToken(env)
+      const apiAccess = await checkMercadoLibreApiAccess(auth)
       return json({
         service: 'Mercado Libre Argentina API',
-        auth: mercadoLibreAuthStatus(auth, env),
+        auth: mercadoLibreAuthStatus(auth, env, apiAccess),
       })
     }
 

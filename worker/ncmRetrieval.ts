@@ -153,6 +153,19 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
     }
   }
 
+  const isSunglasses = ['gafas de sol', 'anteojos de sol', 'sunglasses'].some((term) => text.includes(normalizeText(term)))
+  if (isSunglasses) {
+    const official = findOfficial(index, '9004.10.00')
+    if (official) {
+      return shortcutClassification(
+        index,
+        official,
+        ['gafas de sol', 'sunglasses'],
+        'Producto identificado como gafas/anteojos de sol; se usa shortcut oficial para evitar latencia AI.',
+      )
+    }
+  }
+
   const checks: Array<{ code: string; terms: string[]; rationale: string }> = [
     { code: '9506.59.00', terms: ['padel', 'paleta', 'racket'], rationale: 'Producto identificado como paleta/raqueta de pádel; se usa shortcut oficial para evitar latencia AI.' },
     { code: '8504.40.90', terms: ['cargador'], rationale: 'Producto identificado como adaptador/cargador eléctrico.' },
@@ -172,7 +185,6 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
     { code: '8471.30.19', terms: ['notebook'], rationale: 'Producto identificado como computadora portátil/notebook.' },
     { code: '8541.43.00', terms: ['panel', 'solar'], rationale: 'Producto identificado como panel solar fotovoltaico.' },
     { code: '6404.11.00', terms: ['zapatillas'], rationale: 'Producto identificado como calzado deportivo con suela de caucho/plástico y capellada textil.' },
-    { code: '9004.10.00', terms: ['gafas de sol', 'anteojos de sol', 'sunglasses'], rationale: 'Producto identificado como gafas/anteojos de sol.' },
   ]
 
   for (const check of checks) {

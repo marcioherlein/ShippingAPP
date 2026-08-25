@@ -71,8 +71,8 @@ jobs:
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
           NODE
 
-      - name: Production intake smoke test
-        run: node scripts/smoke-production-intake.mjs
-
       - name: Production MercadoLibre benchmark smoke test
         run: node scripts/smoke-production-mercadolibre.mjs
+
+      - name: Production intake smoke test
+        run: node scripts/smoke-production-intake.mjs

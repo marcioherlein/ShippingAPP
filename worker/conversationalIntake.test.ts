@@ -76,13 +76,12 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.missingFields).toContain('volumen embalado por unidad')
   })
 
-  it('recognizes discovery intent but never fabricates product results', async () => {
-    const result = await runConversationalIntake(ai({
-      intent: 'discover_products', searchQuery: 'carbon padel rackets low MOQ', facts: emptyFacts,
-    }), { message: 'Buscame paletas de padel para importar' })
+  it('recognizes discovery intent without calling AI or fabricating product results', async () => {
+    const brokenAi = { run: async () => { throw new Error('discovery should not call AI') } }
+    const result = await runConversationalIntake(brokenAi, { message: 'Buscame paletas de padel para importar' })
 
     expect(result.status).toBe('discovery_pending')
-    expect(result.searchQuery).toBe('carbon padel rackets low MOQ')
+    expect(result.searchQuery).toBe('Buscame paletas de padel para importar')
     expect(result.suggestedQuantities).toEqual([])
     expect(result.message).toContain('No voy a fabricar resultados')
   })

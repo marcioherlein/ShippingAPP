@@ -41,9 +41,48 @@ describe('MercadoLibre benchmark endpoints', () => {
     expect(body.service).toBe('Mercado Libre Argentina API')
     expect(body.auth.status).toBe('configuration_required')
     expect(body.auth.ready).toBe(false)
+    expect(body.auth.apiAccess.status).toBe('not_checked')
     expect(body.auth.required).toContain('MERCADOLIBRE_CLIENT_ID')
     expect(JSON.stringify(body)).not.toContain('accessToken')
     expect(JSON.stringify(body)).not.toContain('Bearer')
+  })
+
+  it('validates that a loaded token can actually call MercadoLibre APIs', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      expect(String(input)).toBe('https://api.mercadolibre.com/users/me')
+      expect((init?.headers as any)?.authorization).toBe('Bearer test-ml-token')
+      return mlJson({ id: 123, nickname: 'seller' })
+    })
+    vi.stubGlobal('fetch', fetchImpl)
+
+    const response = await worker.fetch(new Request('https://shippingapp.test/api/mercadolibre/status'), env({
+      MERCADOLIBRE_ACCESS_TOKEN: 'test-ml-token',
+    }))
+    expect(response.status).toBe(200)
+    const body: any = await response.json()
+
+    expect(body.auth.ready).toBe(true)
+    expect(body.auth.apiReady).toBe(true)
+    expect(body.auth.apiAccess.status).toBe('ok')
+    expect(JSON.stringify(body)).not.toContain('test-ml-token')
+  })
+
+  it('flags loaded MercadoLibre tokens that are forbidden by the API', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => mlJson({ message: 'forbidden' }, 403))
+    vi.stubGlobal('fetch', fetchImpl)
+
+    const response = await worker.fetch(new Request('https://shippingapp.test/api/mercadolibre/status'), env({
+      MERCADOLIBRE_ACCESS_TOKEN: 'forbidden-token',
+    }))
+    expect(response.status).toBe(200)
+    const body: any = await response.json()
+
+    expect(body.auth.ready).toBe(true)
+    expect(body.auth.apiReady).toBe(false)
+    expect(body.auth.apiAccess.status).toBe('forbidden')
+    expect(body.auth.apiAccess.httpStatus).toBe(403)
+    expect(body.auth.apiAccess.reason).toContain('Reauthorize')
+    expect(JSON.stringify(body)).not.toContain('forbidden-token')
   })
 
   it('fails closed when benchmark is requested without MercadoLibre auth', async () => {

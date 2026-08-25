@@ -1,7 +1,16 @@
 import { readAlibabaSource, type BrowserRun } from './alibabaSource'
+import { extractAlibabaWithParsebot, type ParsebotAlibabaResult } from './parsebotAlibaba'
 
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
-type Env = { AI: AI; ASSETS: { fetch: (request: Request) => Promise<Response> }; BROWSER: BrowserRun }
+type Env = {
+  AI: AI
+  ASSETS: { fetch: (request: Request) => Promise<Response> }
+  BROWSER: BrowserRun
+  PARSEBOT_API_KEY?: string
+  PARSEBOT_ENDPOINT_URL?: string
+  PARSEBOT_SCRAPER_ID?: string
+  PARSEBOT_ENDPOINT_NAME?: string
+}
 
 type Extracted = {
   name?: string | null
@@ -96,6 +105,7 @@ function inferCategory(source: string) {
   if (/\b(padel|pádel)\b/.test(s) && /\b(racket|racquet|paddle|paleta)\b/.test(s)) return 'Padel racket'
   if (/\b(pickleball)\b/.test(s) && /\b(paddle|racket|racquet)\b/.test(s)) return 'Pickleball paddle'
   if (/\b(tennis|tenis)\b/.test(s) && /\b(racket|racquet|raqueta)\b/.test(s)) return 'Tennis racket'
+  if (/\b(video\s*door\s*phone|door\s*phone|video\s*intercom|smart\s*intercom|wifi\s*intercom|doorbell\s*camera|video\s*doorbell)\b/.test(s)) return 'Smart video door phone'
   return null
 }
 
@@ -168,8 +178,83 @@ export function quantitiesFromMoq(moq: number | null) {
   return [...new Set([base, Math.ceil(base * 1.5 / 10) * 10, base * 2, base * 3])]
 }
 
+function analysisFromParsebot(url: URL, parsebot: Extract<ParsebotAlibabaResult, { status: 'ready' }>) {
+  const facts = parsebot.facts
+  const category = facts.category || inferCategory(`${facts.name || ''} ${facts.description || ''}`) || null
+  const b = benchmark(category)
+  const unitPriceUsd = facts.unitPriceUsd || null
+  const detectedMoq = facts.moq ? Math.round(facts.moq) : null
+  const moq = detectedMoq || b.defaultMoq
+  const packedWeightKg = facts.packedWeightKg || b.packedWeightKg
+  const volumeCbm = facts.volumeCbm || b.volumeCbm
+  const originCountry = facts.originCountry || ''
+  const assumptions: string[] = [
+    'Producto estructurado con Parse.bot API; ShippingAPP usa Browser Run sólo como fallback cuando Parse.bot no entrega datos útiles.',
+  ]
+
+  if (!facts.category && category) assumptions.push(`Categoría detectada por reglas del título/descripción: ${category}.`)
+  if (!facts.packedWeightKg && b.packedWeightKg > 0) assumptions.push(`Peso logístico estimado con benchmark de categoría: ${b.packedWeightKg} kg/unidad.`)
+  if (!facts.packedWeightKg && b.packedWeightKg <= 0) assumptions.push('Peso embalado no verificado; no se aplica un fallback genérico.')
+  if (facts.volumeCbm) assumptions.push(`Volumen embalado tomado de Parse.bot: ${facts.volumeCbm} m³/unidad.`)
+  else if (b.volumeCbm > 0) assumptions.push(`Volumen logístico estimado con benchmark de categoría: ${b.volumeCbm} m³/unidad.`)
+  else assumptions.push('Volumen embalado no verificado; no se aplica un fallback genérico.')
+  if (!unitPriceUsd) assumptions.push('No se pudo verificar el precio automáticamente; el análisis económico requiere una estimación de precio.')
+  if (!detectedMoq && moq) assumptions.push(`MOQ estimado con benchmark de categoría: ${moq} unidades.`)
+  if (!moq) assumptions.push('MOQ no verificado; no se generan cantidades de escenario hasta contar con una hipótesis explícita.')
+  if (b.marketPriceArs) assumptions.push(`Precio argentino inicial estimado con benchmark de categoría: ARS ${b.marketPriceArs.toLocaleString('es-AR')}.`)
+  else assumptions.push('Precio de mercado argentino aún no estimado para esta categoría.')
+  if (!originCountry) assumptions.push('País de origen no verificado; ShippingAPP no presume China ni aplica preferencias por origen.')
+  assumptions.push('Demanda mensual no observada: debe ser informada explícitamente por el usuario antes de recomendar cantidad.')
+
+  const verifiedCount = [!!facts.name, !!unitPriceUsd, !!detectedMoq, !!facts.packedWeightKg, !!facts.category, !!originCountry, !!facts.imageUrl].filter(Boolean).length
+  const fallbackCount = [!!category && !facts.category, !!moq && !detectedMoq, b.key !== 'generic'].filter(Boolean).length
+  const overallConfidence = Math.min(94, 42 + verifiedCount * 8 + fallbackCount * 4)
+
+  return {
+    sourceUrl: url.toString(),
+    fetched: true,
+    sourceRead: {
+      mode: 'parsebot',
+      quality: 8,
+      directStatus: 200,
+      browserAttempted: false,
+      browserMsUsed: 0,
+      reason: 'Parse.bot API returned structured Alibaba product facts.',
+      executionTime: parsebot.executionTime,
+    },
+    product: {
+      name: facts.name || slugFallback(url) || 'Producto Alibaba',
+      category: category || 'Sin clasificar',
+      unitPriceUsd,
+      moq,
+      packedWeightKg,
+      volumeCbm,
+      originCountry,
+      imageUrl: facts.imageUrl || null,
+      supplier: facts.supplier || null,
+      description: facts.description || null,
+    },
+    market: {
+      estimatedPriceArs: b.marketPriceArs || null,
+      estimatedMonthlyDemand: 0,
+      source: b.key === 'generic' ? 'Sin benchmark específico' : 'ShippingAPP category benchmark',
+    },
+    suggestedQuantities: quantitiesFromMoq(moq),
+    confidence: {
+      overall: overallConfidence,
+      productSource: 'parsebot',
+      logistics: facts.packedWeightKg ? 'medium' : b.key === 'generic' ? 'missing' : 'benchmark',
+      market: b.marketPriceArs ? 'benchmark' : 'missing',
+    },
+    assumptions,
+  }
+}
+
 async function analyze(rawUrl: string, env: Env) {
   const url = normalizeAlibabaUrl(rawUrl)
+  const parsebot = await extractAlibabaWithParsebot(url, env)
+  if (parsebot.status === 'ready') return analysisFromParsebot(url, parsebot)
+
   const sourceRead = await readAlibabaSource(url, env.BROWSER)
   const html = sourceRead.html
   const fetched = sourceRead.quality > 0
@@ -194,6 +279,7 @@ async function analyze(rawUrl: string, env: Env) {
   const originCountry = ai.originCountry || ''
   const assumptions: string[] = []
 
+  if (parsebot.status !== 'ready') assumptions.push(...parsebot.warnings)
   if (sourceRead.mode === 'browser') assumptions.push('Alibaba requirió Browser Run: el HTML renderizado mejoró la lectura directa.')
   if (sourceRead.mode === 'partial') assumptions.push('Alibaba sólo expuso contenido parcial; Browser Run no logró mejorar la lectura.')
   if (sourceRead.mode === 'blocked') assumptions.push('Alibaba bloqueó o no expuso contenido utilizable tanto al fetch directo como a Browser Run; el perfil se limita a lo identificable desde el link.')

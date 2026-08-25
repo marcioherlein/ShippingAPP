@@ -30,6 +30,11 @@ function factsText(facts: NcmProductFacts) {
   return [facts.name, facts.category, facts.material, facts.functionText, facts.description].filter(Boolean).join(' ')
 }
 
+function isPadelFacts(facts: NcmProductFacts) {
+  const text = normalizeText(factsText(facts))
+  return /\bpadel\b/.test(text) && /\b(paleta|raqueta|racket|racquet)\b/.test(text)
+}
+
 export function scoreSimOpenings(openings: Array<[string, string]>, facts: NcmProductFacts): SimOpening[] {
   const factTokens = new Set(tokens(factsText(facts)))
   const scored = openings.map(([code, label]) => {
@@ -112,6 +117,24 @@ export async function resolveSimOpening(requestUrl: string, assets: Assets, ai: 
   const [, ncmLabel, rawOpenings] = row
   const openings = scoreSimOpenings(rawOpenings, facts)
   if (!openings.length) return { status: 'missing', ncmCode, ncmLabel, candidate: null, alternatives: [], confidence: 'missing', rationale: ['La NCM existe en la snapshot pero no tiene aperturas SIM utilizables.'], missingFacts: [], sourceDate: payload.meta.sourceDate }
+
+  if (ncmCode === '9506.59.00' && isPadelFacts(facts)) {
+    const residual = openings.find((item) => item.code === '9506.59.00.900Z')
+    if (residual) {
+      return {
+        status: 'candidate', ncmCode, ncmLabel, candidate: residual,
+        alternatives: openings.filter((item) => item.code !== residual.code).slice(0, 4),
+        confidence: 'low',
+        rationale: [
+          'Producto identificado como pádel dentro de 9506.59.00; no se lo fuerza a badminton ni squash por coincidencias textuales débiles.',
+          'Se conserva apertura residual oficial 900Z con confidence LOW hasta validación de despachante/SIM.',
+        ],
+        missingFacts: ['Validar apertura SIM residual con despachante antes de declarar'],
+        sourceDate: payload.meta.sourceDate,
+      }
+    }
+  }
+
   if (openings.length === 1) return { status: 'single', ncmCode, ncmLabel, candidate: openings[0], alternatives: [], confidence: 'high', rationale: ['La fuente oficial contiene una única apertura SIM para la NCM seleccionada.'], missingFacts: [], sourceDate: payload.meta.sourceDate }
 
   const aiRank = await rerank(ai, ncmCode, ncmLabel, openings.slice(0, 40), facts)

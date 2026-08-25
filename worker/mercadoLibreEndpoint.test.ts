@@ -22,6 +22,17 @@ afterEach(() => {
 })
 
 describe('MercadoLibre benchmark endpoints', () => {
+  it('renders the OAuth callback code page without exposing token fields', async () => {
+    const response = await worker.fetch(new Request('https://shippingapp.test/oauth/mercadolibre/callback?code=abc123'), env())
+    expect(response.status).toBe(200)
+    const body = await response.text()
+
+    expect(body).toContain('abc123')
+    expect(body).toContain('MercadoLibre autorizó ShippingAPP')
+    expect(body).not.toContain('access_token')
+    expect(body).not.toContain('client_secret')
+  })
+
   it('reports missing MercadoLibre configuration without exposing secrets', async () => {
     const response = await worker.fetch(new Request('https://shippingapp.test/api/mercadolibre/status'), env())
     expect(response.status).toBe(200)

@@ -37,3 +37,27 @@ Mercado Libre access tokens expire, so production should use automatic refresh. 
 - `MERCADOLIBRE_TOKEN_STORE` as a Cloudflare KV binding
 
 The Worker refreshes before expiry and writes the newly rotated access and refresh tokens to KV. If authentication is missing or unavailable, ShippingAPP fails closed and does not promote an unauthenticated Mercado Libre price into the business case.
+
+### Production smoke endpoints
+
+Use these endpoints to diagnose the Mercado Libre integration without running the full import flow.
+
+Check whether authentication is configured. This endpoint never returns access tokens:
+
+```bash
+curl -s https://shippingapp.marciofabrizio.workers.dev/api/mercadolibre/status
+```
+
+Run a direct Mercado Libre benchmark for a product:
+
+```bash
+curl -s https://shippingapp.marciofabrizio.workers.dev/api/mercadolibre/benchmark \
+  -H 'content-type: application/json' \
+  -d '{"productName":"Paleta de pádel carbono EVA","category":"Padel racket"}'
+```
+
+Expected behavior:
+
+- With valid Mercado Libre credentials, response `status` can become `live` and include comparables, P25/median/P75 and suggested price.
+- Without credentials, response remains `configuration_required`, with no promoted market price and no fake comparables.
+- With expired or invalid credentials, response is `unavailable` and the app blocks Mercado Libre economics instead of reusing old benchmarks.

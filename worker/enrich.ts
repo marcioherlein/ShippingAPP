@@ -21,6 +21,31 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { 'content-type': 'application/json; charset=utf-8' },
 })
 
+const html = (body: string, status = 200) => new Response(body, {
+  status,
+  headers: { 'content-type': 'text/html; charset=utf-8' },
+})
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[char] || char))
+}
+
+function mercadoLibreOAuthCallbackPage(url: URL) {
+  const code = url.searchParams.get('code')?.trim() || ''
+  const error = url.searchParams.get('error')?.trim() || ''
+  const errorDescription = url.searchParams.get('error_description')?.trim() || ''
+  if (error) {
+    return html(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>MercadoLibre OAuth</title><main style="font-family:system-ui;padding:32px;max-width:760px;margin:auto"><h1>MercadoLibre no autorizó la app</h1><p><b>Error:</b> ${escapeHtml(error)}</p><p>${escapeHtml(errorDescription || 'Volvé a intentar la autorización.')}</p></main>`, 400)
+  }
+  if (!code) {
+    return html(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>MercadoLibre OAuth</title><main style="font-family:system-ui;padding:32px;max-width:760px;margin:auto"><h1>Falta el code de MercadoLibre</h1><p>Esta URL funciona como callback, pero MercadoLibre todavía no devolvió el parámetro <code>code</code>.</p></main>`, 400)
+  }
+  const safeCode = escapeHtml(code)
+  return html(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>MercadoLibre OAuth code</title><main style="font-family:system-ui;padding:32px;max-width:760px;margin:auto"><h1>MercadoLibre autorizó ShippingAPP</h1><p>Copiá este <b>code</b>. No es el client secret ni el access token.</p><pre style="white-space:pre-wrap;word-break:break-all;background:#f4f4f5;border:1px solid #ddd;border-radius:12px;padding:16px">${safeCode}</pre><p>Después pegalo donde vayas a ejecutar el intercambio por tokens. El code vence rápido.</p></main>`)
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null
   const timeout = new Promise<never>((_, reject) => {
@@ -232,6 +257,10 @@ export default {
           error: error instanceof Error ? error.message : 'unknown error',
         }, 503)
       }
+    }
+
+    if ((url.pathname === '/oauth/mercadolibre/callback' || url.pathname === '/api/mercadolibre/callback') && request.method === 'GET') {
+      return mercadoLibreOAuthCallbackPage(url)
     }
 
     if (url.pathname === '/api/mercadolibre/status' && request.method === 'GET') {

@@ -120,11 +120,14 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
 
   const conversational = !!analysis?.sourceUrl.startsWith('chat://')
 
-  return <section className="url-analyzer">
+  return <section className="url-analyzer" id="analysis">
     <div className="analyzer-copy">
-      <span className="eyebrow">AI product opportunity scanner</span>
-      <h1>Contame qué querés importar.</h1>
-      <p>Describí un producto, pedime que busque opciones o pegá Alibaba. ShippingAPP usa fuentes reales y pregunta sólo lo que falta.</p>
+      <div className="analyzer-kicker-row">
+        <span className="eyebrow">AI import decision engine</span>
+        <span className="source-pill">Alibaba · Mercado Libre · BCRA · ARCA</span>
+      </div>
+      <h1>¿Vale la pena importar este producto?</h1>
+      <p>Pegá un link de Alibaba o describí lo que querés importar. ShippingAPP cruza proveedor, landed cost, mercado argentino y requisitos antes de darte una señal.</p>
     </div>
 
     {messages.length === 0 && <div className="analyst-suggestions intake-suggestions">
@@ -145,11 +148,11 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value.slice(0, 1800))}
-          placeholder="Ej: buscame paletas de carbono hasta USD 30, MOQ hasta 100 — o pegá Alibaba"
+          placeholder="Pegá Alibaba o describí el producto que querés evaluar"
           disabled={loading}
           aria-label="Producto, búsqueda o link para analizar"
         />
-        <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Analizando…' : 'Analizar'}</button>
+        <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Analizando…' : 'Analizar →'}</button>
       </div>
       {error && <p className="analyzer-error">{error}</p>}
     </form>

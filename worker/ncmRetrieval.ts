@@ -102,7 +102,7 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
   const text = normalizeText(factsText(facts))
   const checks: Array<{ code: string; terms: string[]; rationale: string }> = [
     { code: '9506.59.00', terms: ['padel', 'paleta', 'racket'], rationale: 'Producto identificado como paleta/raqueta de pádel; se usa shortcut oficial para evitar latencia AI.' },
-    { code: '8504.40.90', terms: ['cargador', 'charger', 'adaptador', 'power adapter'], rationale: 'Producto identificado como adaptador/cargador eléctrico.' },
+    { code: '8504.40.90', terms: ['cargador'], rationale: 'Producto identificado como adaptador/cargador eléctrico.' },
     { code: '8507.60.00', terms: ['litio', 'lithium', 'bateria', 'battery'], rationale: 'Producto identificado como acumulador de ion litio.' },
     { code: '9506.51.00', terms: ['tenis', 'raqueta'], rationale: 'Producto identificado como raqueta de tenis.' },
     { code: '9506.40.00', terms: ['tenis de mesa', 'ping pong'], rationale: 'Producto identificado como artículo para tenis de mesa.' },

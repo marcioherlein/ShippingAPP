@@ -21,6 +21,16 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { 'content-type': 'application/json; charset=utf-8' },
 })
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer)
+  }) as Promise<T>
+}
+
 function validFacts(body: any): NcmProductFacts | null {
   if (!body || typeof body !== 'object') return null
   const facts: NcmProductFacts = {
@@ -225,7 +235,11 @@ export default {
         if (classification.status !== 'candidate' || !classification.code) return json({ ...classification, sim: null })
 
         try {
-          const sim = await resolveSimOpening(request.url, env.ASSETS, env.AI, classification.code, facts)
+          const sim = await withTimeout(
+            resolveSimOpening(request.url, env.ASSETS, env.AI, classification.code, facts),
+            6000,
+            'SIM hydration timeout',
+          )
           return json({ ...classification, sim })
         } catch (error) {
           return json({

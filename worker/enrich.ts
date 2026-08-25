@@ -1,6 +1,6 @@
 import baseWorker from './index'
 import { analyzeArgentinaMarket } from './catalogProvider'
-import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
+import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv, type MercadoLibreAuthResult } from './mercadoLibreAuth'
 import { classifyFullNcm, loadNcmIndex, type NcmProductFacts } from './ncmRetrieval'
 import { resolveSimOpening } from './simHydration'
 import { fetchBcraReferenceFx } from './bcraFx'
@@ -48,6 +48,45 @@ function discoveryRequest(body: unknown) {
   const query = typeof raw.query === 'string' ? raw.query.trim().replace(/\s+/g, ' ').slice(0, 220) : ''
   const userText = typeof raw.userText === 'string' ? raw.userText.trim().replace(/\s+/g, ' ').slice(0, 500) : query
   return query.length >= 2 ? { query, userText: userText || query } : null
+}
+
+function marketBenchmarkRequest(body: unknown) {
+  const raw = body && typeof body === 'object' ? body as any : {}
+  const productName = typeof raw.productName === 'string'
+    ? raw.productName.trim().replace(/\s+/g, ' ').slice(0, 220)
+    : typeof raw.name === 'string'
+      ? raw.name.trim().replace(/\s+/g, ' ').slice(0, 220)
+      : ''
+  const category = typeof raw.category === 'string'
+    ? raw.category.trim().replace(/\s+/g, ' ').slice(0, 180)
+    : ''
+  if ((productName || category).length < 2) return null
+  return { productName, category }
+}
+
+function hasKvStore(env: Env) {
+  return typeof env.MERCADOLIBRE_TOKEN_STORE?.get === 'function' && typeof env.MERCADOLIBRE_TOKEN_STORE?.put === 'function'
+}
+
+function mercadoLibreAuthStatus(auth: MercadoLibreAuthResult, env: Env) {
+  return {
+    status: auth.status,
+    ready: auth.status === 'ready',
+    tokenSource: auth.source,
+    authMode: auth.source === 'static_access_token'
+      ? 'temporary_access_token_secret'
+      : auth.source === 'token_store' || auth.source === 'refresh'
+        ? 'oauth_refresh_with_kv'
+        : 'not_ready',
+    kvBindingPresent: hasKvStore(env),
+    required: auth.status === 'ready' ? [] : [
+      'MERCADOLIBRE_CLIENT_ID',
+      'MERCADOLIBRE_CLIENT_SECRET',
+      'MERCADOLIBRE_REFRESH_TOKEN',
+      'MERCADOLIBRE_TOKEN_STORE',
+    ],
+    ...(auth.status === 'ready' ? {} : { reason: auth.reason }),
+  }
 }
 
 async function smokeAsset(baseUrl: string, env: Env, assetPath: string) {
@@ -191,6 +230,39 @@ export default {
           status: 'fail',
           runtime: 'cloudflare-worker',
           error: error instanceof Error ? error.message : 'unknown error',
+        }, 503)
+      }
+    }
+
+    if (url.pathname === '/api/mercadolibre/status' && request.method === 'GET') {
+      const auth = await resolveMercadoLibreAccessToken(env)
+      return json({
+        service: 'Mercado Libre Argentina API',
+        auth: mercadoLibreAuthStatus(auth, env),
+      })
+    }
+
+    if (url.pathname === '/api/mercadolibre/benchmark' && request.method === 'POST') {
+      try {
+        const parsed = marketBenchmarkRequest(await request.json())
+        if (!parsed) return json({ error: 'Ingresá productName/name o category para consultar MercadoLibre.' }, 400)
+        const auth = await resolveMercadoLibreAccessToken(env)
+        const market = await analyzeArgentinaMarket(parsed.productName, parsed.category, { accessToken: auth.accessToken })
+        if (auth.status !== 'ready') market.warnings.push(auth.reason)
+        if (auth.status === 'unavailable') {
+          market.status = 'unavailable'
+          market.source = 'Mercado Libre Argentina API · OAuth unavailable'
+        }
+        return json({
+          status: market.status,
+          query: market.query,
+          auth: mercadoLibreAuthStatus(auth, env),
+          market,
+        })
+      } catch (error) {
+        return json({
+          error: 'No pudimos consultar MercadoLibre.',
+          detail: error instanceof Error ? error.message : 'unknown error',
         }, 503)
       }
     }

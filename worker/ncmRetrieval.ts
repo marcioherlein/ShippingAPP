@@ -68,10 +68,6 @@ export function normalizeText(value: string | null | undefined) {
 export function canonicalToken(value: string) {
   let token = normalizeText(value)
   if (!token || token.length < 3) return token
-  // Conservative singularization for retrieval only. Avoid fuzzy/edit-distance
-  // matching: it can cross customs concepts. This handles ordinary Spanish
-  // plural/adjective forms such as raquetas→raqueta, similares→similar and
-  // convertidores→convertidor while preserving words like tenis.
   if (token.length > 6 && token.endsWith('es') && !token.endsWith('ies')) token = token.slice(0, -2)
   else if (token.length > 4 && token.endsWith('s') && !token.endsWith('is') && !token.endsWith('us')) token = token.slice(0, -1)
   return token
@@ -90,6 +86,51 @@ function safeTerms(values: unknown): string[] {
     .filter((value) => value.length >= 3 && value.length <= 100)
     .filter((value) => !/\b\d{4}[.]?\d{2}[.]?\d{2}\b/.test(value))
   )].slice(0, 14)
+}
+
+function factsText(facts: NcmProductFacts) {
+  return [facts.name, facts.category, facts.material, facts.functionText, facts.description].filter(Boolean).join(' ')
+}
+
+function findOfficial(index: NcmSearchIndex, code: string) {
+  const row = index.records.find((record) => record[0] === code)
+  if (!row) return null
+  return { code: row[0], label: row[1] }
+}
+
+function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): FullNcmClassification | null {
+  const text = normalizeText(factsText(facts))
+  const checks: Array<{ code: string; terms: string[]; rationale: string }> = [
+    { code: '9506.59.00', terms: ['padel', 'paleta', 'racket'], rationale: 'Producto identificado como paleta/raqueta de pádel; se usa shortcut oficial para evitar latencia AI.' },
+    { code: '8504.40.90', terms: ['cargador', 'charger', 'adaptador', 'power adapter'], rationale: 'Producto identificado como adaptador/cargador eléctrico.' },
+    { code: '8507.60.00', terms: ['litio', 'lithium', 'bateria', 'battery'], rationale: 'Producto identificado como acumulador de ion litio.' },
+    { code: '9506.51.00', terms: ['tenis', 'raqueta'], rationale: 'Producto identificado como raqueta de tenis.' },
+    { code: '9506.40.00', terms: ['tenis de mesa', 'ping pong'], rationale: 'Producto identificado como artículo para tenis de mesa.' },
+    { code: '9506.91.00', terms: ['mancuerna', 'gimnasio', 'fitness'], rationale: 'Producto identificado como artículo/equipo para ejercicio físico.' },
+    { code: '4202.92.00', terms: ['mochila', 'backpack'], rationale: 'Producto identificado como mochila/bolso con superficie textil o plástica.' },
+    { code: '8518.30.00', terms: ['auricular', 'headphones', 'earbuds'], rationale: 'Producto identificado como auriculares.' },
+    { code: '8518.21.00', terms: ['parlante', 'speaker'], rationale: 'Producto identificado como altavoz/parlante portátil.' },
+    { code: '8516.71.00', terms: ['cafetera', 'coffee maker', 'espresso'], rationale: 'Producto identificado como aparato eléctrico para preparar café.' },
+    { code: '8516.10.00', terms: ['termotanque', 'water heater'], rationale: 'Producto identificado como calentador eléctrico de agua.' },
+    { code: '9004.10.00', terms: ['gafas de sol', 'anteojos de sol', 'sunglasses'], rationale: 'Producto identificado como gafas/anteojos de sol.' },
+  ]
+
+  for (const check of checks) {
+    if (!check.terms.every((term) => text.includes(normalizeText(term)))) continue
+    const official = findOfficial(index, check.code)
+    if (!official) continue
+    return {
+      status: 'candidate', code: official.code, label: official.label, confidence: 'medium',
+      alternatives: [], missingFacts: [], searchTerms: check.terms,
+      rationale: [
+        'Shortcut determinístico validado contra la snapshot oficial ARCA; no se inventa código y se evita depender del AI para productos de identidad obvia.',
+        check.rationale,
+      ],
+      sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
+      retrievalMode: 'deterministic_fallback',
+    }
+  }
+  return null
 }
 
 export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25): NcmRetrievalCandidate[] {
@@ -197,6 +238,9 @@ function deriveConfidence(shortlist: NcmRetrievalCandidate[], ranked: AiRanking)
 }
 
 export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmProductFacts): Promise<FullNcmClassification> {
+  const deterministic = deterministicKnownNcm(index, facts)
+  if (deterministic) return deterministic
+
   const expansion = await expandSearchTerms(ai, facts)
   const fallbackTerms = safeTerms([facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''])
   const searchTerms = expansion.searchTerms.length ? expansion.searchTerms : fallbackTerms

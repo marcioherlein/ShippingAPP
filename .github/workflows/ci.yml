@@ -55,3 +55,18 @@ jobs:
 
           echo 'Runtime smoke endpoint did not become ready'
           exit 1
+      - name: Production Cloudflare smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS https://shippingapp.marciofabrizio.workers.dev/api/runtime-smoke > /tmp/production-smoke.json
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const body = JSON.parse(fs.readFileSync('/tmp/production-smoke.json', 'utf8'))
+          if (body.status !== 'ok') throw new Error(`production smoke failed: ${JSON.stringify(body)}`)
+          if (!body.checks?.workerResponded) throw new Error('Production Worker did not confirm response')
+          if (!body.checks?.assetsBinding) throw new Error('Production ASSETS binding missing')
+          if (body.checks?.ncmIndex?.sourceDate !== '2026-08-14') throw new Error('Production NCM asset date mismatch')
+          if ((body.checks?.ncmIndex?.records ?? 0) < 1000) throw new Error('Production NCM asset unexpectedly small')
+          if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
+          NODE

@@ -1,0 +1,72 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shippingapp-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify Cloudflare deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::error::Missing GitHub secret CLOUDFLARE_API_TOKEN. Add a Cloudflare API token with Workers Scripts edit/deploy permissions."
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::error::Missing GitHub secret CLOUDFLARE_ACCOUNT_ID. Add your Cloudflare account id as a GitHub Actions secret."
+            exit 1
+          fi
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Unit and integration tests
+        run: npx --yes vitest@3.2.4 run
+
+      - name: Validate full ARCA NCM and SIM assets
+        run: node scripts/validate-nomenclador-assets.mjs
+
+      - name: Production build
+        run: npm run build
+
+      - name: Validate Cloudflare configuration
+        run: npx --yes wrangler@latest check
+
+      - name: Deploy to Cloudflare Workers
+        run: npx --yes wrangler@latest deploy
+
+      - name: Production Cloudflare smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "$PRODUCTION_URL/api/runtime-smoke" > /tmp/production-smoke.json
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const body = JSON.parse(fs.readFileSync('/tmp/production-smoke.json', 'utf8'))
+          if (body.status !== 'ok') throw new Error(`production smoke failed: ${JSON.stringify(body)}`)
+          if (!body.checks?.workerResponded) throw new Error('Production Worker did not confirm response')
+          if (!body.checks?.assetsBinding) throw new Error('Production ASSETS binding missing')
+          if (body.checks?.ncmIndex?.sourceDate !== '2026-08-14') throw new Error('Production NCM asset date mismatch')
+          if ((body.checks?.ncmIndex?.records ?? 0) < 1000) throw new Error('Production NCM asset unexpectedly small')
+          if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
+          NODE

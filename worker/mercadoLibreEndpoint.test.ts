@@ -149,4 +149,50 @@ describe('MercadoLibre benchmark endpoints', () => {
     expect(body.market.comparables[0].priceSource).toBe('sale_price')
     expect(JSON.stringify(body)).not.toContain('test-ml-token')
   })
+
+  it('uses public listing search fallback when MercadoLibre rejects Bearer on search endpoints', async () => {
+    const items = Array.from({ length: 6 }, (_, i) => ({
+      id: `MLA9${i + 1}`,
+      title: `Paleta Padel Carbono EVA Control ${i + 1}`,
+      price: 120000 + i * 3500,
+      currency_id: 'ARS',
+      condition: 'new',
+      category_id: 'MLA1276',
+      permalink: `https://articulo.mercadolibre.com.ar/MLA-9${i + 1}`,
+      seller: { id: 2000 + i },
+    }))
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input)
+      const hasBearer = Boolean((init?.headers as any)?.authorization)
+      if (url.includes('/sites/MLA/domain_discovery/search')) {
+        return hasBearer
+          ? mlJson({ message: 'forbidden' }, 403)
+          : mlJson([{ category_id: 'MLA1276', category_name: 'Paletas de Paddle' }])
+      }
+      if (url.includes('/sites/MLA/search')) {
+        return hasBearer
+          ? mlJson({ message: 'forbidden' }, 403)
+          : mlJson({ paging: { total: items.length }, results: items })
+      }
+      if (url.includes('/sale_price')) return mlJson({ message: 'forbidden' }, 403)
+      return mlJson({ error: 'not found' }, 404)
+    })
+    vi.stubGlobal('fetch', fetchImpl)
+
+    const response = await worker.fetch(new Request('https://shippingapp.test/api/mercadolibre/benchmark', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ productName: 'Paleta de pádel carbono EVA', category: 'Padel racket' }),
+    }), env({ MERCADOLIBRE_ACCESS_TOKEN: 'test-ml-token' }))
+    expect(response.status).toBe(200)
+    const body: any = await response.json()
+
+    expect(body.status).toBe('live')
+    expect(body.auth.ready).toBe(true)
+    expect(body.market.source).toContain('public search fallback')
+    expect(body.market.comparableCount).toBeGreaterThanOrEqual(5)
+    expect(body.market.suggestedPriceArs).toBeGreaterThan(0)
+    expect(body.market.comparables[0].priceSource).toBe('search_price')
+    expect(body.market.warnings.join(' ')).toContain('Bearer')
+    expect(JSON.stringify(body)).not.toContain('test-ml-token')
+  })
 })

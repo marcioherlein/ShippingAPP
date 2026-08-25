@@ -251,7 +251,9 @@ function inferExplicitFunction(message: string) {
 function deterministicExtract(message: string, prior: IntakeFacts): Awaited<ReturnType<typeof extract>> | null {
   const safeMessage = message.slice(0, 1800)
   const plain = normalized(safeMessage)
-  if (/\b(buscame|buscar|find|search|opciones|proveedores|suppliers|recommend|ideas?|oportunidades?|faciles?|fáciles?|margen|vender|mercadolibre)\b/.test(plain) && /(producto|productos|importar|proveedor|proveedores|supplier|suppliers|meli|mercadolibre|margen|vender)/.test(plain)) {
+  const directDiscovery = /\b(buscame|buscar|find|search|opciones|proveedores|suppliers|recommend)\b/.test(plain)
+  const ideaDiscovery = /\b(ideas?|oportunidades?|faciles?|fáciles?|margen|vender|mercadolibre)\b/.test(plain) && /(producto|productos|importar|proveedor|proveedores|supplier|suppliers|meli|mercadolibre|margen|vender)/.test(plain)
+  if (directDiscovery || ideaDiscovery) {
     return {
       intent: 'discover_products',
       startsNewCase: false,

@@ -1,106 +1,27 @@
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
+const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 15000)
 
 const intakeCases = [
-  {
-    name: 'padel-completo',
-    message: 'Paleta de pádel de fibra de carbono, núcleo EVA, uso deportivo, origen China, precio proveedor USD 18, MOQ 300 unidades, peso embalado 0.65 kg por unidad.',
-    expect: { status: 'ready', category: 'Padel racket', unitPriceUsd: 18, moq: 300, packedWeightKg: 0.65, volumeCbm: 0.006, originCountry: 'China' },
-  },
-  {
-    name: 'cargador-sin-precio',
-    message: 'Cargador USB-C 65W para notebook y celular, origen China, MOQ 500 unidades, peso embalado 0.18 kg por unidad.',
-    expect: { status: 'needs_input', missingIncludes: 'precio proveedor' },
-  },
-  {
-    name: 'bateria-sin-moq',
-    message: 'Batería recargable de ion litio 18650 para pack electrónico, origen China, precio proveedor USD 2.10, peso embalado 0.05 kg por unidad.',
-    expect: { status: 'needs_input', missingIncludes: 'MOQ' },
-  },
-  {
-    name: 'auricular-sin-peso',
-    message: 'Auriculares Bluetooth inalámbricos con estuche de carga, origen China, precio proveedor USD 6.40, MOQ 200 unidades.',
-    expect: { status: 'needs_input', missingIncludes: 'peso embalado por unidad' },
-  },
-  {
-    name: 'parlante-sin-volumen',
-    message: 'Parlante Bluetooth portátil 10W, plástico y componentes electrónicos, origen China, precio proveedor USD 9.50, MOQ 120 unidades, peso embalado 0.72 kg por unidad.',
-    expect: { status: 'needs_input', missingIncludes: 'volumen embalado por unidad' },
-  },
-  {
-    name: 'mochila-completa',
-    message: 'Mochila escolar de poliéster para notebook, origen China, precio proveedor USD 4.20, MOQ 500 unidades, peso embalado 0.42 kg por unidad, volumen 0.012 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 4.2, moq: 500, packedWeightKg: 0.42, volumeCbm: 0.012, originCountry: 'China' },
-  },
-  {
-    name: 'botella-termica-completa',
-    message: 'Botella térmica de acero inoxidable 750 ml, origen China, precio proveedor USD 3.80, MOQ 300 unidades, peso embalado 0.38 kg por unidad, volumen 0.004 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 3.8, moq: 300, packedWeightKg: 0.38, volumeCbm: 0.004, originCountry: 'China' },
-  },
-  {
-    name: 'teclado-completo',
-    message: 'Teclado inalámbrico Bluetooth para computadora, origen China, precio proveedor USD 7.90, MOQ 250 unidades, peso embalado 0.48 kg por unidad, volumen 0.006 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 7.9, moq: 250, packedWeightKg: 0.48, volumeCbm: 0.006, originCountry: 'China' },
-  },
-  {
-    name: 'mouse-completo',
-    message: 'Mouse inalámbrico óptico para computadora, origen China, precio proveedor USD 2.70, MOQ 400 unidades, peso embalado 0.12 kg por unidad, volumen 0.002 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 2.7, moq: 400, packedWeightKg: 0.12, volumeCbm: 0.002, originCountry: 'China' },
-  },
-  {
-    name: 'lampara-led-completa',
-    message: 'Lámpara LED recargable de escritorio, origen China, precio proveedor USD 5.30, MOQ 180 unidades, peso embalado 0.55 kg por unidad, volumen 0.007 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 5.3, moq: 180, packedWeightKg: 0.55, volumeCbm: 0.007, originCountry: 'China' },
-  },
-  {
-    name: 'cafetera-completa',
-    message: 'Cafetera eléctrica espresso doméstica, origen China, precio proveedor USD 38, MOQ 50 unidades, peso embalado 4.2 kg por unidad, volumen 0.045 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 38, moq: 50, packedWeightKg: 4.2, volumeCbm: 0.045, originCountry: 'China' },
-  },
-  {
-    name: 'termo-electrico-completo',
-    message: 'Termotanque eléctrico mural de 80 litros para calentar agua, origen China, precio proveedor USD 72, MOQ 30 unidades, peso embalado 19 kg por unidad, volumen 0.18 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 72, moq: 30, packedWeightKg: 19, volumeCbm: 0.18, originCountry: 'China' },
-  },
-  {
-    name: 'notebook-completa',
-    message: 'Notebook portátil 14 pulgadas, procesador Intel, origen China, precio proveedor USD 265, MOQ 20 unidades, peso embalado 1.9 kg por unidad, volumen 0.009 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 265, moq: 20, packedWeightKg: 1.9, volumeCbm: 0.009, originCountry: 'China' },
-  },
-  {
-    name: 'panel-solar-completo',
-    message: 'Panel solar fotovoltaico monocristalino 450W, origen China, precio proveedor USD 58, MOQ 40 unidades, peso embalado 22 kg por unidad, volumen 0.08 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 58, moq: 40, packedWeightKg: 22, volumeCbm: 0.08, originCountry: 'China' },
-  },
-  {
-    name: 'camara-ip-completa',
-    message: 'Cámara IP de seguridad WiFi para exterior, origen China, precio proveedor USD 11.80, MOQ 100 unidades, peso embalado 0.48 kg por unidad, volumen 0.004 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 11.8, moq: 100, packedWeightKg: 0.48, volumeCbm: 0.004, originCountry: 'China' },
-  },
-  {
-    name: 'zapatillas-completa',
-    message: 'Zapatillas deportivas de capellada textil y suela de caucho, origen China, precio proveedor USD 12.50, MOQ 300 pares, peso embalado 0.9 kg por par, volumen 0.011 m3 por par.',
-    expect: { status: 'ready', unitPriceUsd: 12.5, moq: 300, packedWeightKg: 0.9, volumeCbm: 0.011, originCountry: 'China' },
-  },
-  {
-    name: 'gafas-sol-completa',
-    message: 'Gafas de sol con montura plástica y lentes polarizadas, origen China, precio proveedor USD 1.85, MOQ 500 unidades, peso embalado 0.06 kg por unidad, volumen 0.001 m3 por unidad.',
-    expect: { status: 'ready', unitPriceUsd: 1.85, moq: 500, packedWeightKg: 0.06, volumeCbm: 0.001, originCountry: 'China' },
-  },
-  {
-    name: 'idea-sin-producto',
-    message: 'Quiero ideas de productos fáciles para importar y vender en MercadoLibre con buen margen.',
-    expect: { status: 'discovery_pending' },
-  },
-  {
-    name: 'busqueda-paletas',
-    message: 'Buscame paletas de carbono hasta USD 20 con bajo MOQ.',
-    expect: { status: 'discovery_pending' },
-  },
-  {
-    name: 'link-alibaba-no-fabrica',
-    message: 'https://www.alibaba.com/product-detail/example-padel-racket.html',
-    expect: { status: 'clarifyOrNeedsInput' },
-  },
+  { name: 'padel-completo', message: 'Paleta de pádel de fibra de carbono, núcleo EVA, uso deportivo, origen China, precio proveedor USD 18, MOQ 300 unidades, peso embalado 0.65 kg por unidad.', expect: { status: 'ready', category: 'Padel racket', unitPriceUsd: 18, moq: 300, packedWeightKg: 0.65, volumeCbm: 0.006, originCountry: 'China' } },
+  { name: 'cargador-sin-precio', message: 'Cargador USB-C 65W para notebook y celular, origen China, MOQ 500 unidades, peso embalado 0.18 kg por unidad.', expect: { status: 'needs_input', missingIncludes: 'precio proveedor' } },
+  { name: 'bateria-sin-moq', message: 'Batería recargable de ion litio 18650 para pack electrónico, origen China, precio proveedor USD 2.10, peso embalado 0.05 kg por unidad.', expect: { status: 'needs_input', missingIncludes: 'MOQ' } },
+  { name: 'auricular-sin-peso', message: 'Auriculares Bluetooth inalámbricos con estuche de carga, origen China, precio proveedor USD 6.40, MOQ 200 unidades.', expect: { status: 'needs_input', missingIncludes: 'peso embalado por unidad' } },
+  { name: 'parlante-sin-volumen', message: 'Parlante Bluetooth portátil 10W, plástico y componentes electrónicos, origen China, precio proveedor USD 9.50, MOQ 120 unidades, peso embalado 0.72 kg por unidad.', expect: { status: 'needs_input', missingIncludes: 'volumen embalado por unidad' } },
+  { name: 'mochila-completa', message: 'Mochila escolar de poliéster para notebook, origen China, precio proveedor USD 4.20, MOQ 500 unidades, peso embalado 0.42 kg por unidad, volumen 0.012 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 4.2, moq: 500, packedWeightKg: 0.42, volumeCbm: 0.012, originCountry: 'China' } },
+  { name: 'botella-termica-completa', message: 'Botella térmica de acero inoxidable 750 ml, origen China, precio proveedor USD 3.80, MOQ 300 unidades, peso embalado 0.38 kg por unidad, volumen 0.004 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 3.8, moq: 300, packedWeightKg: 0.38, volumeCbm: 0.004, originCountry: 'China' } },
+  { name: 'teclado-completo', message: 'Teclado inalámbrico Bluetooth para computadora, origen China, precio proveedor USD 7.90, MOQ 250 unidades, peso embalado 0.48 kg por unidad, volumen 0.006 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 7.9, moq: 250, packedWeightKg: 0.48, volumeCbm: 0.006, originCountry: 'China' } },
+  { name: 'mouse-completo', message: 'Mouse inalámbrico óptico para computadora, origen China, precio proveedor USD 2.70, MOQ 400 unidades, peso embalado 0.12 kg por unidad, volumen 0.002 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 2.7, moq: 400, packedWeightKg: 0.12, volumeCbm: 0.002, originCountry: 'China' } },
+  { name: 'lampara-led-completa', message: 'Lámpara LED recargable de escritorio, origen China, precio proveedor USD 5.30, MOQ 180 unidades, peso embalado 0.55 kg por unidad, volumen 0.007 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 5.3, moq: 180, packedWeightKg: 0.55, volumeCbm: 0.007, originCountry: 'China' } },
+  { name: 'cafetera-completa', message: 'Cafetera eléctrica espresso doméstica, origen China, precio proveedor USD 38, MOQ 50 unidades, peso embalado 4.2 kg por unidad, volumen 0.045 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 38, moq: 50, packedWeightKg: 4.2, volumeCbm: 0.045, originCountry: 'China' } },
+  { name: 'termo-electrico-completo', message: 'Termotanque eléctrico mural de 80 litros para calentar agua, origen China, precio proveedor USD 72, MOQ 30 unidades, peso embalado 19 kg por unidad, volumen 0.18 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 72, moq: 30, packedWeightKg: 19, volumeCbm: 0.18, originCountry: 'China' } },
+  { name: 'notebook-completa', message: 'Notebook portátil 14 pulgadas, procesador Intel, origen China, precio proveedor USD 265, MOQ 20 unidades, peso embalado 1.9 kg por unidad, volumen 0.009 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 265, moq: 20, packedWeightKg: 1.9, volumeCbm: 0.009, originCountry: 'China' } },
+  { name: 'panel-solar-completo', message: 'Panel solar fotovoltaico monocristalino 450W, origen China, precio proveedor USD 58, MOQ 40 unidades, peso embalado 22 kg por unidad, volumen 0.08 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 58, moq: 40, packedWeightKg: 22, volumeCbm: 0.08, originCountry: 'China' } },
+  { name: 'camara-ip-completa', message: 'Cámara IP de seguridad WiFi para exterior, origen China, precio proveedor USD 11.80, MOQ 100 unidades, peso embalado 0.48 kg por unidad, volumen 0.004 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 11.8, moq: 100, packedWeightKg: 0.48, volumeCbm: 0.004, originCountry: 'China' } },
+  { name: 'zapatillas-completa', message: 'Zapatillas deportivas de capellada textil y suela de caucho, origen China, precio proveedor USD 12.50, MOQ 300 pares, peso embalado 0.9 kg por par, volumen 0.011 m3 por par.', expect: { status: 'ready', unitPriceUsd: 12.5, moq: 300, packedWeightKg: 0.9, volumeCbm: 0.011, originCountry: 'China' } },
+  { name: 'gafas-sol-completa', message: 'Gafas de sol con montura plástica y lentes polarizadas, origen China, precio proveedor USD 1.85, MOQ 500 unidades, peso embalado 0.06 kg por unidad, volumen 0.001 m3 por unidad.', expect: { status: 'ready', unitPriceUsd: 1.85, moq: 500, packedWeightKg: 0.06, volumeCbm: 0.001, originCountry: 'China' } },
+  { name: 'idea-sin-producto', message: 'Quiero ideas de productos fáciles para importar y vender en MercadoLibre con buen margen.', expect: { status: 'discovery_pending' } },
+  { name: 'busqueda-paletas', message: 'Buscame paletas de carbono hasta USD 20 con bajo MOQ.', expect: { status: 'discovery_pending' } },
+  { name: 'link-alibaba-no-fabrica', message: 'https://www.alibaba.com/product-detail/example-padel-racket.html', expect: { status: 'clarifyOrNeedsInput' } },
 ]
 
 const classificationCases = [
@@ -130,20 +51,33 @@ function almostEqual(a, b) {
   return Math.abs(Number(a) - Number(b)) < 0.00001
 }
 
-async function postJson(path, payload) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const text = await response.text()
+async function postJson(path, payload, label) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  let response
+  let text
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+    text = await response.text()
+  } catch (error) {
+    const reason = error?.name === 'AbortError' ? `timed out after ${REQUEST_TIMEOUT_MS}ms` : (error?.message || 'request failed')
+    throw new Error(`${label}: ${path} ${reason}`)
+  } finally {
+    clearTimeout(timeout)
+  }
+
   let body
   try {
     body = JSON.parse(text)
   } catch {
-    throw new Error(`${path} returned non-JSON HTTP ${response.status}: ${text.slice(0, 500)}`)
+    throw new Error(`${label}: ${path} returned non-JSON HTTP ${response.status}: ${String(text).slice(0, 500)}`)
   }
-  if (!response.ok) throw new Error(`${path} failed HTTP ${response.status}: ${JSON.stringify(body).slice(0, 1000)}`)
+  if (!response.ok) throw new Error(`${label}: ${path} failed HTTP ${response.status}: ${JSON.stringify(body).slice(0, 1000)}`)
   return body
 }
 
@@ -183,14 +117,16 @@ function assertOfficialClassification(caseDef, body) {
 async function main() {
   const intakeResults = []
   for (const item of intakeCases) {
-    const body = await postJson('/api/intake', { message: item.message, priorFacts: {} })
+    console.log(`[smoke:intake] ${item.name}`)
+    const body = await postJson('/api/intake', { message: item.message, priorFacts: {} }, item.name)
     assertIntake(item, body)
     intakeResults.push({ name: item.name, status: body.status, missing: body.missingFields || [], product: body.analysis?.product?.name || body.facts?.name || null })
   }
 
   const classificationResults = []
   for (const item of classificationCases) {
-    const body = await postJson('/api/ncm-classify', item.facts)
+    console.log(`[smoke:ncm] ${item.name}`)
+    const body = await postJson('/api/ncm-classify', item.facts, item.name)
     assertOfficialClassification(item, body)
     classificationResults.push({ name: item.name, code: body.code, label: body.label, confidence: body.confidence, sim: body.sim?.candidate?.code || body.sim?.status || null })
   }
@@ -198,6 +134,7 @@ async function main() {
   console.log(JSON.stringify({
     status: 'ok',
     baseUrl,
+    requestTimeoutMs: REQUEST_TIMEOUT_MS,
     intakeCases: intakeResults.length,
     classificationCases: classificationResults.length,
     intakeResults,

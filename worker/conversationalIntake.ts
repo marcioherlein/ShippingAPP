@@ -156,6 +156,11 @@ function canonicalOrClause(message: string, canonical: string) {
   return clause && clause.length >= 6 ? clause : canonical
 }
 
+function isBareUrlMessage(message: string) {
+  const trimmed = message.trim()
+  return /^https?:\/\/\S+$/i.test(trimmed)
+}
+
 function inferExplicitIdentity(message: string) {
   const source = normalized(message)
   if (/\bpadel\b/.test(source) && /\b(paleta|raqueta|racket|racquet|paddle)\b/.test(source)) {
@@ -393,11 +398,24 @@ function clarifyFromPrior(prior: IntakeFacts): IntakeResult {
   }
 }
 
+function clarifyBareUrl(prior: IntakeFacts): IntakeResult {
+  return {
+    status: 'clarify', intent: 'clarify',
+    message: 'Recibí el link, pero todavía no extraigo Alibaba live en este flujo. Pegame el título del producto o una descripción con precio proveedor, MOQ, peso embalado y volumen si los tenés.',
+    searchQuery: null, facts: prior,
+    factSources: { moq: prior.moq ? 'user' : 'missing', packedWeightKg: prior.packedWeightKg ? 'user' : 'missing', volumeCbm: prior.volumeCbm ? 'user' : 'missing' },
+    missingFields: missingFor(prior), suggestedQuantities: quantitiesFromMoq(prior.moq),
+    assumptions: ['Link recibido sin datos estructurados; no se fabrica análisis a partir de una URL sola.'],
+  }
+}
+
 export async function runConversationalIntake(ai: AI, body: unknown): Promise<IntakeResult> {
   const raw = body && typeof body === 'object' ? body as any : {}
   const message = text(raw.message, 1800)
   if (!message) throw new Error('missing_message')
   const prior = sanitizeIntakeFacts(raw.priorFacts ?? emptyFacts())
+
+  if (isBareUrlMessage(message)) return clarifyBareUrl(prior)
 
   const deterministic = deterministicExtract(message, prior)
   let parsed: Awaited<ReturnType<typeof extract>> | null = canUseDeterministicFirst(deterministic, prior) ? deterministic : null

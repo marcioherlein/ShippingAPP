@@ -118,6 +118,9 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
     { code: '8516.10.00', terms: ['termotanque', 'water heater'], rationale: 'Producto identificado como calentador eléctrico de agua.' },
     { code: '8471.30.19', terms: ['notebook'], rationale: 'Producto identificado como computadora portátil/notebook.' },
     { code: '8541.43.00', terms: ['panel', 'solar'], rationale: 'Producto identificado como panel solar fotovoltaico.' },
+    { code: '8525.89.00', terms: ['camara', 'ip'], rationale: 'Producto identificado como cámara IP/digital de seguridad.' },
+    { code: '8525.89.90', terms: ['camara', 'ip'], rationale: 'Producto identificado como cámara IP/digital de seguridad.' },
+    { code: '8525.80.29', terms: ['camara', 'ip'], rationale: 'Producto identificado como cámara IP/digital de seguridad.' },
     { code: '6404.11.00', terms: ['zapatillas'], rationale: 'Producto identificado como calzado deportivo con suela de caucho/plástico y capellada textil.' },
     { code: '9004.10.00', terms: ['gafas de sol', 'anteojos de sol', 'sunglasses'], rationale: 'Producto identificado como gafas/anteojos de sol.' },
   ]

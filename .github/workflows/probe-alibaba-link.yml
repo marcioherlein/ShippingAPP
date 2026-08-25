@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
-      ALIBABA_URL: https://www.alibaba.com/product-detail/Newest-Smart-Wifi-Video-Door-Phone_1601456927609.html?spm=a2700.product_home_fy25.just_for_you.15.2ce267afu8PhBI&priceId=3cd0b54d562c4bc3a5c1f60ca3f2a245
+      ALIBABA_URL: "https://www.alibaba.com/product-detail/Newest-Smart-Wifi-Video-Door-Phone_1601456927609.html?spm=a2700.product_home_fy25.just_for_you.15.2ce267afu8PhBI&priceId=3cd0b54d562c4bc3a5c1f60ca3f2a245"
     steps:
       - name: Probe production /api/analyze with provided Alibaba link
         shell: bash
@@ -69,3 +69,5 @@ jobs:
           console.log(JSON.stringify(summary, null, 2))
           if (!summary.product?.name) throw new Error('No product name extracted')
           NODE
+
+# probe rerun marker: 2026-08-25T17:31Z

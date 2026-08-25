@@ -98,8 +98,61 @@ function findOfficial(index: NcmSearchIndex, code: string) {
   return { code: row[0], label: row[1] }
 }
 
+function findOfficialByPrefix(index: NcmSearchIndex, codePrefix: string) {
+  const row = index.records.find(([code]) => code.startsWith(codePrefix))
+  if (!row) return null
+  return { code: row[0], label: row[1] }
+}
+
+function findOfficialByLabel(index: NcmSearchIndex, codePrefix: string, labelTerms: string[]) {
+  const normalizedTerms = labelTerms.map(normalizeText).filter(Boolean)
+  const row = index.records.find(([code, label]) => {
+    if (!code.startsWith(codePrefix)) return false
+    const normalizedLabel = normalizeText(label)
+    return normalizedTerms.every((term) => normalizedLabel.includes(term))
+  })
+  if (!row) return null
+  return { code: row[0], label: row[1] }
+}
+
+function shortcutClassification(
+  index: NcmSearchIndex,
+  official: { code: string; label: string },
+  searchTerms: string[],
+  rationale: string,
+): FullNcmClassification {
+  return {
+    status: 'candidate', code: official.code, label: official.label, confidence: 'medium',
+    alternatives: [], missingFacts: [], searchTerms,
+    rationale: [
+      'Shortcut determinístico validado contra la snapshot oficial ARCA; no se inventa código y se evita depender del AI para productos de identidad obvia.',
+      rationale,
+    ],
+    sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
+    retrievalMode: 'deterministic_fallback',
+  }
+}
+
 function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): FullNcmClassification | null {
   const text = normalizeText(factsText(facts))
+
+  const isCamera = ['camara', 'camera', 'security camera', 'ip camera', 'wifi camera'].some((term) => text.includes(normalizeText(term)))
+  if (isCamera) {
+    const official =
+      findOfficialByLabel(index, '8525.', ['camara']) ||
+      findOfficialByLabel(index, '8525.', ['camaras']) ||
+      findOfficialByLabel(index, '8525.', ['television']) ||
+      findOfficialByPrefix(index, '8525.')
+    if (official) {
+      return shortcutClassification(
+        index,
+        official,
+        ['camara', 'ip', 'security camera'],
+        'Producto identificado como cámara IP/digital de seguridad; se resuelve contra una partida oficial ARCA existente del capítulo 8525 en lugar de caer al AI.',
+      )
+    }
+  }
+
   const checks: Array<{ code: string; terms: string[]; rationale: string }> = [
     { code: '9506.59.00', terms: ['padel', 'paleta', 'racket'], rationale: 'Producto identificado como paleta/raqueta de pádel; se usa shortcut oficial para evitar latencia AI.' },
     { code: '8504.40.90', terms: ['cargador'], rationale: 'Producto identificado como adaptador/cargador eléctrico.' },
@@ -118,9 +171,6 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
     { code: '8516.10.00', terms: ['termotanque', 'water heater'], rationale: 'Producto identificado como calentador eléctrico de agua.' },
     { code: '8471.30.19', terms: ['notebook'], rationale: 'Producto identificado como computadora portátil/notebook.' },
     { code: '8541.43.00', terms: ['panel', 'solar'], rationale: 'Producto identificado como panel solar fotovoltaico.' },
-    { code: '8525.89.00', terms: ['camara', 'ip'], rationale: 'Producto identificado como cámara IP/digital de seguridad.' },
-    { code: '8525.89.90', terms: ['camara', 'ip'], rationale: 'Producto identificado como cámara IP/digital de seguridad.' },
-    { code: '8525.80.29', terms: ['camara', 'ip'], rationale: 'Producto identificado como cámara IP/digital de seguridad.' },
     { code: '6404.11.00', terms: ['zapatillas'], rationale: 'Producto identificado como calzado deportivo con suela de caucho/plástico y capellada textil.' },
     { code: '9004.10.00', terms: ['gafas de sol', 'anteojos de sol', 'sunglasses'], rationale: 'Producto identificado como gafas/anteojos de sol.' },
   ]
@@ -129,16 +179,7 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
     if (!check.terms.every((term) => text.includes(normalizeText(term)))) continue
     const official = findOfficial(index, check.code)
     if (!official) continue
-    return {
-      status: 'candidate', code: official.code, label: official.label, confidence: 'medium',
-      alternatives: [], missingFacts: [], searchTerms: check.terms,
-      rationale: [
-        'Shortcut determinístico validado contra la snapshot oficial ARCA; no se inventa código y se evita depender del AI para productos de identidad obvia.',
-        check.rationale,
-      ],
-      sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
-      retrievalMode: 'deterministic_fallback',
-    }
+    return shortcutClassification(index, official, check.terms, check.rationale)
   }
   return null
 }

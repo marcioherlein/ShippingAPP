@@ -66,7 +66,7 @@ export default function App() {
         <span className="brand-lockup">ShippingAPP</span>
       </a>
       <div className="topbar-meta">
-        <span className="engine-status"><i aria-hidden="true" /> Engines live</span>
+        <span className="engine-status">Evidence-first</span>
         <span className="mvp-badge">MVP 1.8</span>
       </div>
     </header>

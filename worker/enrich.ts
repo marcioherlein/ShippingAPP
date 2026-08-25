@@ -40,6 +40,49 @@ function discoveryRequest(body: unknown) {
   return query.length >= 2 ? { query, userText: userText || query } : null
 }
 
+async function smokeAsset(baseUrl: string, env: Env, assetPath: string) {
+  const response = await env.ASSETS.fetch(new Request(new URL(assetPath, baseUrl).toString()))
+  if (!response.ok) throw new Error(`${assetPath} returned ${response.status}`)
+  return response.json() as Promise<any>
+}
+
+async function runtimeSmoke(baseUrl: string, env: Env) {
+  const ncm = await smokeAsset(baseUrl, env, '/data/ncm-index.json')
+  const sim95 = await smokeAsset(baseUrl, env, '/data/sim/95.json')
+  const ncmRecords = Array.isArray(ncm?.records) ? ncm.records.length : 0
+  const sim95Records = Array.isArray(sim95?.records) ? sim95.records.length : 0
+
+  if (ncm?.meta?.source !== 'ARCA Arancel Integrado') throw new Error('NCM asset source mismatch')
+  if (ncm?.meta?.sourceDate !== '2026-08-14') throw new Error('NCM asset sourceDate mismatch')
+  if (ncmRecords < 1000) throw new Error(`NCM asset unexpectedly small: ${ncmRecords}`)
+  if (sim95?.meta?.chapter !== '95') throw new Error('SIM chapter 95 metadata mismatch')
+  if (sim95?.meta?.sourceDate !== '2026-08-14') throw new Error('SIM chapter 95 sourceDate mismatch')
+  if (sim95Records < 1) throw new Error('SIM chapter 95 has no records')
+
+  return {
+    status: 'ok',
+    runtime: 'cloudflare-worker',
+    checks: {
+      workerResponded: true,
+      assetsBinding: typeof env.ASSETS?.fetch === 'function',
+      aiBindingShape: typeof env.AI?.run === 'function',
+      browserBindingPresent: Boolean(env.BROWSER),
+      ncmIndex: {
+        source: ncm.meta.source,
+        sourceDate: ncm.meta.sourceDate,
+        records: ncmRecords,
+        tariffDataIncluded: ncm.meta.tariffDataIncluded,
+      },
+      simChapter95: {
+        source: sim95.meta.source,
+        sourceDate: sim95.meta.sourceDate,
+        records: sim95Records,
+        tariffDataIncluded: sim95.meta.tariffDataIncluded,
+      },
+    },
+  }
+}
+
 async function hydrateMarketAndFx(data: any, env: Env) {
   const mlAuth = await resolveMercadoLibreAccessToken(env)
   const [market, fx] = await Promise.all([
@@ -129,6 +172,18 @@ export function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConv
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+
+    if (url.pathname === '/api/runtime-smoke' && request.method === 'GET') {
+      try {
+        return json(await runtimeSmoke(request.url, env))
+      } catch (error) {
+        return json({
+          status: 'fail',
+          runtime: 'cloudflare-worker',
+          error: error instanceof Error ? error.message : 'unknown error',
+        }, 503)
+      }
+    }
 
     if (url.pathname === '/api/chat' && request.method === 'POST') {
       try {

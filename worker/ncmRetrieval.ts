@@ -113,6 +113,7 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
     { code: '8518.21.00', terms: ['parlante', 'speaker'], rationale: 'Producto identificado como altavoz/parlante portátil.' },
     { code: '8471.60.52', terms: ['teclado'], rationale: 'Producto identificado como teclado, unidad de entrada para máquina automática de procesamiento de datos.' },
     { code: '8471.60.53', terms: ['mouse'], rationale: 'Producto identificado como mouse, unidad de entrada para máquina automática de procesamiento de datos.' },
+    { code: '9405.42.00', terms: ['lampara', 'led'], rationale: 'Producto identificado como aparato eléctrico de alumbrado LED.' },
     { code: '8516.71.00', terms: ['cafetera', 'coffee maker', 'espresso'], rationale: 'Producto identificado como aparato eléctrico para preparar café.' },
     { code: '8516.10.00', terms: ['termotanque', 'water heater'], rationale: 'Producto identificado como calentador eléctrico de agua.' },
     { code: '9004.10.00', terms: ['gafas de sol', 'anteojos de sol', 'sunglasses'], rationale: 'Producto identificado como gafas/anteojos de sol.' },

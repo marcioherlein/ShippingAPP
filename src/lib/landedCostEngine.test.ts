@@ -59,6 +59,24 @@ describe('Valores landed cost engine', () => {
     expect(comparison.modes.air.totalCostUsd).toBeGreaterThan(comparison.modes.lcl.totalCostUsd)
   })
 
+  it('does not recommend FCL even when a container reference is cheaper than LCL', () => {
+    const largeShipment = compareLandedCost({
+      ...base,
+      quantity: 10000,
+      unitPriceUsd: 4,
+      unitWeightKg: 0.2,
+      unitVolumeCbm: 0.01,
+      hasImporterSignature: true,
+      sensitiveCategory: 'none',
+    })
+
+    expect(largeShipment.status).toBe('ok')
+    expect(largeShipment.modes.fcl.totalCostUsd).toBeLessThan(largeShipment.modes.lcl.totalCostUsd)
+    expect(largeShipment.bestMode).not.toBe('fcl')
+    expect(['lcl', 'air']).toContain(largeShipment.bestMode)
+    expect(largeShipment.notes.join(' ')).toContain('FCL se calcula como referencia')
+  })
+
   it('keeps checklist focused on the four required business inputs', () => {
     const status = checklistStatus({ purpose: 'unknown', entityType: 'unknown', hasImporterSignature: null, sensitiveCategory: 'unknown' })
     expect(status.blockers).toEqual([

@@ -6,6 +6,7 @@ import ImportPanel from './components/ImportPanel'
 import Recommendation from './components/Recommendation'
 import ScenarioTable from './components/ScenarioTable'
 import UrlAnalyzer from './components/UrlAnalyzer'
+import ImportQuoteFlow from './components/ImportQuoteFlow'
 import ClientChecklist from './components/ClientChecklist'
 import RegulatoryPanel from './components/RegulatoryPanel'
 import MarketEvidence from './components/MarketEvidence'
@@ -61,7 +62,14 @@ export default function App() {
   }
 
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.8</span></header>
+    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 2.0</span></header>
+
+    <ImportQuoteFlow />
+
+    <section className="method-card">
+      <h3>Autocompletar con proveedor o búsqueda</h3>
+      <p>El flujo principal ya no depende de Alibaba ni de MercadoLibre. Usá esta sección sólo para traer datos del producto, MOQ, peso, volumen o benchmarks; el cálculo manual de arriba queda disponible siempre.</p>
+    </section>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
 
     {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}

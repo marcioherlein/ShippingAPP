@@ -3,6 +3,7 @@ import { analyzeAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnaly
 import { emptyIntakeFacts, isAlibabaUrl, runProductIntake, type IntakeFacts } from '../lib/productIntake'
 import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
+import { buildDiscoveryQuery, isGenericAlibabaSearchRequest, wantsAlibabaDiscovery } from '../lib/searchIntent'
 
 type Props = { onAnalysis: (analysis: ProductAnalysisV2) => void; analysis?: ProductAnalysisV2 | null }
 type ThreadMessage = { role: 'user' | 'assistant'; content: string }
@@ -38,6 +39,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
   const [messages, setMessages] = useState<ThreadMessage[]>([])
   const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(null)
   const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(null)
+  const [pendingDiscovery, setPendingDiscovery] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -47,6 +49,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
   )
 
   const analyzeRealUrl = async (url: string, fromDiscovery = false, constraints: DiscoveryConstraints | null = null) => {
+    setPendingDiscovery(false)
     setFacts(emptyIntakeFacts())
     const next = await analyzeAlibabaUrlV2(url)
     setSelectedConstraints(fromDiscovery ? constraints : null)
@@ -57,6 +60,20 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
       content: fromDiscovery
         ? 'Producto seleccionado y analizado desde su URL real de Alibaba. Ahora también verifiqué las restricciones comerciales que sí aparecen en la publicación.'
         : 'Link analizado. Ya podés revisar Opportunity Decision, mercado, importabilidad y preguntarle al AI Import Analyst.',
+    }])
+  }
+
+  const runDiscoverySearch = async (query: string, userText: string) => {
+    setPendingDiscovery(false)
+    setFacts(emptyIntakeFacts())
+    setMessages((current) => [...current, { role: 'assistant', content: 'Entendí la búsqueda. Consultando Parse.bot/Alibaba; voy a mostrar candidatos con precio/MOQ/proveedor cuando estén disponibles.' }])
+    const live = await discoverProducts(query, userText)
+    setDiscovery(live)
+    setMessages((current) => [...current, {
+      role: 'assistant',
+      content: live.status === 'live'
+        ? `Encontré ${live.results.length} candidatos desde Alibaba. Los ordené por datos disponibles, proveedor, MOQ y señales de confianza. Para cerrar economics completos, elegí uno y lo analizo con get_product.`
+        : live.note,
     }])
   }
 
@@ -76,24 +93,31 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
         return
       }
 
+      const discoveryIntent = pendingDiscovery || wantsAlibabaDiscovery(value)
+      if (discoveryIntent) {
+        const query = buildDiscoveryQuery(value)
+        if (!query || isGenericAlibabaSearchRequest(value)) {
+          setPendingDiscovery(true)
+          setMessages((current) => [...current, { role: 'assistant', content: 'Dale. Decime qué producto querés que busque en Alibaba, con precio/MOQ objetivo si tenés.' }])
+          return
+        }
+        await runDiscoverySearch(query, value)
+        return
+      }
+
       const result = await runProductIntake(value, facts)
       setFacts(result.facts)
 
       if (result.status === 'discovery_pending' && result.searchQuery) {
-        setMessages((current) => [...current, { role: 'assistant', content: 'Entendí la búsqueda. Consultando Parse.bot/Alibaba; voy a mostrar candidatos con precio/MOQ/proveedor cuando estén disponibles.' }])
-        const live = await discoverProducts(result.searchQuery, value)
-        setDiscovery(live)
-        setMessages((current) => [...current, {
-          role: 'assistant',
-          content: live.status === 'live'
-            ? `Encontré ${live.results.length} candidatos desde Alibaba. Los ordené por datos disponibles, proveedor, MOQ y señales de confianza. Para cerrar economics completos, elegí uno y lo analizo con get_product.`
-            : live.note,
-        }])
+        await runDiscoverySearch(result.searchQuery, value)
         return
       }
 
       setMessages((current) => [...current, { role: 'assistant', content: result.message }])
-      if (result.analysis) onAnalysis(result.analysis)
+      if (result.analysis) {
+        setPendingDiscovery(false)
+        onAnalysis(result.analysis)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos procesar ese producto.')
     } finally {

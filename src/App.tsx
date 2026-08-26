@@ -66,11 +66,14 @@ export default function App() {
 
     <ImportQuoteFlow />
 
-    <section className="method-card">
-      <h3>Autocompletar con proveedor o búsqueda</h3>
-      <p>El flujo principal ya no depende de Alibaba ni de MercadoLibre. Usá esta sección sólo para traer datos del producto, MOQ, peso, volumen o benchmarks; el cálculo manual de arriba queda disponible siempre.</p>
-    </section>
-    <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
+    <details className="manual-details autocomplete-panel">
+      <summary>Autocompletar con proveedor o búsqueda</summary>
+      <section className="method-card">
+        <h3>Alibaba/MercadoLibre ahora son fuentes opcionales</h3>
+        <p>El flujo principal no depende de scraping ni API. Usá esta sección sólo para traer datos del producto, MOQ, peso, volumen o benchmarks y después copiar/ajustar esos datos en la cotización manual.</p>
+      </section>
+      <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
+    </details>
 
     {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
     {analysis && <ImportAnalyst key={analysis.sourceUrl} analysis={analysis} inputs={inputs} decision={opportunityDecision} onApplyScenario={setInputs} />}

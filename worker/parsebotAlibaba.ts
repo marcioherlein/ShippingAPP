@@ -5,6 +5,8 @@ type ParsebotEnv = {
   PARSEBOT_ENDPOINT_NAME?: string
 }
 
+const DEFAULT_PARSEBOT_ALIBABA_ENDPOINT = 'https://api.parse.bot/scraper/ba2822dd-f985-4faa-8d3b-81d795bda2a7/get_product'
+
 export type ParsebotAlibabaFacts = {
   name?: string | null
   category?: string | null
@@ -89,16 +91,15 @@ function parsebotEndpoint(env: ParsebotEnv) {
   if (endpointUrl) return endpointUrl
   const scraperId = cleanString(env.PARSEBOT_SCRAPER_ID, 200)
   const endpointName = cleanString(env.PARSEBOT_ENDPOINT_NAME, 200)
-  if (!scraperId || !endpointName) return null
-  return `https://api.parse.bot/scraper/${encodeURIComponent(scraperId)}/${encodeURIComponent(endpointName)}`
+  if (scraperId && endpointName) {
+    return `https://api.parse.bot/scraper/${encodeURIComponent(scraperId)}/${encodeURIComponent(endpointName)}`
+  }
+  return DEFAULT_PARSEBOT_ALIBABA_ENDPOINT
 }
 
 export function parsebotConfigStatus(env: ParsebotEnv) {
   const missing: string[] = []
   if (!env.PARSEBOT_API_KEY) missing.push('PARSEBOT_API_KEY')
-  if (!env.PARSEBOT_ENDPOINT_URL && (!env.PARSEBOT_SCRAPER_ID || !env.PARSEBOT_ENDPOINT_NAME)) {
-    missing.push('PARSEBOT_ENDPOINT_URL or PARSEBOT_SCRAPER_ID + PARSEBOT_ENDPOINT_NAME')
-  }
   return {
     status: missing.length ? 'not_configured' : 'configured',
     ready: missing.length === 0,
@@ -129,7 +130,7 @@ async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotA
   const headers = {
     accept: 'application/json',
     'x-api-key': apiKey,
-    'user-agent': 'ShippingAPP/2.1 ParsebotAlibaba',
+    'user-agent': 'ShippingAPP/2.2 ParsebotAlibaba',
   }
   const request = attempt.method === 'GET'
     ? fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal: controller.signal })

@@ -160,9 +160,7 @@ export async function resolveMercadoLibreAccessToken(
 ): Promise<MercadoLibreAuthResult> {
   const durable = oauthConfig(env)
   if (durable.complete) {
-    const result = await resolveStoredOrRefreshToken(env, fetchImpl, now)
-    if (result.status === 'ready' || !text(env.MERCADOLIBRE_ACCESS_TOKEN)) return result
-    // Temporary ACCESS_TOKEN is only a fallback when durable OAuth is configured but temporarily unavailable.
+    return resolveStoredOrRefreshToken(env, fetchImpl, now)
   }
 
   const staticAccessToken = text(env.MERCADOLIBRE_ACCESS_TOKEN)

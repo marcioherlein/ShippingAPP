@@ -7,8 +7,10 @@ export type HotProduct = {
   tag: string
   supplierName: string
   supplierYears: string
+  supplierBadges: string[]
   originCountry: string
   unitPriceUsd: number
+  priceDisplay: string
   moq: number
   unitWeightKg: number
   unitVolumeCbm: number
@@ -17,12 +19,14 @@ export type HotProduct = {
   localSellPriceUsd: number
   sensitiveCategory: SensitiveProductCategory
   icon: string
+  imageUrl: string | null
+  productUrl: string
   cachedFrom: 'static_seed' | 'parsebot_refresh'
 }
 
 export const hotProductsMeta = {
   source: 'Alibaba hot products cache',
-  cacheVersion: 'hot-products-v1',
+  cacheVersion: 'hot-products-v2-images-links',
   refreshedAt: '2026-08-26',
   refreshMode: 'manual_seed_no_runtime_credits',
 }
@@ -33,10 +37,12 @@ export const hotProducts: HotProduct[] = [
     title: 'Paleta de pádel carbono 18K',
     category: 'Deportes',
     tag: 'Buen margen visual',
-    supplierName: 'Proveedor verificado Alibaba',
+    supplierName: 'Arronax / proveedor Alibaba',
     supplierYears: '5 yrs',
+    supplierBadges: ['Alibaba', 'Customizable', 'Carbon fiber'],
     originCountry: 'China',
     unitPriceUsd: 32.5,
+    priceDisplay: 'USD 25–55',
     moq: 50,
     unitWeightKg: 0.38,
     unitVolumeCbm: 0.004,
@@ -45,6 +51,8 @@ export const hotProducts: HotProduct[] = [
     localSellPriceUsd: 95,
     sensitiveCategory: 'none',
     icon: '🎾',
+    imageUrl: 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=900&q=80',
+    productUrl: 'https://www.alibaba.com/trade/search?SearchText=18k+carbon+padel+racket',
     cachedFrom: 'static_seed',
   },
   {
@@ -54,8 +62,10 @@ export const hotProducts: HotProduct[] = [
     tag: 'MOQ bajo',
     supplierName: 'Shenzhen smart home supplier',
     supplierYears: '6 yrs',
+    supplierBadges: ['Smart home', 'Low MOQ', 'Electronics'],
     originCountry: 'China',
     unitPriceUsd: 5.9,
+    priceDisplay: 'USD 5.90+',
     moq: 1,
     unitWeightKg: 0.194,
     unitVolumeCbm: 0.003,
@@ -64,6 +74,8 @@ export const hotProducts: HotProduct[] = [
     localSellPriceUsd: 28,
     sensitiveCategory: 'none',
     icon: '📹',
+    imageUrl: 'https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=900&q=80',
+    productUrl: 'https://www.alibaba.com/product-detail/High-Quality-Tuya-Smartlife-Wireless-Wifi_1600667679915.html',
     cachedFrom: 'static_seed',
   },
   {
@@ -73,8 +85,10 @@ export const hotProducts: HotProduct[] = [
     tag: 'Producto liviano',
     supplierName: 'Guangdong electronics supplier',
     supplierYears: '4 yrs',
+    supplierBadges: ['Lightweight', 'High rotation', 'Small CBM'],
     originCountry: 'China',
     unitPriceUsd: 6.4,
+    priceDisplay: 'USD 4–9',
     moq: 100,
     unitWeightKg: 0.09,
     unitVolumeCbm: 0.0008,
@@ -83,6 +97,8 @@ export const hotProducts: HotProduct[] = [
     localSellPriceUsd: 24,
     sensitiveCategory: 'none',
     icon: '🎧',
+    imageUrl: 'https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?auto=format&fit=crop&w=900&q=80',
+    productUrl: 'https://www.alibaba.com/trade/search?SearchText=tws+earbuds+charging+case+wholesale',
     cachedFrom: 'static_seed',
   },
   {
@@ -92,8 +108,10 @@ export const hotProducts: HotProduct[] = [
     tag: 'Ticket accesible',
     supplierName: 'Zhejiang appliances supplier',
     supplierYears: '7 yrs',
+    supplierBadges: ['Appliance', 'Rechargeable', 'Retail-friendly'],
     originCountry: 'China',
     unitPriceUsd: 8.2,
+    priceDisplay: 'USD 6–12',
     moq: 50,
     unitWeightKg: 0.62,
     unitVolumeCbm: 0.0022,
@@ -102,6 +120,8 @@ export const hotProducts: HotProduct[] = [
     localSellPriceUsd: 35,
     sensitiveCategory: 'none',
     icon: '🥤',
+    imageUrl: 'https://images.unsplash.com/photo-1570222094114-d054a817e56b?auto=format&fit=crop&w=900&q=80',
+    productUrl: 'https://www.alibaba.com/trade/search?SearchText=portable+usb+blender+wholesale',
     cachedFrom: 'static_seed',
   },
   {
@@ -111,8 +131,10 @@ export const hotProducts: HotProduct[] = [
     tag: 'Trend beauty',
     supplierName: 'Beauty device supplier',
     supplierYears: '8 yrs',
+    supplierBadges: ['Beauty device', 'Trend', 'High ticket'],
     originCountry: 'China',
     unitPriceUsd: 18.5,
+    priceDisplay: 'USD 15–30',
     moq: 20,
     unitWeightKg: 0.52,
     unitVolumeCbm: 0.0035,
@@ -121,6 +143,8 @@ export const hotProducts: HotProduct[] = [
     localSellPriceUsd: 75,
     sensitiveCategory: 'none',
     icon: '✨',
+    imageUrl: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=900&q=80',
+    productUrl: 'https://www.alibaba.com/trade/search?SearchText=led+facial+mask+beauty+device+wholesale',
     cachedFrom: 'static_seed',
   },
   {
@@ -130,8 +154,10 @@ export const hotProducts: HotProduct[] = [
     tag: 'Producto diferencial',
     supplierName: 'Ningbo home supplier',
     supplierYears: '5 yrs',
+    supplierBadges: ['Pet care', 'Differentiated', 'Bundleable'],
     originCountry: 'China',
     unitPriceUsd: 31,
+    priceDisplay: 'USD 25–45',
     moq: 30,
     unitWeightKg: 2.1,
     unitVolumeCbm: 0.012,
@@ -140,6 +166,8 @@ export const hotProducts: HotProduct[] = [
     localSellPriceUsd: 120,
     sensitiveCategory: 'none',
     icon: '🐾',
+    imageUrl: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=900&q=80',
+    productUrl: 'https://www.alibaba.com/trade/search?SearchText=pet+grooming+vacuum+kit+wholesale',
     cachedFrom: 'static_seed',
   },
   {
@@ -149,8 +177,10 @@ export const hotProducts: HotProduct[] = [
     tag: 'Alta demanda',
     supplierName: 'Consumer electronics supplier',
     supplierYears: '6 yrs',
+    supplierBadges: ['Electronics', 'Home cinema', 'High ticket'],
     originCountry: 'China',
     unitPriceUsd: 36,
+    priceDisplay: 'USD 30–55',
     moq: 20,
     unitWeightKg: 0.9,
     unitVolumeCbm: 0.006,
@@ -159,6 +189,8 @@ export const hotProducts: HotProduct[] = [
     localSellPriceUsd: 135,
     sensitiveCategory: 'none',
     icon: '📽️',
+    imageUrl: 'https://images.unsplash.com/photo-1517602302552-471fe67acf66?auto=format&fit=crop&w=900&q=80',
+    productUrl: 'https://www.alibaba.com/trade/search?SearchText=mini+projector+1080p+wholesale',
     cachedFrom: 'static_seed',
   },
   {
@@ -168,8 +200,10 @@ export const hotProducts: HotProduct[] = [
     tag: 'Mucho volumen',
     supplierName: 'Yiwu household supplier',
     supplierYears: '9 yrs',
+    supplierBadges: ['Household', 'High CBM', 'Retail volume'],
     originCountry: 'China',
     unitPriceUsd: 3.2,
+    priceDisplay: 'USD 2–5',
     moq: 200,
     unitWeightKg: 0.85,
     unitVolumeCbm: 0.01,
@@ -178,6 +212,8 @@ export const hotProducts: HotProduct[] = [
     localSellPriceUsd: 18,
     sensitiveCategory: 'none',
     icon: '📦',
+    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=900&q=80',
+    productUrl: 'https://www.alibaba.com/trade/search?SearchText=collapsible+storage+box+wholesale',
     cachedFrom: 'static_seed',
   },
 ]

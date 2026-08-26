@@ -1,0 +1,183 @@
+import type { SensitiveProductCategory } from '../lib/landedCostEngine'
+
+export type HotProduct = {
+  id: string
+  title: string
+  category: string
+  tag: string
+  supplierName: string
+  supplierYears: string
+  originCountry: string
+  unitPriceUsd: number
+  moq: number
+  unitWeightKg: number
+  unitVolumeCbm: number
+  budgetUsd: number
+  monthlyDemand: number
+  localSellPriceUsd: number
+  sensitiveCategory: SensitiveProductCategory
+  icon: string
+  cachedFrom: 'static_seed' | 'parsebot_refresh'
+}
+
+export const hotProductsMeta = {
+  source: 'Alibaba hot products cache',
+  cacheVersion: 'hot-products-v1',
+  refreshedAt: '2026-08-26',
+  refreshMode: 'manual_seed_no_runtime_credits',
+}
+
+export const hotProducts: HotProduct[] = [
+  {
+    id: 'padel-carbon-18k',
+    title: 'Paleta de pádel carbono 18K',
+    category: 'Deportes',
+    tag: 'Buen margen visual',
+    supplierName: 'Proveedor verificado Alibaba',
+    supplierYears: '5 yrs',
+    originCountry: 'China',
+    unitPriceUsd: 32.5,
+    moq: 50,
+    unitWeightKg: 0.38,
+    unitVolumeCbm: 0.004,
+    budgetUsd: 8000,
+    monthlyDemand: 60,
+    localSellPriceUsd: 95,
+    sensitiveCategory: 'none',
+    icon: '🎾',
+    cachedFrom: 'static_seed',
+  },
+  {
+    id: 'wifi-video-doorbell',
+    title: 'Video portero WiFi smart',
+    category: 'Hogar inteligente',
+    tag: 'MOQ bajo',
+    supplierName: 'Shenzhen smart home supplier',
+    supplierYears: '6 yrs',
+    originCountry: 'China',
+    unitPriceUsd: 5.9,
+    moq: 1,
+    unitWeightKg: 0.194,
+    unitVolumeCbm: 0.003,
+    budgetUsd: 3500,
+    monthlyDemand: 80,
+    localSellPriceUsd: 28,
+    sensitiveCategory: 'none',
+    icon: '📹',
+    cachedFrom: 'static_seed',
+  },
+  {
+    id: 'tws-earbuds-pro',
+    title: 'Auriculares TWS con estuche',
+    category: 'Electrónica',
+    tag: 'Producto liviano',
+    supplierName: 'Guangdong electronics supplier',
+    supplierYears: '4 yrs',
+    originCountry: 'China',
+    unitPriceUsd: 6.4,
+    moq: 100,
+    unitWeightKg: 0.09,
+    unitVolumeCbm: 0.0008,
+    budgetUsd: 6000,
+    monthlyDemand: 120,
+    localSellPriceUsd: 24,
+    sensitiveCategory: 'none',
+    icon: '🎧',
+    cachedFrom: 'static_seed',
+  },
+  {
+    id: 'portable-blender-usb',
+    title: 'Licuadora portátil USB',
+    category: 'Hogar',
+    tag: 'Ticket accesible',
+    supplierName: 'Zhejiang appliances supplier',
+    supplierYears: '7 yrs',
+    originCountry: 'China',
+    unitPriceUsd: 8.2,
+    moq: 50,
+    unitWeightKg: 0.62,
+    unitVolumeCbm: 0.0022,
+    budgetUsd: 4500,
+    monthlyDemand: 55,
+    localSellPriceUsd: 35,
+    sensitiveCategory: 'none',
+    icon: '🥤',
+    cachedFrom: 'static_seed',
+  },
+  {
+    id: 'led-beauty-mask',
+    title: 'Máscara LED facial',
+    category: 'Belleza tech',
+    tag: 'Trend beauty',
+    supplierName: 'Beauty device supplier',
+    supplierYears: '8 yrs',
+    originCountry: 'China',
+    unitPriceUsd: 18.5,
+    moq: 20,
+    unitWeightKg: 0.52,
+    unitVolumeCbm: 0.0035,
+    budgetUsd: 5500,
+    monthlyDemand: 35,
+    localSellPriceUsd: 75,
+    sensitiveCategory: 'none',
+    icon: '✨',
+    cachedFrom: 'static_seed',
+  },
+  {
+    id: 'pet-grooming-vacuum',
+    title: 'Aspiradora grooming mascotas',
+    category: 'Mascotas',
+    tag: 'Producto diferencial',
+    supplierName: 'Ningbo home supplier',
+    supplierYears: '5 yrs',
+    originCountry: 'China',
+    unitPriceUsd: 31,
+    moq: 30,
+    unitWeightKg: 2.1,
+    unitVolumeCbm: 0.012,
+    budgetUsd: 9000,
+    monthlyDemand: 30,
+    localSellPriceUsd: 120,
+    sensitiveCategory: 'none',
+    icon: '🐾',
+    cachedFrom: 'static_seed',
+  },
+  {
+    id: 'mini-projector-1080p',
+    title: 'Mini proyector 1080p',
+    category: 'Electrónica',
+    tag: 'Alta demanda',
+    supplierName: 'Consumer electronics supplier',
+    supplierYears: '6 yrs',
+    originCountry: 'China',
+    unitPriceUsd: 36,
+    moq: 20,
+    unitWeightKg: 0.9,
+    unitVolumeCbm: 0.006,
+    budgetUsd: 7000,
+    monthlyDemand: 40,
+    localSellPriceUsd: 135,
+    sensitiveCategory: 'none',
+    icon: '📽️',
+    cachedFrom: 'static_seed',
+  },
+  {
+    id: 'collapsible-storage-box',
+    title: 'Caja organizadora plegable',
+    category: 'Hogar',
+    tag: 'Mucho volumen',
+    supplierName: 'Yiwu household supplier',
+    supplierYears: '9 yrs',
+    originCountry: 'China',
+    unitPriceUsd: 3.2,
+    moq: 200,
+    unitWeightKg: 0.85,
+    unitVolumeCbm: 0.01,
+    budgetUsd: 5000,
+    monthlyDemand: 150,
+    localSellPriceUsd: 18,
+    sensitiveCategory: 'none',
+    icon: '📦',
+    cachedFrom: 'static_seed',
+  },
+]

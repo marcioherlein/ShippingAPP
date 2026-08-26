@@ -60,7 +60,16 @@ export default function App() {
   }
 
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.7</span></header>
+    <header className="topbar">
+      <a className="brand" href="#" aria-label="ShippingAPP home">
+        <span className="brand-mark" aria-hidden="true">S</span>
+        <span className="brand-lockup">ShippingAPP</span>
+      </a>
+      <div className="topbar-meta">
+        <span className="engine-status">Evidence-first</span>
+        <span className="mvp-badge">MVP 1.8</span>
+      </div>
+    </header>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
 
     {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
@@ -93,6 +102,6 @@ export default function App() {
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Buscar con criterios</span><p>Producto, origen, precio/MOQ objetivo o exclusiones; validamos después de abrir la fuente.</p></div><div><b>02</b><span>Mercado argentino</span><p>Buscamos comparables y rango de precio local.</p></div><div><b>03</b><span>Importabilidad</span><p>NCM/SIM, landed cost y requisitos como motores internos.</p></div><div><b>04</b><span>AI Decision</span><p>Opportunity Decision + analista conversacional grounded en el mismo caso.</p></div></section>}
+    {!analysis && <section className="value-strip"><div><b>01</b><span>Source</span><p>Producto y proveedor desde una fuente real. Sin completar datos faltantes por intuición.</p></div><div><b>02</b><span>Landed cost</span><p>Producto, flete, aranceles, impuestos y cash requerido en una misma economía.</p></div><div><b>03</b><span>Market</span><p>Comparables de Mercado Libre para entender rango y posición de precio en Argentina.</p></div><div><b>04</b><span>Decision</span><p>Una señal accionable que separa evidencia confirmada, supuestos y lo que todavía falta validar.</p></div></section>}
   </main>
 }

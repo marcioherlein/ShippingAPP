@@ -17,6 +17,7 @@ import ExpertOverridePanel from './components/ExpertOverridePanel'
 import NcmIntelligencePanel from './components/NcmIntelligencePanel'
 import OpportunityDecisionPanel from './components/OpportunityDecisionPanel'
 import ImportAnalyst from './components/ImportAnalyst'
+import HotProductsSection from './components/HotProductsSection'
 import { defaultInputs } from './data/defaults'
 import { bestRowsV2, calculateV2, recommendV2 } from './lib/optimizerV2'
 import { applyAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
@@ -25,6 +26,8 @@ import { defaultClientProfileV3, type ClientProfileV3 } from './lib/regulatoryV3
 import { applyExpertOverride, type ExpertOverride } from './lib/expertOverride'
 import { automaticEvidenceReady, quantityDecisionReady } from './lib/decisionReadiness'
 import { buildOpportunityDecision } from './lib/opportunityDecision'
+import { getCachedHotProducts, hotProductToQuotePrefill } from './lib/hotProducts'
+import type { HotProduct } from './data/hotProducts'
 import type { ScenarioTaxContext } from './lib/types'
 
 export default function App() {
@@ -33,6 +36,9 @@ export default function App() {
   const [analysis, setAnalysis] = useState<ProductAnalysisV2 | null>(null)
   const [expertOverride, setExpertOverride] = useState<ExpertOverride | null>(null)
   const [client, setClient] = useState<ClientProfileV3>(defaultClientProfileV3)
+  const [selectedHotProduct, setSelectedHotProduct] = useState<HotProduct | null>(null)
+  const hotProducts = useMemo(() => getCachedHotProducts(8), [])
+  const quotePrefill = useMemo(() => selectedHotProduct ? hotProductToQuotePrefill(selectedHotProduct) : null, [selectedHotProduct])
   const taxContext = useMemo<ScenarioTaxContext>(() => ({ entityType: client.entityType, taxStatus: client.taxStatus, purpose: client.purpose, statisticsExempt: false, vatPerceptionExempt: client.entityType === 'individual' && client.purpose === 'own_use', gainsPerceptionExempt: false }), [client])
   const regulatoryChecks = useMemo(() => analysis ? buildRegulatoryChecksV4(analysis, client, expertOverride) : [], [analysis, client, expertOverride])
   const marketP25Ars = analysis && !expertOverride ? Number((analysis.market as any).details?.p25Ars) || null : null
@@ -61,10 +67,17 @@ export default function App() {
     setInputs((current) => applyExpertOverride(current, override))
   }
 
+  const handleHotProductQuote = (next: HotProduct) => {
+    setSelectedHotProduct(next)
+    window.setTimeout(() => {
+      document.getElementById('quote')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
+
   return <main className="mobile-app-shell">
     <header className="topbar mobile-topbar" id="home">
       <a className="brand mobile-brand" href="#home"><span className="brand-cube" aria-hidden="true" />Shipping<span>APP</span></a>
-      <span className="mvp-badge">MVP 2.3</span>
+      <span className="mvp-badge">MVP 2.4</span>
     </header>
 
     <section className="mobile-hero">
@@ -74,16 +87,18 @@ export default function App() {
       <p>Buscá oportunidades en Alibaba o cargá tu proveedor propio. ShippingAPP calcula flete, CIF, impuestos, cantidad óptima y recomendación final.</p>
       <div className="hero-search-pill"><span>🔎</span><b>Buscar producto, pegar link o cotizar manual</b></div>
       <div className="entry-grid">
-        <a className="entry-card entry-primary" href="#discover"><span>01</span><b>Buscar en Alibaba</b><small>Encontrá productos, proveedores, MOQ y datos logísticos.</small></a>
+        <a className="entry-card entry-primary" href="#hot-products"><span>01</span><b>Hot products</b><small>Ideas cacheadas para cotizar sin gastar créditos.</small></a>
         <a className="entry-card" href="#quote"><span>02</span><b>Ya tengo proveedor</b><small>Cargá FOB, peso, volumen, presupuesto y checklist.</small></a>
       </div>
       <div className="mobile-step-strip">
-        <span><b>1</b>Buscar</span><span><b>2</b>Cotizar</span><span><b>3</b>Optimizar</span><span><b>4</b>Decidir</span>
+        <span><b>1</b>Elegir</span><span><b>2</b>Cotizar</span><span><b>3</b>Optimizar</span><span><b>4</b>Decidir</span>
       </div>
     </section>
 
+    <HotProductsSection products={hotProducts} selectedId={selectedHotProduct?.id ?? null} onQuote={handleHotProductQuote} />
+
     <section id="quote" className="mobile-section primary-quote-section">
-      <ImportQuoteFlow />
+      <ImportQuoteFlow key={selectedHotProduct?.id ?? 'manual-quote'} prefill={quotePrefill} />
     </section>
 
     <details id="discover" className="manual-details autocomplete-panel mobile-discover-panel">
@@ -132,7 +147,7 @@ export default function App() {
 
     <nav className="mobile-bottom-nav" aria-label="Navegación principal">
       <a href="#home"><span>⌂</span>Inicio</a>
-      <a href="#discover"><span>⌕</span>Buscar</a>
+      <a href="#hot-products"><span>★</span>Hot</a>
       <a href="#quote"><span>▣</span>Cotizar</a>
       <a href="#results"><span>✓</span>Decidir</a>
     </nav>

@@ -37,11 +37,8 @@ function cleanString(value: unknown, max = 500) {
 function numberOrNull(value: unknown) {
   if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : null
   if (typeof value !== 'string') return null
-  const cleaned = value
-    .replace(/,/g, '')
-    .replace(/USD|US\$|\$|pcs?|pieces?|sets?|units?|kg|cbm|m³|cm|mm|meters?|metres?/gi, '')
-    .replace(/[^0-9.\-]/g, '')
-  const n = Number(cleaned)
+  const match = value.replace(/,/g, '').match(/\d+(?:\.\d+)?/)
+  const n = match ? Number(match[0]) : NaN
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
@@ -274,7 +271,7 @@ async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotA
   const headers = {
     accept: 'application/json',
     'x-api-key': apiKey,
-    'user-agent': 'ShippingAPP/2.4 ParsebotAlibaba',
+    'user-agent': 'ShippingAPP/2.5 ParsebotAlibaba',
   }
   const request = attempt.method === 'GET'
     ? fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal: controller.signal })

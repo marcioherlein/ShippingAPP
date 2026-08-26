@@ -52,7 +52,7 @@ export async function discoverProducts(query: string, userText: string = query):
   const response = await fetch('/api/opportunity-search', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ query, userText, limit: 12 }),
+    body: JSON.stringify({ query, userText }),
   })
   const data = await response.json() as ProductDiscoveryResponse & { error?: string }
   if (!response.ok) throw new Error(data.error || 'No pudimos buscar productos en Alibaba.')

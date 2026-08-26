@@ -77,10 +77,31 @@ function imageUrl(root: any) {
   return cleanString(value, 1000)
 }
 
+function normalizeAlibabaProductUrl(raw: string | null, productId: string | null) {
+  const fallback = productId ? `https://www.alibaba.com/product-detail/_${encodeURIComponent(productId)}.html` : ''
+  if (!raw) return fallback
+
+  let candidate = raw.trim().replace(/\s+/g, '')
+  if (!candidate) return fallback
+  if (candidate.startsWith('//')) candidate = `https:${candidate}`
+  else if (candidate.startsWith('/')) candidate = `https://www.alibaba.com${candidate}`
+  else if (/^(?:www\.)?alibaba\.com\//i.test(candidate)) candidate = `https://${candidate}`
+
+  try {
+    const url = new URL(candidate)
+    const host = url.hostname.toLowerCase()
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return fallback
+    if (host !== 'alibaba.com' && !host.endsWith('.alibaba.com')) return fallback
+    url.protocol = 'https:'
+    return url.toString()
+  } catch {
+    return fallback
+  }
+}
+
 function productUrl(root: any, productId: string | null) {
   const explicit = cleanString(firstPresent(root, ['product_url', 'productUrl', 'url', 'link']), 1200)
-  if (explicit) return explicit
-  return productId ? `https://www.alibaba.com/product-detail/_${productId}.html` : ''
+  return normalizeAlibabaProductUrl(explicit, productId)
 }
 
 function priceFromTiers(root: any) {

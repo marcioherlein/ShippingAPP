@@ -15,6 +15,6 @@ describe('Alibaba search intent helpers', () => {
   it('detects explicit product searches with criteria', () => {
     const text = 'buscame paletas de padel carbono hasta USD 30 MOQ hasta 100 en Alibaba'
     expect(wantsAlibabaDiscovery(text)).toBe(true)
-    expect(buildDiscoveryQuery(text)).toBe('paletas padel carbono hasta moq hasta')
+    expect(buildDiscoveryQuery(text)).toBe('paletas padel carbono')
   })
 })

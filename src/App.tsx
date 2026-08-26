@@ -61,33 +61,55 @@ export default function App() {
     setInputs((current) => applyExpertOverride(current, override))
   }
 
-  return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 2.2</span></header>
+  return <main className="mobile-app-shell">
+    <header className="topbar mobile-topbar" id="home">
+      <a className="brand mobile-brand" href="#home"><span className="brand-cube" aria-hidden="true" />Shipping<span>APP</span></a>
+      <span className="mvp-badge">MVP 2.3</span>
+    </header>
 
-    <ImportQuoteFlow />
+    <section className="mobile-hero">
+      <div className="hero-glow" aria-hidden="true" />
+      <span className="eyebrow">Calcula. Importa. Gana.</span>
+      <h1>Decidí qué importar y cuántas unidades traer.</h1>
+      <p>Buscá oportunidades en Alibaba o cargá tu proveedor propio. ShippingAPP calcula flete, CIF, impuestos, cantidad óptima y recomendación final.</p>
+      <div className="hero-search-pill"><span>🔎</span><b>Buscar producto, pegar link o cotizar manual</b></div>
+      <div className="entry-grid">
+        <a className="entry-card entry-primary" href="#discover"><span>01</span><b>Buscar en Alibaba</b><small>Encontrá productos, proveedores, MOQ y datos logísticos.</small></a>
+        <a className="entry-card" href="#quote"><span>02</span><b>Ya tengo proveedor</b><small>Cargá FOB, peso, volumen, presupuesto y checklist.</small></a>
+      </div>
+      <div className="mobile-step-strip">
+        <span><b>1</b>Buscar</span><span><b>2</b>Cotizar</span><span><b>3</b>Optimizar</span><span><b>4</b>Decidir</span>
+      </div>
+    </section>
 
-    <details className="manual-details autocomplete-panel">
-      <summary>Autocompletar con proveedor o búsqueda</summary>
+    <section id="quote" className="mobile-section primary-quote-section">
+      <ImportQuoteFlow />
+    </section>
+
+    <details id="discover" className="manual-details autocomplete-panel mobile-discover-panel">
+      <summary>Buscar oportunidades o autocompletar con proveedor</summary>
       <section className="method-card">
-        <h3>Alibaba/MercadoLibre ahora son fuentes opcionales</h3>
-        <p>El flujo principal no depende de scraping ni API. Usá esta sección sólo para traer datos del producto, MOQ, peso, volumen o benchmarks y después copiar/ajustar esos datos en la cotización manual.</p>
+        <h3>Alibaba/MercadoLibre son fuentes opcionales</h3>
+        <p>Usá esta sección para traer datos del producto, MOQ, peso, volumen o benchmarks. La cotización manual queda siempre disponible arriba.</p>
       </section>
       <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
     </details>
 
-    {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
-    {analysis && <ImportAnalyst key={analysis.sourceUrl} analysis={analysis} inputs={inputs} decision={opportunityDecision} onApplyScenario={setInputs} />}
-    {analysis && <MarketEvidence analysis={analysis} />}
-    {analysis && <FxEvidence analysis={analysis} />}
-    {analysis && <FreightComparisonPanel analysis={analysis} inputs={inputs} client={client} />}
-    {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
+    <section id="results" className="mobile-section results-anchor">
+      {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
+      {analysis && <ImportAnalyst key={analysis.sourceUrl} analysis={analysis} inputs={inputs} decision={opportunityDecision} onApplyScenario={setInputs} />}
+      {analysis && <MarketEvidence analysis={analysis} />}
+      {analysis && <FxEvidence analysis={analysis} />}
+      {analysis && <FreightComparisonPanel analysis={analysis} inputs={inputs} client={client} />}
+      {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
+    </section>
 
     {analysis && economicsReady && <>
       {expertOverride
         ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. El FX sigue viniendo de BCRA REF; ShippingAPP no convierte el override en validación aduanera.</div>
-        : <div className="analysis-banner"><b>Opportunity screening.</b> El output ahora sigue el flujo input → proceso → output: datos del producto, benchmark, FX, flete FCL/LCL/aéreo, CIF/impuestos/gastos y decisión. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening.</div>}
+        : <div className="analysis-banner"><b>Opportunity screening.</b> El output sigue input → proceso → output: datos del producto, benchmark, FX, flete FCL/LCL/aéreo, CIF/impuestos/gastos y decisión. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening.</div>}
 
-      <div className="workspace">
+      <div className="workspace legacy-business-case">
         <aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>
         <section className="results-column">
           {decisionReady ? <>
@@ -95,7 +117,7 @@ export default function App() {
             <ScenarioTable rows={rows} selected={selected} />
             <RobustQuantityPanel key={`${analysis.sourceUrl}:${marketP25Ars ?? 'manual'}`} inputs={inputs} context={taxContext} marketP25Ars={marketP25Ars} />
             <section className="method-card"><h3>Cómo se calcula el score</h3><p>Margen sobre costo económico 40% · eficiencia del capital 30% · inventario 20% · capacidad de financiar el capital inicial 10% cuando el capital fue informado.</p><p>Si el capital no se informa, esa dimensión no recibe puntos gratis: se normalizan sólo las dimensiones observadas. El score mide atractivo económico, no habilitación legal ni demanda observada.</p></section>
-          </> : <section className="partial-card"><span className="eyebrow">Robust Decision pendiente</span><h2>Agregá una hipótesis de demanda para optimizar cantidad.</h2><p>El Instant Screening de arriba ya evalúa unit economics y cash del MOQ. Podés escribir la demanda en “Mercado y capital” o decírsela al AI Import Analyst. ShippingAPP recién muestra “cantidad recomendada”, inventario y Robust score cuando la demanda mensual es mayor a 0.</p><p>Mercado Libre aporta publicaciones y precios de screening; no observamos ventas reales.</p></section>}
+          </> : <section className="partial-card"><span className="eyebrow">Robust Decision pendiente</span><h2>Agregá una hipótesis de demanda para optimizar cantidad.</h2><p>El Instant Screening ya evalúa unit economics y cash del MOQ. Podés escribir la demanda en “Mercado y capital” o decírsela al AI Import Analyst.</p><p>Mercado Libre aporta publicaciones y precios de screening; no observamos ventas reales.</p></section>}
         </section>
       </div>
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
@@ -106,6 +128,13 @@ export default function App() {
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Input mínimo</span><p>Producto, origen, precio, MOQ, peso/volumen y 4 preguntas de checklist.</p></div><div><b>02</b><span>Proceso</span><p>Flete FCL/LCL/aéreo, CIF, derechos, tasa, IVA/percepciones y gastos.</p></div><div><b>03</b><span>Comparación</span><p>LCL vs aéreo como valor principal; FCL sólo referencia.</p></div><div><b>04</b><span>Output</span><p>Costo unitario puesto en Argentina, margen y decisión.</p></div></section>}
+    {!analysis && <section className="value-strip mobile-value-strip"><div><b>01</b><span>Input mínimo</span><p>Producto, origen, precio, MOQ, peso/volumen y checklist.</p></div><div><b>02</b><span>Proceso</span><p>Flete FCL/LCL/aéreo, CIF, derechos, tasa, IVA y gastos.</p></div><div><b>03</b><span>Optimización</span><p>Presupuesto, MOQ, demanda y cantidad óptima.</p></div><div><b>04</b><span>Output</span><p>Costo unitario, margen y decisión final.</p></div></section>}
+
+    <nav className="mobile-bottom-nav" aria-label="Navegación principal">
+      <a href="#home"><span>⌂</span>Inicio</a>
+      <a href="#discover"><span>⌕</span>Buscar</a>
+      <a href="#quote"><span>▣</span>Cotizar</a>
+      <a href="#results"><span>✓</span>Decidir</a>
+    </nav>
   </main>
 }

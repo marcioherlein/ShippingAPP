@@ -39,6 +39,14 @@ function checklistSignal(ok: boolean, label: string) {
   return <span className={ok ? 'score-pill' : 'score-pill warning-pill'}>{ok ? 'OK' : label}</span>
 }
 
+function decisionCopy(mode: 'lcl' | 'air' | null, marginPct: number | null, blockers: string[]) {
+  if (!mode) return { title: 'Completá datos', body: 'Faltan datos para comparar LCL contra aéreo.' }
+  if (blockers.length) return { title: 'Faltan datos clave', body: 'El costo se calcula, pero la decisión queda abierta hasta cerrar checklist.' }
+  if (marginPct !== null && marginPct < 0) return { title: 'No conviene con estos datos', body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} es el menor costo logístico, pero el costo unitario supera el precio local cargado.` }
+  if (marginPct !== null && marginPct < 20) return { title: 'Margen débil', body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} gana por costo, pero el margen rápido queda bajo para absorber errores, demoras o gastos no modelados.` }
+  return { title: `Conviene ${mode === 'lcl' ? 'LCL' : 'aéreo'}`, body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} es el menor costo entre las opciones accionables. FCL queda sólo como referencia.` }
+}
+
 export default function ImportQuoteFlow() {
   const [productName, setProductName] = useState('Paleta de pádel carbono')
   const [originCountry, setOriginCountry] = useState('China')
@@ -81,6 +89,7 @@ export default function ImportQuoteFlow() {
   const fcl = quote.modes.fcl
   const winner = quote.bestMode ? quote.modes[quote.bestMode] : null
   const marginPct = winner && localSellPriceUsd > 0 ? ((localSellPriceUsd - winner.unitCostUsd) / localSellPriceUsd) * 100 : null
+  const decision = decisionCopy(quote.bestMode, marginPct, quote.checklist.blockers)
 
   return <section className="manual-quote-shell">
     <div className="table-title">
@@ -129,9 +138,10 @@ export default function ImportQuoteFlow() {
       <section className="results-column">
         <section className="recommendation">
           <div className="recommendation-top">
-            <div><span className="eyebrow">Output principal</span><strong>{winner ? modeLabels[winner.mode] : 'Pendiente'}</strong></div>
+            <div><span className="eyebrow">Decisión principal</span><strong>{decision.title}</strong></div>
             <div className="score"><span>Costo/u.</span><b>{winner ? usd(winner.unitCostUsd) : '-'}</b></div>
           </div>
+          <p className="mode">{decision.body}</p>
           <p className="mode">{productName || 'Producto'} · {originCountry} · {quantity} unidades · FOB total {usd(quantity * unitPriceUsd)}</p>
           <div className="metric-grid">
             <div><span>LCL final</span><b>{usd(lcl.totalCostUsd)}</b></div>
@@ -146,7 +156,7 @@ export default function ImportQuoteFlow() {
             const taxes = mode.dutyUsd + mode.statisticsUsd + mode.vatUsd + mode.vatAdditionalUsd + mode.gainsUsd + mode.iibbUsd
             const expenses = mode.fixedDestinationUsd + mode.noImporterSignatureUsd + mode.sensitiveCategoryUsd
             const selected = winner?.mode === mode.mode
-            return <tr key={mode.mode} className={selected ? 'selected-row' : undefined}><td><b>{modeLabels[mode.mode]}</b>{selected && <em>menor costo total</em>}</td><td>{usd(mode.freightCostUsd)}<br /><small>{mode.chargeableUnits} {mode.mode === 'air' ? 'kg cobrables' : mode.mode === 'lcl' ? 'WM' : 'cont.'}</small></td><td>{usd(mode.cifUsd)}</td><td>{usd(mode.baseVatUsd)}</td><td>{usd(taxes)}</td><td>{usd(expenses)}</td><td><b>{usd(mode.totalCostUsd)}</b></td><td><b>{usd(mode.unitCostUsd)}</b></td></tr>
+            return <tr key={mode.mode} className={selected ? 'selected-row' : undefined}><td><b>{modeLabels[mode.mode]}</b>{selected && <em>recomendado</em>}{mode.mode === 'fcl' && <em>referencia</em>}</td><td>{usd(mode.freightCostUsd)}<br /><small>{mode.chargeableUnits} {mode.mode === 'air' ? 'kg cobrables' : mode.mode === 'lcl' ? 'WM' : 'cont.'}</small></td><td>{usd(mode.cifUsd)}</td><td>{usd(mode.baseVatUsd)}</td><td>{usd(taxes)}</td><td>{usd(expenses)}</td><td><b>{usd(mode.totalCostUsd)}</b></td><td><b>{usd(mode.unitCostUsd)}</b></td></tr>
           })}</tbody></table></div>
           <div className="analysis-banner" style={{ marginTop: 16 }}><b>LCL vs Aéreo:</b> {quote.lclVsAir.cheaperMode === 'lcl' ? `LCL ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs aéreo.` : quote.lclVsAir.cheaperMode === 'air' ? `Aéreo ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs LCL.` : 'empate con los datos actuales.'} FCL queda como referencia de contenedor entero.</div>
         </section>

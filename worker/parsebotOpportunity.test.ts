@@ -8,7 +8,7 @@ const sample = {
         title: '7-Inch Ultra-Thin 1024x600 TFT LCD Car Capacitive Touch Screen',
         image_urls: ['https://sc04.alicdn.com/kf/H78d2e944cd984fafbcae555c783b645fG.jpg'],
         product_id: '1601144593280',
-        product_url: 'https://www.alibaba.com/product-detail/_1601144593280.html',
+        product_url: '//www.alibaba.com/product-detail/_1601144593280.html',
         moq: 'Min. order: 1 sets',
         price_display: '$76-78',
         price_tiers: [
@@ -25,7 +25,7 @@ const sample = {
       {
         title: 'Generic LCD screen without data',
         product_id: '1600000000000',
-        product_url: 'https://www.alibaba.com/product-detail/_1600000000000.html',
+        product_url: 'not-a-url',
       },
     ],
     total_count: 2,
@@ -48,6 +48,8 @@ describe('Parse.bot opportunity search', () => {
     expect(result.creditsEstimated).toBe(2)
     expect(result.results).toHaveLength(2)
     expect(result.results[0].title).toContain('7-Inch Ultra-Thin')
+    expect(result.results[0].url).toBe('https://www.alibaba.com/product-detail/_1601144593280.html')
+    expect(result.results[1].url).toBe('https://www.alibaba.com/product-detail/_1600000000000.html')
     expect(result.results[0].unitPriceUsd).toBe(78)
     expect(result.results[0].moq).toBe(1)
     expect(result.results[0].packedWeightKg).toBe(3)

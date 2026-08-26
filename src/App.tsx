@@ -18,6 +18,7 @@ import NcmIntelligencePanel from './components/NcmIntelligencePanel'
 import OpportunityDecisionPanel from './components/OpportunityDecisionPanel'
 import ImportAnalyst from './components/ImportAnalyst'
 import HotProductsSection from './components/HotProductsSection'
+import GuidedImportAgent from './components/GuidedImportAgent'
 import { defaultInputs } from './data/defaults'
 import { bestRowsV2, calculateV2, recommendV2 } from './lib/optimizerV2'
 import { applyAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
@@ -47,6 +48,8 @@ export default function App() {
   const fxReady = !!analysis && analysis.fx?.status === 'live' && !!analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0
   const economicsReady = automaticReady || (!!expertOverride && fxReady)
   const decisionReady = quantityDecisionReady(economicsReady, inputs.monthlyDemand)
+  const hasSupplierData = Boolean(quotePrefill || (analysis && analysis.product?.unitPriceUsd && analysis.product?.moq && analysis.product?.packedWeightKg && analysis.product?.volumeCbm))
+  const hasNcmCandidate = Boolean(analysis && (analysis as any).customs?.ncm)
 
   const results = useMemo(() => economicsReady && inputs.usdArs > 0 ? calculateV2(inputs, taxContext) : [], [inputs, taxContext, economicsReady])
   const rows = useMemo(() => bestRowsV2(results), [results])
@@ -77,7 +80,7 @@ export default function App() {
   return <main className="mobile-app-shell">
     <header className="topbar mobile-topbar" id="home">
       <a className="brand mobile-brand" href="#home"><span className="brand-cube" aria-hidden="true" />Shipping<span>APP</span></a>
-      <span className="mvp-badge">MVP 2.4</span>
+      <span className="mvp-badge">MVP 2.5</span>
     </header>
 
     <section className="mobile-hero">
@@ -94,6 +97,16 @@ export default function App() {
         <span><b>1</b>Elegir</span><span><b>2</b>Cotizar</span><span><b>3</b>Optimizar</span><span><b>4</b>Decidir</span>
       </div>
     </section>
+
+    <GuidedImportAgent facts={{
+      hasSelectedProduct: Boolean(selectedHotProduct || analysis),
+      hasSupplierData,
+      hasBudget: Boolean(quotePrefill?.budgetUsd || inputs.capitalAvailableUsd),
+      hasQuantitySignal: Boolean(quotePrefill?.monthlyDemand || inputs.monthlyDemand),
+      hasNcmCandidate,
+      productName: selectedHotProduct?.title || analysis?.product?.name || null,
+      missingProductFacts: ['material/composición', 'función principal', 'uso previsto', 'presentación comercial'],
+    }} />
 
     <HotProductsSection products={hotProducts} selectedId={selectedHotProduct?.id ?? null} onQuote={handleHotProductQuote} />
 

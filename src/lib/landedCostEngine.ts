@@ -76,7 +76,7 @@ export type LandedCostComparison = {
     blockers: string[]
   }
   modes: Record<TransportMode, ModeCostBreakdown>
-  bestMode: TransportMode | null
+  bestMode: 'lcl' | 'air' | null
   lclVsAir: {
     cheaperMode: 'lcl' | 'air' | null
     savingsUsd: number | null
@@ -240,8 +240,6 @@ export function compareLandedCost(input: LandedCostInput): LandedCostComparison 
   }
   if (!origin) return { status: 'missing_origin', origin, checklist: checklistStatus(input), modes, bestMode: null, lclVsAir: { cheaperMode: null, savingsUsd: null, savingsPct: null }, notes: ['No encontramos el origen en la tabla Valores.xlsx.'] }
 
-  const available = Object.values(modes).filter((mode) => mode.available)
-  const best = available.reduce((winner, current) => current.totalCostUsd < winner.totalCostUsd ? current : winner, available[0])
   const lcl = modes.lcl
   const air = modes.air
   const cheaperMode = lcl.totalCostUsd === air.totalCostUsd ? null : lcl.totalCostUsd < air.totalCostUsd ? 'lcl' : 'air'
@@ -254,10 +252,10 @@ export function compareLandedCost(input: LandedCostInput): LandedCostComparison 
     origin,
     checklist: checklistStatus(input),
     modes,
-    bestMode: best?.mode ?? null,
+    bestMode: cheaperMode,
     lclVsAir: { cheaperMode, savingsUsd: savingsUsd === null ? null : roundMoney(savingsUsd), savingsPct },
     notes: [
-      'FCL se calcula como referencia por contenedor entero.',
+      'FCL se calcula como referencia por contenedor entero y nunca define la recomendación principal.',
       'El valor principal para oportunidad compara LCL vs aéreo.',
       'FOB + flete internacional = CIF; derecho y tasa estadística se calculan sobre CIF; IVA/percepciones sobre base IVA.',
     ],

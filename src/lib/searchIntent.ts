@@ -40,6 +40,7 @@ export function buildDiscoveryQuery(input: string) {
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length >= 3)
     .filter((token) => !/^\d+(?:[.,]\d+)?$/.test(token))
+    .filter((token) => !/^\d+(?:usd|us|dolar|dolares)$/.test(token))
     .filter((token) => !SEARCH_FILLER_WORDS.has(token))
   return tokens.slice(0, 10).join(' ')
 }

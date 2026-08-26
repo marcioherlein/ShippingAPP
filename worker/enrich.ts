@@ -8,12 +8,16 @@ import { runImportAnalyst } from './importAnalyst'
 import { runConversationalIntake } from './conversationalIntake'
 import { discoverAlibabaProducts } from './productDiscovery'
 import { rankDiscoveryResponse } from './discoveryRanking'
+import { searchAlibabaOpportunities } from './parsebotOpportunity'
 import type { BrowserRun } from './alibabaSource'
 
 type Env = MercadoLibreAuthEnv & {
   AI: { run: (model: string, input: unknown) => Promise<unknown> }
   ASSETS: { fetch: (request: Request) => Promise<Response> }
   BROWSER: BrowserRun
+  PARSEBOT_API_KEY?: string
+  PARSEBOT_ENDPOINT_URL?: string
+  PARSEBOT_SCRAPER_ID?: string
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -73,6 +77,16 @@ function discoveryRequest(body: unknown) {
   const query = typeof raw.query === 'string' ? raw.query.trim().replace(/\s+/g, ' ').slice(0, 220) : ''
   const userText = typeof raw.userText === 'string' ? raw.userText.trim().replace(/\s+/g, ' ').slice(0, 500) : query
   return query.length >= 2 ? { query, userText: userText || query } : null
+}
+
+function opportunitySearchRequest(body: unknown) {
+  const raw = body && typeof body === 'object' ? body as any : {}
+  const query = typeof raw.query === 'string' ? raw.query.trim().replace(/\s+/g, ' ').slice(0, 220) : ''
+  const userText = typeof raw.userText === 'string' ? raw.userText.trim().replace(/\s+/g, ' ').slice(0, 500) : query
+  const page = typeof raw.page === 'number' ? raw.page : 1
+  const limit = typeof raw.limit === 'number' ? raw.limit : 12
+  const sort = typeof raw.sort === 'string' ? raw.sort : 'best_match'
+  return query.length >= 2 ? { query, userText: userText || query, page, limit, sort } : null
 }
 
 function marketBenchmarkRequest(body: unknown) {
@@ -355,6 +369,37 @@ export default {
         return json({ ...intake, analysis })
       } catch {
         return json({ error: 'No pudimos procesar el intake conversacional.' }, 400)
+      }
+    }
+
+    if (url.pathname === '/api/opportunity-search' && request.method === 'POST') {
+      try {
+        const parsed = opportunitySearchRequest(await request.json())
+        if (!parsed) return json({ error: 'Ingresá una búsqueda de producto válida.' }, 400)
+        const result = await searchAlibabaOpportunities(parsed.query, env, {
+          page: parsed.page,
+          sort: parsed.sort,
+          limit: parsed.limit,
+        })
+        const constraints = rankDiscoveryResponse({
+          status: 'unavailable',
+          mode: 'unavailable',
+          query: parsed.query,
+          results: [],
+          browserAttempted: false,
+          browserMsUsed: null,
+          note: '',
+        }, parsed.userText)
+        return json({
+          ...result,
+          constraints: constraints.constraints,
+          constraintsNote: constraints.constraintsNote,
+        })
+      } catch (error) {
+        return json({
+          error: 'No pudimos ejecutar la búsqueda Parse.bot de Alibaba.',
+          detail: error instanceof Error ? error.message : 'unknown error',
+        }, 503)
       }
     }
 

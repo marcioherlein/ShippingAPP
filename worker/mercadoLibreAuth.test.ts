@@ -17,6 +17,24 @@ describe('Mercado Libre OAuth token lifecycle', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  it('prefers durable OAuth storage over a temporary access token when both are configured', async () => {
+    const now = 1_800_000_000_000
+    const stored = JSON.stringify({ accessToken: 'stored-access', refreshToken: 'stored-refresh', expiresAt: now + 60 * 60 * 1000 })
+    const store: MercadoLibreTokenStore = { get: vi.fn(async () => stored), put: vi.fn(async () => undefined) }
+    const fetchImpl = vi.fn<typeof fetch>()
+
+    const result = await resolveMercadoLibreAccessToken({
+      MERCADOLIBRE_ACCESS_TOKEN: 'expired-temporary-token',
+      MERCADOLIBRE_CLIENT_ID: 'client',
+      MERCADOLIBRE_CLIENT_SECRET: 'secret',
+      MERCADOLIBRE_REFRESH_TOKEN: 'bootstrap',
+      MERCADOLIBRE_TOKEN_STORE: store,
+    }, fetchImpl, now)
+
+    expect(result).toEqual({ status: 'ready', accessToken: 'stored-access', source: 'token_store' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it('reuses a still-valid token from durable storage', async () => {
     const now = 1_800_000_000_000
     const stored = JSON.stringify({ accessToken: 'stored-access', refreshToken: 'stored-refresh', expiresAt: now + 60 * 60 * 1000 })

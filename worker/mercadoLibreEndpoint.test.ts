@@ -22,6 +22,23 @@ afterEach(() => {
 })
 
 describe('MercadoLibre benchmark endpoints', () => {
+  it('accepts MercadoLibre notification callbacks without exposing the payload', async () => {
+    const response = await worker.fetch(new Request('https://shippingapp.test/api/mercadolibre/notifications', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ resource: '/items/MLA123', user_id: 99, secret: 'do-not-leak' }),
+    }), env())
+    expect(response.status).toBe(200)
+    const bodyText = await response.text()
+    const body = JSON.parse(bodyText)
+
+    expect(body.status).toBe('ok')
+    expect(body.accepted).toBe(true)
+    expect(body.payloadSeen).toBe(true)
+    expect(bodyText).not.toContain('do-not-leak')
+    expect(bodyText).not.toContain('MLA123')
+  })
+
   it('renders the OAuth callback code page without exposing token fields', async () => {
     const response = await worker.fetch(new Request('https://shippingapp.test/oauth/mercadolibre/callback?code=abc123'), env())
     expect(response.status).toBe(200)

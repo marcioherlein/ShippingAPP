@@ -9,5 +9,11 @@
     "run_worker_first": ["/api/*", "/oauth/*"]
   },
   "ai": { "binding": "AI" },
-  "browser": { "binding": "BROWSER" }
+  "browser": { "binding": "BROWSER" },
+  "kv_namespaces": [
+    {
+      "binding": "MERCADOLIBRE_TOKEN_STORE",
+      "id": "4e4a1a22926f4dcdb8242cf0b5d845d1"
+    }
+  ]
 }

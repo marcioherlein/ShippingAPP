@@ -10,7 +10,7 @@ export type FxEvidence = {
 }
 
 export type SourceReadEvidence = {
-  mode: 'direct' | 'browser' | 'partial' | 'blocked'
+  mode: 'direct' | 'browser' | 'partial' | 'blocked' | 'parsebot'
   quality: number
   directStatus: number | null
   browserAttempted: boolean

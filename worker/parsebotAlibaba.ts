@@ -39,7 +39,7 @@ function numberOrNull(value: unknown) {
   if (typeof value !== 'string') return null
   const cleaned = value
     .replace(/,/g, '')
-    .replace(/USD|US\$|\$|pcs?|pieces?|sets?|units?|kg|cbm|m³/gi, '')
+    .replace(/USD|US\$|\$|pcs?|pieces?|sets?|units?|kg|cbm|m³|cm|mm|meters?|metres?/gi, '')
     .replace(/[^0-9.\-]/g, '')
   const n = Number(cleaned)
   return Number.isFinite(n) && n > 0 ? n : null
@@ -55,10 +55,92 @@ function firstPresent(root: any, keys: string[]) {
   return null
 }
 
+function normalizeSpecName(value: unknown) {
+  return cleanString(value, 120)?.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() || ''
+}
+
+function specifications(root: any): Array<{ name?: unknown; value?: unknown }> {
+  const value = firstPresent(root, ['specifications', 'specs', 'product.specifications', 'data.specifications'])
+  return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : []
+}
+
+function specificationValue(root: any, names: string[]) {
+  const wanted = names.map(normalizeSpecName)
+  for (const spec of specifications(root)) {
+    const name = normalizeSpecName(spec.name)
+    if (wanted.includes(name)) return spec.value
+  }
+  return null
+}
+
 function firstImage(root: any) {
-  const value = firstPresent(root, ['imageUrl', 'image_url', 'main_image', 'mainImage', 'image', 'images', 'product.images', 'thumbnail', 'thumbnail_url'])
+  const value = firstPresent(root, [
+    'imageUrl',
+    'image_url',
+    'main_image',
+    'mainImage',
+    'image',
+    'images',
+    'image_urls',
+    'product.images',
+    'product.image_urls',
+    'thumbnail',
+    'thumbnail_url',
+  ])
   if (Array.isArray(value)) return cleanString(value.find((item) => typeof item === 'string'))
   return cleanString(value)
+}
+
+function priceFromTiers(root: any) {
+  const tiers = firstPresent(root, ['price_tiers', 'priceTiers', 'tiers', 'product.price_tiers'])
+  if (!Array.isArray(tiers)) return null
+  const normalized = tiers
+    .map((tier: any) => ({
+      minQuantity: numberOrNull(tier?.min_quantity ?? tier?.minQuantity ?? tier?.min_qty ?? tier?.from),
+      price: numberOrNull(tier?.price_value ?? tier?.priceValue ?? tier?.unit_price ?? tier?.unitPrice ?? tier?.price),
+    }))
+    .filter((tier) => tier.price)
+    .sort((a, b) => (a.minQuantity ?? Number.MAX_SAFE_INTEGER) - (b.minQuantity ?? Number.MAX_SAFE_INTEGER))
+  return normalized[0]?.price ?? null
+}
+
+function priceFromDisplay(value: unknown) {
+  const text = cleanString(value, 200)
+  if (!text) return null
+  const numbers = text.match(/\d+(?:\.\d+)?/g)?.map(Number).filter((n) => Number.isFinite(n) && n > 0) || []
+  return numbers[0] ?? null
+}
+
+function weightKg(value: unknown) {
+  const text = cleanString(value, 120)
+  const amount = numberOrNull(value)
+  if (!amount) return null
+  if (text && /\bg\b|grams?/i.test(text) && !/kg/i.test(text)) return amount / 1000
+  return amount
+}
+
+function dimensionsToCbm(value: unknown) {
+  const text = cleanString(value, 200)
+  if (!text) return null
+  const dims = text.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) || []
+  if (dims.length !== 3 || dims.some((n) => !Number.isFinite(n) || n <= 0)) return null
+  const factor = /\bmm\b/i.test(text) ? 0.001 : /\bm\b|meters?|metres?/i.test(text) && !/\bcm\b/i.test(text) ? 1 : 0.01
+  const cbm = dims.reduce((product, n) => product * n * factor, 1)
+  return Number.isFinite(cbm) && cbm > 0 ? Number(cbm.toFixed(6)) : null
+}
+
+function compactSpecsDescription(root: any) {
+  const specs = specifications(root)
+  if (!specs.length) return null
+  const parts = specs
+    .map((spec) => {
+      const name = cleanString(spec.name, 80)
+      const value = cleanString(spec.value, 160)
+      return name && value ? `${name}: ${value}` : null
+    })
+    .filter(Boolean)
+    .slice(0, 10)
+  return parts.length ? `Specifications: ${parts.join('; ')}` : null
 }
 
 function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
@@ -66,24 +148,62 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
   const data = root.data && typeof root.data === 'object' ? root.data : root
   const product = data.product && typeof data.product === 'object' ? data.product : data
   const packaging = product.packaging && typeof product.packaging === 'object' ? product.packaging : data.packaging || {}
-  const priceValue = firstPresent(product, [
-    'unitPriceUsd', 'unit_price_usd', 'price_usd', 'priceMinUsd', 'price_min_usd', 'price.min_usd', 'price.min', 'price.low', 'price', 'unitPrice', 'unit_price', 'min_price', 'minPrice',
-  ])
+  const shipping = product.shipping_info && typeof product.shipping_info === 'object'
+    ? product.shipping_info
+    : product.shippingInfo && typeof product.shippingInfo === 'object'
+      ? product.shippingInfo
+      : data.shipping_info || data.shippingInfo || {}
+
+  const priceValue = priceFromTiers(product) ?? firstPresent(product, [
+    'unitPriceUsd',
+    'unit_price_usd',
+    'price_usd',
+    'priceMinUsd',
+    'price_min_usd',
+    'price.min_usd',
+    'price.min',
+    'price.low',
+    'price_value',
+    'priceValue',
+    'price',
+    'unitPrice',
+    'unit_price',
+    'min_price',
+    'minPrice',
+  ]) ?? priceFromDisplay(firstPresent(product, ['price_display', 'priceDisplay', 'display_price']))
+
   const moqValue = firstPresent(product, ['moq', 'minimum_order_quantity', 'minimumOrderQuantity', 'min_order', 'minOrder', 'minimum_order'])
-  const weightValue = firstPresent(product, ['packedWeightKg', 'packed_weight_kg', 'weightKg', 'weight_kg', 'package_weight_kg', 'packaging.weight_kg']) ?? firstPresent(packaging, ['weight_kg', 'packedWeightKg', 'weightKg'])
+  const weightValue = firstPresent(product, [
+    'packedWeightKg',
+    'packed_weight_kg',
+    'weightKg',
+    'weight_kg',
+    'package_weight_kg',
+    'packaging.weight_kg',
+    'shipping_info.unit_weight',
+    'shippingInfo.unitWeight',
+  ]) ?? firstPresent(packaging, ['weight_kg', 'packedWeightKg', 'weightKg']) ?? firstPresent(shipping, ['unit_weight', 'unitWeight', 'weight'])
   const volumeValue = firstPresent(product, ['volumeCbm', 'volume_cbm', 'package_volume_cbm', 'packaging.volume_cbm']) ?? firstPresent(packaging, ['volume_cbm', 'volumeCbm'])
+  const dimensionsValue = firstPresent(product, ['shipping_info.unit_size', 'shippingInfo.unitSize', 'package_size', 'package_dimensions', 'dimensions'])
+    ?? firstPresent(shipping, ['unit_size', 'unitSize', 'package_size', 'dimensions'])
+    ?? firstPresent(packaging, ['unit_size', 'dimensions', 'size'])
+
+  const originValue = firstPresent(product, ['originCountry', 'origin_country', 'country_of_origin', 'supplier_country', 'supplier.country'])
+    ?? specificationValue(product, ['place of origin', 'origin', 'country of origin', 'country/region', 'country region'])
+  const title = firstPresent(product, ['name', 'title', 'product_name', 'productName'])
+  const description = firstPresent(product, ['description', 'summary', 'product_description']) ?? compactSpecsDescription(product)
 
   return {
-    name: cleanString(firstPresent(product, ['name', 'title', 'product_name', 'productName']), 700),
-    category: cleanString(firstPresent(product, ['category', 'product_category', 'productCategory']), 300),
+    name: cleanString(title, 700),
+    category: cleanString(firstPresent(product, ['category', 'product_category', 'productCategory', 'type', 'product_type']), 300),
     unitPriceUsd: numberOrNull(priceValue),
     moq: numberOrNull(moqValue),
-    packedWeightKg: numberOrNull(weightValue),
-    volumeCbm: numberOrNull(volumeValue),
-    originCountry: cleanString(firstPresent(product, ['originCountry', 'origin_country', 'country_of_origin', 'supplier_country', 'supplier.country']), 120),
+    packedWeightKg: weightKg(weightValue),
+    volumeCbm: numberOrNull(volumeValue) ?? dimensionsToCbm(dimensionsValue),
+    originCountry: cleanString(originValue, 120),
     imageUrl: firstImage(product) || firstImage(data),
-    supplier: cleanString(firstPresent(product, ['supplier', 'supplier_name', 'supplier.name', 'company', 'company_name']), 300),
-    description: cleanString(firstPresent(product, ['description', 'summary', 'product_description']), 1500),
+    supplier: cleanString(firstPresent(product, ['supplier', 'supplier_name', 'supplierName', 'supplier.name', 'company', 'company_name']), 300),
+    description: cleanString(description, 1500),
     raw,
   }
 }
@@ -154,7 +274,7 @@ async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotA
   const headers = {
     accept: 'application/json',
     'x-api-key': apiKey,
-    'user-agent': 'ShippingAPP/2.3 ParsebotAlibaba',
+    'user-agent': 'ShippingAPP/2.4 ParsebotAlibaba',
   }
   const request = attempt.method === 'GET'
     ? fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal: controller.signal })

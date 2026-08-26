@@ -10,6 +10,7 @@ import ClientChecklist from './components/ClientChecklist'
 import RegulatoryPanel from './components/RegulatoryPanel'
 import MarketEvidence from './components/MarketEvidence'
 import FxEvidence from './components/FxEvidence'
+import FreightComparisonPanel from './components/FreightComparisonPanel'
 import RobustQuantityPanel from './components/RobustQuantityPanel'
 import ExpertOverridePanel from './components/ExpertOverridePanel'
 import NcmIntelligencePanel from './components/NcmIntelligencePanel'
@@ -60,19 +61,20 @@ export default function App() {
   }
 
   return <main>
-    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.7</span></header>
+    <header className="topbar"><a className="brand" href="#">Shipping<span>APP</span></a><span className="mvp-badge">MVP 1.8</span></header>
     <UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} />
 
     {analysis && <OpportunityDecisionPanel decision={opportunityDecision} />}
     {analysis && <ImportAnalyst key={analysis.sourceUrl} analysis={analysis} inputs={inputs} decision={opportunityDecision} onApplyScenario={setInputs} />}
     {analysis && <MarketEvidence analysis={analysis} />}
     {analysis && <FxEvidence analysis={analysis} />}
+    {analysis && <FreightComparisonPanel analysis={analysis} inputs={inputs} client={client} />}
     {analysis && !expertOverride && <NcmIntelligencePanel analysis={analysis} />}
 
     {analysis && economicsReady && <>
       {expertOverride
         ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. El FX sigue viniendo de BCRA REF; ShippingAPP no convierte el override en validación aduanera.</div>
-        : <div className="analysis-banner"><b>Opportunity screening.</b> El verdict instantáneo usa unit economics del MOQ sin inventar demanda. Cuando ingresás una hipótesis mensual —manualmente o desde AI Import Analyst— pasa a Robust Decision con stress de demanda -30% y precio P25 cuando existe. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening y las intervenciones/reglamentos permanecen sujetos a verificación.</div>}
+        : <div className="analysis-banner"><b>Opportunity screening.</b> El output ahora sigue el flujo input → proceso → output: datos del producto, benchmark, FX, flete FCL/LCL/aéreo, CIF/impuestos/gastos y decisión. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening.</div>}
 
       <div className="workspace">
         <aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>
@@ -93,6 +95,6 @@ export default function App() {
       <ClientChecklist value={client} onChange={setClient} /><RegulatoryPanel checks={regulatoryChecks} client={client} />
     </>}
 
-    {!analysis && <section className="value-strip"><div><b>01</b><span>Buscar con criterios</span><p>Producto, origen, precio/MOQ objetivo o exclusiones; validamos después de abrir la fuente.</p></div><div><b>02</b><span>Mercado argentino</span><p>Buscamos comparables y rango de precio local.</p></div><div><b>03</b><span>Importabilidad</span><p>NCM/SIM, landed cost y requisitos como motores internos.</p></div><div><b>04</b><span>AI Decision</span><p>Opportunity Decision + analista conversacional grounded en el mismo caso.</p></div></section>}
+    {!analysis && <section className="value-strip"><div><b>01</b><span>Input mínimo</span><p>Producto, origen, precio, MOQ, peso/volumen y 4 preguntas de checklist.</p></div><div><b>02</b><span>Proceso</span><p>Flete FCL/LCL/aéreo, CIF, derechos, tasa, IVA/percepciones y gastos.</p></div><div><b>03</b><span>Comparación</span><p>LCL vs aéreo como valor principal; FCL sólo referencia.</p></div><div><b>04</b><span>Output</span><p>Costo unitario puesto en Argentina, margen y decisión.</p></div></section>}
   </main>
 }

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { importFreightValues } from '../data/importFreightValues'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory, type TransportMode } from '../lib/landedCostEngine'
 import { optimizeQuantity, type BuyStrategy } from '../lib/quantityOptimizer'
+import type { QuotePrefill } from '../lib/hotProducts'
 import { usd } from '../lib/format'
 
 const sensitiveLabels: Record<SensitiveProductCategory, string> = {
@@ -38,6 +39,10 @@ type NumberFieldProps = {
   onChange: (value: number) => void
 }
 
+type ImportQuoteFlowProps = {
+  prefill?: QuotePrefill | null
+}
+
 function NumberField({ label, hint, value, min = 0, step = 1, suffix, onChange }: NumberFieldProps) {
   return <label className="field"><span>{label}</span>{hint && <small>{hint}</small>}<div className="input-wrap"><input type="number" min={min} step={step} value={Number.isFinite(value) ? value : 0} onChange={(e) => onChange(Number(e.target.value))} />{suffix && <small>{suffix}</small>}</div></label>
 }
@@ -60,28 +65,28 @@ function strategyCopy(strategy: BuyStrategy) {
   return 'balancea costo unitario, presupuesto y meses de stock.'
 }
 
-export default function ImportQuoteFlow() {
-  const [productName, setProductName] = useState('Paleta de pádel carbono')
-  const [originCountry, setOriginCountry] = useState('China')
-  const [quantity, setQuantity] = useState(100)
-  const [unitPriceUsd, setUnitPriceUsd] = useState(40)
-  const [unitWeightKg, setUnitWeightKg] = useState(1)
-  const [unitVolumeCbm, setUnitVolumeCbm] = useState(0.01)
+export default function ImportQuoteFlow({ prefill = null }: ImportQuoteFlowProps) {
+  const [productName, setProductName] = useState(prefill?.productName ?? 'Paleta de pádel carbono')
+  const [originCountry, setOriginCountry] = useState(prefill?.originCountry ?? 'China')
+  const [quantity, setQuantity] = useState(prefill?.quantity ?? 100)
+  const [unitPriceUsd, setUnitPriceUsd] = useState(prefill?.unitPriceUsd ?? 40)
+  const [unitWeightKg, setUnitWeightKg] = useState(prefill?.unitWeightKg ?? 1)
+  const [unitVolumeCbm, setUnitVolumeCbm] = useState(prefill?.unitVolumeCbm ?? 0.01)
   const [dutyRatePct, setDutyRatePct] = useState(16)
   const [statisticsRatePct, setStatisticsRatePct] = useState(3)
   const [vatRatePct, setVatRatePct] = useState(21)
   const [vatAdditionalRatePct, setVatAdditionalRatePct] = useState(20)
   const [gainsRatePct, setGainsRatePct] = useState(6)
   const [iibbRatePct, setIibbRatePct] = useState(2.5)
-  const [localSellPriceUsd, setLocalSellPriceUsd] = useState(150)
-  const [budgetUsd, setBudgetUsd] = useState(10000)
-  const [moq, setMoq] = useState(50)
-  const [monthlyDemand, setMonthlyDemand] = useState(60)
+  const [localSellPriceUsd, setLocalSellPriceUsd] = useState(prefill?.localSellPriceUsd ?? 150)
+  const [budgetUsd, setBudgetUsd] = useState(prefill?.budgetUsd ?? 10000)
+  const [moq, setMoq] = useState(prefill?.moq ?? 50)
+  const [monthlyDemand, setMonthlyDemand] = useState(prefill?.monthlyDemand ?? 60)
   const [strategy, setStrategy] = useState<BuyStrategy>('normal')
   const [purpose, setPurpose] = useState<ImportPurpose>('resale')
   const [entityType, setEntityType] = useState<ImportEntityType>('company')
   const [hasImporterSignature, setHasImporterSignature] = useState<'yes' | 'no' | 'unknown'>('no')
-  const [sensitiveCategory, setSensitiveCategory] = useState<SensitiveProductCategory>('toys')
+  const [sensitiveCategory, setSensitiveCategory] = useState<SensitiveProductCategory>(prefill?.sensitiveCategory ?? 'none')
 
   const landedInput = {
     originCountry,
@@ -124,8 +129,10 @@ export default function ImportQuoteFlow() {
   return <section className="manual-quote-shell">
     <div className="table-title">
       <div><span className="eyebrow">Nuevo flujo principal</span><h2>Input → checklist → fletes → costo final</h2></div>
-      <small>{importFreightValues.meta.source}</small>
+      <small>{prefill?.sourceLabel ?? importFreightValues.meta.source}</small>
     </div>
+
+    {prefill && <div className="analysis-banner hot-prefill-banner"><b>Producto precargado.</b> Datos tomados del cache de hot products. Revisá FOB, MOQ, peso y volumen antes de decidir.</div>}
 
     <div className="workspace manual-quote-workspace">
       <aside className="inputs-column">

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { importFreightValues } from '../data/importFreightValues'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory, type TransportMode } from '../lib/landedCostEngine'
+import { optimizeQuantity, type BuyStrategy } from '../lib/quantityOptimizer'
 import { usd } from '../lib/format'
 
 const sensitiveLabels: Record<SensitiveProductCategory, string> = {
@@ -17,6 +18,12 @@ const modeLabels: Record<TransportMode, string> = {
   fcl: 'FCL referencia',
   lcl: 'LCL',
   air: 'Aéreo',
+}
+
+const strategyLabels: Record<BuyStrategy, string> = {
+  test: 'Prueba: menor riesgo',
+  normal: 'Normal: balance costo/stock',
+  aggressive: 'Agresiva: bajar costo unitario',
 }
 
 const originCountries = importFreightValues.rates.map((row) => row[0])
@@ -47,6 +54,12 @@ function decisionCopy(mode: 'lcl' | 'air' | null, marginPct: number | null, bloc
   return { title: `Conviene ${mode === 'lcl' ? 'LCL' : 'aéreo'}`, body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} es el menor costo entre las opciones accionables. FCL queda sólo como referencia.` }
 }
 
+function strategyCopy(strategy: BuyStrategy) {
+  if (strategy === 'test') return 'prioriza no pasarse de presupuesto ni inmovilizar stock.'
+  if (strategy === 'aggressive') return 'acepta más stock si baja el costo unitario.'
+  return 'balancea costo unitario, presupuesto y meses de stock.'
+}
+
 export default function ImportQuoteFlow() {
   const [productName, setProductName] = useState('Paleta de pádel carbono')
   const [originCountry, setOriginCountry] = useState('China')
@@ -61,12 +74,16 @@ export default function ImportQuoteFlow() {
   const [gainsRatePct, setGainsRatePct] = useState(6)
   const [iibbRatePct, setIibbRatePct] = useState(2.5)
   const [localSellPriceUsd, setLocalSellPriceUsd] = useState(150)
+  const [budgetUsd, setBudgetUsd] = useState(10000)
+  const [moq, setMoq] = useState(50)
+  const [monthlyDemand, setMonthlyDemand] = useState(60)
+  const [strategy, setStrategy] = useState<BuyStrategy>('normal')
   const [purpose, setPurpose] = useState<ImportPurpose>('resale')
   const [entityType, setEntityType] = useState<ImportEntityType>('company')
   const [hasImporterSignature, setHasImporterSignature] = useState<'yes' | 'no' | 'unknown'>('no')
   const [sensitiveCategory, setSensitiveCategory] = useState<SensitiveProductCategory>('toys')
 
-  const quote = useMemo(() => compareLandedCost({
+  const landedInput = {
     originCountry,
     quantity,
     unitPriceUsd,
@@ -82,7 +99,18 @@ export default function ImportQuoteFlow() {
     entityType,
     hasImporterSignature: hasImporterSignature === 'unknown' ? null : hasImporterSignature === 'yes',
     sensitiveCategory,
-  }), [originCountry, quantity, unitPriceUsd, unitWeightKg, unitVolumeCbm, dutyRatePct, statisticsRatePct, vatRatePct, vatAdditionalRatePct, gainsRatePct, iibbRatePct, purpose, entityType, hasImporterSignature, sensitiveCategory])
+  }
+
+  const quote = useMemo(() => compareLandedCost(landedInput), [originCountry, quantity, unitPriceUsd, unitWeightKg, unitVolumeCbm, dutyRatePct, statisticsRatePct, vatRatePct, vatAdditionalRatePct, gainsRatePct, iibbRatePct, purpose, entityType, hasImporterSignature, sensitiveCategory])
+
+  const optimizer = useMemo(() => optimizeQuantity({
+    ...landedInput,
+    budgetUsd,
+    moq,
+    monthlyDemand,
+    strategy,
+    localSellPriceUsd,
+  }), [originCountry, quantity, unitPriceUsd, unitWeightKg, unitVolumeCbm, dutyRatePct, statisticsRatePct, vatRatePct, vatAdditionalRatePct, gainsRatePct, iibbRatePct, purpose, entityType, hasImporterSignature, sensitiveCategory, budgetUsd, moq, monthlyDemand, strategy, localSellPriceUsd])
 
   const lcl = quote.modes.lcl
   const air = quote.modes.air
@@ -90,6 +118,8 @@ export default function ImportQuoteFlow() {
   const winner = quote.bestMode ? quote.modes[quote.bestMode] : null
   const marginPct = winner && localSellPriceUsd > 0 ? ((localSellPriceUsd - winner.unitCostUsd) / localSellPriceUsd) * 100 : null
   const decision = decisionCopy(quote.bestMode, marginPct, quote.checklist.blockers)
+  const quantityRecommendation = optimizer.recommendation
+  const topCandidates = optimizer.candidates.slice(0, 5)
 
   return <section className="manual-quote-shell">
     <div className="table-title">
@@ -104,7 +134,7 @@ export default function ImportQuoteFlow() {
           <label className="field field-wide"><span>Producto</span><input value={productName} onChange={(e) => setProductName(e.target.value)} /></label>
           <label className="field field-wide"><span>Origen</span><select value={originCountry} onChange={(e) => setOriginCountry(e.target.value)}>{originCountries.map((country) => <option key={country} value={country}>{country}</option>)}</select></label>
           <div className="field-grid">
-            <NumberField label="Cantidad" value={quantity} onChange={setQuantity} suffix="u." />
+            <NumberField label="Cantidad a simular" value={quantity} onChange={setQuantity} suffix="u." />
             <NumberField label="Precio FOB unitario" value={unitPriceUsd} onChange={setUnitPriceUsd} step={0.01} suffix="USD" />
             <NumberField label="Peso unitario" value={unitWeightKg} onChange={setUnitWeightKg} step={0.01} suffix="kg" />
             <NumberField label="Volumen unitario" value={unitVolumeCbm} onChange={setUnitVolumeCbm} step={0.001} suffix="m³" />
@@ -112,7 +142,17 @@ export default function ImportQuoteFlow() {
         </section>
 
         <section className="panel">
-          <div className="section-heading"><span>02</span><div><h2>Checklist real</h2><p>Las 4 preguntas que cambian el costo/camino.</p></div></div>
+          <div className="section-heading"><span>02</span><div><h2>Presupuesto y cantidad óptima</h2><p>Input mínimo para no traer ni de menos ni de más.</p></div></div>
+          <div className="field-grid">
+            <NumberField label="Presupuesto máximo" hint="Costo final total, no sólo FOB" value={budgetUsd} onChange={setBudgetUsd} step={100} suffix="USD" />
+            <NumberField label="MOQ proveedor" value={moq} onChange={setMoq} suffix="u." />
+            <NumberField label="Demanda mensual" hint="Opcional; 0 si no sabés" value={monthlyDemand} onChange={setMonthlyDemand} suffix="u./mes" />
+            <label className="field"><span>Estrategia</span><small>{strategyCopy(strategy)}</small><select value={strategy} onChange={(e) => setStrategy(e.target.value as BuyStrategy)}>{(Object.keys(strategyLabels) as BuyStrategy[]).map((key) => <option key={key} value={key}>{strategyLabels[key]}</option>)}</select></label>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="section-heading"><span>03</span><div><h2>Checklist real</h2><p>Las 4 preguntas que cambian el costo/camino.</p></div></div>
           <div className="field-grid">
             <label className="field"><span>Uso</span><select value={purpose} onChange={(e) => setPurpose(e.target.value as ImportPurpose)}><option value="resale">Reventa</option><option value="own_use">Uso propio</option><option value="unknown">No sé</option></select></label>
             <label className="field"><span>Importa como</span><select value={entityType} onChange={(e) => setEntityType(e.target.value as ImportEntityType)}><option value="company">Empresa</option><option value="individual">Persona humana</option><option value="unknown">No sé</option></select></label>
@@ -122,7 +162,7 @@ export default function ImportQuoteFlow() {
         </section>
 
         <section className="panel">
-          <div className="section-heading"><span>03</span><div><h2>NCM e impuestos</h2><p>Por ahora manual/editable; luego lo trae el nomenclador.</p></div></div>
+          <div className="section-heading"><span>04</span><div><h2>NCM e impuestos</h2><p>Por ahora manual/editable; luego lo trae el nomenclador.</p></div></div>
           <div className="field-grid">
             <NumberField label="Derecho importación" value={dutyRatePct} onChange={setDutyRatePct} step={0.1} suffix="%" />
             <NumberField label="Tasa estadística" value={statisticsRatePct} onChange={setStatisticsRatePct} step={0.1} suffix="%" />
@@ -148,6 +188,23 @@ export default function ImportQuoteFlow() {
             <div><span>Aéreo final</span><b>{usd(air.totalCostUsd)}</b></div>
             <div><span>Margen rápido</span><b>{marginPct === null ? '-' : `${marginPct.toFixed(1)}%`}</b></div>
           </div>
+        </section>
+
+        <section className="table-card">
+          <div className="table-title"><div><span className="eyebrow">Cantidad óptima</span><h2>{quantityRecommendation ? `${quantityRecommendation.quantity} unidades recomendadas` : 'Sin recomendación'}</h2></div><small>Presupuesto {usd(budgetUsd)}</small></div>
+          {quantityRecommendation && <>
+            <div className="metric-grid">
+              <div><span>Modo recomendado</span><b>{quantityRecommendation.selectedMode === 'lcl' ? 'LCL' : quantityRecommendation.selectedMode === 'air' ? 'Aéreo' : '-'}</b></div>
+              <div><span>Costo total</span><b>{usd(quantityRecommendation.totalCostUsd)}</b></div>
+              <div><span>Costo unitario</span><b>{usd(quantityRecommendation.unitCostUsd)}</b></div>
+              <div><span>Volumen estimado</span><b>{quantityRecommendation.totalVolumeCbm} m³</b></div>
+              <div><span>Stock estimado</span><b>{quantityRecommendation.monthsOfStock === null ? 'sin demanda' : `${quantityRecommendation.monthsOfStock} meses`}</b></div>
+              <div><span>Score</span><b>{quantityRecommendation.score}/100</b></div>
+            </div>
+            <p className="assumption-note">{quantityRecommendation.affordable ? 'Entra dentro del presupuesto cargado.' : 'No entra dentro del presupuesto: es la opción menos mala encontrada desde el MOQ.'} {optimizer.notes[2]}</p>
+            <button className="secondary" type="button" onClick={() => setQuantity(quantityRecommendation.quantity)}>Usar esta cantidad en la simulación</button>
+          </>}
+          <div className="table-scroll" style={{ marginTop: 14 }}><table><thead><tr><th>Cantidad</th><th>Modo</th><th>Total</th><th>Unitario</th><th>m³</th><th>Stock</th><th>Estado</th></tr></thead><tbody>{topCandidates.map((candidate) => <tr key={candidate.quantity} className={candidate.quantity === quantityRecommendation?.quantity ? 'selected-row' : undefined}><td><b>{candidate.quantity} u.</b></td><td>{candidate.selectedMode === 'lcl' ? 'LCL' : candidate.selectedMode === 'air' ? 'Aéreo' : '-'}</td><td>{usd(candidate.totalCostUsd)}</td><td>{usd(candidate.unitCostUsd)}</td><td>{candidate.totalVolumeCbm}</td><td>{candidate.monthsOfStock === null ? '-' : `${candidate.monthsOfStock}m`}</td><td>{candidate.affordable ? 'OK' : 'Fuera presupuesto'}</td></tr>)}</tbody></table></div>
         </section>
 
         <section className="table-card">

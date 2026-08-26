@@ -10,6 +10,7 @@ type ThreadMessage = { role: 'user' | 'assistant'; content: string }
 function readLabel(analysis: ProductAnalysisV2) {
   if (analysis.sourceUrl.startsWith('chat://')) return 'Datos aportados en conversación'
   const mode = analysis.sourceRead?.mode
+  if (mode === 'parsebot') return 'Alibaba · Parse.bot'
   if (mode === 'direct') return 'Alibaba · lectura directa'
   if (mode === 'browser') return 'Alibaba · Browser Run'
   if (mode === 'partial') return 'Alibaba · lectura parcial'
@@ -22,6 +23,14 @@ const starters = [
   'Quiero evaluar un cargador USB-C de 65W',
   'Buscame paletas de pádel de carbono de China, hasta USD 30, MOQ hasta 100',
 ]
+
+function money(value?: number | null) {
+  return value ? `USD ${value.toFixed(2)}` : 'Precio pendiente'
+}
+
+function units(value?: number | null) {
+  return value ? `${value} u.` : 'MOQ pendiente'
+}
 
 export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
   const [draft, setDraft] = useState('')
@@ -71,13 +80,13 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
       setFacts(result.facts)
 
       if (result.status === 'discovery_pending' && result.searchQuery) {
-        setMessages((current) => [...current, { role: 'assistant', content: 'Entendí la búsqueda. Consultando Alibaba en vivo; sólo voy a mostrar productos respaldados por una URL real.' }])
+        setMessages((current) => [...current, { role: 'assistant', content: 'Entendí la búsqueda. Consultando Parse.bot/Alibaba; voy a mostrar candidatos con precio/MOQ/proveedor cuando estén disponibles.' }])
         const live = await discoverProducts(result.searchQuery, value)
         setDiscovery(live)
         setMessages((current) => [...current, {
           role: 'assistant',
           content: live.status === 'live'
-            ? `Encontré ${live.results.length} productos con fuente Alibaba real. Los ordené por relevancia visible; precio, MOQ y origen siguen pendientes hasta abrir cada publicación.`
+            ? `Encontré ${live.results.length} candidatos desde Alibaba. Los ordené por datos disponibles, proveedor, MOQ y señales de confianza. Para cerrar economics completos, elegí uno y lo analizo con get_product.`
             : live.note,
         }])
         return
@@ -156,22 +165,30 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
 
     {discovery && <section className="discovery-card">
       <div className="discovery-head">
-        <div><span className="eyebrow">Experimental live search</span><h2>Resultados Alibaba</h2><p>{discovery.note}</p></div>
-        <span className="confidence">{discovery.mode === 'browser' ? 'Browser Run' : discovery.mode === 'direct' ? 'Direct' : 'Unavailable'}</span>
+        <div><span className="eyebrow">Opportunity Finder</span><h2>Resultados Alibaba</h2><p>{discovery.note}</p></div>
+        <span className="confidence">{discovery.mode === 'parsebot' ? 'Parse.bot' : discovery.mode === 'browser' ? 'Browser Run' : discovery.mode === 'direct' ? 'Direct' : 'Unavailable'}</span>
       </div>
       <div className="discovery-constraints"><b>Tu criterio</b><span>{discovery.constraintsNote}</span></div>
       {discovery.results.length > 0 ? <div className="discovery-grid">
         {discovery.results.map((item) => <article key={item.url} className="discovery-item">
-          <div className="discovery-item-top"><span>ALIBABA · LIVE SOURCE</span><small className={`match-${item.titleMatch}`}>{item.titleMatch.toUpperCase()} TITLE MATCH</small></div>
+          <div className="discovery-item-top"><span>ALIBABA · {item.source === 'parsebot_search_products' ? 'PARSE.BOT' : 'LIVE SOURCE'}</span><small>{item.opportunityScore ? `${item.opportunityScore}/100` : `${(item.titleMatch || 'partial').toUpperCase()} MATCH`}</small></div>
+          {item.imageUrl && <img className="discovery-thumb" src={item.imageUrl} alt="" loading="lazy" />}
           <h3>{item.title}</h3>
-          {item.matchedTerms.length > 0 && <p>Match visible: {item.matchedTerms.join(' · ')}</p>}
-          <p>Precio, MOQ y origen no se validan desde la tarjeta de búsqueda. Elegí el producto para verificar esas restricciones contra la publicación.</p>
+          <div className="opportunity-facts">
+            <span><b>{money(item.unitPriceUsd)}</b><small>{item.priceDisplay || 'supplier price'}</small></span>
+            <span><b>{units(item.moq)}</b><small>minimum order</small></span>
+            <span><b>{item.supplierName || 'Proveedor pendiente'}</b><small>{item.supplierYears || 'supplier'}</small></span>
+            <span><b>{item.volumeCbm ? `${item.volumeCbm} m³` : 'Volumen pendiente'}</b><small>{item.packedWeightKg ? `${item.packedWeightKg} kg` : 'peso pendiente'}</small></span>
+          </div>
+          {(item.supplierBadges?.length || item.sellingPoints?.length) ? <p>Señales: {[...(item.sellingPoints || []), ...(item.supplierBadges || [])].slice(0, 5).join(' · ')}</p> : null}
+          {item.missingFacts?.length ? <p>Falta validar: {item.missingFacts.join(' · ')}. Abrí el producto para get_product profundo.</p> : <p>Datos comerciales principales presentes desde búsqueda. Igual conviene abrirlo para validar specs/logística.</p>}
           <div className="discovery-actions">
             <a href={item.url} target="_blank" rel="noreferrer">Ver fuente</a>
-            <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>Analizar</button>
+            <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>Analizar profundo</button>
           </div>
         </article>)}
       </div> : <div className="customs-note"><b>NO RESULTS</b><span>No mostramos productos sintéticos. Podés reformular la búsqueda o pegar una publicación concreta.</span></div>}
+      {discovery.creditsEstimated !== undefined && <p className="assumption-note">Costo estimado Parse.bot: {discovery.creditsEstimated} créditos para la búsqueda. El análisis profundo consume créditos adicionales por producto seleccionado.</p>}
       {discovery.browserAttempted && <p className="assumption-note">Browser Run: {discovery.browserMsUsed ? `${(discovery.browserMsUsed / 1000).toFixed(1)}s` : 'intentado'}. Se utiliza sólo cuando la lectura directa no expone suficientes URLs de producto.</p>}
     </section>}
 

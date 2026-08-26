@@ -35,6 +35,27 @@ describe('Mercado Libre OAuth token lifecycle', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  it('surfaces durable OAuth refresh failures instead of masking them with a temporary access token', async () => {
+    const now = 1_800_000_000_000
+    const store: MercadoLibreTokenStore = { get: vi.fn(async () => null), put: vi.fn(async () => undefined) }
+    const fetchImpl = vi.fn<typeof fetch>(async () => json({ message: 'invalid refresh token' }, 400))
+
+    const result = await resolveMercadoLibreAccessToken({
+      MERCADOLIBRE_ACCESS_TOKEN: 'expired-temporary-token',
+      MERCADOLIBRE_CLIENT_ID: 'client',
+      MERCADOLIBRE_CLIENT_SECRET: 'secret',
+      MERCADOLIBRE_REFRESH_TOKEN: 'bad-refresh',
+      MERCADOLIBRE_TOKEN_STORE: store,
+    }, fetchImpl, now)
+
+    expect(result).toEqual({
+      status: 'unavailable',
+      accessToken: null,
+      source: 'none',
+      reason: 'Mercado Libre OAuth 400',
+    })
+  })
+
   it('reuses a still-valid token from durable storage', async () => {
     const now = 1_800_000_000_000
     const stored = JSON.stringify({ accessToken: 'stored-access', refreshToken: 'stored-refresh', expiresAt: now + 60 * 60 * 1000 })

@@ -35,6 +35,15 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function oauthConfig(env: MercadoLibreAuthEnv) {
+  const clientId = text(env.MERCADOLIBRE_CLIENT_ID)
+  const clientSecret = text(env.MERCADOLIBRE_CLIENT_SECRET)
+  const bootstrapRefreshToken = text(env.MERCADOLIBRE_REFRESH_TOKEN)
+  const store = env.MERCADOLIBRE_TOKEN_STORE
+  const complete = Boolean(clientId && clientSecret && bootstrapRefreshToken && store)
+  return { clientId, clientSecret, bootstrapRefreshToken, store, complete }
+}
+
 function validStoredToken(raw: string | null): StoredToken | null {
   if (!raw) return null
   try {
@@ -84,19 +93,12 @@ async function refreshAccessToken(
   return { accessToken, refreshToken: nextRefreshToken, expiresIn }
 }
 
-export async function resolveMercadoLibreAccessToken(
+async function resolveStoredOrRefreshToken(
   env: MercadoLibreAuthEnv,
-  fetchImpl: typeof fetch = fetch,
-  now = Date.now(),
+  fetchImpl: typeof fetch,
+  now: number,
 ): Promise<MercadoLibreAuthResult> {
-  const staticAccessToken = text(env.MERCADOLIBRE_ACCESS_TOKEN)
-  if (staticAccessToken) return { status: 'ready', accessToken: staticAccessToken, source: 'static_access_token' }
-
-  const clientId = text(env.MERCADOLIBRE_CLIENT_ID)
-  const clientSecret = text(env.MERCADOLIBRE_CLIENT_SECRET)
-  const bootstrapRefreshToken = text(env.MERCADOLIBRE_REFRESH_TOKEN)
-  const store = env.MERCADOLIBRE_TOKEN_STORE
-
+  const { clientId, clientSecret, bootstrapRefreshToken, store } = oauthConfig(env)
   if (!clientId || !clientSecret || !bootstrapRefreshToken || !store) {
     return {
       status: 'configuration_required',
@@ -149,4 +151,22 @@ export async function resolveMercadoLibreAccessToken(
       reason: error instanceof Error ? error.message : 'Mercado Libre OAuth refresh failed',
     }
   }
+}
+
+export async function resolveMercadoLibreAccessToken(
+  env: MercadoLibreAuthEnv,
+  fetchImpl: typeof fetch = fetch,
+  now = Date.now(),
+): Promise<MercadoLibreAuthResult> {
+  const durable = oauthConfig(env)
+  if (durable.complete) {
+    const result = await resolveStoredOrRefreshToken(env, fetchImpl, now)
+    if (result.status === 'ready' || !text(env.MERCADOLIBRE_ACCESS_TOKEN)) return result
+    // Temporary ACCESS_TOKEN is only a fallback when durable OAuth is configured but temporarily unavailable.
+  }
+
+  const staticAccessToken = text(env.MERCADOLIBRE_ACCESS_TOKEN)
+  if (staticAccessToken) return { status: 'ready', accessToken: staticAccessToken, source: 'static_access_token' }
+
+  return resolveStoredOrRefreshToken(env, fetchImpl, now)
 }

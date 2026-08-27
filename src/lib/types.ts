@@ -12,6 +12,8 @@ export type ScenarioTaxContext = {
   statisticsExempt: boolean
   vatPerceptionExempt: boolean
   gainsPerceptionExempt: boolean
+  capitalGoodEligible?: boolean
+  capitalGoodUse?: boolean
 }
 
 export type Inputs = {

@@ -5,9 +5,9 @@ import { optimizeQuantity, type BuyStrategy } from '../lib/quantityOptimizer'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { usd } from '../lib/format'
 
-const sensitiveLabels: Record<SensitiveProductCategory, string> = {
+const interventionLabels: Record<SensitiveProductCategory, string> = {
   unknown: 'No sé todavía',
-  none: 'Ninguna de estas',
+  none: 'No requiere intervención',
   food: 'Alimentos',
   toys: 'Juguetes',
   cosmetics: 'Cosméticos',
@@ -28,6 +28,7 @@ const strategyLabels: Record<BuyStrategy, string> = {
 }
 
 const originCountries = importFreightValues.rates.map((row) => row[0])
+const interventionFeeUsd = importFreightValues.expenses.lcl.extras.sensitiveProductCategory
 
 type NumberFieldProps = {
   label: string
@@ -90,7 +91,8 @@ function unitBreakdown(mode: ModeCostBreakdown, quantity: number) {
     ['Percepción Ganancias', perUnit(mode.gainsUsd, quantity)],
     ['Percepción IIBB', perUnit(mode.iibbUsd, quantity)],
     ['Gastos destino', perUnit(mode.fixedDestinationUsd, quantity)],
-    ['Extras operación', perUnit(mode.noImporterSignatureUsd + mode.sensitiveCategoryUsd, quantity)],
+    ['Costo firma/importador', perUnit(mode.noImporterSignatureUsd, quantity)],
+    ['Trámite de intervención', perUnit(mode.sensitiveCategoryUsd, quantity)],
   ] as const
 }
 
@@ -166,19 +168,19 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
       <small>{prefill?.sourceLabel ?? importFreightValues.meta.source}</small>
     </div>
 
-    {prefill && <div className="analysis-banner hot-prefill-banner"><b>Datos precargados desde el pipeline.</b> NCM, aranceles y datos físicos alimentan el motor; podés revisar cualquier supuesto antes de decidir.</div>}
+    {prefill && <div className="analysis-banner hot-prefill-banner"><b>Datos precargados desde el pipeline.</b> NCM, aranceles, costos de trámite y datos físicos alimentan el motor; podés revisar cualquier supuesto antes de decidir.</div>}
 
     {prefill?.ncmCode && <section className="quote-customs-evidence">
-      <div><span className="eyebrow">Clasificación usada</span><h3>NCM {prefill.ncmCode}</h3><p>{prefill.customsSource || 'Clasificación automática del nomenclador.'}</p></div>
+      <div><span className="eyebrow">Clasificación usada</span><h3>NCM {prefill.ncmCode}</h3><p>Clasificación y aranceles aplicados automáticamente desde el nomenclador cargado.</p></div>
       <div className="quote-customs-facts">
         <span><small>Confianza</small><b>{prefill.classificationConfidence || 'pendiente'}</b></span>
-        <span><small>SIM</small><b>{prefill.simCode || 'Verificar'}</b></span>
+        <span><small>SIM</small><b>{prefill.simCode || '-'}</b></span>
         <span><small>Derecho</small><b>{dutyRatePct}%</b></span>
         <span><small>Tasa</small><b>{statisticsRatePct}%</b></span>
         <span><small>IVA</small><b>{vatRatePct}%</b></span>
-        <span><small>Fuente</small><b>{prefill.customsSourceDate || 'vigente cargada'}</b></span>
+        <span><small>Intervención</small><b>{sensitiveCategory !== 'none' && sensitiveCategory !== 'unknown' ? usd(interventionFeeUsd) : sensitiveCategory === 'unknown' ? 'Pendiente' : 'No aplica'}</b></span>
       </div>
-      {prefill.customsMissingFacts?.length ? <p className="assumption-note">Pendientes de clasificación/intervenciones: {prefill.customsMissingFacts.slice(0, 4).join(' · ')}</p> : null}
+      {prefill.customsMissingFacts?.length ? <p className="assumption-note">Datos pendientes de clasificación: {prefill.customsMissingFacts.slice(0, 4).join(' · ')}</p> : null}
     </section>}
 
     <div className="workspace manual-quote-workspace">
@@ -201,7 +203,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
             <label className="field"><span>Uso</span><select value={purpose} onChange={(e) => setPurpose(e.target.value as ImportPurpose)}><option value="resale">Reventa</option><option value="own_use">Uso propio</option><option value="unknown">No sé</option></select></label>
             <label className="field"><span>Importa como</span><select value={entityType} onChange={(e) => setEntityType(e.target.value as ImportEntityType)}><option value="company">Empresa</option><option value="individual">Persona humana</option><option value="unknown">No sé</option></select></label>
             <label className="field"><span>Firma/importador</span><select value={hasImporterSignature} onChange={(e) => setHasImporterSignature(e.target.value as 'yes' | 'no' | 'unknown')}><option value="yes">Tiene firma</option><option value="no">No tiene firma</option><option value="unknown">No sé</option></select></label>
-            <label className="field"><span>Categoría sensible</span><select value={sensitiveCategory} onChange={(e) => setSensitiveCategory(e.target.value as SensitiveProductCategory)}>{(Object.keys(sensitiveLabels) as SensitiveProductCategory[]).map((key) => <option key={key} value={key}>{sensitiveLabels[key]}</option>)}</select></label>
+            <label className="field"><span>Grupo con intervención</span><small>Alimentos, juguetes, cosméticos, medicamentos y suplementos suman automáticamente {usd(interventionFeeUsd)} por trámite a la operación.</small><select value={sensitiveCategory} onChange={(e) => setSensitiveCategory(e.target.value as SensitiveProductCategory)}>{(Object.keys(interventionLabels) as SensitiveProductCategory[]).map((key) => <option key={key} value={key}>{interventionLabels[key]}</option>)}</select></label>
             {capitalGoodEligible && <label className="field"><span>NCM marcada Bien de Uso</span><small>Esto puede llevar tasa estadística y percepciones a 0 en el modelo.</small><select value={capitalGoodUse ? 'yes' : 'no'} onChange={(e) => setCapitalGoodUse(e.target.value === 'yes')}><option value="no">No aplicar tratamiento</option><option value="yes">Sí, se usará como Bien de Uso</option></select></label>}
           </div>
         </section>
@@ -249,7 +251,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
           <div className="unit-context-grid">
             <div><span>FOB total</span><b>{usd(winner.fobUsd)}</b></div>
             <div><span>Flete total</span><b>{usd(winner.freightCostUsd)}</b></div>
-            <div><span>CIF total</span><b>{usd(winner.cifUsd)}</b></div>
+            <div><span>Trámite intervención</span><b>{winner.sensitiveCategoryUsd > 0 ? usd(winner.sensitiveCategoryUsd) : 'No aplica'}</b></div>
             <div><span>Total operación</span><b>{usd(winner.totalCostUsd)}</b></div>
           </div>
         </section>}
@@ -284,14 +286,17 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
         </section>
 
         <section className="method-card journey-checklist-status">
-          <h3>Qué falta cerrar</h3>
+          <h3>Datos aplicados</h3>
           <div className="metric-grid">
             <div><span>Uso propio/reventa</span><b>{checklistSignal(quote.checklist.ownUseOrResaleKnown, 'Falta')}</b></div>
             <div><span>Empresa/persona</span><b>{checklistSignal(quote.checklist.entityTypeKnown, 'Falta')}</b></div>
             <div><span>Firma importador</span><b>{checklistSignal(quote.checklist.importerSignatureKnown, 'Falta')}</b></div>
           </div>
-          <p>{quote.checklist.needsSensitiveCategoryReview ? 'Categoría sensible: requiere explicación/control separado antes de decidir operación.' : 'Categoría sensible no activada.'}</p>
-          {prefill?.ncmCode && <p>Intervenciones regulatorias: la NCM/SIM alimenta screening, pero VUCE/CIVUCE debe verificarse antes de una operación real.</p>}
+          <p>{sensitiveCategory === 'unknown'
+            ? 'Falta definir si el producto pertenece a un grupo con intervención para saber si corresponde sumar USD 200.'
+            : sensitiveCategory === 'none'
+              ? 'Trámite de intervención: no aplica.'
+              : `Trámite de intervención: ${usd(interventionFeeUsd)} agregado automáticamente al costo total de la operación.`}</p>
           {quote.checklist.blockers.length > 0 && <ul className="tax-assumptions">{quote.checklist.blockers.map((item) => <li key={item}>{item}</li>)}</ul>}
         </section>
       </section>

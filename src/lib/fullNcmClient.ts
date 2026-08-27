@@ -219,6 +219,8 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
   }
 
   const sameAsLocal = local.ncmCandidate === full.code
+  const usableDuty = full.tariff?.diePct ?? (sameAsLocal && fullStrong ? local.dutyRatePct : null)
+  const usableStatus = usableDuty === null ? 'missing' : 'candidate'
   let combinedAlternatives = apiAlternatives(full)
   for (const candidate of local.alternatives) combinedAlternatives = addUniqueAlternative(combinedAlternatives, candidate)
 
@@ -230,13 +232,13 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
     simAlternatives: sameAsLocal ? local.simAlternatives ?? [] : [],
     simSource: sameAsLocal ? local.simSource : 'SIM pendiente de hidratación full-catalog.',
     classificationConfidence: full.confidence,
-    dutyRatePct: full.tariff?.diePct ?? null,
-    dutyRateStatus: full.tariff ? 'candidate' : 'missing',
+    dutyRatePct: usableDuty,
+    dutyRateStatus: usableStatus,
     description: full.label,
     alternatives: combinedAlternatives.filter((candidate) => candidate.code !== full.code).slice(0, 4),
     missingFacts: [...new Set([...full.missingFacts, ...(sameAsLocal ? local.missingFacts : [])])],
-    rationale: [...full.rationale, ...(sameAsLocal ? local.rationale : []), ...(full.tariff ? ['La tabla NCM_APP aporta derecho, IVA/percepciones y elegibilidad Bien de Uso para esta NCM.'] : ['Full-catalog retrieval no contiene semántica tarifaria validada; el derecho permanece pendiente.'])],
-    source: `${full.source} · Full snapshot ${full.sourceDate}, ${full.catalogRecordCount} NCM. ${full.retrievalMode}. ${full.tariff ? 'Tarifa integrada desde NCM_APP.' : 'Derecho no resuelto por el índice full-catalog.'}`,
+    rationale: [...full.rationale, ...(sameAsLocal ? local.rationale : []), ...(full.tariff ? ['La tabla NCM_APP aporta derecho, IVA/percepciones y elegibilidad Bien de Uso para esta NCM.'] : sameAsLocal && usableDuty !== null ? ['El candidato full-catalog coincide con el seed especializado; se conserva el derecho candidato del seed para screening.'] : ['Full-catalog retrieval no contiene semántica tarifaria validada; el derecho permanece pendiente.'])],
+    source: `${full.source} · Full snapshot ${full.sourceDate}, ${full.catalogRecordCount} NCM. ${full.retrievalMode}. ${full.tariff ? 'Tarifa integrada desde NCM_APP.' : sameAsLocal && usableDuty !== null ? 'Coincide con seed especializado; derecho candidato conservado para screening.' : 'Derecho no resuelto por el índice full-catalog.'}`,
     reviewedAt: full.sourceDate,
     catalogScope: `Full ARCA snapshot (${full.catalogRecordCount} posiciones NCM); retrieval NCM + hidratación SIM por capítulo; tarifas NCM_APP cuando están disponibles`,
     catalogSourceDate: full.sourceDate,

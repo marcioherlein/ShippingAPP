@@ -79,10 +79,12 @@ function mergeFacts(previous: IntakeFacts, next: IntakeFacts): IntakeFacts {
   return merged
 }
 
+function normalized(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
 function normalizeIdentity(value: string | null) {
-  return (value || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  return normalized(value || '').replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
 function identityChanged(previous: IntakeFacts, next: IntakeFacts, modelFlag: boolean) {
@@ -108,10 +110,6 @@ function identityChanged(previous: IntakeFacts, next: IntakeFacts, modelFlag: bo
 
 function normalizeIntent(value: unknown): IntakeIntent {
   return value === 'discover_products' || value === 'clarify' ? value : 'analyze_product'
-}
-
-function normalized(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
 function toNumber(value: string | undefined | null) {
@@ -157,14 +155,36 @@ function canonicalOrClause(message: string, canonical: string) {
 }
 
 function isBareUrlMessage(message: string) {
-  const trimmed = message.trim()
-  return /^https?:\/\/\S+$/i.test(trimmed)
+  return /^https?:\/\/\S+$/i.test(message.trim())
+}
+
+function genericProductName(message: string) {
+  let clause = firstClause(message)
+  if (!clause) return null
+
+  clause = clause
+    .replace(/^(?:ahora\s+)?(?:quiero|quisiera|necesito|me interesa)\s+(?:(?:evaluar|importar|cotizar|analizar|traer|comprar)\s+)?(?:un|una|el|la)?\s*/i, '')
+    .replace(/^es\s+(?:un|una|el|la)\s+/i, '')
+    .trim()
+
+  const plain = normalized(clause)
+  const words = clause.split(/\s+/).filter(Boolean)
+  if (clause.length < 6 || clause.length > 180 || words.length < 3 || words.length > 20) return null
+  if (!/[a-záéíóúñ]{3}/i.test(clause)) return null
+  if (/^(?:(?:el|la|los|las)\s+)?(?:precio|price|moq|pedido|minimo|mínimo|peso|weight|volumen|volume|cbm|origen|origin)\b/.test(plain)) return null
+  if (/^(?:hola|hello|gracias|thanks|si|sí|no|ok|dale|perfecto)\b/.test(plain)) return null
+  if (/\b(?:ignore|ignora|system prompt|prompt del sistema|jailbreak|developer message|instrucciones del sistema|set price|setea el precio)\b/.test(plain)) return null
+  if (/^(?:que|qué|como|cómo|por que|por qué|cuando|cuándo)\b/.test(plain)) return null
+  return text(clause, 300)
 }
 
 function inferExplicitIdentity(message: string) {
   const source = normalized(message)
   if (/\bpadel\b/.test(source) && /\b(paleta|raqueta|racket|racquet|paddle)\b/.test(source)) {
     return { name: canonicalOrClause(message, 'Paleta de pádel'), category: 'Padel racket' }
+  }
+  if (/\b(tenis|tennis)\b/.test(source) && /\b(raqueta|racket|racquet)\b/.test(source)) {
+    return { name: canonicalOrClause(message, 'Raqueta de tenis'), category: 'Tennis racket' }
   }
   if (/\b(cargador|charger|adaptador|power adapter)\b/.test(source) && /(usb\s*-?\s*c|65\s*w|corriente|notebook|celular|phone|laptop)/.test(source)) {
     return { name: 'USB-C 65W power adapter', category: 'Power adapter' }
@@ -214,7 +234,7 @@ function inferExplicitIdentity(message: string) {
   if (/gafas\s+de\s+sol|anteojos\s+de\s+sol|sunglasses/.test(source)) {
     return { name: canonicalOrClause(message, 'Gafas de sol'), category: 'Sunglasses' }
   }
-  return { name: null, category: null }
+  return { name: genericProductName(message), category: null }
 }
 
 function inferExplicitMaterial(message: string) {
@@ -236,7 +256,7 @@ function inferExplicitMaterial(message: string) {
 
 function inferExplicitFunction(message: string) {
   const source = normalized(message)
-  if (/uso\s+deportivo|sports?\s+use|jugar\s+padel|play\s+padel|calzado\s+deportivo/.test(source)) return 'uso deportivo'
+  if (/uso\s+deportivo|sports?\s+use|jugar\s+padel|play\s+padel|jugar\s+tenis|play\s+tennis|calzado\s+deportivo/.test(source)) return 'uso deportivo'
   if (/convierte?\s+corriente|cargar\s+(?:celulares|notebooks)|charge\s+(?:phones|laptops)/.test(source)) return 'convierte corriente eléctrica para carga'
   if (/acumula|recargable|battery|bateria|acumulador/.test(source)) return 'acumula energía eléctrica recargable'
   if (/reproducir\s+audio|reproducir\s+sonido|audio|speaker|auricular/.test(source)) return 'reproducir audio'
@@ -310,15 +330,13 @@ function deterministicExtract(message: string, prior: IntakeFacts): Awaited<Retu
   }
 }
 
-function hasCommercialFacts(facts: IntakeFacts) {
-  return [facts.unitPriceUsd, facts.moq, facts.packedWeightKg, facts.volumeCbm, facts.originCountry, facts.material, facts.functionText]
-    .some((item) => item !== null)
-}
-
-function canUseDeterministicFirst(parsed: Awaited<ReturnType<typeof extract>> | null, prior: IntakeFacts) {
+function shouldUseDeterministicFirst(parsed: Awaited<ReturnType<typeof extract>> | null, prior: IntakeFacts) {
   if (!parsed || parsed.intent !== 'analyze_product') return false
-  if (!hasCommercialFacts(parsed.facts)) return false
-  return Boolean(parsed.facts.name || parsed.facts.category || prior.name || prior.category)
+  if (parsed.facts.category) return true
+  if (parsed.facts.name && parsed.facts.name.split(/\s+/).length >= 3) return true
+  const hasCommercial = [parsed.facts.unitPriceUsd, parsed.facts.moq, parsed.facts.packedWeightKg, parsed.facts.volumeCbm, parsed.facts.originCountry, parsed.facts.material, parsed.facts.functionText]
+    .some((item) => item !== null)
+  return hasCommercial && Boolean(prior.name || prior.category)
 }
 
 function missingFor(facts: IntakeFacts) {
@@ -391,7 +409,7 @@ function applySupportedBenchmarks(facts: IntakeFacts) {
 
 function clarifyFromPrior(prior: IntakeFacts): IntakeResult {
   return {
-    status: 'clarify', intent: 'clarify', message: 'No pude estructurar ese mensaje de forma confiable. Describime el producto o pegá un link de Alibaba.',
+    status: 'clarify', intent: 'clarify', message: 'No pude identificar un producto o una actualización del caso con suficiente confianza. Describime el producto o pegá un link de Alibaba.',
     searchQuery: null, facts: prior,
     factSources: { moq: prior.moq ? 'user' : 'missing', packedWeightKg: prior.packedWeightKg ? 'user' : 'missing', volumeCbm: prior.volumeCbm ? 'user' : 'missing' },
     missingFields: missingFor(prior), suggestedQuantities: quantitiesFromMoq(prior.moq), assumptions: [],
@@ -401,7 +419,7 @@ function clarifyFromPrior(prior: IntakeFacts): IntakeResult {
 function clarifyBareUrl(prior: IntakeFacts): IntakeResult {
   return {
     status: 'clarify', intent: 'clarify',
-    message: 'Recibí el link, pero todavía no extraigo Alibaba live en este flujo. Pegame el título del producto o una descripción con precio proveedor, MOQ, peso embalado y volumen si los tenés.',
+    message: 'Recibí el link. Este endpoint conversacional no lee la publicación por sí solo; el flujo de producto abre Alibaba directamente antes de cotizar.',
     searchQuery: null, facts: prior,
     factSources: { moq: prior.moq ? 'user' : 'missing', packedWeightKg: prior.packedWeightKg ? 'user' : 'missing', volumeCbm: prior.volumeCbm ? 'user' : 'missing' },
     missingFields: missingFor(prior), suggestedQuantities: quantitiesFromMoq(prior.moq),
@@ -420,7 +438,7 @@ export async function runConversationalIntake(ai: AI, body: unknown): Promise<In
   const deterministic = deterministicExtract(message, prior)
   let parsed: Awaited<ReturnType<typeof extract>> | null = deterministic?.intent === 'discover_products'
     ? deterministic
-    : canUseDeterministicFirst(deterministic, prior) ? deterministic : null
+    : shouldUseDeterministicFirst(deterministic, prior) ? deterministic : null
 
   if (!parsed) {
     try {
@@ -439,22 +457,19 @@ export async function runConversationalIntake(ai: AI, body: unknown): Promise<In
   if (parsed.intent === 'discover_products') {
     return {
       status: 'discovery_pending', intent: parsed.intent,
-      message: 'Entendí que querés buscar oportunidades/productos. No voy a fabricar resultados: el proveedor de búsqueda live de Alibaba todavía no está habilitado para este flujo.',
+      message: 'Entendí que querés buscar oportunidades/productos. No voy a fabricar resultados: esta consulta debe resolverse contra la búsqueda live de Alibaba.',
       searchQuery: parsed.searchQuery || text(message, 300), facts: prior,
       factSources: { moq: prior.moq ? 'user' : 'missing', packedWeightKg: prior.packedWeightKg ? 'user' : 'missing', volumeCbm: prior.volumeCbm ? 'user' : 'missing' },
-      missingFields: [], suggestedQuantities: [], assumptions: ['Discovery reconocido pero no ejecutado: requiere una fuente live separada.'],
+      missingFields: [], suggestedQuantities: [], assumptions: ['Discovery reconocido; los candidatos deben venir de una fuente Alibaba real.'],
     }
   }
 
-  if (parsed.intent === 'clarify') {
-    return {
-      status: 'clarify', intent: parsed.intent,
-      message: 'Contame qué producto querés evaluar o qué oportunidad querés buscar. También podés pegar directamente un link de Alibaba.',
-      searchQuery: null, facts: prior,
-      factSources: { moq: prior.moq ? 'user' : 'missing', packedWeightKg: prior.packedWeightKg ? 'user' : 'missing', volumeCbm: prior.volumeCbm ? 'user' : 'missing' },
-      missingFields: missingFor(prior), suggestedQuantities: quantitiesFromMoq(prior.moq), assumptions: [],
-    }
-  }
+  if (parsed.intent === 'clarify') return clarifyFromPrior(prior)
+
+  const parsedHasIdentity = Boolean(parsed.facts.name || parsed.facts.category)
+  const parsedHasCommercial = [parsed.facts.unitPriceUsd, parsed.facts.moq, parsed.facts.packedWeightKg, parsed.facts.volumeCbm, parsed.facts.originCountry, parsed.facts.material, parsed.facts.functionText]
+    .some((item) => item !== null)
+  if (!parsedHasIdentity && !(parsedHasCommercial && (prior.name || prior.category))) return clarifyFromPrior(prior)
 
   const resetPrior = identityChanged(prior, parsed.facts, parsed.startsNewCase)
   const merged = mergeFacts(resetPrior ? emptyFacts() : prior, parsed.facts)

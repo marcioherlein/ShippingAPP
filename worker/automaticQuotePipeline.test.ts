@@ -17,23 +17,27 @@ const index: NcmSearchIndex = {
 
 const aiNeverNeeded = { run: async () => ({ response: '{}' }) }
 
-function automaticTaxFromClassification(customsBaseUsd: number, tariff: NonNullable<Awaited<ReturnType<typeof classifyFullNcm>>['tariff']>, opts: { gainsExempt?: boolean; capitalGoodUse?: boolean } = {}) {
+type ClassifiedTariff = NonNullable<Awaited<ReturnType<typeof classifyFullNcm>>['tariff']>
+
+function automaticTaxFromClassification(customsBaseUsd: number, tariff: ClassifiedTariff, opts: { gainsExempt?: boolean; capitalGoodUse?: boolean } = {}) {
+  const capitalGoodUse = opts.capitalGoodUse === true && tariff.capitalGoodEligible
   return calculateImportTaxes({
     customsBaseUsd,
     dutyRatePct: tariff.diePct,
     dutyRateVerified: true,
     statisticsRatePct: tariff.tePct,
-    statisticsExempt: opts.capitalGoodUse === true,
+    statisticsExempt: capitalGoodUse,
     vatRatePct: tariff.vatPct,
-    vatPerceptionPct: opts.capitalGoodUse === true ? 0 : tariff.vatAdditionalPct,
+    vatPerceptionPct: capitalGoodUse ? 0 : tariff.vatAdditionalPct,
     gainsPerceptionPct: tariff.gainsPct,
-    iibbPerceptionPct: opts.capitalGoodUse === true ? 0 : tariff.iibbPct,
+    iibbPerceptionPct: capitalGoodUse ? 0 : tariff.iibbPct,
     taxStatus: 'responsable_inscripto',
-    purpose: opts.capitalGoodUse === true ? 'own_use' : 'resale',
+    purpose: capitalGoodUse ? 'own_use' : 'resale',
     entityType: 'company',
-    vatPerceptionExempt: opts.capitalGoodUse === true,
-    gainsPerceptionExempt: opts.gainsExempt === true || opts.capitalGoodUse === true,
-    capitalGoodUse: opts.capitalGoodUse === true,
+    vatPerceptionExempt: capitalGoodUse,
+    gainsPerceptionExempt: opts.gainsExempt === true || capitalGoodUse,
+    capitalGoodEligible: tariff.capitalGoodEligible,
+    capitalGoodUse,
   })
 }
 

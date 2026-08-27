@@ -26,23 +26,66 @@ function validSim(code) {
   return /^\d{4}\.\d{2}\.\d{2}\.\d{3}[A-Z]$/.test(code)
 }
 
+function validPct(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
+}
+
+function isNewNcmAppAsset(ncm) {
+  return ncm?.meta?.source === 'NCM_APP.xlsx'
+    && ncm?.meta?.sourceFile === 'NCM_APP.xlsx'
+    && ncm?.meta?.indexSchema === 4
+    && ncm?.meta?.tariffDataIncluded === true
+}
+
+function isLegacyArcaAsset(ncm) {
+  return ncm?.meta?.source === 'ARCA Arancel Integrado'
+    && ncm?.meta?.sourceDate === '2026-08-14'
+    && ncm?.meta?.indexSchema === 3
+    && ncm?.meta?.tariffDataIncluded === false
+}
+
 if (!fs.existsSync(ncmPath)) fail('public/data/ncm-index.json is missing')
 if (!fs.existsSync(simDir)) fail('public/data/sim is missing')
 
 const ncm = readJson(ncmPath)
-if (ncm?.meta?.source !== 'ARCA Arancel Integrado') fail('unexpected NCM source')
-if (ncm?.meta?.sourceDate !== '2026-08-14') fail(`unexpected NCM sourceDate ${ncm?.meta?.sourceDate ?? 'missing'}`)
-if (ncm?.meta?.tariffDataIncluded !== false) fail('NCM retrieval asset must not contain tariff data')
-if (!Array.isArray(ncm?.records) || ncm.records.length < 1000) fail('NCM catalog is unexpectedly small')
+const ncmMode = isNewNcmAppAsset(ncm) ? 'ncm_app_schema_4' : isLegacyArcaAsset(ncm) ? 'arca_schema_3' : null
+if (!ncmMode) {
+  fail(`unexpected NCM asset metadata source=${ncm?.meta?.source ?? 'missing'} sourceDate=${ncm?.meta?.sourceDate ?? 'missing'} schema=${ncm?.meta?.indexSchema ?? 'missing'} tariffDataIncluded=${ncm?.meta?.tariffDataIncluded ?? 'missing'}`)
+}
+if (!Array.isArray(ncm?.records) || ncm.records.length < 10000) fail('NCM catalog is unexpectedly small')
+if (ncm.meta.recordCount !== ncm.records.length) fail('NCM recordCount mismatch')
 
 const ncmCodes = new Set()
+let capitalGoodEligibleCount = 0
+let gainsZeroCount = 0
 for (const row of ncm.records) {
-  if (!Array.isArray(row) || row.length !== 2) fail('invalid NCM row shape')
+  if (!Array.isArray(row)) fail('invalid NCM row shape')
+  if (ncmMode === 'arca_schema_3' && row.length !== 2) fail('invalid legacy NCM row shape')
+  if (ncmMode === 'ncm_app_schema_4' && row.length !== 12) fail('invalid NCM_APP row shape')
+
   const [code, label] = row
   if (!validNcm(code)) fail(`invalid NCM code ${code}`)
   if (ncmCodes.has(code)) fail(`duplicate NCM code ${code}`)
-  if (typeof label !== 'string') fail(`invalid NCM label for ${code}`)
+  if (typeof label !== 'string' || !label.trim()) fail(`invalid NCM label for ${code}`)
   ncmCodes.add(code)
+
+  if (ncmMode === 'ncm_app_schema_4') {
+    const [,,,,,,,,,,, capitalGoodEligible] = row
+    const tariffValues = row.slice(2, 10)
+    for (const value of tariffValues) {
+      if (!validPct(value)) fail(`invalid tariff percentage for ${code}`)
+    }
+    if (!(capitalGoodEligible === true || capitalGoodEligible === false || capitalGoodEligible === 0 || capitalGoodEligible === 1 || capitalGoodEligible === 'SI' || capitalGoodEligible === 'NO')) {
+      fail(`invalid Bien de Uso flag for ${code}`)
+    }
+    if (capitalGoodEligible === true || capitalGoodEligible === 1 || capitalGoodEligible === 'SI') capitalGoodEligibleCount += 1
+    if (row[8] === 0) gainsZeroCount += 1
+  }
+}
+
+if (ncmMode === 'ncm_app_schema_4') {
+  if (capitalGoodEligibleCount < 100) fail(`too few Bien de Uso rows: ${capitalGoodEligibleCount}`)
+  if (gainsZeroCount < 100) fail(`too few Ganancias 0 rows: ${gainsZeroCount}`)
 }
 
 const simFiles = fs.readdirSync(simDir).filter((name) => /^\d{2}\.json$/.test(name)).sort()
@@ -87,9 +130,14 @@ for (const fileName of simFiles) {
 
 console.log(JSON.stringify({
   status: 'ok',
+  mode: ncmMode,
   source: ncm.meta.source,
   sourceDate: ncm.meta.sourceDate,
+  indexSchema: ncm.meta.indexSchema,
+  tariffDataIncluded: ncm.meta.tariffDataIncluded,
   ncmRecords: ncm.records.length,
+  capitalGoodEligibleCount,
+  gainsZeroCount,
   simChapterFiles: simFiles.length,
   simParents: simParentCount,
   simOpenings: simOpeningCount,

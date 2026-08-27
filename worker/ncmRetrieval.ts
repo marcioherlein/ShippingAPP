@@ -1,4 +1,30 @@
-export type NcmIndexRecord = [code: string, label: string]
+export type NcmIndexRecord = [
+  code: string,
+  label: string,
+  aecPct?: number,
+  diePct?: number,
+  tePct?: number,
+  diiPct?: number,
+  vatPct?: number,
+  vatAdditionalPct?: number,
+  gainsPct?: number,
+  iibbPct?: number,
+  internalTax?: string | number | null,
+  capitalGoodEligible?: boolean | 0 | 1 | 'SI' | 'NO',
+]
+
+export type NcmTariff = {
+  aecPct: number
+  diePct: number
+  tePct: number
+  diiPct: number
+  vatPct: number
+  vatAdditionalPct: number
+  gainsPct: number
+  iibbPct: number
+  internalTax: string | number | null
+  capitalGoodEligible: boolean
+}
 
 export type NcmSearchIndex = {
   meta: {
@@ -11,6 +37,8 @@ export type NcmSearchIndex = {
     tariffDataIncluded: boolean
     simOpeningsIncluded: boolean
     recordShape: string
+    tariffShape?: string
+    filters?: string[]
   }
   records: NcmIndexRecord[]
 }
@@ -43,6 +71,7 @@ export type FullNcmClassification = {
   source: string
   catalogRecordCount: number
   retrievalMode: 'ai_reranked' | 'deterministic_fallback' | 'missing'
+  tariff: NcmTariff | null
 }
 
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
@@ -92,32 +121,57 @@ function factsText(facts: NcmProductFacts) {
   return [facts.name, facts.category, facts.material, facts.functionText, facts.description].filter(Boolean).join(' ')
 }
 
-function findOfficial(index: NcmSearchIndex, code: string) {
-  const row = index.records.find((record) => record[0] === code)
+function toNumber(value: unknown, fallback = 0) {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+export function tariffFromRecord(row: NcmIndexRecord | null | undefined): NcmTariff | null {
+  if (!row || row.length < 12) return null
+  return {
+    aecPct: toNumber(row[2]),
+    diePct: toNumber(row[3]),
+    tePct: toNumber(row[4]),
+    diiPct: toNumber(row[5]),
+    vatPct: toNumber(row[6], 21),
+    vatAdditionalPct: toNumber(row[7], 20),
+    gainsPct: toNumber(row[8], 6),
+    iibbPct: toNumber(row[9], 2.5),
+    internalTax: row[10] ?? null,
+    capitalGoodEligible: row[11] === true || row[11] === 1 || row[11] === 'SI',
+  }
+}
+
+function officialFromRow(row: NcmIndexRecord | null | undefined) {
   if (!row) return null
-  return { code: row[0], label: row[1] }
+  return { code: row[0], label: row[1], tariff: tariffFromRecord(row) }
+}
+
+function findOfficial(index: NcmSearchIndex, code: string) {
+  return officialFromRow(index.records.find((record) => record[0] === code))
 }
 
 function findOfficialByPrefix(index: NcmSearchIndex, codePrefix: string) {
-  const row = index.records.find(([code]) => code.startsWith(codePrefix))
-  if (!row) return null
-  return { code: row[0], label: row[1] }
+  return officialFromRow(index.records.find(([code]) => code.startsWith(codePrefix)))
 }
 
 function findOfficialByLabel(index: NcmSearchIndex, codePrefix: string, labelTerms: string[]) {
   const normalizedTerms = labelTerms.map(normalizeText).filter(Boolean)
-  const row = index.records.find(([code, label]) => {
+  return officialFromRow(index.records.find(([code, label]) => {
     if (!code.startsWith(codePrefix)) return false
     const normalizedLabel = normalizeText(label)
     return normalizedTerms.every((term) => normalizedLabel.includes(term))
-  })
-  if (!row) return null
-  return { code: row[0], label: row[1] }
+  }))
+}
+
+function tariffForCode(index: NcmSearchIndex, code: string | null | undefined) {
+  if (!code) return null
+  return tariffFromRecord(index.records.find((record) => record[0] === code))
 }
 
 function shortcutClassification(
   index: NcmSearchIndex,
-  official: { code: string; label: string },
+  official: { code: string; label: string; tariff: NcmTariff | null },
   searchTerms: string[],
   rationale: string,
 ): FullNcmClassification {
@@ -129,7 +183,7 @@ function shortcutClassification(
       rationale,
     ],
     sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
-    retrievalMode: 'deterministic_fallback',
+    retrievalMode: 'deterministic_fallback', tariff: official.tariff,
   }
 }
 
@@ -143,27 +197,13 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
       findOfficialByLabel(index, '8525.', ['camaras']) ||
       findOfficialByLabel(index, '8525.', ['television']) ||
       findOfficialByPrefix(index, '8525.')
-    if (official) {
-      return shortcutClassification(
-        index,
-        official,
-        ['camara', 'ip', 'security camera'],
-        'Producto identificado como cámara IP/digital de seguridad; se resuelve contra una partida oficial ARCA existente del capítulo 8525 en lugar de caer al AI.',
-      )
-    }
+    if (official) return shortcutClassification(index, official, ['camara', 'ip', 'security camera'], 'Producto identificado como cámara IP/digital de seguridad; se resuelve contra una partida oficial ARCA existente del capítulo 8525 en lugar de caer al AI.')
   }
 
   const isSunglasses = ['gafas de sol', 'anteojos de sol', 'sunglasses'].some((term) => text.includes(normalizeText(term)))
   if (isSunglasses) {
     const official = findOfficial(index, '9004.10.00')
-    if (official) {
-      return shortcutClassification(
-        index,
-        official,
-        ['gafas de sol', 'sunglasses'],
-        'Producto identificado como gafas/anteojos de sol; se usa shortcut oficial para evitar latencia AI.',
-      )
-    }
+    if (official) return shortcutClassification(index, official, ['gafas de sol', 'sunglasses'], 'Producto identificado como gafas/anteojos de sol; se usa shortcut oficial para evitar latencia AI.')
   }
 
   const checks: Array<{ code: string; terms: string[]; rationale: string }> = [
@@ -197,7 +237,7 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
 }
 
 export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25): NcmRetrievalCandidate[] {
-  if (!index || index.meta.indexSchema !== 3 || !Array.isArray(index.records)) return []
+  if (!index || ![3, 4].includes(index.meta.indexSchema) || !Array.isArray(index.records)) return []
   const rawPhrases = [...safeTerms(searchTerms), facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''].filter(Boolean)
   const phraseNorms = [...new Set(rawPhrases.map(normalizeText).filter((phrase) => phrase.length >= 4))]
   const queryTokens = [...new Set(rawPhrases.flatMap(tokens))]
@@ -207,7 +247,7 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
   for (const row of index.records) {
     if (!Array.isArray(row) || row.length < 2) continue
     const [code, label] = row
-    if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string') continue
+    if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string' || !label.trim()) continue
     const normalizedLabel = normalizeText(label)
     if (!normalizedLabel) continue
     const labelTokens = new Set(tokens(normalizedLabel))
@@ -310,7 +350,7 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   const shortlist = retrieveNcmCandidates(index, searchTerms, facts, 25)
   if (!shortlist.length) {
     return {
-      status: 'missing', code: null, label: null, confidence: 'missing', alternatives: [],
+      status: 'missing', code: null, label: null, confidence: 'missing', alternatives: [], tariff: null,
       missingFacts: expansion.missingFacts, rationale: ['El índice oficial no produjo una shortlist con evidencia textual suficiente; no se inventa una NCM.'],
       searchTerms, sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount, retrievalMode: 'missing',
     }
@@ -339,6 +379,7 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
     ],
     searchTerms, sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
     retrievalMode: ranked.ranking.length ? 'ai_reranked' : 'deterministic_fallback',
+    tariff: tariffForCode(index, top.code),
   }
 }
 
@@ -351,7 +392,7 @@ export async function loadNcmIndex(requestUrl: string, assets: { fetch: (request
       const response = await assets.fetch(new Request(url.toString()))
       if (!response.ok) throw new Error(`NCM index unavailable (${response.status})`)
       const data = await response.json() as NcmSearchIndex
-      if (data?.meta?.indexSchema !== 3 || data?.meta?.tariffDataIncluded !== false || !Array.isArray(data.records) || data.records.length < 10000) {
+      if (!data?.meta || ![3, 4].includes(data.meta.indexSchema) || !Array.isArray(data.records) || data.records.length < 10000) {
         throw new Error('NCM index failed integrity checks')
       }
       return data

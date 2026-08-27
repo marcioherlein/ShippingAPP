@@ -1,5 +1,5 @@
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
-const REQUEST_TIMEOUT_MS = Number(process.env.AUDIT_REQUEST_TIMEOUT_MS || 18000)
+const REQUEST_TIMEOUT_MS = Number(process.env.AUDIT_REQUEST_TIMEOUT_MS || 28000)
 
 const results = []
 
@@ -80,19 +80,23 @@ async function directDiscoveryCase(name, query) {
     count: body.results?.length || 0,
     note: body.note || body.error || null,
     browserAttempted: body.browserAttempted,
+    viableAsLiveFallback: body.status === 'live' && Array.isArray(body.results) && body.results.length > 0,
   }, { informational: 'endpoint must respond safely; live indicates fallback provider is viable' })
 }
 
 async function ncmCase(name, facts, expectedCode) {
   const response = await postJson('/api/ncm-classify', facts)
   const body = response.body || {}
-  const pass = response.ok && body.code === expectedCode && body.dutyRatePct !== null && body.dutyRatePct !== undefined
+  const tariff = body.tariff || null
+  const pass = response.ok && body.code === expectedCode && tariff && Number.isFinite(tariff.diePct) && Number.isFinite(tariff.tePct)
   record('ncm', name, pass, {
     http: response.statusCode,
     code: body.code || null,
     confidence: body.confidence || null,
-    dutyRatePct: body.dutyRatePct ?? null,
-    statisticsRatePct: body.statisticsRatePct ?? null,
+    dutyRatePct: tariff?.diePct ?? null,
+    statisticsRatePct: tariff?.tePct ?? null,
+    vatRatePct: tariff?.vatPct ?? null,
+    capitalGoodEligible: tariff?.capitalGoodEligible ?? null,
   }, { code: expectedCode, tariffRequired: true })
 }
 

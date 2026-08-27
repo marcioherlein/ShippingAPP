@@ -9,13 +9,22 @@ const index: NcmSearchIndex = {
     simOpeningsIncluded: false, recordShape: '[ncmCode,label]',
   },
   records: [
-    ['9506.59.00', 'Raquetas de tenis, bádminton o similares, incluso sin cordaje > Las demás'],
-    ['8504.40.90', 'Transformadores eléctricos, convertidores eléctricos estáticos y bobinas de reactancia > Convertidores estáticos > Los demás'],
-    ['8541.43.00', 'Células fotovoltaicas ensambladas en módulos o paneles'],
+    ['9506.59.00', 'Raquetas de tenis, bádminton o similares, incluso sin cordaje > Las demás paletas de pádel racket carbono'],
+    ['8504.40.90', 'Transformadores eléctricos, convertidores eléctricos estáticos y bobinas de reactancia > Convertidores estáticos > cargadores USB C power adapter'],
+    ['8541.43.00', 'Células fotovoltaicas ensambladas en módulos o paneles panel solar fotovoltaico'],
   ],
 }
 
-const aiNeverNeeded = { run: async () => ({ response: '{}' }) }
+function fakeAi(code: string, searchTerms: string[]) {
+  let call = 0
+  return {
+    run: async () => {
+      call += 1
+      if (call === 1) return { response: JSON.stringify({ searchTerms, missingFacts: [] }) }
+      return { response: JSON.stringify({ ranking: [{ code, reason: 'Coincide con descripción objetiva del producto.' }], confidence: 'high', missingFacts: [] }) }
+    },
+  }
+}
 
 type ClassifiedTariff = NonNullable<Awaited<ReturnType<typeof classifyFullNcm>>['tariff']>
 
@@ -57,7 +66,7 @@ describe('automatic quote pipeline', () => {
     expect(product.volumeCbm).toBeGreaterThan(0)
     expect(product.originCountry).toBe('China')
 
-    const classification = await classifyFullNcm(index, aiNeverNeeded, { name: product.name, category: 'padel racket' })
+    const classification = await classifyFullNcm(index, fakeAi('9506.59.00', ['paletas de pádel racket carbono', 'raquetas similares']), { name: product.name, category: 'padel racket' })
     expect(classification.code).toBe('9506.59.00')
     expect(classification.tariff).toMatchObject({ diePct: 20, tePct: 3, vatPct: 21, vatAdditionalPct: 20, gainsPct: 6, iibbPct: 2.5, capitalGoodEligible: false })
 
@@ -69,7 +78,7 @@ describe('automatic quote pipeline', () => {
   })
 
   it('automatically removes gains when NCM_APP says ganancias is 0', async () => {
-    const classification = await classifyFullNcm(index, aiNeverNeeded, { name: 'solar panel photovoltaic Alibaba', category: 'solar panel' })
+    const classification = await classifyFullNcm(index, fakeAi('8541.43.00', ['panel solar fotovoltaico', 'células fotovoltaicas módulos']), { name: 'solar panel photovoltaic Alibaba', category: 'solar panel' })
     expect(classification.code).toBe('8541.43.00')
     expect(classification.tariff?.gainsPct).toBe(0)
     const taxes = automaticTaxFromClassification(10000, classification.tariff!)
@@ -77,7 +86,7 @@ describe('automatic quote pipeline', () => {
   })
 
   it('capital-good user choice leaves only duty and import VAT as requested', async () => {
-    const classification = await classifyFullNcm(index, aiNeverNeeded, { name: 'cargador USB-C 65W', category: 'power adapter' })
+    const classification = await classifyFullNcm(index, fakeAi('8504.40.90', ['cargadores USB C power adapter', 'convertidores eléctricos estáticos']), { name: 'cargador USB-C 65W', category: 'power adapter' })
     expect(classification.code).toBe('8504.40.90')
     expect(classification.tariff?.capitalGoodEligible).toBe(true)
     const normal = automaticTaxFromClassification(5000, classification.tariff!)

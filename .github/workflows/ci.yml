@@ -20,7 +20,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Unit and integration tests
         run: npx --yes vitest@3.2.4 run
-      - name: Validate full ARCA NCM and SIM assets
+      - name: Validate NCM and SIM assets
         run: node scripts/validate-nomenclador-assets.mjs
       - name: Production build
         run: npm run build
@@ -41,11 +41,16 @@ jobs:
               node - <<'NODE'
           const fs = require('node:fs')
           const body = JSON.parse(fs.readFileSync('/tmp/runtime-smoke.json', 'utf8'))
+          function assertNcmAsset(ncm, label) {
+            const legacy = ncm?.sourceDate === '2026-08-14' && ncm?.tariffDataIncluded === false
+            const ncmApp = ncm?.source === 'NCM_APP.xlsx' && ncm?.sourceDate === '2026-08-27' && ncm?.tariffDataIncluded === true
+            if (!legacy && !ncmApp) throw new Error(`${label} NCM asset metadata mismatch: ${JSON.stringify(ncm)}`)
+            if ((ncm?.records ?? 0) < 10000) throw new Error(`${label} NCM asset unexpectedly small`)
+          }
           if (body.status !== 'ok') throw new Error(`runtime smoke failed: ${JSON.stringify(body)}`)
           if (!body.checks?.workerResponded) throw new Error('Worker did not confirm response')
           if (!body.checks?.assetsBinding) throw new Error('ASSETS binding missing')
-          if (body.checks?.ncmIndex?.sourceDate !== '2026-08-14') throw new Error('NCM asset date mismatch')
-          if ((body.checks?.ncmIndex?.records ?? 0) < 1000) throw new Error('NCM asset unexpectedly small')
+          assertNcmAsset(body.checks?.ncmIndex, 'Runtime')
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('SIM asset date mismatch')
           NODE
               exit 0
@@ -63,10 +68,15 @@ jobs:
           node - <<'NODE'
           const fs = require('node:fs')
           const body = JSON.parse(fs.readFileSync('/tmp/production-smoke.json', 'utf8'))
+          function assertNcmAsset(ncm, label) {
+            const legacy = ncm?.sourceDate === '2026-08-14' && ncm?.tariffDataIncluded === false
+            const ncmApp = ncm?.source === 'NCM_APP.xlsx' && ncm?.sourceDate === '2026-08-27' && ncm?.tariffDataIncluded === true
+            if (!legacy && !ncmApp) throw new Error(`${label} NCM asset metadata mismatch: ${JSON.stringify(ncm)}`)
+            if ((ncm?.records ?? 0) < 10000) throw new Error(`${label} NCM asset unexpectedly small`)
+          }
           if (body.status !== 'ok') throw new Error(`production smoke failed: ${JSON.stringify(body)}`)
           if (!body.checks?.workerResponded) throw new Error('Production Worker did not confirm response')
           if (!body.checks?.assetsBinding) throw new Error('Production ASSETS binding missing')
-          if (body.checks?.ncmIndex?.sourceDate !== '2026-08-14') throw new Error('Production NCM asset date mismatch')
-          if ((body.checks?.ncmIndex?.records ?? 0) < 1000) throw new Error('Production NCM asset unexpectedly small')
+          assertNcmAsset(body.checks?.ncmIndex, 'Production')
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
           NODE

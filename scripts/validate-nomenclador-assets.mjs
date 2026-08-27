@@ -58,6 +58,7 @@ if (ncm.meta.recordCount !== ncm.records.length) fail('NCM recordCount mismatch'
 const ncmCodes = new Set()
 let capitalGoodEligibleCount = 0
 let gainsZeroCount = 0
+let blankLabelCount = 0
 for (const row of ncm.records) {
   if (!Array.isArray(row)) fail('invalid NCM row shape')
   if (ncmMode === 'arca_schema_3' && row.length !== 2) fail('invalid legacy NCM row shape')
@@ -66,7 +67,11 @@ for (const row of ncm.records) {
   const [code, label] = row
   if (!validNcm(code)) fail(`invalid NCM code ${code}`)
   if (ncmCodes.has(code)) fail(`duplicate NCM code ${code}`)
-  if (typeof label !== 'string' || !label.trim()) fail(`invalid NCM label for ${code}`)
+  if (typeof label !== 'string') fail(`invalid NCM label type for ${code}`)
+  if (!label.trim()) {
+    if (ncmMode === 'arca_schema_3') fail(`invalid NCM label for ${code}`)
+    blankLabelCount += 1
+  }
   ncmCodes.add(code)
 
   if (ncmMode === 'ncm_app_schema_4') {
@@ -86,6 +91,7 @@ for (const row of ncm.records) {
 if (ncmMode === 'ncm_app_schema_4') {
   if (capitalGoodEligibleCount < 100) fail(`too few Bien de Uso rows: ${capitalGoodEligibleCount}`)
   if (gainsZeroCount < 100) fail(`too few Ganancias 0 rows: ${gainsZeroCount}`)
+  if (blankLabelCount > 250) fail(`too many blank NCM_APP labels: ${blankLabelCount}`)
 }
 
 const simFiles = fs.readdirSync(simDir).filter((name) => /^\d{2}\.json$/.test(name)).sort()
@@ -138,6 +144,7 @@ console.log(JSON.stringify({
   ncmRecords: ncm.records.length,
   capitalGoodEligibleCount,
   gainsZeroCount,
+  blankLabelCount,
   simChapterFiles: simFiles.length,
   simParents: simParentCount,
   simOpenings: simOpeningCount,

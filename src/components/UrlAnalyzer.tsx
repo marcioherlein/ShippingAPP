@@ -5,7 +5,11 @@ import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryRespo
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
 import { buildDiscoveryQuery, isGenericAlibabaSearchRequest, wantsAlibabaDiscovery } from '../lib/searchIntent'
 
-type Props = { onAnalysis: (analysis: ProductAnalysisV2) => void; analysis?: ProductAnalysisV2 | null }
+type Props = {
+  onAnalysis: (analysis: ProductAnalysisV2) => void
+  analysis?: ProductAnalysisV2 | null
+  mode?: 'intake' | 'discovery'
+}
 type ThreadMessage = { role: 'user' | 'assistant'; content: string }
 
 function readLabel(analysis: ProductAnalysisV2) {
@@ -19,10 +23,16 @@ function readLabel(analysis: ProductAnalysisV2) {
   return analysis.fetched ? 'Fuente leída' : 'Fuente no disponible'
 }
 
-const starters = [
+const intakeStarters = [
   'Paleta de pádel carbono, China, USD 25,50',
   'Quiero evaluar un cargador USB-C de 65W',
   'Buscame paletas de pádel de carbono de China, hasta USD 30, MOQ hasta 100',
+]
+
+const discoveryStarters = [
+  'Paletas de pádel de carbono',
+  'Cargadores USB-C 65W',
+  'Botellas térmicas de acero inoxidable',
 ]
 
 function money(value?: number | null) {
@@ -33,7 +43,7 @@ function units(value?: number | null) {
   return value ? `${value} u.` : 'MOQ pendiente'
 }
 
-export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
+export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake' }: Props) {
   const [draft, setDraft] = useState('')
   const [facts, setFacts] = useState<IntakeFacts>(emptyIntakeFacts())
   const [messages, setMessages] = useState<ThreadMessage[]>([])
@@ -42,6 +52,9 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
   const [pendingDiscovery, setPendingDiscovery] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const discoveryOnly = mode === 'discovery'
+  const starters = discoveryOnly ? discoveryStarters : intakeStarters
 
   const constraintChecks = useMemo(
     () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],
@@ -59,20 +72,20 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
       role: 'assistant',
       content: fromDiscovery
         ? 'Producto seleccionado y analizado desde su URL real de Alibaba. Ahora también verifiqué las restricciones comerciales que sí aparecen en la publicación.'
-        : 'Link analizado. Ya podés revisar Opportunity Decision, mercado, importabilidad y preguntarle al AI Import Analyst.',
+        : 'Link analizado. Ya podés revisar el producto y convertirlo en una cotización.',
     }])
   }
 
   const runDiscoverySearch = async (query: string, userText: string) => {
     setPendingDiscovery(false)
     setFacts(emptyIntakeFacts())
-    setMessages((current) => [...current, { role: 'assistant', content: 'Entendí la búsqueda. Consultando Parse.bot/Alibaba; voy a mostrar candidatos con precio/MOQ/proveedor cuando estén disponibles.' }])
+    setMessages((current) => [...current, { role: 'assistant', content: 'Buscando en Alibaba. Voy a mostrar candidatos reales con precio, MOQ y proveedor cuando estén disponibles.' }])
     const live = await discoverProducts(query, userText)
     setDiscovery(live)
     setMessages((current) => [...current, {
       role: 'assistant',
       content: live.status === 'live'
-        ? `Encontré ${live.results.length} candidatos desde Alibaba. Los ordené por datos disponibles, proveedor, MOQ y señales de confianza. Para cerrar economics completos, elegí uno y lo analizo con get_product.`
+        ? `Encontré ${live.results.length} candidatos desde Alibaba. Elegí uno y lo analizo en profundidad para convertirlo en cotización.`
         : live.note,
     }])
   }
@@ -93,12 +106,12 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
         return
       }
 
-      const discoveryIntent = pendingDiscovery || wantsAlibabaDiscovery(value)
+      const discoveryIntent = discoveryOnly || pendingDiscovery || wantsAlibabaDiscovery(value)
       if (discoveryIntent) {
         const query = buildDiscoveryQuery(value)
         if (!query || isGenericAlibabaSearchRequest(value)) {
           setPendingDiscovery(true)
-          setMessages((current) => [...current, { role: 'assistant', content: 'Dale. Decime qué producto querés que busque en Alibaba, con precio/MOQ objetivo si tenés.' }])
+          setMessages((current) => [...current, { role: 'assistant', content: 'Decime qué producto querés que busque en Alibaba. Podés agregar precio máximo o MOQ objetivo.' }])
           return
         }
         await runDiscoverySearch(query, value)
@@ -153,11 +166,13 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
 
   const conversational = !!analysis?.sourceUrl.startsWith('chat://')
 
-  return <section className="url-analyzer">
+  return <section className={`url-analyzer${discoveryOnly ? ' discovery-search-mode' : ''}`}>
     <div className="analyzer-copy">
-      <span className="eyebrow">AI product opportunity scanner</span>
-      <h1>Contame qué querés importar.</h1>
-      <p>Describí un producto, pedime que busque opciones o pegá Alibaba. ShippingAPP usa fuentes reales y pregunta sólo lo que falta.</p>
+      <span className="eyebrow">{discoveryOnly ? 'Alibaba live search' : 'AI product opportunity scanner'}</span>
+      <h1>{discoveryOnly ? 'Buscá cualquier producto en Alibaba.' : 'Contame qué querés importar.'}</h1>
+      <p>{discoveryOnly
+        ? 'Escribí el producto en lenguaje natural. ShippingAPP consulta Alibaba, muestra candidatos reales y te deja elegir uno para cotizar.'
+        : 'Describí un producto, pedime que busque opciones o pegá Alibaba. ShippingAPP usa fuentes reales y pregunta sólo lo que falta.'}</p>
     </div>
 
     {messages.length === 0 && <div className="analyst-suggestions intake-suggestions">
@@ -169,7 +184,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
         <span>{message.role === 'user' ? 'Vos' : 'ShippingAPP'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Consultando y estructurando el caso…</p></div>}
+      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>{discoveryOnly ? 'Buscando productos reales en Alibaba…' : 'Consultando y estructurando el caso…'}</p></div>}
     </div>}
 
     <form className="url-form" onSubmit={submit}>
@@ -178,11 +193,11 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value.slice(0, 1800))}
-          placeholder="Ej: buscame paletas de carbono hasta USD 30, MOQ hasta 100 — o pegá Alibaba"
+          placeholder={discoveryOnly ? 'Ej: paletas de pádel carbono hasta USD 30, MOQ menor a 100' : 'Ej: buscame paletas de carbono hasta USD 30, MOQ hasta 100 — o pegá Alibaba'}
           disabled={loading}
-          aria-label="Producto, búsqueda o link para analizar"
+          aria-label={discoveryOnly ? 'Buscar productos en Alibaba' : 'Producto, búsqueda o link para analizar'}
         />
-        <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Analizando…' : 'Analizar'}</button>
+        <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Buscando…' : discoveryOnly ? 'Buscar en Alibaba' : 'Analizar'}</button>
       </div>
       {error && <p className="analyzer-error">{error}</p>}
     </form>
@@ -205,10 +220,10 @@ export default function UrlAnalyzer({ onAnalysis, analysis }: Props) {
             <span><b>{item.volumeCbm ? `${item.volumeCbm} m³` : 'Volumen pendiente'}</b><small>{item.packedWeightKg ? `${item.packedWeightKg} kg` : 'peso pendiente'}</small></span>
           </div>
           {(item.supplierBadges?.length || item.sellingPoints?.length) ? <p>Señales: {[...(item.sellingPoints || []), ...(item.supplierBadges || [])].slice(0, 5).join(' · ')}</p> : null}
-          {item.missingFacts?.length ? <p>Falta validar: {item.missingFacts.join(' · ')}. Abrí el producto para get_product profundo.</p> : <p>Datos comerciales principales presentes desde búsqueda. Igual conviene abrirlo para validar specs/logística.</p>}
+          {item.missingFacts?.length ? <p>Falta validar: {item.missingFacts.join(' · ')}. Abrí el producto para análisis profundo.</p> : <p>Datos comerciales principales presentes desde búsqueda. Igual conviene abrirlo para validar specs/logística.</p>}
           <div className="discovery-actions">
-            <a href={item.url} target="_blank" rel="noreferrer">Ver fuente</a>
-            <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>Analizar profundo</button>
+            <a href={item.url} target="_blank" rel="noreferrer">Ver en Alibaba</a>
+            <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>Elegir y cotizar</button>
           </div>
         </article>)}
       </div> : <div className="customs-note"><b>NO RESULTS</b><span>No mostramos productos sintéticos. Podés reformular la búsqueda o pegar una publicación concreta.</span></div>}

@@ -4,6 +4,7 @@ import type { ClientProfile, RegulatoryCheck, TriState } from './regulatory'
 
 export type DeclarationRoute = 'self' | 'authorized_declarante' | 'customs_broker' | 'unknown'
 export type TechnicalRegulationState = 'unknown' | 'not_applicable_confirmed' | 'applies_ready' | 'applies_pending'
+export type CapitalGoodUseState = 'unknown' | 'resale' | 'capital_good'
 
 export type ClientProfileV3 = ClientProfile & {
   sitaAccess: TriState
@@ -14,6 +15,8 @@ export type ClientProfileV3 = ClientProfile & {
   technicalRegulation: TechnicalRegulationState
   tadAccess: TriState
   labelingReady: TriState
+  gainsExempt: TriState
+  capitalGoodUse: CapitalGoodUseState
 }
 
 export const defaultClientProfileV3: ClientProfileV3 = {
@@ -21,6 +24,7 @@ export const defaultClientProfileV3: ClientProfileV3 = {
   sitaSicnea: 'unknown', mipyme: 'unknown', bankComex: 'unknown', purpose: 'resale', paymentTerm: 'unknown', province: '',
   sitaAccess: 'unknown', sicneaAdhesion: 'unknown', criminalRecordDocs: 'unknown',
   declarationRoute: 'unknown', declarantProfile: 'unknown', technicalRegulation: 'unknown', tadAccess: 'unknown', labelingReady: 'unknown',
+  gainsExempt: 'no', capitalGoodUse: 'unknown',
 }
 
 function triStatus(value: TriState, noIsBlocker = false): 'pass' | 'blocker' | 'verify' {
@@ -89,6 +93,22 @@ export function buildRegulatoryChecksV3(analysis: ProductAnalysis, client: Clien
     sourceIds: ['statistics', 'vuce'], financialEffect: 'economic_cost',
   }
 
+  const gains: RegulatoryCheck = {
+    id: 'gains-exempt', group: 'tax', status: client.gainsExempt === 'unknown' ? 'verify' : 'info',
+    title: client.gainsExempt === 'yes' ? 'Exento Ganancias aplicado por usuario' : client.gainsExempt === 'no' ? 'Percepción Ganancias aplicada' : 'Confirmar si está exento de Ganancias',
+    detail: client.gainsExempt === 'yes'
+      ? 'El motor modela la percepción de Ganancias en 0%. Debe existir certificado/condición fiscal aplicable; no se asume automáticamente por producto.'
+      : 'Si el importador no informa exención, ShippingAPP conserva la percepción de Ganancias de la tabla NCM_APP o el valor de fallback.',
+    sourceIds: ['statistics'], financialEffect: 'cash_only',
+  }
+
+  const capitalGood: RegulatoryCheck = {
+    id: 'capital-good-use', group: 'tax', status: client.capitalGoodUse === 'unknown' ? 'verify' : 'info',
+    title: client.capitalGoodUse === 'capital_good' ? 'Tratamiento Bien de Uso seleccionado' : client.capitalGoodUse === 'resale' ? 'Tratamiento Reventa seleccionado' : 'Definir si la mercadería es Bien de Uso o Reventa cuando la NCM lo permite',
+    detail: 'Cuando la columna Bien de Uso de NCM_APP indica SI y el usuario elige Bien de Uso, el motor modela sólo derechos e IVA. Para reventa se mantienen percepciones y demás cargos aplicables.',
+    sourceIds: ['statistics'], financialEffect: 'economic_cost',
+  }
+
   let technical: RegulatoryCheck
   if (client.technicalRegulation === 'not_applicable_confirmed') {
     technical = { id: 'technical-regulation', group: 'sale', status: 'pass', title: 'Reglamento técnico: no aplicable confirmado', detail: 'La no aplicabilidad debe provenir de la consulta de la posición/producto y conservarse como evidencia del análisis.', sourceIds: ['vuce', 'technicalRegs'], financialEffect: 'none' }
@@ -134,8 +154,8 @@ export function buildRegulatoryChecksV3(analysis: ProductAnalysis, client: Clien
     sourceIds: ['bcra'], financialEffect: 'cash_only',
   }
 
-  const additions = [criminal, sicnea, sita, declarationRoute, ...(declarant ? [declarant] : []), stats, technical, tad, labeling, fx]
+  const additions = [criminal, sicnea, sita, declarationRoute, ...(declarant ? [declarant] : []), stats, gains, capitalGood, technical, tad, labeling, fx]
   const insertAfterClient = base.findIndex((check) => check.group !== 'client')
   if (insertAfterClient < 0) return [...base, ...additions]
-  return [...base.slice(0, insertAfterClient), criminal, sicnea, sita, ...base.slice(insertAfterClient), declarationRoute, ...(declarant ? [declarant] : []), stats, technical, tad, labeling, fx]
+  return [...base.slice(0, insertAfterClient), criminal, sicnea, sita, ...base.slice(insertAfterClient), declarationRoute, ...(declarant ? [declarant] : []), stats, gains, capitalGood, technical, tad, labeling, fx]
 }

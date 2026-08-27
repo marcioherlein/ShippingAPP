@@ -35,8 +35,15 @@ const sample = {
   status: 'success',
 }
 
+const directHtml = [1, 2, 3].map((id) =>
+  `<a href="/product-detail/Professional-Tennis-Racket-${id}_160000000000${id}.html" title="Professional Tennis Racket ${id}">Professional Tennis Racket ${id}</a>`,
+).join('')
+
 describe('Parse.bot opportunity search', () => {
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
 
   it('normalizes and ranks search_products results with commercial facts', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(sample), { status: 200 })))
@@ -57,5 +64,28 @@ describe('Parse.bot opportunity search', () => {
     expect(result.results[0].imageUrl).toContain('alicdn.com')
     expect(result.results[0].supplierBadges).toContain('Verified Supplier')
     expect(result.results[0].opportunityScore).toBeGreaterThan(result.results[1].opportunityScore)
+  })
+
+  it('falls back to direct Alibaba product links when the structured provider fails', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'error' }), { status: 503 }))
+      .mockResolvedValueOnce(new Response(directHtml, { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const browser = { quickAction: vi.fn() }
+
+    const result = await searchAlibabaOpportunities('professional tennis racket', {
+      PARSEBOT_API_KEY: 'test-key',
+      BROWSER: browser as any,
+    })
+
+    expect(result.status).toBe('live')
+    expect(result.mode).toBe('direct')
+    expect(result.results).toHaveLength(3)
+    expect(result.results[0].source).toBe('alibaba_direct')
+    expect(result.results[0].title).toContain('Professional Tennis Racket')
+    expect(result.results[0].missingFacts).toContain('supplier_price')
+    expect(result.note).not.toContain('search_products')
+    expect(result.note).not.toContain('Parse.bot')
+    expect(browser.quickAction).not.toHaveBeenCalled()
   })
 })

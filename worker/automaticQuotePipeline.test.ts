@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { classifyFullNcm, type NcmSearchIndex } from './ncmRetrieval'
-import { calculateImportTaxes } from '../src/lib/importTaxes'
+import { calculateImportTaxes, statisticsCap } from '../src/lib/importTaxes'
 
 const index: NcmSearchIndex = {
   meta: {
@@ -91,8 +91,11 @@ describe('automatic quote pipeline', () => {
     expect(classification.tariff?.capitalGoodEligible).toBe(true)
     const normal = automaticTaxFromClassification(5000, classification.tariff!)
     const capitalGood = automaticTaxFromClassification(5000, classification.tariff!, { capitalGoodUse: true })
+    const expectedNormalStatistics = classification.tariff!.tePct > 0
+      ? Math.min(5000 * classification.tariff!.tePct / 100, statisticsCap(5000))
+      : 0
 
-    expect(normal.statisticsFeeUsd).toBeGreaterThan(0)
+    expect(normal.statisticsFeeUsd).toBe(expectedNormalStatistics)
     expect(normal.vatPerceptionUsd).toBeGreaterThan(0)
     expect(normal.gainsPerceptionUsd).toBeGreaterThan(0)
     expect(normal.iibbPerceptionUsd).toBeGreaterThan(0)

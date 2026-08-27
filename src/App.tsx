@@ -9,7 +9,6 @@ import type { ImportEntityType, ImportPurpose, SensitiveProductCategory } from '
 
 type EntryIntent = 'have_product' | 'search_product' | 'discover' | null
 type BudgetMode = 'budget' | 'units' | 'unknown' | null
-
 type SignatureAnswer = 'yes' | 'no' | 'unknown'
 
 const stepLabels = ['Objetivo', 'Tu operación', 'Presupuesto', 'Producto', 'Resultado']
@@ -69,6 +68,7 @@ export default function App() {
     const fx = analysis.fx?.status === 'live' && analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0 ? analysis.fx.arsPerUsd : null
     const estimatedLocalUsd = fx && analysis.market.estimatedPriceArs ? analysis.market.estimatedPriceArs / fx : 0
     const fallbackQuantity = analysis.product.moq || analysis.suggestedQuantities[0] || 100
+
     return {
       productName: analysis.product.name,
       originCountry: analysis.product.originCountry || 'China',
@@ -128,13 +128,11 @@ export default function App() {
   }
 
   const continueOperation = () => {
-    if (!operationAnswered) return
-    setStep(2)
+    if (operationAnswered) setStep(2)
   }
 
   const continueBudget = () => {
-    if (!budgetAnswered) return
-    setStep(3)
+    if (budgetAnswered) setStep(3)
   }
 
   const resetJourney = () => {
@@ -181,7 +179,7 @@ export default function App() {
         {intent === null ? <div className="journey-choice-grid three">
           <button type="button" onClick={() => chooseIntent('have_product')}><span>▣</span><b>Ya tengo un producto</b><small>Tengo proveedor, precio, peso/volumen o parte de esos datos.</small></button>
           <button type="button" onClick={() => chooseIntent('search_product')}><span>⌕</span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y ShippingAPP busca opciones en Alibaba.</small></button>
-          <button type="button" onClick={() => chooseIntent('discover')}><span>✦</span><b>Quiero descubrir</b><small>Mostrame productos para explorar oportunidades y cotizarlos rápido.</small></button>
+          <button type="button" onClick={() => chooseIntent('discover')}><span>✦</span><b>Quiero descubrir</b><small>Buscá en Alibaba o explorá oportunidades listas para cotizar.</small></button>
         </div> : <div className="journey-bubble user"><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar oportunidades.'}</b><button type="button" onClick={() => setStep(0)}>Cambiar</button></div></div>}
 
         {intent && <>
@@ -224,11 +222,26 @@ export default function App() {
           {step >= 3 && <>
             <div className="journey-bubble assistant">
               <span className="journey-avatar">S</span>
-              <div><b>{intent === 'have_product' ? 'Perfecto. Pasame los datos del producto y calculamos.' : intent === 'search_product' ? 'Describime el producto como se lo explicarías a una persona.' : 'Elegí una oportunidad y la convierto en una cotización.'}</b><p>{intent === 'have_product' ? 'Precio, origen, peso, volumen y MOQ son suficientes para arrancar. Si algo falta, podés completar después.' : intent === 'search_product' ? 'Podés escribir “buscame paletas de pádel de carbono hasta USD 30 y MOQ menor a 100”, pegar un link o describir lo que necesitás.' : 'Los productos de abajo están cacheados para que puedas comparar sin iniciar una búsqueda nueva.'}</p></div>
+              <div>
+                <b>{intent === 'have_product' ? 'Perfecto. Pasame los datos del producto y calculamos.' : intent === 'search_product' ? 'Describime el producto como se lo explicarías a una persona.' : 'Buscá en Alibaba o elegí una oportunidad lista.'}</b>
+                <p>{intent === 'have_product'
+                  ? 'Precio, origen, peso, volumen y MOQ son suficientes para arrancar. Si algo falta, podés completar después.'
+                  : intent === 'search_product'
+                    ? 'Podés escribir “buscame paletas de pádel de carbono hasta USD 30 y MOQ menor a 100”, pegar un link o describir lo que necesitás.'
+                    : 'Escribí cualquier producto para buscarlo en Alibaba. Si sólo querés explorar, abajo siguen disponibles oportunidades cacheadas sin iniciar una búsqueda nueva.'}</p>
+              </div>
             </div>
 
             {intent === 'search_product' && <div className="journey-product-surface"><UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} /></div>}
-            {intent === 'discover' && <div className="journey-product-surface"><HotProductsSection products={hotProducts} selectedId={selectedHotProduct?.id ?? null} onQuote={handleHotProductQuote} /></div>}
+
+            {intent === 'discover' && <>
+              <div className="journey-product-surface"><UrlAnalyzer mode="discovery" onAnalysis={handleAnalysis} analysis={analysis} /></div>
+              <div className="journey-product-surface">
+                <div className="journey-section-heading"><span className="eyebrow">O explorar sin buscar</span><h2>Oportunidades cacheadas</h2><p>Estos productos quedan disponibles para comparar rápido sin consumir una búsqueda nueva de Alibaba.</p></div>
+                <HotProductsSection products={hotProducts} selectedId={selectedHotProduct?.id ?? null} onQuote={handleHotProductQuote} />
+              </div>
+            </>}
+
             {intent === 'have_product' && <div className="journey-manual-ready"><span>✓</span><div><b>Listo para cargar tu producto</b><p>La calculadora de abajo empieza con datos editables. Reemplazalos por los de tu proveedor.</p></div><a href="#calculator">Abrir calculadora</a></div>}
           </>}
         </>}

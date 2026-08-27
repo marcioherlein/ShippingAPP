@@ -39,8 +39,18 @@ type NumberFieldProps = {
   onChange: (value: number) => void
 }
 
+export type JourneyQuoteSetup = {
+  budgetUsd?: number
+  quantity?: number
+  purpose?: ImportPurpose
+  entityType?: ImportEntityType
+  hasImporterSignature?: 'yes' | 'no' | 'unknown'
+  sensitiveCategory?: SensitiveProductCategory
+}
+
 type ImportQuoteFlowProps = {
   prefill?: QuotePrefill | null
+  setup?: JourneyQuoteSetup | null
 }
 
 function NumberField({ label, hint, value, min = 0, step = 1, suffix, onChange }: NumberFieldProps) {
@@ -65,28 +75,28 @@ function strategyCopy(strategy: BuyStrategy) {
   return 'balancea costo unitario, presupuesto y meses de stock.'
 }
 
-export default function ImportQuoteFlow({ prefill = null }: ImportQuoteFlowProps) {
-  const [productName, setProductName] = useState(prefill?.productName ?? 'Paleta de pádel carbono')
+export default function ImportQuoteFlow({ prefill = null, setup = null }: ImportQuoteFlowProps) {
+  const [productName, setProductName] = useState(prefill?.productName ?? '')
   const [originCountry, setOriginCountry] = useState(prefill?.originCountry ?? 'China')
-  const [quantity, setQuantity] = useState(prefill?.quantity ?? 100)
-  const [unitPriceUsd, setUnitPriceUsd] = useState(prefill?.unitPriceUsd ?? 40)
-  const [unitWeightKg, setUnitWeightKg] = useState(prefill?.unitWeightKg ?? 1)
-  const [unitVolumeCbm, setUnitVolumeCbm] = useState(prefill?.unitVolumeCbm ?? 0.01)
+  const [quantity, setQuantity] = useState(setup?.quantity ?? prefill?.quantity ?? 100)
+  const [unitPriceUsd, setUnitPriceUsd] = useState(prefill?.unitPriceUsd ?? 0)
+  const [unitWeightKg, setUnitWeightKg] = useState(prefill?.unitWeightKg ?? 0)
+  const [unitVolumeCbm, setUnitVolumeCbm] = useState(prefill?.unitVolumeCbm ?? 0)
   const [dutyRatePct, setDutyRatePct] = useState(16)
   const [statisticsRatePct, setStatisticsRatePct] = useState(3)
   const [vatRatePct, setVatRatePct] = useState(21)
   const [vatAdditionalRatePct, setVatAdditionalRatePct] = useState(20)
   const [gainsRatePct, setGainsRatePct] = useState(6)
   const [iibbRatePct, setIibbRatePct] = useState(2.5)
-  const [localSellPriceUsd, setLocalSellPriceUsd] = useState(prefill?.localSellPriceUsd ?? 150)
-  const [budgetUsd, setBudgetUsd] = useState(prefill?.budgetUsd ?? 10000)
-  const [moq, setMoq] = useState(prefill?.moq ?? 50)
-  const [monthlyDemand, setMonthlyDemand] = useState(prefill?.monthlyDemand ?? 60)
+  const [localSellPriceUsd, setLocalSellPriceUsd] = useState(prefill?.localSellPriceUsd ?? 0)
+  const [budgetUsd, setBudgetUsd] = useState(setup?.budgetUsd ?? prefill?.budgetUsd ?? 0)
+  const [moq, setMoq] = useState(prefill?.moq ?? 1)
+  const [monthlyDemand, setMonthlyDemand] = useState(prefill?.monthlyDemand ?? 0)
   const [strategy, setStrategy] = useState<BuyStrategy>('normal')
-  const [purpose, setPurpose] = useState<ImportPurpose>('resale')
-  const [entityType, setEntityType] = useState<ImportEntityType>('company')
-  const [hasImporterSignature, setHasImporterSignature] = useState<'yes' | 'no' | 'unknown'>('no')
-  const [sensitiveCategory, setSensitiveCategory] = useState<SensitiveProductCategory>(prefill?.sensitiveCategory ?? 'none')
+  const [purpose, setPurpose] = useState<ImportPurpose>(setup?.purpose ?? 'unknown')
+  const [entityType, setEntityType] = useState<ImportEntityType>(setup?.entityType ?? 'unknown')
+  const [hasImporterSignature, setHasImporterSignature] = useState<'yes' | 'no' | 'unknown'>(setup?.hasImporterSignature ?? 'unknown')
+  const [sensitiveCategory, setSensitiveCategory] = useState<SensitiveProductCategory>(setup?.sensitiveCategory ?? prefill?.sensitiveCategory ?? 'unknown')
 
   const landedInput = {
     originCountry,
@@ -126,19 +136,19 @@ export default function ImportQuoteFlow({ prefill = null }: ImportQuoteFlowProps
   const quantityRecommendation = optimizer.recommendation
   const topCandidates = optimizer.candidates.slice(0, 5)
 
-  return <section className="manual-quote-shell">
-    <div className="table-title">
-      <div><span className="eyebrow">Nuevo flujo principal</span><h2>Input → checklist → fletes → costo final</h2></div>
+  return <section className="manual-quote-shell journey-quote-shell">
+    <div className="table-title journey-quote-title">
+      <div><span className="eyebrow">Calculadora del caso</span><h2>Producto → logística → costo final → cantidad</h2></div>
       <small>{prefill?.sourceLabel ?? importFreightValues.meta.source}</small>
     </div>
 
-    {prefill && <div className="analysis-banner hot-prefill-banner"><b>Producto precargado.</b> Datos tomados del cache de hot products. Revisá FOB, MOQ, peso y volumen antes de decidir.</div>}
+    {prefill && <div className="analysis-banner hot-prefill-banner"><b>Datos precargados.</b> Revisá FOB, MOQ, peso y volumen. Todo el cálculo se actualiza en vivo.</div>}
 
     <div className="workspace manual-quote-workspace">
       <aside className="inputs-column">
         <section className="panel">
-          <div className="section-heading"><span>01</span><div><h2>Producto y operación</h2><p>Datos mínimos para calcular FOB, flete, CIF e impuestos.</p></div></div>
-          <label className="field field-wide"><span>Producto</span><input value={productName} onChange={(e) => setProductName(e.target.value)} /></label>
+          <div className="section-heading"><span>01</span><div><h2>Producto y proveedor</h2><p>Lo mínimo para transformar una compra FOB en una operación importada.</p></div></div>
+          <label className="field field-wide"><span>Producto</span><input placeholder="Ej. paleta de pádel carbono" value={productName} onChange={(e) => setProductName(e.target.value)} /></label>
           <label className="field field-wide"><span>Origen</span><select value={originCountry} onChange={(e) => setOriginCountry(e.target.value)}>{originCountries.map((country) => <option key={country} value={country}>{country}</option>)}</select></label>
           <div className="field-grid">
             <NumberField label="Cantidad a simular" value={quantity} onChange={setQuantity} suffix="u." />
@@ -148,28 +158,28 @@ export default function ImportQuoteFlow({ prefill = null }: ImportQuoteFlowProps
           </div>
         </section>
 
-        <section className="panel">
-          <div className="section-heading"><span>02</span><div><h2>Presupuesto y cantidad óptima</h2><p>Input mínimo para no traer ni de menos ni de más.</p></div></div>
-          <div className="field-grid">
-            <NumberField label="Presupuesto máximo" hint="Costo final total, no sólo FOB" value={budgetUsd} onChange={setBudgetUsd} step={100} suffix="USD" />
-            <NumberField label="MOQ proveedor" value={moq} onChange={setMoq} suffix="u." />
-            <NumberField label="Demanda mensual" hint="Opcional; 0 si no sabés" value={monthlyDemand} onChange={setMonthlyDemand} suffix="u./mes" />
-            <label className="field"><span>Estrategia</span><small>{strategyCopy(strategy)}</small><select value={strategy} onChange={(e) => setStrategy(e.target.value as BuyStrategy)}>{(Object.keys(strategyLabels) as BuyStrategy[]).map((key) => <option key={key} value={key}>{strategyLabels[key]}</option>)}</select></label>
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="section-heading"><span>03</span><div><h2>Checklist real</h2><p>Las 4 preguntas que cambian el costo/camino.</p></div></div>
+        <section className="panel journey-profile-panel">
+          <div className="section-heading"><span>02</span><div><h2>Tu operación</h2><p>Viene del diálogo inicial y sigue siendo editable.</p></div></div>
           <div className="field-grid">
             <label className="field"><span>Uso</span><select value={purpose} onChange={(e) => setPurpose(e.target.value as ImportPurpose)}><option value="resale">Reventa</option><option value="own_use">Uso propio</option><option value="unknown">No sé</option></select></label>
             <label className="field"><span>Importa como</span><select value={entityType} onChange={(e) => setEntityType(e.target.value as ImportEntityType)}><option value="company">Empresa</option><option value="individual">Persona humana</option><option value="unknown">No sé</option></select></label>
-            <label className="field"><span>Firma importador</span><select value={hasImporterSignature} onChange={(e) => setHasImporterSignature(e.target.value as 'yes' | 'no' | 'unknown')}><option value="yes">Tiene firma</option><option value="no">No tiene firma</option><option value="unknown">No sé</option></select></label>
+            <label className="field"><span>Firma/importador</span><select value={hasImporterSignature} onChange={(e) => setHasImporterSignature(e.target.value as 'yes' | 'no' | 'unknown')}><option value="yes">Tiene firma</option><option value="no">No tiene firma</option><option value="unknown">No sé</option></select></label>
             <label className="field"><span>Categoría sensible</span><select value={sensitiveCategory} onChange={(e) => setSensitiveCategory(e.target.value as SensitiveProductCategory)}>{(Object.keys(sensitiveLabels) as SensitiveProductCategory[]).map((key) => <option key={key} value={key}>{sensitiveLabels[key]}</option>)}</select></label>
           </div>
         </section>
 
         <section className="panel">
-          <div className="section-heading"><span>04</span><div><h2>NCM e impuestos</h2><p>Por ahora manual/editable; luego lo trae el nomenclador.</p></div></div>
+          <div className="section-heading"><span>03</span><div><h2>Presupuesto y cantidad</h2><p>El optimizador prueba cantidades a partir del MOQ.</p></div></div>
+          <div className="field-grid">
+            <NumberField label="Presupuesto máximo" hint="Costo final total, no sólo FOB. 0 = todavía no definido." value={budgetUsd} onChange={setBudgetUsd} step={100} suffix="USD" />
+            <NumberField label="MOQ proveedor" value={moq} onChange={setMoq} min={1} suffix="u." />
+            <NumberField label="Demanda mensual" hint="Opcional; 0 si no sabés" value={monthlyDemand} onChange={setMonthlyDemand} suffix="u./mes" />
+            <label className="field"><span>Estrategia</span><small>{strategyCopy(strategy)}</small><select value={strategy} onChange={(e) => setStrategy(e.target.value as BuyStrategy)}>{(Object.keys(strategyLabels) as BuyStrategy[]).map((key) => <option key={key} value={key}>{strategyLabels[key]}</option>)}</select></label>
+          </div>
+        </section>
+
+        <details className="panel journey-advanced-taxes">
+          <summary><div className="section-heading"><span>04</span><div><h2>NCM e impuestos</h2><p>Supuestos avanzados; editá sólo si tenés mejor información.</p></div></div></summary>
           <div className="field-grid">
             <NumberField label="Derecho importación" value={dutyRatePct} onChange={setDutyRatePct} step={0.1} suffix="%" />
             <NumberField label="Tasa estadística" value={statisticsRatePct} onChange={setStatisticsRatePct} step={0.1} suffix="%" />
@@ -179,13 +189,13 @@ export default function ImportQuoteFlow({ prefill = null }: ImportQuoteFlowProps
             <NumberField label="IIBB" value={iibbRatePct} onChange={setIibbRatePct} step={0.1} suffix="%" />
             <NumberField label="Precio venta local" hint="Para margen unitario rápido" value={localSellPriceUsd} onChange={setLocalSellPriceUsd} step={0.01} suffix="USD" />
           </div>
-        </section>
+        </details>
       </aside>
 
       <section className="results-column">
-        <section className="recommendation">
+        <section className="recommendation journey-main-result">
           <div className="recommendation-top">
-            <div><span className="eyebrow">Decisión principal</span><strong>{decision.title}</strong></div>
+            <div><span className="eyebrow">Recomendación actual</span><strong>{decision.title}</strong></div>
             <div className="score"><span>Costo/u.</span><b>{winner ? usd(winner.unitCostUsd) : '-'}</b></div>
           </div>
           <p className="mode">{decision.body}</p>
@@ -197,8 +207,8 @@ export default function ImportQuoteFlow({ prefill = null }: ImportQuoteFlowProps
           </div>
         </section>
 
-        <section className="table-card">
-          <div className="table-title"><div><span className="eyebrow">Cantidad óptima</span><h2>{quantityRecommendation ? `${quantityRecommendation.quantity} unidades recomendadas` : 'Sin recomendación'}</h2></div><small>Presupuesto {usd(budgetUsd)}</small></div>
+        <section className="table-card journey-quantity-card">
+          <div className="table-title"><div><span className="eyebrow">Cantidad óptima</span><h2>{quantityRecommendation ? `${quantityRecommendation.quantity} unidades recomendadas` : budgetUsd <= 0 ? 'Definí presupuesto para optimizar' : 'Sin recomendación'}</h2></div><small>{budgetUsd > 0 ? `Presupuesto ${usd(budgetUsd)}` : 'Presupuesto abierto'}</small></div>
           {quantityRecommendation && <>
             <div className="metric-grid">
               <div><span>Modo recomendado</span><b>{quantityRecommendation.selectedMode === 'lcl' ? 'LCL' : quantityRecommendation.selectedMode === 'air' ? 'Aéreo' : '-'}</b></div>
@@ -211,11 +221,11 @@ export default function ImportQuoteFlow({ prefill = null }: ImportQuoteFlowProps
             <p className="assumption-note">{quantityRecommendation.affordable ? 'Entra dentro del presupuesto cargado.' : 'No entra dentro del presupuesto: es la opción menos mala encontrada desde el MOQ.'} {optimizer.notes[2]}</p>
             <button className="secondary" type="button" onClick={() => setQuantity(quantityRecommendation.quantity)}>Usar esta cantidad en la simulación</button>
           </>}
-          <div className="table-scroll" style={{ marginTop: 14 }}><table><thead><tr><th>Cantidad</th><th>Modo</th><th>Total</th><th>Unitario</th><th>m³</th><th>Stock</th><th>Estado</th></tr></thead><tbody>{topCandidates.map((candidate) => <tr key={candidate.quantity} className={candidate.quantity === quantityRecommendation?.quantity ? 'selected-row' : undefined}><td><b>{candidate.quantity} u.</b></td><td>{candidate.selectedMode === 'lcl' ? 'LCL' : candidate.selectedMode === 'air' ? 'Aéreo' : '-'}</td><td>{usd(candidate.totalCostUsd)}</td><td>{usd(candidate.unitCostUsd)}</td><td>{candidate.totalVolumeCbm}</td><td>{candidate.monthsOfStock === null ? '-' : `${candidate.monthsOfStock}m`}</td><td>{candidate.affordable ? 'OK' : 'Fuera presupuesto'}</td></tr>)}</tbody></table></div>
+          {topCandidates.length > 0 && <div className="table-scroll" style={{ marginTop: 14 }}><table><thead><tr><th>Cantidad</th><th>Modo</th><th>Total</th><th>Unitario</th><th>m³</th><th>Stock</th><th>Estado</th></tr></thead><tbody>{topCandidates.map((candidate) => <tr key={candidate.quantity} className={candidate.quantity === quantityRecommendation?.quantity ? 'selected-row' : undefined}><td><b>{candidate.quantity} u.</b></td><td>{candidate.selectedMode === 'lcl' ? 'LCL' : candidate.selectedMode === 'air' ? 'Aéreo' : '-'}</td><td>{usd(candidate.totalCostUsd)}</td><td>{usd(candidate.unitCostUsd)}</td><td>{candidate.totalVolumeCbm}</td><td>{candidate.monthsOfStock === null ? '-' : `${candidate.monthsOfStock}m`}</td><td>{candidate.affordable ? 'OK' : 'Fuera presupuesto'}</td></tr>)}</tbody></table></div>}
         </section>
 
         <section className="table-card">
-          <div className="table-title"><div><span className="eyebrow">Proceso</span><h2>Fletes, CIF, impuestos y gastos</h2></div><small>{quote.origin ? `${quote.origin.region} · ${quote.origin.capital}` : quote.status}</small></div>
+          <div className="table-title"><div><span className="eyebrow">Desglose completo</span><h2>Flete, CIF, impuestos y gastos</h2></div><small>{quote.origin ? `${quote.origin.region} · ${quote.origin.capital}` : quote.status}</small></div>
           <div className="table-scroll"><table><thead><tr><th>Modo</th><th>Flete</th><th>CIF</th><th>Base IVA</th><th>Impuestos</th><th>Gastos</th><th>Total</th><th>Unitario</th></tr></thead><tbody>{([lcl, air, fcl] as const).map((mode) => {
             const taxes = mode.dutyUsd + mode.statisticsUsd + mode.vatUsd + mode.vatAdditionalUsd + mode.gainsUsd + mode.iibbUsd
             const expenses = mode.fixedDestinationUsd + mode.noImporterSignatureUsd + mode.sensitiveCategoryUsd
@@ -225,8 +235,8 @@ export default function ImportQuoteFlow({ prefill = null }: ImportQuoteFlowProps
           <div className="analysis-banner" style={{ marginTop: 16 }}><b>LCL vs Aéreo:</b> {quote.lclVsAir.cheaperMode === 'lcl' ? `LCL ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs aéreo.` : quote.lclVsAir.cheaperMode === 'air' ? `Aéreo ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs LCL.` : 'empate con los datos actuales.'} FCL queda como referencia de contenedor entero.</div>
         </section>
 
-        <section className="method-card">
-          <h3>Checklist status</h3>
+        <section className="method-card journey-checklist-status">
+          <h3>Qué falta cerrar</h3>
           <div className="metric-grid">
             <div><span>Uso propio/reventa</span><b>{checklistSignal(quote.checklist.ownUseOrResaleKnown, 'Falta')}</b></div>
             <div><span>Empresa/persona</span><b>{checklistSignal(quote.checklist.entityTypeKnown, 'Falta')}</b></div>

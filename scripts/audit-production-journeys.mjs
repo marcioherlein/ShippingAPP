@@ -1,3 +1,4 @@
+// Production contract audit: realistic user inputs + provider fallbacks + customs.
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 const REQUEST_TIMEOUT_MS = Number(process.env.AUDIT_REQUEST_TIMEOUT_MS || 28000)
 
@@ -103,7 +104,6 @@ async function ncmCase(name, facts, expectedCode) {
 async function main() {
   console.log(`ShippingAPP production journey audit -> ${baseUrl}`)
 
-  // Realistic terse inputs: these are the phrases users actually type in the UI.
   const tennis = await intakeCase('terse-tennis-racket', 'Raqueta de tenis profesional', {
     notStatus: 'clarify', namePresent: true,
   })
@@ -120,12 +120,10 @@ async function main() {
     notStatus: 'clarify', namePresent: true,
   })
 
-  // Rich intake should reach ready without search.
   await intakeCase('rich-tennis-racket', 'Raqueta de tenis profesional de grafito, origen China, precio proveedor USD 24, MOQ 100 unidades, peso embalado 0.45 kg por unidad, volumen 0.004 m3 por unidad.', {
     status: 'ready', namePresent: true,
   })
 
-  // Search/discovery wording should route predictably.
   await intakeCase('explicit-search', 'Buscame raquetas de tenis profesionales en Alibaba', {
     status: 'discovery_pending',
   })
@@ -133,7 +131,6 @@ async function main() {
     status: 'discovery_pending',
   })
 
-  // Follow-up must preserve a recognized product rather than losing thread state.
   if (tennis?.facts?.name) {
     await intakeCase('follow-up-preserves-product', 'Precio proveedor USD 24, MOQ 100 unidades, origen China, peso embalado 0.45 kg, volumen 0.004 m3.', {
       priorFacts: tennis.facts,
@@ -144,17 +141,14 @@ async function main() {
     record('intake', 'follow-up-preserves-product', false, { skipped: true }, { preservePriorProduct: true }, 'terse tennis input never established product identity')
   }
 
-  // Provider matrix. The first is the current control query; the rest are user-facing categories.
   await opportunityCase('control-smart-door-phone', 'smart wifi video door phone')
   await opportunityCase('carbon-padel-racket', 'carbon padel racket')
   await opportunityCase('professional-tennis-racket', 'professional tennis racket')
   await opportunityCase('usb-c-65w-charger', 'usb c 65w charger')
 
-  // Existing independent Alibaba direct/browser engine: diagnostic for provider fallback viability.
   await directDiscoveryCase('carbon-padel-direct-browser', 'carbon padel racket')
   await directDiscoveryCase('tennis-direct-browser', 'professional tennis racket')
 
-  // Customs/tariff layer sanity checks for two sports products shown in the UI examples.
   await ncmCase('tennis-racket', {
     name: 'Raqueta de tenis de grafito', category: 'Tennis racket', material: 'grafito',
     functionText: 'jugar tenis', description: 'professional graphite tennis racket',

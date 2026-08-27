@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './styles.css'
 import './styles/regulatory.css'
+import './styles/entry-simplification.css'
 
 const root = document.getElementById('root')
 

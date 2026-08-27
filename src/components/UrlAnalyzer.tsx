@@ -4,6 +4,9 @@ import { isAlibabaUrl } from '../lib/productIntake'
 import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
 import { buildDiscoveryQuery, isGenericAlibabaSearchRequest } from '../lib/searchIntent'
+import { getCachedHotProducts } from '../lib/hotProducts'
+import type { HotProduct } from '../data/hotProducts'
+import HotProductsSection from './HotProductsSection'
 
 type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
@@ -45,8 +48,10 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
   const [messages, setMessages] = useState<ThreadMessage[]>([])
   const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(null)
   const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(null)
+  const [selectedCachedId, setSelectedCachedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const cachedProducts = useMemo(() => getCachedHotProducts(6), [])
 
   const constraintChecks = useMemo(
     () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],
@@ -67,6 +72,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
   }
 
   const runDiscoverySearch = async (query: string, userText: string) => {
+    setSelectedCachedId(null)
     setMessages((current) => [...current, {
       role: 'assistant',
       content: 'Buscando en Alibaba. Si una fuente no responde, ShippingAPP prueba automáticamente una alternativa.',
@@ -91,6 +97,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
     setError('')
     setDiscovery(null)
     setSelectedConstraints(null)
+    setSelectedCachedId(null)
 
     try {
       if (isAlibabaUrl(value)) {
@@ -108,7 +115,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
       }
 
       // This component is the product finder. Any non-URL product text means
-      // "search Alibaba" regardless of whether the entry card was Buscar or Descubrir.
+      // "search Alibaba" regardless of which legacy entry path opened it.
       await runDiscoverySearch(query, value)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos buscar ese producto en este momento.')
@@ -121,10 +128,32 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
     if (loading || !discovery) return
     setLoading(true)
     setError('')
+    setSelectedCachedId(null)
     try {
       await analyzeRealUrl(url, true, discovery.constraints)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos analizar el producto seleccionado.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const selectCachedProduct = async (product: HotProduct) => {
+    if (loading) return
+    setSelectedCachedId(product.id)
+    setLoading(true)
+    setError('')
+    setDiscovery(null)
+    setSelectedConstraints(null)
+    setMessages((current) => [...current, {
+      role: 'assistant',
+      content: 'Abriendo la oportunidad cacheada. No hago una búsqueda nueva: valido directamente la publicación real antes de cotizar.',
+    }])
+    try {
+      await analyzeRealUrl(product.productUrl, true, null)
+    } catch (err) {
+      setSelectedCachedId(null)
+      setError(err instanceof Error ? err.message : 'No pudimos abrir la oportunidad cacheada.')
     } finally {
       setLoading(false)
     }
@@ -153,8 +182,8 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
   return <section className={`url-analyzer${modeClass}`}>
     <div className="analyzer-copy">
       <span className="eyebrow">Alibaba live search</span>
-      <h1>Buscá cualquier producto en Alibaba.</h1>
-      <p>Escribí lo que querés en lenguaje natural. ShippingAPP busca candidatos reales, absorbe fallas de fuente cuando puede y te deja elegir una publicación para cotizar.</p>
+      <h1>Encontrá el producto que querés importar.</h1>
+      <p>Buscá en Alibaba con lenguaje natural o pegá una publicación concreta. Si preferís explorar, abajo tenés oportunidades cacheadas que no disparan una búsqueda nueva.</p>
     </div>
 
     {messages.length === 0 && <div className="analyst-suggestions intake-suggestions">
@@ -166,7 +195,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
         <span>{message.role === 'user' ? 'Vos' : 'ShippingAPP'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Buscando y leyendo productos reales en Alibaba…</p></div>}
+      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Buscando o validando productos reales en Alibaba…</p></div>}
     </div>}
 
     <form className="url-form" onSubmit={submit}>
@@ -214,11 +243,23 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
             <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>{deferCalculation ? 'Elegir producto' : 'Elegir y cotizar'}</button>
           </div>
         </article>)}
-      </div> : <div className="customs-note"><b>NO RESULTS</b><span>No mostramos productos sintéticos. Podés reformular la búsqueda o pegar una publicación concreta.</span></div>}
+      </div> : <div className="customs-note"><b>NO RESULTS</b><span>No mostramos productos sintéticos. Podés reformular la búsqueda o elegir una oportunidad cacheada abajo.</span></div>}
 
       {discovery.creditsEstimated !== undefined && discovery.creditsEstimated > 0 && <p className="assumption-note">Costo estimado de búsqueda estructurada: {discovery.creditsEstimated} créditos. El análisis profundo puede consumir créditos adicionales por producto seleccionado.</p>}
       {discovery.browserAttempted && <p className="assumption-note">Fuente alternativa con navegador: {discovery.browserMsUsed ? `${(discovery.browserMsUsed / 1000).toFixed(1)}s` : 'intentada'}. Se usa sólo cuando las fuentes anteriores no entregan suficientes URLs reales.</p>}
     </section>}
+
+    {!analysis && <div className="finder-cached-opportunities">
+      <div className="finder-cache-intro">
+        <span className="eyebrow">O explorar sin buscar</span>
+        <p>Estas oportunidades vienen del cache local. Elegir una no inicia una búsqueda nueva: ShippingAPP abre la publicación real y valida sus datos antes de cotizar.</p>
+      </div>
+      <HotProductsSection
+        products={cachedProducts}
+        selectedId={selectedCachedId}
+        onQuote={(product) => void selectCachedProduct(product)}
+      />
+    </div>}
 
     {analysis && !loading && <div className="extraction-card">
       <div className="extraction-top">

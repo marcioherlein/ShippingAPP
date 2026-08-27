@@ -1,0 +1,44 @@
+.journey-choice-grid.three {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Buscar and Descubrir now share the same finder contract. Keep a single
+   visible entry point while the legacy discover state remains compatible. */
+.journey-choice-grid.three > button:nth-child(3) {
+  display: none;
+}
+
+.finder-cached-opportunities {
+  margin-top: 32px;
+  padding-top: 26px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.finder-cache-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 10px;
+}
+
+.finder-cache-intro p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--muted, rgba(255, 255, 255, 0.62));
+  line-height: 1.55;
+}
+
+@media (max-width: 760px) {
+  .journey-choice-grid.three {
+    grid-template-columns: 1fr;
+  }
+
+  .finder-cache-intro {
+    display: block;
+  }
+
+  .finder-cache-intro p {
+    margin-top: 8px;
+  }
+}

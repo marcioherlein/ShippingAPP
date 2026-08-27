@@ -80,3 +80,6 @@ jobs:
           assertNcmAsset(body.checks?.ncmIndex, 'Production')
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
           NODE
+      - name: Full production journey audit
+        if: github.event_name == 'pull_request'
+        run: node scripts/audit-production-journeys.mjs

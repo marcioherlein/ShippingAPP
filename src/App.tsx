@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react'
 import UrlAnalyzer from './components/UrlAnalyzer'
 import HotProductsSection from './components/HotProductsSection'
+import CalculationPipeline, { type CalculationPipelineStatus, type CalculationPipelineSummary } from './components/CalculationPipeline'
 import ImportQuoteFlow, { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
 import { getCachedHotProducts, hotProductToQuotePrefill, type QuotePrefill } from './lib/hotProducts'
 import type { HotProduct } from './data/hotProducts'
-import type { ProductAnalysisV2 } from './lib/productAnalysisV2'
-import type { ImportEntityType, ImportPurpose, SensitiveProductCategory } from './lib/landedCostEngine'
+import { analyzeAlibabaUrlV2, enrichProductAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
+import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
 
 type EntryIntent = 'have_product' | 'search_product' | 'discover' | null
 type BudgetMode = 'budget' | 'units' | 'unknown' | null
@@ -45,6 +46,49 @@ function sensitiveLabel(value: SensitiveProductCategory | null) {
   return 'Pendiente'
 }
 
+function makeAnalysisPrefill(
+  analysis: ProductAnalysisV2,
+  budgetMode: BudgetMode,
+  budgetUsd: number,
+  sensitiveCategory: SensitiveProductCategory | null,
+): QuotePrefill {
+  const fx = analysis.fx?.status === 'live' && analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0 ? analysis.fx.arsPerUsd : null
+  const estimatedLocalUsd = fx && analysis.market.estimatedPriceArs ? analysis.market.estimatedPriceArs / fx : 0
+  const fallbackQuantity = analysis.product.moq || analysis.suggestedQuantities[0] || 100
+  return {
+    productName: analysis.product.name,
+    originCountry: analysis.product.originCountry || 'China',
+    quantity: fallbackQuantity,
+    unitPriceUsd: analysis.product.unitPriceUsd || 0,
+    unitWeightKg: analysis.product.packedWeightKg || 0,
+    unitVolumeCbm: analysis.product.volumeCbm || 0,
+    moq: analysis.product.moq || fallbackQuantity,
+    budgetUsd: budgetMode === 'budget' ? budgetUsd : 0,
+    monthlyDemand: analysis.market.estimatedMonthlyDemand || 0,
+    localSellPriceUsd: estimatedLocalUsd,
+    sensitiveCategory: sensitiveCategory || 'unknown',
+    sourceLabel: analysis.sourceUrl.startsWith('chat://') ? 'Datos aportados en conversación' : 'Producto analizado por ShippingAPP',
+    ncmCode: analysis.customs.ncmCandidate,
+    simCode: analysis.customs.simOpeningCandidate?.code ?? null,
+    classificationConfidence: analysis.customs.classificationConfidence,
+    dutyRatePct: analysis.customs.dutyRatePct,
+    statisticsRatePct: analysis.customs.statisticsRatePct,
+    vatRatePct: analysis.customs.vatRatePct ?? null,
+    vatAdditionalRatePct: analysis.customs.vatAdditionalRatePct ?? null,
+    gainsRatePct: analysis.customs.gainsRatePct ?? null,
+    iibbRatePct: analysis.customs.iibbRatePct ?? null,
+    capitalGoodEligible: analysis.customs.capitalGoodEligible ?? false,
+    customsSource: analysis.customs.source,
+    customsSourceDate: analysis.customs.catalogSourceDate || analysis.customs.reviewedAt,
+    customsMissingFacts: analysis.customs.missingFacts,
+    customsRationale: analysis.customs.rationale,
+  }
+}
+
+function nextPaint(ms = 180) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+}
+
 export default function App() {
   const [intent, setIntent] = useState<EntryIntent>(null)
   const [step, setStep] = useState(0)
@@ -58,6 +102,12 @@ export default function App() {
   const [unitsMax, setUnitsMax] = useState(200)
   const [analysis, setAnalysis] = useState<ProductAnalysisV2 | null>(null)
   const [selectedHotProduct, setSelectedHotProduct] = useState<HotProduct | null>(null)
+  const [selectionLoading, setSelectionLoading] = useState(false)
+  const [selectionError, setSelectionError] = useState('')
+  const [calculationStatus, setCalculationStatus] = useState<CalculationPipelineStatus>('confirm')
+  const [pipelineStage, setPipelineStage] = useState(0)
+  const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
+  const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
 
   const hotProducts = useMemo(() => getCachedHotProducts(8), [])
   const operationAnswered = purpose !== null && entityType !== null && signature !== null && sensitiveCategory !== null
@@ -65,32 +115,16 @@ export default function App() {
 
   const analysisPrefill = useMemo<QuotePrefill | null>(() => {
     if (!analysis) return null
-    const fx = analysis.fx?.status === 'live' && analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0 ? analysis.fx.arsPerUsd : null
-    const estimatedLocalUsd = fx && analysis.market.estimatedPriceArs ? analysis.market.estimatedPriceArs / fx : 0
-    const fallbackQuantity = analysis.product.moq || analysis.suggestedQuantities[0] || 100
-
-    return {
-      productName: analysis.product.name,
-      originCountry: analysis.product.originCountry || 'China',
-      quantity: fallbackQuantity,
-      unitPriceUsd: analysis.product.unitPriceUsd || 0,
-      unitWeightKg: analysis.product.packedWeightKg || 0,
-      unitVolumeCbm: analysis.product.volumeCbm || 0,
-      moq: analysis.product.moq || fallbackQuantity,
-      budgetUsd: budgetMode === 'budget' ? budgetUsd : 0,
-      monthlyDemand: analysis.market.estimatedMonthlyDemand || 0,
-      localSellPriceUsd: estimatedLocalUsd,
-      sensitiveCategory: sensitiveCategory || 'unknown',
-      sourceLabel: analysis.sourceUrl.startsWith('chat://') ? 'Datos aportados en conversación' : 'Producto analizado por ShippingAPP',
-    }
+    return makeAnalysisPrefill(analysis, budgetMode, budgetUsd, sensitiveCategory)
   }, [analysis, budgetMode, budgetUsd, sensitiveCategory])
 
   const selectedPrefill = useMemo<QuotePrefill | null>(() => {
+    if (analysisPrefill) return analysisPrefill
     if (selectedHotProduct) {
       const base = hotProductToQuotePrefill(selectedHotProduct)
       return { ...base, budgetUsd: budgetMode === 'budget' ? budgetUsd : base.budgetUsd }
     }
-    return analysisPrefill
+    return null
   }, [selectedHotProduct, analysisPrefill, budgetMode, budgetUsd])
 
   const quoteSetup = useMemo<JourneyQuoteSetup>(() => ({
@@ -102,29 +136,147 @@ export default function App() {
     sensitiveCategory: sensitiveCategory || 'unknown',
   }), [budgetMode, budgetUsd, unitsMin, unitsMax, purpose, entityType, signature, sensitiveCategory])
 
-  const productReady = intent === 'have_product' || Boolean(selectedPrefill)
-  const resultStepActive = productReady && step >= 3
-  const progressStep = resultStepActive ? 4 : step
+  const progressStep = intent === 'have_product'
+    ? (step >= 3 ? 4 : step)
+    : calculationStatus === 'ready'
+      ? 4
+      : step
+
+  const resetPipeline = () => {
+    setCalculationStatus('confirm')
+    setPipelineStage(0)
+    setPipelineSummary(null)
+    setPipelineBlocker(null)
+    setSelectionError('')
+  }
 
   const chooseIntent = (next: Exclude<EntryIntent, null>) => {
     setIntent(next)
     setAnalysis(null)
     setSelectedHotProduct(null)
+    resetPipeline()
     setStep(1)
   }
 
   const handleAnalysis = (next: ProductAnalysisV2) => {
     setAnalysis(next)
     setSelectedHotProduct(null)
-    setStep(4)
-    window.setTimeout(() => document.getElementById('calculator')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+    resetPipeline()
+    setStep(3)
+    window.setTimeout(() => document.getElementById('case-confirmation')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
-  const handleHotProductQuote = (product: HotProduct) => {
+  const handleHotProductQuote = async (product: HotProduct) => {
+    if (selectionLoading) return
     setSelectedHotProduct(product)
+    setSelectionLoading(true)
+    setSelectionError('')
+    resetPipeline()
+    try {
+      const next = await analyzeAlibabaUrlV2(product.productUrl)
+      handleAnalysis(next)
+    } catch (error) {
+      setAnalysis(null)
+      setSelectionError(error instanceof Error ? error.message : 'No pudimos hacer la ingesta profunda de este producto.')
+    } finally {
+      setSelectionLoading(false)
+    }
+  }
+
+  const editSelectedProduct = () => {
     setAnalysis(null)
-    setStep(4)
-    window.setTimeout(() => document.getElementById('calculator')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+    setSelectedHotProduct(null)
+    resetPipeline()
+    setStep(3)
+    window.setTimeout(() => document.querySelector('.journey-product-surface')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+  }
+
+  const confirmAndCalculate = async () => {
+    if (!analysis) return
+    setCalculationStatus('processing')
+    setPipelineStage(0)
+    setPipelineSummary(null)
+    setPipelineBlocker(null)
+
+    try {
+      // Re-run the nomenclator enrichment after explicit user confirmation so
+      // the tariff evidence used for economics is refreshed at calculation time.
+      const refreshed = await enrichProductAnalysisV2(analysis)
+      setAnalysis(refreshed)
+
+      if (!refreshed.customs.ncmCandidate || refreshed.customs.classificationConfidence === 'missing') {
+        setPipelineStage(0)
+        setPipelineBlocker('No pude resolver una NCM candidata suficiente con los datos del producto. Necesito más detalle de material, función o composición antes de calcular.')
+        setCalculationStatus('blocked')
+        return
+      }
+
+      await nextPaint()
+      setPipelineStage(1)
+
+      if (refreshed.customs.dutyRatePct === null || refreshed.customs.dutyRatePct === undefined || refreshed.customs.classificationConfidence === 'low') {
+        setPipelineBlocker('La NCM quedó con confianza baja o sin derecho utilizable. ShippingAPP detiene el cálculo para no aplicar un arancel inventado.')
+        setCalculationStatus('blocked')
+        return
+      }
+
+      const prefill = makeAnalysisPrefill(refreshed, budgetMode, budgetUsd, sensitiveCategory)
+      await nextPaint()
+      setPipelineStage(2)
+
+      if (prefill.unitPriceUsd <= 0 || prefill.unitWeightKg <= 0 || prefill.unitVolumeCbm <= 0) {
+        setPipelineBlocker('Para calcular flete y costo unitario necesito precio FOB, peso y volumen unitario. Alguno de esos datos no pudo verificarse en la publicación.')
+        setCalculationStatus('blocked')
+        return
+      }
+
+      const baseQuantity = quoteSetup.quantity ?? prefill.quantity ?? prefill.moq ?? 1
+      const comparison = compareLandedCost({
+        originCountry: prefill.originCountry,
+        quantity: baseQuantity,
+        unitPriceUsd: prefill.unitPriceUsd,
+        unitWeightKg: prefill.unitWeightKg,
+        unitVolumeCbm: prefill.unitVolumeCbm,
+        dutyRatePct: refreshed.customs.dutyRatePct,
+        statisticsRatePct: refreshed.customs.statisticsRatePct,
+        vatRatePct: refreshed.customs.vatRatePct,
+        vatAdditionalRatePct: refreshed.customs.vatAdditionalRatePct,
+        gainsRatePct: refreshed.customs.gainsRatePct,
+        iibbRatePct: refreshed.customs.iibbRatePct,
+        purpose: purpose || 'unknown',
+        entityType: entityType || 'unknown',
+        hasImporterSignature: signature === null || signature === 'unknown' ? null : signature === 'yes',
+        sensitiveCategory: sensitiveCategory || 'unknown',
+        capitalGoodEligible: refreshed.customs.capitalGoodEligible ?? false,
+        capitalGoodUse: false,
+      })
+
+      if (comparison.status !== 'ok' || !comparison.bestMode) {
+        setPipelineBlocker(comparison.status === 'missing_origin'
+          ? `No hay una tarifa de flete cargada para ${prefill.originCountry}.`
+          : 'Con estos datos todavía no puedo comparar un modo logístico accionable.')
+        setCalculationStatus('blocked')
+        return
+      }
+
+      await nextPaint()
+      setPipelineStage(3)
+      const winner = comparison.modes[comparison.bestMode]
+      setPipelineSummary({
+        baseQuantity,
+        selectedMode: comparison.bestMode,
+        unitCostUsd: winner.unitCostUsd,
+        totalCostUsd: winner.totalCostUsd,
+        freightCostUsd: winner.freightCostUsd,
+      })
+      await nextPaint(120)
+      setCalculationStatus('ready')
+      setStep(4)
+      window.setTimeout(() => document.getElementById('calculator')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+    } catch (error) {
+      setPipelineBlocker(error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.')
+      setCalculationStatus('blocked')
+    }
   }
 
   const continueOperation = () => {
@@ -145,8 +297,14 @@ export default function App() {
     setBudgetMode(null)
     setAnalysis(null)
     setSelectedHotProduct(null)
+    setSelectionLoading(false)
+    resetPipeline()
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  const productStatusLabel = analysis
+    ? calculationStatus === 'ready' ? 'Calculado' : calculationStatus === 'processing' ? 'Procesando' : calculationStatus === 'blocked' ? 'Revisión necesaria' : 'Esperando confirmación'
+    : selectionLoading ? 'Leyendo publicación' : intent === 'have_product' && step >= 3 ? 'Carga manual' : 'Pendiente'
 
   return <main className="journey-app" id="home">
     <header className="journey-topbar">
@@ -232,13 +390,15 @@ export default function App() {
               </div>
             </div>
 
-            {intent === 'search_product' && <div className="journey-product-surface"><UrlAnalyzer onAnalysis={handleAnalysis} analysis={analysis} /></div>}
+            {intent === 'search_product' && <div className="journey-product-surface"><UrlAnalyzer deferCalculation onAnalysis={handleAnalysis} analysis={analysis} /></div>}
 
             {intent === 'discover' && <>
-              <div className="journey-product-surface"><UrlAnalyzer mode="discovery" onAnalysis={handleAnalysis} analysis={analysis} /></div>
+              <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode="discovery" onAnalysis={handleAnalysis} analysis={analysis} /></div>
               <div className="journey-product-surface">
-                <div className="journey-section-heading"><span className="eyebrow">O explorar sin buscar</span><h2>Oportunidades cacheadas</h2><p>Estos productos quedan disponibles para comparar rápido sin consumir una búsqueda nueva de Alibaba.</p></div>
+                <div className="journey-section-heading"><span className="eyebrow">O explorar sin buscar</span><h2>Oportunidades cacheadas</h2><p>Al elegir una, ShippingAPP abre la publicación real y completa la ingesta antes de pedirte confirmación.</p></div>
                 <HotProductsSection products={hotProducts} selectedId={selectedHotProduct?.id ?? null} onQuote={handleHotProductQuote} />
+                {selectionLoading && <div className="journey-selection-status"><span className="journey-spinner" /><div><b>Leyendo la publicación seleccionada</b><p>Estoy completando precio, MOQ, peso, volumen y descripción antes de pasar al cálculo.</p></div></div>}
+                {selectionError && <div className="pipeline-warning"><b>No pude completar la ingesta.</b><span>{selectionError}</span></div>}
               </div>
             </>}
 
@@ -257,28 +417,41 @@ export default function App() {
             <div><span>Importador</span><b>{entityLabel(entityType)}</b></div>
             <div><span>Firma</span><b>{signatureLabel(signature)}</b></div>
             <div><span>Capacidad</span><b>{budgetMode === 'budget' ? `USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} u.` : budgetMode === 'unknown' ? 'A definir' : 'Pendiente'}</b></div>
-            <div><span>Producto</span><b>{selectedPrefill ? 'Datos cargados' : intent === 'have_product' && step >= 3 ? 'Carga manual' : 'Pendiente'}</b></div>
+            <div><span>Producto</span><b>{productStatusLabel}</b></div>
           </div>
-          <div className="journey-summary-note"><span>La lógica</span><p>Primero definimos restricciones reales. Después comparamos cantidades y modos de flete. Así evitamos optimizar un producto para una operación que no encaja.</p></div>
+          <div className="journey-summary-note"><span>La lógica</span><p>Producto confirmado → NCM → aranceles → flete → costo puesto por unidad → optimización. Si una etapa no tiene evidencia suficiente, el motor se detiene y la marca como pendiente.</p></div>
         </div>
       </aside>
     </section>
 
+    {analysis && analysisPrefill && intent !== 'have_product' && <section className="journey-pipeline-section">
+      <CalculationPipeline
+        analysis={analysis}
+        prefill={analysisPrefill}
+        status={calculationStatus}
+        activeStage={pipelineStage}
+        summary={pipelineSummary}
+        blocker={pipelineBlocker}
+        onConfirm={() => void confirmAndCalculate()}
+        onEditProduct={editSelectedProduct}
+      />
+    </section>}
+
     {intent === 'have_product' && step >= 3 && <section className="journey-calculator-section" id="calculator">
-      <div className="journey-section-heading"><span className="eyebrow">Cálculo automático</span><h2>Completá los datos físicos y comerciales.</h2><p>ShippingAPP recalcula flete, CIF, impuestos, gastos, costo unitario y cantidad recomendada con cada cambio.</p></div>
+      <div className="journey-section-heading"><span className="eyebrow">Cálculo manual</span><h2>Completá los datos físicos y comerciales.</h2><p>En el camino manual todavía podés editar todos los supuestos. Para productos ingeridos desde Alibaba, el flujo automático valida NCM y aranceles antes de llegar acá.</p></div>
       <ImportQuoteFlow setup={quoteSetup} />
     </section>}
 
-    {selectedPrefill && <section className="journey-calculator-section" id="calculator">
-      <div className="journey-section-heading"><span className="eyebrow">Resultado del caso</span><h2>Producto identificado. Ahora optimizamos la importación.</h2><p>Revisá los datos detectados y ajustá cualquier supuesto antes de tomar la decisión.</p></div>
-      <ImportQuoteFlow key={`${selectedPrefill.productName}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}`} prefill={selectedPrefill} setup={quoteSetup} />
+    {analysisPrefill && calculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
+      <div className="journey-section-heading"><span className="eyebrow">Resultado del caso</span><h2>Primero entendé el costo de una unidad. Después optimizamos.</h2><p>El costo unitario se calcula dentro de la cantidad base/MOQ seleccionada, distribuyendo flete y gastos fijos. Debajo podés ver cómo cambia al traer más o menos unidades.</p></div>
+      <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}`} prefill={analysisPrefill} setup={quoteSetup} />
     </section>}
 
     <section className="journey-output-explainer">
-      <div><span>01</span><b>Producto</b><p>Proveedor o búsqueda, FOB, MOQ, peso y volumen.</p></div>
-      <div><span>02</span><b>Flete</b><p>Compara aéreo, LCL y referencia FCL con peso/volumen cobrable.</p></div>
-      <div><span>03</span><b>Costo puesto</b><p>CIF, derechos, tasa, IVA, percepciones y gastos de destino.</p></div>
-      <div><span>04</span><b>Decisión</b><p>Escenarios de cantidad, presupuesto, costo unitario y recomendación.</p></div>
+      <div><span>01</span><b>Confirmación</b><p>Validás que el producto, precio, origen, peso, volumen y MOQ sean los correctos.</p></div>
+      <div><span>02</span><b>NCM + aranceles</b><p>Clasificación automática y extracción de derechos, tasa, IVA, percepciones y señales SIM.</p></div>
+      <div><span>03</span><b>Costo unitario</b><p>Flete, CIF, tributos y gastos distribuidos por unidad dentro de la cantidad base.</p></div>
+      <div><span>04</span><b>Optimización</b><p>Escenarios de cantidad, presupuesto, costo unitario, stock y modo logístico recomendado.</p></div>
     </section>
   </main>
 }

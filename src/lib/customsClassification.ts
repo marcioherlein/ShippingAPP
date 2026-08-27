@@ -3,6 +3,19 @@ import type { NcmSimOpening } from './ncmCatalog'
 
 export type SimEvidenceConfidence = 'high' | 'medium' | 'low' | 'missing'
 
+export type NcmTariffProfile = {
+  aecPct: number
+  diePct: number
+  tePct: number
+  diiPct: number
+  vatPct: number
+  vatAdditionalPct: number
+  gainsPct: number
+  iibbPct: number
+  internalTax: string | number | null
+  capitalGoodEligible: boolean
+}
+
 export type CustomsProfile = {
   ncmCandidate: string | null
   simOpeningCandidate?: NcmSimOpening | null
@@ -13,6 +26,12 @@ export type CustomsProfile = {
   dutyRatePct: number | null
   dutyRateStatus: 'candidate' | 'missing'
   statisticsRatePct: number
+  vatRatePct?: number
+  vatAdditionalRatePct?: number
+  gainsRatePct?: number
+  iibbRatePct?: number
+  capitalGoodEligible?: boolean
+  tariff?: NcmTariffProfile | null
   statisticsPreferenceStatus: 'none' | 'verify_origin' | 'unknown'
   interventionsStatus: 'verify_vuce'
   source: string
@@ -57,6 +76,12 @@ export function customsProfileFor(
       dutyRatePct: usableDuty,
       dutyRateStatus: usableDuty === null ? 'missing' : 'candidate',
       statisticsRatePct: 3,
+      vatRatePct: 21,
+      vatAdditionalRatePct: 20,
+      gainsRatePct: 6,
+      iibbRatePct: 2.5,
+      capitalGoodEligible: false,
+      tariff: null,
       statisticsPreferenceStatus,
       interventionsStatus: 'verify_vuce',
       source: `${classification.catalog.sourceLabel}. Catálogo seed parcial; NCM ${classification.top.code} candidata, no dictamen.${classification.top.simOpening ? ` Apertura SIM candidata ${classification.top.simOpening.code}.` : ''}${confidenceNote} Verificar Arancel Integrado/CIVUCE vigente.${originNote}`,
@@ -80,6 +105,12 @@ export function customsProfileFor(
     dutyRatePct: null,
     dutyRateStatus: 'missing',
     statisticsRatePct: 3,
+    vatRatePct: 21,
+    vatAdditionalRatePct: 20,
+    gainsRatePct: 6,
+    iibbRatePct: 2.5,
+    capitalGoodEligible: false,
+    tariff: null,
     statisticsPreferenceStatus,
     interventionsStatus: 'verify_vuce',
     source: `Clasificación arancelaria pendiente. El producto está fuera de la cobertura suficiente del catálogo seed; no se inventa una NCM.${originNote}`,

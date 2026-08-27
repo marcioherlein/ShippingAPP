@@ -10,6 +10,9 @@ export type ImporterChecklistInput = {
   entityType: ImportEntityType
   hasImporterSignature: boolean | null
   sensitiveCategory: SensitiveProductCategory
+  gainsExempt?: boolean
+  capitalGoodEligible?: boolean
+  capitalGoodUse?: boolean
 }
 
 export type LandedCostInput = ImporterChecklistInput & {
@@ -72,6 +75,8 @@ export type LandedCostComparison = {
     entityTypeKnown: boolean
     importerSignatureKnown: boolean
     sensitiveCategoryKnown: boolean
+    gainsExemptionKnown: boolean
+    capitalGoodChoiceKnown: boolean
     needsSensitiveCategoryReview: boolean
     blockers: string[]
   }
@@ -183,13 +188,14 @@ export function calculateLandedCostMode(mode: TransportMode, input: LandedCostIn
   const freight = freightCost(mode, rate, input)
   const freightCostUsd = roundMoney(freight.cost)
   const cifUsd = roundMoney(fobUsd + freightCostUsd)
+  const capitalGoodTreatment = Boolean(input.capitalGoodEligible && input.capitalGoodUse)
   const dutyUsd = roundMoney(cifUsd * safePct(input.dutyRatePct, 0))
-  const statisticsUsd = roundMoney(cifUsd * safePct(input.statisticsRatePct, 3))
+  const statisticsUsd = capitalGoodTreatment ? 0 : roundMoney(cifUsd * safePct(input.statisticsRatePct, 3))
   const baseVatUsd = roundMoney(cifUsd + dutyUsd + statisticsUsd)
   const vatUsd = roundMoney(baseVatUsd * safePct(input.vatRatePct, 21))
-  const vatAdditionalUsd = roundMoney(baseVatUsd * safePct(input.vatAdditionalRatePct, 20))
-  const gainsUsd = roundMoney(baseVatUsd * safePct(input.gainsRatePct, 6))
-  const iibbUsd = roundMoney(baseVatUsd * safePct(input.iibbRatePct, 2.5))
+  const vatAdditionalUsd = capitalGoodTreatment ? 0 : roundMoney(baseVatUsd * safePct(input.vatAdditionalRatePct, 20))
+  const gainsUsd = capitalGoodTreatment || input.gainsExempt ? 0 : roundMoney(baseVatUsd * safePct(input.gainsRatePct, 6))
+  const iibbUsd = capitalGoodTreatment ? 0 : roundMoney(baseVatUsd * safePct(input.iibbRatePct, 2.5))
   const fixedDestinationUsd = roundMoney(fixedExpenseTotal(mode))
   const noImporterSignatureUsd = input.hasImporterSignature === false ? Number(expensesFor(mode).extras.noImporterSignature || 0) : 0
   const sensitiveCategoryUsd = sensitiveCategories.has(input.sensitiveCategory) ? Number(expensesFor(mode).extras.sensitiveProductCategory || 0) : 0
@@ -247,6 +253,12 @@ export function compareLandedCost(input: LandedCostInput): LandedCostComparison 
   const higher = Math.max(lcl.totalCostUsd, air.totalCostUsd)
   const savingsPct = cheaperMode && higher > 0 ? roundMoney((savingsUsd! / higher) * 100) : null
 
+  const taxNote = input.capitalGoodEligible && input.capitalGoodUse
+    ? 'Bien de Uso activo: el motor modela sólo derechos e IVA; tasa estadística y percepciones quedan en 0.'
+    : input.gainsExempt
+      ? 'Exento Ganancias activo: la percepción de Ganancias se modela en 0.'
+      : 'Ganancias y Bien de Uso se aplican según el checklist.'
+
   return {
     status: 'ok',
     origin,
@@ -258,6 +270,7 @@ export function compareLandedCost(input: LandedCostInput): LandedCostComparison 
       'FCL se calcula como referencia por contenedor entero y nunca define la recomendación principal.',
       'El valor principal para oportunidad compara LCL vs aéreo.',
       'FOB + flete internacional = CIF; derecho y tasa estadística se calculan sobre CIF; IVA/percepciones sobre base IVA.',
+      taxNote,
     ],
   }
 }
@@ -269,11 +282,14 @@ export function checklistStatus(input: ImporterChecklistInput) {
   if (input.entityType === 'unknown') blockers.push('Definir si opera empresa o persona humana.')
   if (input.hasImporterSignature === null) blockers.push('Definir si tiene firma/importador para la operación.')
   if (input.sensitiveCategory === 'unknown') blockers.push('Confirmar si cae en alimentos, juguetes, cosméticos, medicamentos o suplementos.')
+  if (input.capitalGoodUse && !input.capitalGoodEligible) blockers.push('No aplicar Bien de Uso si la NCM no está marcada como Bien de Uso = SI en NCM_APP.')
   return {
     ownUseOrResaleKnown: input.purpose !== 'unknown',
     entityTypeKnown: input.entityType !== 'unknown',
     importerSignatureKnown: input.hasImporterSignature !== null,
     sensitiveCategoryKnown: input.sensitiveCategory !== 'unknown',
+    gainsExemptionKnown: typeof input.gainsExempt === 'boolean',
+    capitalGoodChoiceKnown: !input.capitalGoodEligible || typeof input.capitalGoodUse === 'boolean',
     needsSensitiveCategoryReview,
     blockers,
   }

@@ -1,4 +1,5 @@
 import { hotProducts, type HotProduct } from '../data/hotProducts'
+import type { CustomsProfile } from './customsClassification'
 
 function normalizeKey(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -69,13 +70,42 @@ export function dedupeHotProducts(products: HotProduct[]) {
   return unique
 }
 
+export type QuotePrefill = {
+  productName: string
+  originCountry: string
+  quantity: number
+  unitPriceUsd: number
+  unitWeightKg: number
+  unitVolumeCbm: number
+  moq: number
+  budgetUsd: number
+  monthlyDemand: number
+  localSellPriceUsd: number
+  sensitiveCategory: HotProduct['sensitiveCategory']
+  sourceLabel: string
+  ncmCode?: string | null
+  simCode?: string | null
+  classificationConfidence?: CustomsProfile['classificationConfidence']
+  dutyRatePct?: number | null
+  statisticsRatePct?: number | null
+  vatRatePct?: number | null
+  vatAdditionalRatePct?: number | null
+  gainsRatePct?: number | null
+  iibbRatePct?: number | null
+  capitalGoodEligible?: boolean
+  customsSource?: string | null
+  customsSourceDate?: string | null
+  customsMissingFacts?: string[]
+  customsRationale?: string[]
+}
+
 export function getCachedHotProducts(limit = 8) {
   return dedupeHotProducts(hotProducts)
     .filter((product) => product.unitPriceUsd > 0 && product.moq > 0)
     .slice(0, Math.max(0, limit))
 }
 
-export function hotProductToQuotePrefill(product: HotProduct) {
+export function hotProductToQuotePrefill(product: HotProduct): QuotePrefill {
   return {
     productName: product.title,
     originCountry: product.originCountry,
@@ -91,5 +121,3 @@ export function hotProductToQuotePrefill(product: HotProduct) {
     sourceLabel: 'Hot product cacheado',
   }
 }
-
-export type QuotePrefill = ReturnType<typeof hotProductToQuotePrefill>

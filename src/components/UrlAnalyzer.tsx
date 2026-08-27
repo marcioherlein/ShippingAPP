@@ -9,6 +9,7 @@ type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
   analysis?: ProductAnalysisV2 | null
   mode?: 'intake' | 'discovery'
+  deferCalculation?: boolean
 }
 type ThreadMessage = { role: 'user' | 'assistant'; content: string }
 
@@ -43,7 +44,7 @@ function units(value?: number | null) {
   return value ? `${value} u.` : 'MOQ pendiente'
 }
 
-export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake' }: Props) {
+export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', deferCalculation = false }: Props) {
   const [draft, setDraft] = useState('')
   const [facts, setFacts] = useState<IntakeFacts>(emptyIntakeFacts())
   const [messages, setMessages] = useState<ThreadMessage[]>([])
@@ -71,8 +72,8 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake' }: P
     setMessages((current) => [...current, {
       role: 'assistant',
       content: fromDiscovery
-        ? 'Producto seleccionado y analizado desde su URL real de Alibaba. Ahora también verifiqué las restricciones comerciales que sí aparecen en la publicación.'
-        : 'Link analizado. Ya podés revisar el producto y convertirlo en una cotización.',
+        ? 'Producto seleccionado. Terminé la ingesta de la publicación y validé los datos comerciales visibles. Confirmalos abajo antes de iniciar el cálculo.'
+        : 'Producto ingerido. Revisá los datos y confirmalos antes de iniciar clasificación, aranceles y costos.',
     }])
   }
 
@@ -85,7 +86,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake' }: P
     setMessages((current) => [...current, {
       role: 'assistant',
       content: live.status === 'live'
-        ? `Encontré ${live.results.length} candidatos desde Alibaba. Elegí uno y lo analizo en profundidad para convertirlo en cotización.`
+        ? `Encontré ${live.results.length} candidatos desde Alibaba. Elegí uno y hago la ingesta profunda de la publicación antes de calcular.`
         : live.note,
     }])
   }
@@ -184,7 +185,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake' }: P
         <span>{message.role === 'user' ? 'Vos' : 'ShippingAPP'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>{discoveryOnly ? 'Buscando productos reales en Alibaba…' : 'Consultando y estructurando el caso…'}</p></div>}
+      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>{discoveryOnly ? 'Buscando y leyendo productos reales en Alibaba…' : 'Consultando y estructurando el caso…'}</p></div>}
     </div>}
 
     <form className="url-form" onSubmit={submit}>
@@ -223,7 +224,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake' }: P
           {item.missingFacts?.length ? <p>Falta validar: {item.missingFacts.join(' · ')}. Abrí el producto para análisis profundo.</p> : <p>Datos comerciales principales presentes desde búsqueda. Igual conviene abrirlo para validar specs/logística.</p>}
           <div className="discovery-actions">
             <a href={item.url} target="_blank" rel="noreferrer">Ver en Alibaba</a>
-            <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>Elegir y cotizar</button>
+            <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>{deferCalculation ? 'Elegir producto' : 'Elegir y cotizar'}</button>
           </div>
         </article>)}
       </div> : <div className="customs-note"><b>NO RESULTS</b><span>No mostramos productos sintéticos. Podés reformular la búsqueda o pegar una publicación concreta.</span></div>}
@@ -232,12 +233,17 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake' }: P
     </section>}
 
     {analysis && !loading && <div className="extraction-card">
-      <div className="extraction-top"><div><span className="eyebrow">Producto detectado</span><h2>{analysis.product.name}</h2><p>{analysis.product.category}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div><span className="confidence">{analysis.confidence.overall}% confidence</span></div>
+      <div className="extraction-top"><div><span className="eyebrow">Ingesta de producto</span><h2>{analysis.product.name}</h2><p>{analysis.product.category}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div><span className="confidence">{analysis.confidence.overall}% datos</span></div>
       <div className="fact-grid">
         <div><span>Precio proveedor</span><b>{analysis.product.unitPriceUsd ? `USD ${analysis.product.unitPriceUsd.toFixed(2)}` : 'No verificado'}</b></div>
         <div><span>MOQ</span><b>{analysis.product.moq ? `${analysis.product.moq} u.` : 'No verificado'}</b></div>
-        <div><span>NCM candidato</span><b>{analysis.customs.ncmCandidate || 'Pendiente'}</b></div>
-        <div><span>Derecho candidato</span><b>{dutyLabel}</b></div>
+        {deferCalculation ? <>
+          <div><span>Peso unitario</span><b>{analysis.product.packedWeightKg ? `${analysis.product.packedWeightKg} kg` : 'No verificado'}</b></div>
+          <div><span>Volumen unitario</span><b>{analysis.product.volumeCbm ? `${analysis.product.volumeCbm} m³` : 'No verificado'}</b></div>
+        </> : <>
+          <div><span>NCM candidato</span><b>{analysis.customs.ncmCandidate || 'Pendiente'}</b></div>
+          <div><span>Derecho candidato</span><b>{dutyLabel}</b></div>
+        </>}
         <div><span>Fuente del producto</span><b>{readLabel(analysis)}</b></div>
         <div><span>Browser Run</span><b>{conversational ? 'No aplica' : analysis.sourceRead?.browserAttempted ? `${analysis.sourceRead.browserMsUsed ? `${(analysis.sourceRead.browserMsUsed / 1000).toFixed(1)}s` : 'intentado'}` : 'No necesario'}</b></div>
       </div>
@@ -247,7 +253,9 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake' }: P
       </div>}
       {analysis.sourceRead && <div className="customs-note"><b>{analysis.sourceRead.mode.toUpperCase()}</b><span>{analysis.sourceRead.reason}</span></div>}
       {conversational && <div className="customs-note"><b>USER-SUPPLIED</b><span>Los datos comerciales provienen de la conversación y no fueron verificados contra proveedor/proforma.</span></div>}
-      <div className="customs-note"><b>{classificationLabel}</b><span>{analysis.customs.source} · Revisado {analysis.customs.reviewedAt}. Intervenciones: verificar en CIVUCE/VUCE.</span></div>
+      {deferCalculation
+        ? <div className="customs-note"><b>INGESTA COMPLETA</b><span>Confirmá el producto en el siguiente paso. La clasificación NCM y los aranceles se validan en el pipeline de cálculo.</span></div>
+        : <div className="customs-note"><b>{classificationLabel}</b><span>{analysis.customs.source} · Revisado {analysis.customs.reviewedAt}. Intervenciones: verificar en CIVUCE/VUCE.</span></div>}
       <details className="assumptions"><summary>Ver supuestos y calidad de datos</summary><ul>{analysis.assumptions.map((item) => <li key={item}>{item}</li>)}</ul></details>
     </div>}
   </section>

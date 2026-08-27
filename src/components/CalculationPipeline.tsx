@@ -24,14 +24,16 @@ type Props = {
   onEditProduct: () => void
 }
 
+const interventionCategories = new Set(['food', 'toys', 'cosmetics', 'medicines', 'supplements'])
+
 const pipelineSteps = [
   {
     title: 'Clasificación arancelaria',
     description: 'Cruzo descripción, material y función contra el nomenclador NCM completo.',
   },
   {
-    title: 'Aranceles y condiciones',
-    description: 'Cargo derecho, tasa estadística, IVA, percepciones, SIM y señales que afectan el cálculo.',
+    title: 'Aranceles y costos automáticos',
+    description: 'Cargo derecho, tasa estadística, IVA y percepciones. Si el producto cae en un grupo con intervención, sumo USD 200 de trámite automáticamente.',
   },
   {
     title: 'Logística internacional',
@@ -48,6 +50,10 @@ function confidenceLabel(value: ProductAnalysisV2['customs']['classificationConf
   if (value === 'medium') return 'Media'
   if (value === 'low') return 'Baja'
   return 'Pendiente'
+}
+
+function hasInterventionFee(prefill: QuotePrefill) {
+  return interventionCategories.has(prefill.sensitiveCategory)
 }
 
 function stageState(index: number, status: CalculationPipelineStatus, activeStage: number) {
@@ -71,7 +77,8 @@ function stageDetail(index: number, analysis: ProductAnalysisV2, prefill: QuoteP
   }
   if (index === 1) {
     if (analysis.customs.dutyRatePct === null || analysis.customs.dutyRatePct === undefined) return 'Derecho retenido hasta resolver clasificación'
-    return `DIE ${analysis.customs.dutyRatePct}% · TE ${analysis.customs.statisticsRatePct}% · IVA ${analysis.customs.vatRatePct ?? 21}%${analysis.customs.simOpeningCandidate?.code ? ` · SIM ${analysis.customs.simOpeningCandidate.code}` : ''}`
+    const intervention = hasInterventionFee(prefill) ? ' · Trámite intervención USD 200' : ''
+    return `DIE ${analysis.customs.dutyRatePct}% · TE ${analysis.customs.statisticsRatePct}% · IVA ${analysis.customs.vatRatePct ?? 21}%${intervention}`
   }
   if (index === 2) {
     return `${prefill.originCountry} · ${prefill.unitWeightKg || 0} kg/u. · ${prefill.unitVolumeCbm || 0} m³/u.`
@@ -82,13 +89,14 @@ function stageDetail(index: number, analysis: ProductAnalysisV2, prefill: QuoteP
 
 export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
+  const interventionFee = hasInterventionFee(prefill)
 
   return <section className="calculation-pipeline" id="case-confirmation">
     {status === 'confirm' ? <>
       <div className="pipeline-confirm-head">
         <span className="eyebrow">Producto listo para procesar</span>
         <h2>Confirmá los datos antes de calcular.</h2>
-        <p>Después de confirmar, ShippingAPP valida la clasificación NCM, toma los aranceles del nomenclador, cruza la tabla de fletes y arma el costo puesto por unidad. Si la clasificación no alcanza una confianza suficiente, el cálculo se detiene en vez de inventar un arancel.</p>
+        <p>Después de confirmar, ShippingAPP valida la clasificación NCM, toma los aranceles del nomenclador, aplica automáticamente los costos correspondientes —incluido el trámite de USD 200 cuando el producto pertenece a un grupo con intervención— y cruza la tabla de fletes para construir el costo puesto por unidad.</p>
       </div>
 
       <div className="pipeline-product-card">
@@ -102,7 +110,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           <div><span>MOQ / cantidad base</span><b>{prefill.moq || prefill.quantity || 'Pendiente'} u.</b></div>
           <div><span>Peso unitario</span><b>{prefill.unitWeightKg > 0 ? `${prefill.unitWeightKg} kg` : 'Pendiente'}</b></div>
           <div><span>Volumen unitario</span><b>{prefill.unitVolumeCbm > 0 ? `${prefill.unitVolumeCbm} m³` : 'Pendiente'}</b></div>
-          <div><span>Categoría detectada</span><b>{analysis.product.category || 'Pendiente'}</b></div>
+          <div><span>Trámite de intervención</span><b>{interventionFee ? 'USD 200 · incluido' : prefill.sensitiveCategory === 'unknown' ? 'Pendiente' : 'No aplica'}</b></div>
         </div>
         {(prefill.unitPriceUsd <= 0 || prefill.unitWeightKg <= 0 || prefill.unitVolumeCbm <= 0) && <div className="pipeline-warning"><b>Faltan datos físicos/comerciales.</b><span>Podemos intentar clasificar, pero el costo logístico no será confiable hasta completar precio, peso y volumen.</span></div>}
         <div className="pipeline-confirm-actions">
@@ -142,7 +150,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
       {status === 'ready' && summary && <div className="pipeline-ready-strip">
         <div><span>Clasificación</span><b>{analysis.customs.ncmCandidate}</b></div>
         <div><span>Modo base</span><b>{summary.selectedMode === 'lcl' ? 'LCL' : 'Aéreo'}</b></div>
-        <div><span>Cantidad base</span><b>{summary.baseQuantity} u.</b></div>
+        <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
         <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>
       </div>}
     </>}

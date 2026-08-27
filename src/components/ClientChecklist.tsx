@@ -1,6 +1,6 @@
 import React from 'react'
 import type { TriState } from '../lib/regulatory'
-import type { ClientProfileV3 } from '../lib/regulatoryV3'
+import type { CapitalGoodUseState, ClientProfileV3 } from '../lib/regulatoryV3'
 
 type Props = { value: ClientProfileV3; onChange: (next: ClientProfileV3) => void }
 
@@ -20,6 +20,12 @@ const sensitiveLabels: Record<SensitiveCategory, string> = {
   supplements: 'Suplementos',
 }
 
+const capitalGoodLabels: Record<CapitalGoodUseState, string> = {
+  unknown: 'No sé todavía',
+  resale: 'Para reventa',
+  capital_good: 'Bien de Uso',
+}
+
 export default function ClientChecklist({ value, onChange }: Props) {
   const set = <K extends keyof ClientProfileV3>(key: K, next: ClientProfileV3[K]) => onChange({ ...value, [key]: next })
   const extended = value as ClientProfileV3 & { hasImporterSignature?: TriState; sensitiveCategory?: SensitiveCategory }
@@ -36,8 +42,8 @@ export default function ClientChecklist({ value, onChange }: Props) {
 
   return <section className="client-checklist regulatory-card">
     <div className="reg-card-head">
-      <div><span className="eyebrow">Checklist mínimo</span><h2>4 datos que cambian la importación</h2></div>
-      <span className="checklist-time">≈ 30 segundos</span>
+      <div><span className="eyebrow">Checklist mínimo</span><h2>6 datos que cambian la importación</h2></div>
+      <span className="checklist-time">≈ 45 segundos</span>
     </div>
     <p className="reg-intro">Reducido a las preguntas que impactan el cálculo y el camino operativo. No pedimos CUIT ni documentos; sólo inputs de decisión.</p>
 
@@ -69,10 +75,25 @@ export default function ClientChecklist({ value, onChange }: Props) {
           {(Object.keys(sensitiveLabels) as SensitiveCategory[]).map((key) => <option key={key} value={key}>{sensitiveLabels[key]}</option>)}
         </select>
       </label>
+
+      <label className="readiness-field"><span>Exento Ganancias</span><small>Si marcás Sí, el motor no cobra la percepción de Ganancias.</small>
+        <select value={value.gainsExempt} onChange={(e) => set('gainsExempt', e.target.value as TriState)}>
+          {triOptions.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+        </select>
+      </label>
+
+      <label className="readiness-field"><span>Uso económico cuando la NCM lo permite</span><small>Si NCM_APP marca Bien de Uso = SI, esta selección cambia impuestos.</small>
+        <select value={value.capitalGoodUse} onChange={(e) => set('capitalGoodUse', e.target.value as CapitalGoodUseState)}>
+          {(Object.keys(capitalGoodLabels) as CapitalGoodUseState[]).map((key) => <option key={key} value={key}>{capitalGoodLabels[key]}</option>)}
+        </select>
+      </label>
     </div>
 
     <div className="analysis-banner" style={{ marginTop: 16 }}>
       <b>Por qué importa la categoría sensible.</b> {sensitiveExplanation} Alimentos, juguetes, cosméticos, medicamentos y suplementos pueden requerir intervención, control, rotulado, autorización o documentación distinta; ShippingAPP no debe tratarlos como importación estándar sin esa alerta.
+    </div>
+    <div className="analysis-banner" style={{ marginTop: 12 }}>
+      <b>Ganancias y Bien de Uso.</b> Exento Ganancias pone esa percepción en 0. Si la NCM tiene Bien de Uso = SI y elegís Bien de Uso, el motor modela sólo derechos e IVA; si elegís reventa, mantiene percepciones y demás cargos aplicables.
     </div>
   </section>
 }

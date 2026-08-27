@@ -63,6 +63,60 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.suggestedQuantities).toEqual([300, 450, 600, 900])
   })
 
+  it('recognizes a terse tennis product without depending on the model', async () => {
+    const brokenAi = { run: async () => { throw new Error('AI should not be required') } }
+    const result = await runConversationalIntake(brokenAi, { message: 'Raqueta de tenis profesional' })
+
+    expect(result.status).toBe('needs_input')
+    expect(result.intent).toBe('analyze_product')
+    expect(result.facts.name).toBe('Raqueta de tenis profesional')
+    expect(result.facts.category).toBe('Tennis racket')
+    expect(result.missingFields).toContain('precio proveedor')
+    expect(result.missingFields).not.toContain('producto / categoría')
+  })
+
+  it('preserves a plausible product name outside the deterministic category list', async () => {
+    const brokenAi = { run: async () => { throw new Error('AI should not be required') } }
+    const result = await runConversationalIntake(brokenAi, { message: 'Organizador de cables de silicona para escritorio' })
+
+    expect(result.status).toBe('needs_input')
+    expect(result.facts.name).toBe('Organizador de cables de silicona para escritorio')
+    expect(result.facts.category).toBeNull()
+    expect(result.missingFields).not.toContain('producto / categoría')
+    expect(result.missingFields).toContain('precio proveedor')
+  })
+
+  it('parses a rich tennis case deterministically and reaches ready', async () => {
+    const brokenAi = { run: async () => { throw new Error('AI should not be required') } }
+    const result = await runConversationalIntake(brokenAi, {
+      message: 'Raqueta de tenis profesional de grafito, origen China, precio proveedor USD 24, MOQ 100 unidades, peso embalado 0.45 kg por unidad, volumen 0.004 m3 por unidad.',
+    })
+
+    expect(result.status).toBe('ready')
+    expect(result.facts.name).toBe('Raqueta de tenis profesional de grafito')
+    expect(result.facts.category).toBe('Tennis racket')
+    expect(result.facts.unitPriceUsd).toBe(24)
+    expect(result.facts.moq).toBe(100)
+    expect(result.facts.packedWeightKg).toBe(0.45)
+    expect(result.facts.volumeCbm).toBe(0.004)
+    expect(result.facts.originCountry).toBe('China')
+  })
+
+  it('keeps a terse product identity across commercial follow-up messages', async () => {
+    const brokenAi = { run: async () => { throw new Error('AI should not be required') } }
+    const first = await runConversationalIntake(brokenAi, { message: 'Raqueta de tenis profesional' })
+    const second = await runConversationalIntake(brokenAi, {
+      message: 'Precio proveedor USD 24, MOQ 100, origen China, peso embalado 0.45 kg, volumen 0.004 m3.',
+      priorFacts: first.facts,
+    })
+
+    expect(second.facts.name).toBe('Raqueta de tenis profesional')
+    expect(second.facts.category).toBe('Tennis racket')
+    expect(second.facts.unitPriceUsd).toBe(24)
+    expect(second.facts.moq).toBe(100)
+    expect(second.status).toBe('ready')
+  })
+
   it('fails closed for an unsupported category instead of inheriting generic logistics', async () => {
     const result = await runConversationalIntake(ai({
       intent: 'analyze_product', searchQuery: null,

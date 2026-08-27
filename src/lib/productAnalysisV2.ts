@@ -46,5 +46,9 @@ export function applyAnalysisV2(current: Inputs, analysis: ProductAnalysisV2): I
     dutyRatePct: analysis.customs.dutyRatePct ?? 0,
     dutyRateVerified: false,
     statisticsRatePct: analysis.customs.statisticsRatePct,
+    vatRatePct: analysis.customs.vatRatePct ?? base.vatRatePct,
+    vatPerceptionPct: analysis.customs.vatAdditionalRatePct ?? base.vatPerceptionPct,
+    gainsPerceptionPct: analysis.customs.gainsRatePct ?? base.gainsPerceptionPct,
+    iibbPerceptionPct: analysis.customs.iibbRatePct ?? base.iibbPerceptionPct,
   }
 }

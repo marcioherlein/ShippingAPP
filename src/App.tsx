@@ -40,7 +40,16 @@ export default function App() {
   const [selectedHotProduct, setSelectedHotProduct] = useState<HotProduct | null>(null)
   const hotProducts = useMemo(() => getCachedHotProducts(8), [])
   const quotePrefill = useMemo(() => selectedHotProduct ? hotProductToQuotePrefill(selectedHotProduct) : null, [selectedHotProduct])
-  const taxContext = useMemo<ScenarioTaxContext>(() => ({ entityType: client.entityType, taxStatus: client.taxStatus, purpose: client.purpose, statisticsExempt: false, vatPerceptionExempt: client.entityType === 'individual' && client.purpose === 'own_use', gainsPerceptionExempt: false }), [client])
+  const taxContext = useMemo<ScenarioTaxContext>(() => ({
+    entityType: client.entityType,
+    taxStatus: client.taxStatus,
+    purpose: client.purpose,
+    statisticsExempt: false,
+    vatPerceptionExempt: client.entityType === 'individual' && client.purpose === 'own_use',
+    gainsPerceptionExempt: client.gainsExempt === 'yes',
+    capitalGoodEligible: Boolean(analysis?.customs?.capitalGoodEligible),
+    capitalGoodUse: client.capitalGoodUse === 'capital_good',
+  }), [client, analysis])
   const regulatoryChecks = useMemo(() => analysis ? buildRegulatoryChecksV4(analysis, client, expertOverride) : [], [analysis, client, expertOverride])
   const marketP25Ars = analysis && !expertOverride ? Number((analysis.market as any).details?.p25Ars) || null : null
 
@@ -49,7 +58,7 @@ export default function App() {
   const economicsReady = automaticReady || (!!expertOverride && fxReady)
   const decisionReady = quantityDecisionReady(economicsReady, inputs.monthlyDemand)
   const hasSupplierData = Boolean(quotePrefill || (analysis && analysis.product?.unitPriceUsd && analysis.product?.moq && analysis.product?.packedWeightKg && analysis.product?.volumeCbm))
-  const hasNcmCandidate = Boolean(analysis && (analysis as any).customs?.ncm)
+  const hasNcmCandidate = Boolean(analysis?.customs?.ncmCandidate)
 
   const results = useMemo(() => economicsReady && inputs.usdArs > 0 ? calculateV2(inputs, taxContext) : [], [inputs, taxContext, economicsReady])
   const rows = useMemo(() => bestRowsV2(results), [results])
@@ -80,7 +89,7 @@ export default function App() {
   return <main className="mobile-app-shell">
     <header className="topbar mobile-topbar" id="home">
       <a className="brand mobile-brand" href="#home"><span className="brand-cube" aria-hidden="true" />Shipping<span>APP</span></a>
-      <span className="mvp-badge">MVP 2.5</span>
+      <span className="mvp-badge">MVP 2.6</span>
     </header>
 
     <section className="mobile-hero">
@@ -135,7 +144,7 @@ export default function App() {
     {analysis && economicsReady && <>
       {expertOverride
         ? <div className="analysis-banner"><b>Expert Override activo.</b> El business case usa evidencia aportada manualmente: NCM {expertOverride.ncm}, derecho {expertOverride.dutyRatePct}%, precio proveedor USD {expertOverride.supplierUnitPriceUsd}, MOQ {expertOverride.moq}, peso/volumen, benchmark local y demanda {expertOverride.monthlyDemand} u./mes. El FX sigue viniendo de BCRA REF; ShippingAPP no convierte el override en validación aduanera.</div>
-        : <div className="analysis-banner"><b>Opportunity screening.</b> El output sigue input → proceso → output: datos del producto, benchmark, FX, flete FCL/LCL/aéreo, CIF/impuestos/gastos y decisión. FX usa BCRA REF; la NCM/SIM y el arancel siguen siendo screening.</div>}
+        : <div className="analysis-banner"><b>Opportunity screening.</b> El output sigue input → proceso → output: datos del producto, benchmark, FX, flete FCL/LCL/aéreo, CIF/impuestos/gastos y decisión. FX usa BCRA REF; NCM_APP alimenta derecho, IVA/percepciones y elegibilidad Bien de Uso cuando está disponible.</div>}
 
       <div className="workspace legacy-business-case">
         <aside className="inputs-column"><details className="manual-details" open><summary>Ajustar supuestos económicos</summary><label className="product-name"><span>Producto</span><input value={product} onChange={(e) => setProduct(e.target.value)} /></label><ProductPanel inputs={inputs} setInputs={setInputs} /><MarketPanel inputs={inputs} setInputs={setInputs} /><LogisticsPanel inputs={inputs} setInputs={setInputs} /><ImportPanel inputs={inputs} setInputs={setInputs} /></details></aside>

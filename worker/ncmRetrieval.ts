@@ -1,3 +1,5 @@
+import { ncmAppTariffOverride } from './ncmTariffOverrides'
+
 export type NcmIndexRecord = [
   code: string,
   label: string,
@@ -75,7 +77,6 @@ export type FullNcmClassification = {
 }
 
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
-
 type AiExpansion = { searchTerms: string[]; missingFacts: string[] }
 type AiRanking = { ranking: Array<{ code: string; reason?: string }>; confidence?: 'high' | 'medium' | 'low'; missingFacts?: string[] }
 
@@ -103,8 +104,9 @@ export function canonicalToken(value: string) {
 }
 
 function tokens(value: string) {
-  const raw = normalizeText(value).split(' ')
-  return [...new Set(raw.map(canonicalToken).filter((token) => token.length >= 3 && !STOPWORDS.has(token)))]
+  return [...new Set(normalizeText(value).split(' ')
+    .map(canonicalToken)
+    .filter((token) => token.length >= 3 && !STOPWORDS.has(token)))]
 }
 
 function safeTerms(values: unknown): string[] {
@@ -142,31 +144,32 @@ export function tariffFromRecord(row: NcmIndexRecord | null | undefined): NcmTar
   }
 }
 
-function officialFromRow(row: NcmIndexRecord | null | undefined) {
+function tariffForCode(index: NcmSearchIndex, code: string | null | undefined) {
+  if (!code) return null
+  const rowTariff = tariffFromRecord(index.records.find((record) => record[0] === code))
+  return rowTariff ?? ncmAppTariffOverride(code)
+}
+
+function officialFromRow(index: NcmSearchIndex, row: NcmIndexRecord | null | undefined) {
   if (!row) return null
-  return { code: row[0], label: row[1], tariff: tariffFromRecord(row) }
+  return { code: row[0], label: row[1], tariff: tariffForCode(index, row[0]) }
 }
 
 function findOfficial(index: NcmSearchIndex, code: string) {
-  return officialFromRow(index.records.find((record) => record[0] === code))
+  return officialFromRow(index, index.records.find((record) => record[0] === code))
 }
 
 function findOfficialByPrefix(index: NcmSearchIndex, codePrefix: string) {
-  return officialFromRow(index.records.find(([code]) => code.startsWith(codePrefix)))
+  return officialFromRow(index, index.records.find(([code, label]) => code.startsWith(codePrefix) && typeof label === 'string' && label.trim()))
 }
 
 function findOfficialByLabel(index: NcmSearchIndex, codePrefix: string, labelTerms: string[]) {
   const normalizedTerms = labelTerms.map(normalizeText).filter(Boolean)
-  return officialFromRow(index.records.find(([code, label]) => {
-    if (!code.startsWith(codePrefix)) return false
+  return officialFromRow(index, index.records.find(([code, label]) => {
+    if (!code.startsWith(codePrefix) || typeof label !== 'string' || !label.trim()) return false
     const normalizedLabel = normalizeText(label)
     return normalizedTerms.every((term) => normalizedLabel.includes(term))
   }))
-}
-
-function tariffForCode(index: NcmSearchIndex, code: string | null | undefined) {
-  if (!code) return null
-  return tariffFromRecord(index.records.find((record) => record[0] === code))
 }
 
 function shortcutClassification(
@@ -176,14 +179,23 @@ function shortcutClassification(
   rationale: string,
 ): FullNcmClassification {
   return {
-    status: 'candidate', code: official.code, label: official.label, confidence: 'medium',
-    alternatives: [], missingFacts: [], searchTerms,
+    status: 'candidate',
+    code: official.code,
+    label: official.label,
+    confidence: 'medium',
+    alternatives: [],
+    missingFacts: [],
+    searchTerms,
     rationale: [
       'Shortcut determinístico validado contra la snapshot oficial ARCA; no se inventa código y se evita depender del AI para productos de identidad obvia.',
+      ...(official.tariff ? ['Tarifa NCM_APP aplicada automáticamente para economics de screening.'] : []),
       rationale,
     ],
-    sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
-    retrievalMode: 'deterministic_fallback', tariff: official.tariff,
+    sourceDate: index.meta.sourceDate,
+    source: index.meta.source,
+    catalogRecordCount: index.meta.recordCount,
+    retrievalMode: 'deterministic_fallback',
+    tariff: official.tariff,
   }
 }
 
@@ -192,22 +204,21 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
 
   const isCamera = ['camara', 'camera', 'security camera', 'ip camera', 'wifi camera'].some((term) => text.includes(normalizeText(term)))
   if (isCamera) {
-    const official =
-      findOfficialByLabel(index, '8525.', ['camara']) ||
-      findOfficialByLabel(index, '8525.', ['camaras']) ||
-      findOfficialByLabel(index, '8525.', ['television']) ||
-      findOfficialByPrefix(index, '8525.')
-    if (official) return shortcutClassification(index, official, ['camara', 'ip', 'security camera'], 'Producto identificado como cámara IP/digital de seguridad; se resuelve contra una partida oficial ARCA existente del capítulo 8525 en lugar de caer al AI.')
+    const official = findOfficial(index, '8525.89.19')
+      || findOfficialByLabel(index, '8525.', ['camara'])
+      || findOfficialByLabel(index, '8525.', ['camaras'])
+      || findOfficialByPrefix(index, '8525.')
+    if (official) return shortcutClassification(index, official, ['camara', 'ip', 'security camera'], 'Producto identificado como cámara IP/digital de seguridad.')
   }
 
   const isSunglasses = ['gafas de sol', 'anteojos de sol', 'sunglasses'].some((term) => text.includes(normalizeText(term)))
   if (isSunglasses) {
     const official = findOfficial(index, '9004.10.00')
-    if (official) return shortcutClassification(index, official, ['gafas de sol', 'sunglasses'], 'Producto identificado como gafas/anteojos de sol; se usa shortcut oficial para evitar latencia AI.')
+    if (official) return shortcutClassification(index, official, ['gafas de sol', 'sunglasses'], 'Producto identificado como gafas/anteojos de sol.')
   }
 
   const checks: Array<{ code: string; terms: string[]; rationale: string }> = [
-    { code: '9506.59.00', terms: ['padel', 'paleta', 'racket'], rationale: 'Producto identificado como paleta/raqueta de pádel; se usa shortcut oficial para evitar latencia AI.' },
+    { code: '9506.59.00', terms: ['padel', 'paleta', 'racket'], rationale: 'Producto identificado como paleta/raqueta de pádel.' },
     { code: '8504.40.90', terms: ['cargador'], rationale: 'Producto identificado como adaptador/cargador eléctrico.' },
     { code: '8507.60.00', terms: ['litio', 'lithium', 'bateria', 'battery'], rationale: 'Producto identificado como acumulador de ion litio.' },
     { code: '9506.51.00', terms: ['tenis', 'raqueta'], rationale: 'Producto identificado como raqueta de tenis.' },
@@ -230,8 +241,7 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
   for (const check of checks) {
     if (!check.terms.every((term) => text.includes(normalizeText(term)))) continue
     const official = findOfficial(index, check.code)
-    if (!official) continue
-    return shortcutClassification(index, official, check.terms, check.rationale)
+    if (official) return shortcutClassification(index, official, check.terms, check.rationale)
   }
   return null
 }
@@ -249,7 +259,6 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
     const [code, label] = row
     if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string' || !label.trim()) continue
     const normalizedLabel = normalizeText(label)
-    if (!normalizedLabel) continue
     const labelTokens = new Set(tokens(normalizedLabel))
     const matchedTerms: string[] = []
     let score = 0
@@ -267,8 +276,9 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
       matchedTerms.push(token)
     }
 
-    const distinctMatches = new Set(matchedTerms).size
-    if (score >= 8 && distinctMatches >= 2) scored.push({ code, label, score: Math.round(score * 100) / 100, matchedTerms: [...new Set(matchedTerms)] })
+    if (score >= 8 && new Set(matchedTerms).size >= 2) {
+      scored.push({ code, label, score: Math.round(score * 100) / 100, matchedTerms: [...new Set(matchedTerms)] })
+    }
   }
 
   return scored.sort((a, b) => b.score - a.score || a.code.localeCompare(b.code)).slice(0, Math.max(1, Math.min(50, limit)))
@@ -281,7 +291,9 @@ async function expandSearchTerms(ai: AI, facts: NcmProductFacts): Promise<AiExpa
         { role: 'system', content: 'You prepare search vocabulary for Argentina customs nomenclature retrieval. Return JSON only: {"searchTerms":[...],"missingFacts":[...]}. searchTerms must be Spanish customs/product nouns or short phrases describing what the product IS, its principal function, material/composition and important technical nature. Include useful synonyms/translations. NEVER output HS, NCM, tariff or numeric classification codes. Do not guess missing technical facts.' },
         { role: 'user', content: JSON.stringify(facts) },
       ],
-      response_format: { type: 'json_object' }, temperature: 0, max_completion_tokens: 350,
+      response_format: { type: 'json_object' },
+      temperature: 0,
+      max_completion_tokens: 350,
     })
     const content = result?.response ?? result?.choices?.[0]?.message?.content
     const parsed = typeof content === 'string' ? JSON.parse(content) : content
@@ -300,10 +312,9 @@ export function sanitizeAiRanking(output: unknown, shortlist: NcmRetrievalCandid
   if (typeof output === 'string') {
     try { parsed = JSON.parse(output) } catch { parsed = {} }
   }
-  const rankingInput = Array.isArray(parsed?.ranking) ? parsed.ranking : []
   const seen = new Set<string>()
   const ranking: Array<{ code: string; reason?: string }> = []
-  for (const item of rankingInput) {
+  for (const item of Array.isArray(parsed?.ranking) ? parsed.ranking : []) {
     if (!item || typeof item.code !== 'string' || !allowed.has(item.code) || seen.has(item.code)) continue
     seen.add(item.code)
     ranking.push({ code: item.code, reason: typeof item.reason === 'string' ? item.reason.slice(0, 400) : undefined })
@@ -320,7 +331,9 @@ async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRet
         { role: 'system', content: 'You rerank ONLY the supplied Argentina NCM candidates. Return JSON only: {"ranking":[{"code":"EXACT_ALLOWED_CODE","reason":"short reason"}],"confidence":"high|medium|low","missingFacts":[...]}. Never create a code. If product facts are insufficient, still rank only allowed codes but use low confidence and explain missing facts. Classification depends on objective product characteristics/function, never origin country, price or intended profit.' },
         { role: 'user', content: JSON.stringify({ product: facts, allowedCandidates: shortlist.map(({ code, label }) => ({ code, label })) }) },
       ],
-      response_format: { type: 'json_object' }, temperature: 0, max_completion_tokens: 550,
+      response_format: { type: 'json_object' },
+      temperature: 0,
+      max_completion_tokens: 550,
     })
     const content = result?.response ?? result?.choices?.[0]?.message?.content
     return sanitizeAiRanking(content, shortlist)
@@ -351,8 +364,13 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   if (!shortlist.length) {
     return {
       status: 'missing', code: null, label: null, confidence: 'missing', alternatives: [], tariff: null,
-      missingFacts: expansion.missingFacts, rationale: ['El índice oficial no produjo una shortlist con evidencia textual suficiente; no se inventa una NCM.'],
-      searchTerms, sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount, retrievalMode: 'missing',
+      missingFacts: expansion.missingFacts,
+      rationale: ['El índice oficial no produjo una shortlist con evidencia textual suficiente; no se inventa una NCM.'],
+      searchTerms,
+      sourceDate: index.meta.sourceDate,
+      source: index.meta.source,
+      catalogRecordCount: index.meta.recordCount,
+      retrievalMode: 'missing',
     }
   }
 
@@ -366,20 +384,28 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   const top = ordered[0]
   const confidence = ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
   const reason = ranked.ranking.find((item) => item.code === top.code)?.reason
+  const tariff = tariffForCode(index, top.code)
 
   return {
-    status: 'candidate', code: top.code, label: top.label, confidence,
+    status: 'candidate',
+    code: top.code,
+    label: top.label,
+    confidence,
     alternatives: ordered.slice(1, 4).map(({ code, label, score }) => ({ code, label, score })),
     missingFacts: [...new Set([...expansion.missingFacts, ...(ranked.missingFacts || [])])].slice(0, 8),
     rationale: [
       'El candidato pertenece a la snapshot oficial ARCA; el modelo sólo pudo reordenar códigos de la shortlist determinística.',
+      ...(tariff ? ['Tarifa NCM_APP aplicada automáticamente para economics de screening.'] : []),
       ...(reason ? [reason] : []),
       `Retrieval determinístico: ${shortlist[0].code} score ${shortlist[0].score}.`,
       ...(top.code !== shortlist[0].code ? [`AI rerank seleccionó ${top.code} dentro de la shortlist permitida.`] : []),
     ],
-    searchTerms, sourceDate: index.meta.sourceDate, source: index.meta.source, catalogRecordCount: index.meta.recordCount,
+    searchTerms,
+    sourceDate: index.meta.sourceDate,
+    source: index.meta.source,
+    catalogRecordCount: index.meta.recordCount,
     retrievalMode: ranked.ranking.length ? 'ai_reranked' : 'deterministic_fallback',
-    tariff: tariffForCode(index, top.code),
+    tariff,
   }
 }
 

@@ -102,8 +102,9 @@ function assertIntake(caseDef, body) {
 function assertOfficialClassification(caseDef, body) {
   if (body.status !== 'candidate' || !body.code) throw new Error(`${caseDef.name}: expected NCM candidate, got ${JSON.stringify(body).slice(0, 1000)}`)
   if (!/^\d{4}\.\d{2}\.\d{2}$/.test(body.code)) throw new Error(`${caseDef.name}: invalid NCM format ${body.code}`)
-  if (body.source !== 'ARCA Arancel Integrado') throw new Error(`${caseDef.name}: unexpected source ${body.source}`)
-  if (body.sourceDate !== '2026-08-14') throw new Error(`${caseDef.name}: unexpected sourceDate ${body.sourceDate}`)
+  const legacyArca = body.source === 'ARCA Arancel Integrado' && body.sourceDate === '2026-08-14'
+  const ncmApp = body.source === 'NCM_APP.xlsx' && body.sourceDate === '2026-08-27'
+  if (!legacyArca && !ncmApp) throw new Error(`${caseDef.name}: unexpected catalog source ${body.source} @ ${body.sourceDate}`)
   if ((body.catalogRecordCount ?? 0) < 10000) throw new Error(`${caseDef.name}: catalog too small ${body.catalogRecordCount}`)
   if (caseDef.expectedCode && body.code !== caseDef.expectedCode) throw new Error(`${caseDef.name}: expected ${caseDef.expectedCode}, got ${body.code} (${body.label})`)
   if (caseDef.expectedPrefix && !body.code.startsWith(caseDef.expectedPrefix)) throw new Error(`${caseDef.name}: expected prefix ${caseDef.expectedPrefix}, got ${body.code} (${body.label})`)

@@ -1,7 +1,11 @@
+import type { BrowserRun } from './alibabaSource'
+import { discoverAlibabaProducts } from './productDiscovery'
+
 type ParsebotOpportunityEnv = {
   PARSEBOT_API_KEY?: string
   PARSEBOT_ENDPOINT_URL?: string
   PARSEBOT_SCRAPER_ID?: string
+  BROWSER?: BrowserRun
 }
 
 const DEFAULT_PARSEBOT_SCRAPER_ID = 'ba2822dd-f985-4faa-8d3b-81d795bda2a7'
@@ -25,12 +29,12 @@ export type OpportunitySearchItem = {
   missingFacts: string[]
   sellingPoints: string[]
   nextAction: 'analyze_product' | 'needs_supplier_data'
-  source: 'parsebot_search_products'
+  source: 'parsebot_search_products' | 'alibaba_direct' | 'alibaba_browser'
 }
 
 export type OpportunitySearchResponse = {
   status: 'live' | 'unavailable' | 'not_configured'
-  mode: 'parsebot' | 'unavailable'
+  mode: 'parsebot' | 'direct' | 'browser' | 'unavailable'
   query: string
   results: OpportunitySearchItem[]
   totalCount: number | null
@@ -39,6 +43,8 @@ export type OpportunitySearchResponse = {
   creditsEstimated: number
   note: string
   warnings: string[]
+  browserAttempted?: boolean
+  browserMsUsed?: number | null
 }
 
 function cleanString(value: unknown, max = 500) {
@@ -229,7 +235,31 @@ function normalizeItem(raw: any): OpportunitySearchItem | null {
   return {
     ...base,
     opportunityScore,
-    nextAction: missingFacts.length > 0 ? 'analyze_product' : 'analyze_product',
+    nextAction: 'analyze_product',
+  }
+}
+
+function fallbackItem(item: { title: string; url: string }, mode: 'direct' | 'browser'): OpportunitySearchItem {
+  return {
+    title: item.title,
+    url: item.url,
+    productId: null,
+    imageUrl: null,
+    unitPriceUsd: null,
+    moq: null,
+    priceDisplay: null,
+    supplierName: null,
+    supplierYears: null,
+    supplierBadges: [],
+    reviewCount: null,
+    reviewScore: null,
+    packedWeightKg: null,
+    volumeCbm: null,
+    opportunityScore: 30,
+    missingFacts: ['supplier_price', 'moq', 'package_weight', 'package_volume'],
+    sellingPoints: ['Alibaba live source'],
+    nextAction: 'analyze_product',
+    source: mode === 'direct' ? 'alibaba_direct' : 'alibaba_browser',
   }
 }
 
@@ -239,14 +269,14 @@ async function callSearch(endpoint: string, apiKey: string, query: string, page:
   target.searchParams.set('page', String(page))
   if (sort) target.searchParams.set('sort', sort)
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 9000)
+  const timeout = setTimeout(() => controller.abort(), 6500)
   try {
     const response = await fetch(target.toString(), {
       method: 'GET',
       headers: {
         accept: 'application/json',
         'x-api-key': apiKey,
-        'user-agent': 'ShippingAPP/2.6 ParsebotOpportunityFinder',
+        'user-agent': 'ShippingAPP/2.7 OpportunityFinder',
       },
       signal: controller.signal,
     })
@@ -259,33 +289,83 @@ async function callSearch(endpoint: string, apiKey: string, query: string, page:
   }
 }
 
+function unavailable(query: string, page: number, creditsEstimated: number, warnings: string[], status: 'unavailable' | 'not_configured' = 'unavailable'): OpportunitySearchResponse {
+  return {
+    status,
+    mode: 'unavailable',
+    query,
+    results: [],
+    totalCount: null,
+    totalPages: null,
+    currentPage: page,
+    creditsEstimated,
+    note: 'No encontramos resultados verificables en Alibaba en este intento. Podés reintentar o reformular la búsqueda.',
+    warnings,
+  }
+}
+
+async function fallbackSearch(
+  query: string,
+  env: ParsebotOpportunityEnv,
+  page: number,
+  limit: number,
+  creditsEstimated: number,
+  warnings: string[],
+  unavailableStatus: 'unavailable' | 'not_configured' = 'unavailable',
+): Promise<OpportunitySearchResponse> {
+  if (!env.BROWSER) return unavailable(query, page, creditsEstimated, warnings, unavailableStatus)
+
+  try {
+    const fallback = await discoverAlibabaProducts(query, env.BROWSER)
+    if (fallback.status !== 'live' || !fallback.results.length || fallback.mode === 'unavailable') {
+      return {
+        ...unavailable(query, page, creditsEstimated, [...warnings, fallback.note], unavailableStatus),
+        browserAttempted: fallback.browserAttempted,
+        browserMsUsed: fallback.browserMsUsed,
+      }
+    }
+
+    const mode = fallback.mode as 'direct' | 'browser'
+    const results = fallback.results.slice(0, limit).map((item) => fallbackItem(item, mode))
+    return {
+      status: 'live',
+      mode,
+      query,
+      results,
+      totalCount: fallback.results.length,
+      totalPages: null,
+      currentPage: page,
+      creditsEstimated,
+      note: `Encontré ${results.length} productos verificables en Alibaba mediante una fuente alternativa. Abrí uno para completar precio, MOQ, proveedor y logística.`,
+      warnings: [...warnings, 'Se activó una fuente alternativa de Alibaba porque la búsqueda estructurada no estuvo disponible.'],
+      browserAttempted: fallback.browserAttempted,
+      browserMsUsed: fallback.browserMsUsed,
+    }
+  } catch (error) {
+    return unavailable(query, page, creditsEstimated, [
+      ...warnings,
+      error instanceof Error ? error.message : 'Alibaba fallback failed',
+    ], unavailableStatus)
+  }
+}
+
 export async function searchAlibabaOpportunities(query: string, env: ParsebotOpportunityEnv, options: { page?: number; sort?: string; limit?: number } = {}): Promise<OpportunitySearchResponse> {
   const normalizedQuery = query.trim().replace(/\s+/g, ' ').slice(0, 220)
   const page = Math.max(1, Math.min(5, Math.trunc(options.page || 1)))
   const limit = Math.max(1, Math.min(24, Math.trunc(options.limit || 12)))
   const sort = (options.sort || 'best_match').trim().slice(0, 50)
-  if (!normalizedQuery) {
-    return { status: 'unavailable', mode: 'unavailable', query: '', results: [], totalCount: null, totalPages: null, currentPage: page, creditsEstimated: 0, note: 'Query vacía.', warnings: ['Ingresá un producto o categoría para buscar.'] }
-  }
+  if (!normalizedQuery) return unavailable('', page, 0, ['Ingresá un producto o categoría para buscar.'])
+
   if (!env.PARSEBOT_API_KEY) {
-    return { status: 'not_configured', mode: 'unavailable', query: normalizedQuery, results: [], totalCount: null, totalPages: null, currentPage: page, creditsEstimated: 0, note: 'Parse.bot no está configurado.', warnings: ['Falta PARSEBOT_API_KEY.'] }
+    return fallbackSearch(normalizedQuery, env, page, limit, 0, ['La fuente estructurada no está configurada.'], 'not_configured')
   }
 
   try {
     const result = await callSearch(searchEndpoint(env), env.PARSEBOT_API_KEY, normalizedQuery, page, sort)
     if (!result.response.ok || result.body?.status === 'error' || result.body?.status === 'timeout') {
-      return {
-        status: 'unavailable',
-        mode: 'unavailable',
-        query: normalizedQuery,
-        results: [],
-        totalCount: null,
-        totalPages: null,
-        currentPage: page,
-        creditsEstimated: 2,
-        note: 'Parse.bot search_products no devolvió resultados utilizables.',
-        warnings: [`search_products returned ${result.body?.status || `HTTP ${result.response.status}`}`],
-      }
+      return fallbackSearch(normalizedQuery, env, page, limit, 2, [
+        `Structured search returned ${result.body?.status || `HTTP ${result.response.status}`}`,
+      ])
     }
 
     const data = result.body?.data ?? result.body
@@ -293,6 +373,11 @@ export async function searchAlibabaOpportunities(query: string, env: ParsebotOpp
       .map(normalizeItem)
       .filter(Boolean) as OpportunitySearchItem[]
     results.sort((a, b) => b.opportunityScore - a.opportunityScore)
+
+    if (!results.length) {
+      return fallbackSearch(normalizedQuery, env, page, limit, 2, ['La fuente estructurada respondió sin productos normalizables.'])
+    }
+
     return {
       status: 'live',
       mode: 'parsebot',
@@ -302,21 +387,12 @@ export async function searchAlibabaOpportunities(query: string, env: ParsebotOpp
       totalPages: numberOrNull(firstPresent(data, ['total_pages', 'totalPages'])),
       currentPage: numberOrNull(firstPresent(data, ['current_page', 'currentPage'])) ?? page,
       creditsEstimated: 2,
-      note: `Parse.bot search_products devolvió ${results.length} candidatos; se muestran los mejores ${Math.min(limit, results.length)} por datos disponibles, proveedor y MOQ.`,
-      warnings: results.length ? [] : ['Parse.bot respondió, pero no encontramos productos normalizables.'],
+      note: `Encontré ${results.length} candidatos estructurados en Alibaba; se muestran los mejores ${Math.min(limit, results.length)} por datos disponibles, proveedor y MOQ.`,
+      warnings: [],
     }
   } catch (error) {
-    return {
-      status: 'unavailable',
-      mode: 'unavailable',
-      query: normalizedQuery,
-      results: [],
-      totalCount: null,
-      totalPages: null,
-      currentPage: page,
-      creditsEstimated: 2,
-      note: 'No pudimos consultar search_products.',
-      warnings: [error instanceof Error ? error.message : 'Parse.bot search failed'],
-    }
+    return fallbackSearch(normalizedQuery, env, page, limit, 2, [
+      error instanceof Error ? error.message : 'Structured Alibaba search failed',
+    ])
   }
 }

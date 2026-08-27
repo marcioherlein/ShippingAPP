@@ -7,6 +7,7 @@ import type { FreightMode, Inputs, Result, ScenarioTaxContext } from './types'
 const unknownTaxContext: ScenarioTaxContext = {
   entityType: 'unknown', taxStatus: 'unknown', purpose: 'unknown',
   statisticsExempt: false, vatPerceptionExempt: false, gainsPerceptionExempt: false,
+  capitalGoodEligible: false, capitalGoodUse: false,
 }
 
 export function scenario(quantity: number, mode: FreightMode, i: Inputs, taxContext: ScenarioTaxContext = unknownTaxContext): Result {
@@ -37,6 +38,8 @@ export function scenario(quantity: number, mode: FreightMode, i: Inputs, taxCont
     entityType: taxContext.entityType,
     vatPerceptionExempt: taxContext.vatPerceptionExempt,
     gainsPerceptionExempt: taxContext.gainsPerceptionExempt,
+    capitalGoodEligible: taxContext.capitalGoodEligible,
+    capitalGoodUse: taxContext.capitalGoodUse,
   })
 
   const economicLandedTotalUsd = customsBaseUsd + taxes.nonRecoverableTaxCostUsd + i.fixedFeesUsd

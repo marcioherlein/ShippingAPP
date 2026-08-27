@@ -197,9 +197,20 @@ async function runtimeSmoke(baseUrl: string, env: Env) {
   const ncmRecords = Array.isArray(ncm?.records) ? ncm.records.length : 0
   const sim95Records = Array.isArray(sim95?.records) ? sim95.records.length : 0
 
-  if (ncm?.meta?.source !== 'ARCA Arancel Integrado') throw new Error('NCM asset source mismatch')
-  if (ncm?.meta?.sourceDate !== '2026-08-14') throw new Error('NCM asset sourceDate mismatch')
-  if (ncmRecords < 1000) throw new Error(`NCM asset unexpectedly small: ${ncmRecords}`)
+  const ncmIsLegacyArca = ncm?.meta?.source === 'ARCA Arancel Integrado'
+    && ncm?.meta?.sourceDate === '2026-08-14'
+    && ncm?.meta?.tariffDataIncluded === false
+  const ncmIsAppTariffAsset = ncm?.meta?.source === 'NCM_APP.xlsx'
+    && ncm?.meta?.sourceFile === 'NCM_APP.xlsx'
+    && ncm?.meta?.indexSchema === 4
+    && ncm?.meta?.tariffDataIncluded === true
+  if (!ncmIsLegacyArca && !ncmIsAppTariffAsset) {
+    throw new Error(`NCM asset metadata mismatch: source=${ncm?.meta?.source ?? 'missing'} sourceDate=${ncm?.meta?.sourceDate ?? 'missing'} schema=${ncm?.meta?.indexSchema ?? 'missing'} tariffDataIncluded=${ncm?.meta?.tariffDataIncluded ?? 'missing'}`)
+  }
+  if (ncmRecords < 10000) throw new Error(`NCM asset unexpectedly small: ${ncmRecords}`)
+  if (ncmIsAppTariffAsset && !Array.isArray(ncm.records?.[0]) || (ncmIsAppTariffAsset && ncm.records[0].length !== 12)) {
+    throw new Error('NCM_APP asset row shape mismatch')
+  }
   if (sim95?.meta?.chapter !== '95') throw new Error('SIM chapter 95 metadata mismatch')
   if (sim95?.meta?.sourceDate !== '2026-08-14') throw new Error('SIM chapter 95 sourceDate mismatch')
   if (sim95Records < 1) throw new Error('SIM chapter 95 has no records')

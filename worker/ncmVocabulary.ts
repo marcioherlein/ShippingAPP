@@ -21,16 +21,34 @@ function normalize(value: string | null | undefined) {
     .trim()
 }
 
-const ACCESSORY_INTENT = /\b(cover|case|replacement|shade|accessory|part|spare|zipper|repuesto|funda|estuche|cubierta|pantalla|accesorio|parte|reemplazo)\b/
+const STRONG_ACCESSORY_INTENT = /\b(replacement|replacement only|spare|accessory|part|parts|shade|zipper|repuesto|repuestos|accesorio|accesorios|parte|partes|reemplazo|pantalla|cierre|cremallera)\b/
+const COVER_CASE_WORD = /\b(cover|case|funda|estuche|cubierta)\b/
+const ACCESSORY_ONLY_CONTEXT = /\b(protective|protection|replacement|spare|only|shell|empty|without electronics|without device|no electronics|solo funda|solo estuche|solo cubierta|repuesto|reemplazo|protector|proteccion)\b/
+const COMPLETE_EARBUDS = /\b(headphones?|earbuds?|earphones?|tws|auriculares?)\b/
+const BUNDLED_CHARGING_CASE = /\b(with|incl(?:udes?|uded)?|including|con)\b.{0,30}\b(charging case|charger case|estuche de carga)\b|\b(charging case|charger case|estuche de carga)\b.{0,30}\b(with|incl(?:udes?|uded)?|including|con)\b/
+const CHARGING_CASE_ONLY = /\b(replacement|spare|only)\b.{0,30}\b(charging case|charger case)\b|\b(charging case|charger case)\b.{0,30}\b(replacement|spare|only)\b/
 
 export function hasAccessoryIntent(facts: CustomsVocabularyFacts) {
-  return ACCESSORY_INTENT.test(normalize([
+  const text = normalize([
     facts.name || '',
     facts.category || '',
     facts.material || '',
     facts.functionText || '',
     facts.description || '',
-  ].join(' ')))
+  ].join(' '))
+  if (!text) return false
+
+  // Alibaba titles often describe a complete TWS product as "earbuds with
+  // charging case". The bundled case is packaging/functionality, not proof
+  // that the listing itself is an accessory. Only accessory-only wording wins.
+  if (COMPLETE_EARBUDS.test(text) && BUNDLED_CHARGING_CASE.test(text) && !CHARGING_CASE_ONLY.test(text)) {
+    return false
+  }
+
+  if (STRONG_ACCESSORY_INTENT.test(text)) return true
+  if (COVER_CASE_WORD.test(text) && ACCESSORY_ONLY_CONTEXT.test(text)) return true
+
+  return false
 }
 
 // Code-free bilingual bridge between noisy marketplace language and the Spanish
@@ -40,6 +58,10 @@ const RULES: VocabularyRule[] = [
   {
     when: /\b(padel|paddle)\b.*\b(racket|racquet|pala|paleta|raqueta)\b|\b(racket|racquet|pala|paleta|raqueta)\b.*\b(padel|paddle)\b/,
     terms: ['raqueta de padel', 'raqueta de pádel', 'paleta de padel', 'raqueta deportiva', 'raquetas similares'],
+  },
+  {
+    when: /\b(badminton|badminton)\b.*\b(racket|racquet|raqueta)\b|\b(racket|racquet|raqueta)\b.*\b(badminton|badminton)\b/,
+    terms: ['raqueta de badminton', 'raqueta de bádminton', 'raquetas similares', 'raqueta deportiva'],
   },
   {
     when: /\b(tennis|tenis)\b.*\b(racket|racquet|raqueta)\b|\b(racket|racquet|raqueta)\b.*\b(tennis|tenis)\b/,
@@ -186,13 +208,13 @@ export function deterministicCustomsTerms(facts: CustomsVocabularyFacts): string
   if (!text) return []
 
   // Marketplace accessory listings often repeat the complete product name.
-  // Suppress complete-product vocabulary when the listing explicitly says it
-  // is a cover/case/replacement/part; this is safer than a confident false NCM.
-  if (ACCESSORY_INTENT.test(text)) {
+  // Suppress complete-product vocabulary only when the listing itself is an
+  // accessory. A complete product bundled with a case remains a full product.
+  if (hasAccessoryIntent(facts)) {
     const accessoryTerms = ['accesorio', 'parte', 'repuesto', 'componente']
     if (/\b(cover|case|funda|estuche|cubierta)\b/.test(text)) accessoryTerms.push('funda', 'cubierta')
     if (/\b(shade|pantalla)\b/.test(text)) accessoryTerms.push('pantalla', 'parte de aparato de alumbrado')
-    if (/\b(zipper|cierre)\b/.test(text)) accessoryTerms.push('cierre', 'cremallera')
+    if (/\b(zipper|cierre|cremallera)\b/.test(text)) accessoryTerms.push('cierre', 'cremallera')
     return [...new Set(accessoryTerms)].slice(0, 14)
   }
 

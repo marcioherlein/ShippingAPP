@@ -19,6 +19,8 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - name: Unit and integration tests
+        id: unit_tests
+        continue-on-error: true
         run: npx --yes vitest@3.2.4 run
       - name: Validate NCM and SIM assets
         run: node scripts/validate-nomenclador-assets.mjs
@@ -81,10 +83,23 @@ jobs:
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
           NODE
       - name: Adversarial production engine audit
+        id: engine_audit
+        continue-on-error: true
         run: node scripts/audit-engine-production.mjs
       - name: Install browser audit runtime
         run: |
           npm install --no-save --no-audit --no-fund playwright@1.55.0
           npx playwright install --with-deps chromium
       - name: Responsive production layout audit
+        id: layout_audit
+        continue-on-error: true
         run: node scripts/audit-layout-production.mjs
+      - name: Fail if any adversarial audit failed
+        if: always()
+        run: |
+          echo "unit_tests=${{ steps.unit_tests.outcome }}"
+          echo "engine_audit=${{ steps.engine_audit.outcome }}"
+          echo "layout_audit=${{ steps.layout_audit.outcome }}"
+          if [ "${{ steps.unit_tests.outcome }}" != "success" ] || [ "${{ steps.engine_audit.outcome }}" != "success" ] || [ "${{ steps.layout_audit.outcome }}" != "success" ]; then
+            exit 1
+          fi

@@ -1,5 +1,31 @@
+@font-face {
+  font-family: "72";
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.3/content/Base/baseLib/baseTheme/fonts/72-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "72";
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.3/content/Base/baseLib/baseTheme/fonts/72-Semibold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "72";
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.3/content/Base/baseLib/baseTheme/fonts/72-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}
+
 :root {
-  --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* 72 Brand is preferred when available in the environment. The public SAP
+     72 webfont is the guaranteed product-safe fallback shipped to every user. */
+  --app-font: "72 Brand", "72", Arial, Helvetica, sans-serif;
 }
 
 html,
@@ -18,7 +44,22 @@ select,
 textarea,
 option,
 optgroup,
-table {
+table,
+th,
+td,
+a,
+p,
+span,
+small,
+label,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+summary,
+details {
   font-family: var(--app-font);
 }
 
@@ -153,7 +194,7 @@ canvas {
   max-width: 100%;
 }
 
-/* Remove viewport bleed from horizontal rails while preserving swipe/scroll. */
+/* Horizontal content stays bounded by the card while remaining scrollable. */
 .hot-products-rail,
 .guided-agent-steps,
 .table-scroll,

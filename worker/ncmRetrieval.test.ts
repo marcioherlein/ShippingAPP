@@ -14,7 +14,9 @@ const index: NcmSearchIndex = {
     ['9506.51.00', 'Raquetas de tenis, incluso sin cordaje'],
     ['8504.40.90', 'Transformadores eléctricos, convertidores eléctricos estáticos y bobinas de reactancia > Convertidores estáticos > Los demás'],
     ['8507.60.00', 'Acumuladores eléctricos > De iones de litio'],
+    ['8517.13.00', 'Teléfonos inteligentes'],
     ['4202.92.00', 'Bolsos, mochilas y continentes similares > Con superficie exterior de hojas de plástico o materia textil'],
+    ['8544.42.00', 'Conductores eléctricos aislados provistos de piezas de conexión'],
   ],
 }
 
@@ -35,11 +37,13 @@ describe('full NCM deterministic retrieval', () => {
     expect(result[0]?.code).toBe('8504.40.90')
   })
 
-  it('canonicalizes ordinary Spanish plural forms without damaging tenis', () => {
+  it('canonicalizes ordinary plural forms without breaking smartphones or inteligentes', () => {
     expect(canonicalToken('raquetas')).toBe('raqueta')
     expect(canonicalToken('similares')).toBe('similar')
     expect(canonicalToken('convertidores')).toBe('convertidor')
     expect(canonicalToken('tenis')).toBe('tenis')
+    expect(canonicalToken('smartphones')).toBe('smartphone')
+    expect(canonicalToken('inteligentes')).toBe('inteligente')
   })
 
   it('never returns an official row whose source label is empty', () => {
@@ -67,15 +71,30 @@ describe('full NCM deterministic retrieval', () => {
     ] }, shortlist)
     expect(ranking.ranking).toHaveLength(1)
   })
+
+  it('resolves an obvious English smartphone without AI', async () => {
+    const ai = { run: async () => { throw new Error('offline') } }
+    const result = await classifyFullNcm(index, ai, { name: 'Unlocked Android 5G Smartphone Dual SIM Mobile Phone' })
+    expect(result.status).toBe('candidate')
+    expect(result.code).toBe('8517.13.00')
+    expect(result.retrievalMode).toBe('deterministic_fallback')
+  })
+
+  it('keeps a cable-without-adapter out of the charger classification', async () => {
+    const ai = { run: async () => { throw new Error('offline') } }
+    const result = await classifyFullNcm(index, ai, { name: 'USB C Charging Cable 2m No Power Adapter' })
+    expect(result.code).toBe('8544.42.00')
+    expect(result.code).not.toBe('8504.40.90')
+  })
 })
 
 describe('full NCM AI-constrained classification', () => {
-  it('classifies a power adapter using AI vocabulary but only an official shortlist code', async () => {
+  it('classifies a generic static-converter module using AI vocabulary but only an official shortlist code', async () => {
     const ai = fakeAi([
       { searchTerms: ['convertidor eléctrico estático', 'fuente de alimentación eléctrica'], missingFacts: [] },
       { ranking: [{ code: '8504.40.90', reason: 'La función principal es conversión estática de energía.' }], confidence: 'high', missingFacts: ['confirmar tensión y tipo de conversión'] },
     ])
-    const result = await classifyFullNcm(index, ai, { name: 'USB-C 65W power adapter', category: 'Power adapter' })
+    const result = await classifyFullNcm(index, ai, { name: 'AC DC electronic conversion module', category: 'Power electronics module' })
     expect(result.code).toBe('8504.40.90')
     expect(result.status).toBe('candidate')
     expect(result.sourceDate).toBe('2026-08-14')
@@ -88,7 +107,7 @@ describe('full NCM AI-constrained classification', () => {
       { searchTerms: ['raqueta deportiva', 'bádminton similar'], missingFacts: [] },
       { ranking: [{ code: '1234.56.78', reason: 'hallucinated' }], confidence: 'high' },
     ])
-    const result = await classifyFullNcm(index, ai, { name: 'Carbon padel racket', category: 'Padel racket' })
+    const result = await classifyFullNcm(index, ai, { name: 'generic carbon sports racket', category: 'racket sport' })
     expect(result.code).toBe('9506.59.00')
     expect(result.retrievalMode).toBe('deterministic_fallback')
     expect(result.confidence).toBe('low')
@@ -115,7 +134,7 @@ describe('full NCM AI-constrained classification', () => {
       { searchTerms: ['convertidor eléctrico estático', 'fuente de alimentación'], missingFacts: [] },
       { ranking: [{ code: '8504.40.90' }], confidence: 'medium' },
     ])
-    const result = await classifyFullNcm(index, ai, { name: 'power adapter' })
+    const result = await classifyFullNcm(index, ai, { name: 'power conversion device' })
     expect(result.alternatives.length).toBeLessThanOrEqual(3)
     expect(JSON.stringify(result)).not.toContain('10504 records')
   })

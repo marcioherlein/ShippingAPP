@@ -80,3 +80,11 @@ jobs:
           assertNcmAsset(body.checks?.ncmIndex, 'Production')
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
           NODE
+      - name: Adversarial production engine audit
+        run: node scripts/audit-engine-production.mjs
+      - name: Install browser audit runtime
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Responsive production layout audit
+        run: node scripts/audit-layout-production.mjs

@@ -1,3 +1,5 @@
+import { applyDiscoverySearchContext, type DiscoveryFit, type DiscoverySearchContext } from './discoveryBudget'
+
 export type DiscoveryConstraints = {
   maxUnitPriceUsd: number | null
   maxMoq: number | null
@@ -29,6 +31,10 @@ export type ProductDiscoveryItem = {
   sellingPoints?: string[]
   nextAction?: 'analyze_product' | 'needs_supplier_data'
   source?: 'parsebot_search_products'
+  minimumFobUsd?: number | null
+  budgetFit?: DiscoveryFit
+  unitRangeFit?: DiscoveryFit
+  searchContextFit?: DiscoveryFit
 }
 
 export type ProductDiscoveryResponse = {
@@ -46,9 +52,18 @@ export type ProductDiscoveryResponse = {
   currentPage?: number
   creditsEstimated?: number
   warnings?: string[]
+  contextNote?: string | null
+  rejectedCount?: number
+  budgetRejectedCount?: number
+  unitRangeRejectedCount?: number
+  unknownFitCount?: number
 }
 
-export async function discoverProducts(query: string, userText: string = query): Promise<ProductDiscoveryResponse> {
+export async function discoverProducts(
+  query: string,
+  userText: string = query,
+  context: DiscoverySearchContext = {},
+): Promise<ProductDiscoveryResponse> {
   const response = await fetch('/api/opportunity-search', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -56,5 +71,21 @@ export async function discoverProducts(query: string, userText: string = query):
   })
   const data = await response.json() as ProductDiscoveryResponse & { error?: string }
   if (!response.ok) throw new Error(data.error || 'No pudimos buscar productos en Alibaba.')
-  return data
+
+  const contextual = applyDiscoverySearchContext(data.results || [], context)
+  const sourceCount = data.results?.length || 0
+  const note = contextual.contextNote && sourceCount > 0 && contextual.results.length === 0
+    ? `Alibaba devolvió ${sourceCount} candidato${sourceCount === 1 ? '' : 's'}, pero ninguno puede cumplir el contexto del caso con los datos visibles.`
+    : data.note
+
+  return {
+    ...data,
+    note,
+    results: contextual.results,
+    contextNote: contextual.contextNote,
+    rejectedCount: contextual.rejectedCount,
+    budgetRejectedCount: contextual.budgetRejectedCount,
+    unitRangeRejectedCount: contextual.unitRangeRejectedCount,
+    unknownFitCount: contextual.unknownFitCount,
+  }
 }

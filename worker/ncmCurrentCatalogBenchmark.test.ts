@@ -31,7 +31,7 @@ const positiveCases: PositiveCase[] = [
   { title: 'Stainless Steel Kitchen Mixing Bowl Household Set Food Prep', expected: '7323.93.00' },
   { title: 'Bluetooth 5.3 TWS Wireless Earbuds Headphones with Microphone Charging Case', expected: '8518.30.00' },
   { title: 'Portable Bluetooth Speaker Wireless Loudspeaker Mini Outdoor Audio', expected: '8518.21.00' },
-  { title: 'Mini Projector 1080P Portable Home Theater LED Video Projector', expected: '8528.69.00' },
+  { title: 'Professional Carbon Badminton Racket Lightweight Racquet Tournament Wholesale', expected: '9506.59.00' },
   { title: 'Portable Blender USB Rechargeable Smoothie Juice Mixer Cup', expected: '8509.40.50' },
   { title: 'Pet Grooming Vacuum Cleaner Dog Hair Suction Kit Home Electric', expected: '8508.11.00' },
   { title: 'Polarized UV400 Fashion Sunglasses Unisex Wholesale Custom Logo', expected: '9004.10.00' },
@@ -97,5 +97,12 @@ describe('current NCM_APP deterministic marketplace benchmark', () => {
     const result = await classifyFullNcm(index, aiUnavailable, { name: 'Hot Sale New Product 2026 Best Quality OEM ODM' })
     expect(result.status).toBe('missing')
     expect(result.code).toBeNull()
+  })
+
+  it('does not preserve the stale projector code removed from the current NCM_APP snapshot', async () => {
+    const available = new Set(index.records.map(([code]) => code))
+    expect(available.has('8528.69.00')).toBe(false)
+    const result = await classifyFullNcm(index, aiUnavailable, { name: 'Mini Projector 1080P Portable Home Theater LED Video Projector' })
+    expect(result.code).not.toBe('8528.69.00')
   })
 })

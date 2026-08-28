@@ -32,16 +32,13 @@ function record(group, name, pass, actual, expected) {
   console.log(`[${pass ? 'PASS' : 'FAIL'}] ${group} / ${name}`)
 }
 
+// Representative live sample. The broader deterministic NCM/product matrix stays in Vitest;
+// this probe verifies that the deployed worker and its live providers behave the same way.
 const productCases = [
   { id: 'tennis-racket', text: 'Raqueta de tenis profesional de grafito', category: 'Tennis racket', material: 'grafito', fn: 'jugar tenis', code: '9506.51.00' },
   { id: 'padel-racket', text: 'Paleta de pádel de fibra de carbono EVA', category: 'Padel racket', material: 'fibra de carbono / EVA', fn: 'jugar pádel', code: '9506.59.00' },
   { id: 'usb-c-charger', text: 'Cargador USB-C 65W power adapter', category: 'cargador eléctrico', material: 'plástico y componentes electrónicos', fn: 'convertir y suministrar energía eléctrica', code: '8504.40.90' },
-  { id: 'video-door-phone', text: 'Smart wifi video door phone camera', category: 'cámara de seguridad IP', material: 'electrónica', fn: 'capturar y transmitir video', code: '8525.89.19' },
-  { id: 'tws-earbuds', text: 'Auriculares TWS bluetooth con micrófono', category: 'auriculares', material: 'plástico y electrónica', fn: 'reproducir audio', code: '8518.30.00' },
   { id: 'mini-projector', text: 'Mini proyector 1080p LED', category: 'proyector', material: 'electrónica', fn: 'proyectar imagen', code: '8528.69.00' },
-  { id: 'portable-blender', text: 'Licuadora portátil USB con motor eléctrico', category: 'licuadora', material: 'plástico, acero y motor eléctrico', fn: 'mezclar alimentos', code: '8509.40.50' },
-  { id: 'pet-vacuum', text: 'Aspiradora eléctrica para grooming de mascotas 1200W', category: 'aspiradora', material: 'plástico y motor eléctrico', fn: 'aspirar pelo y polvo', code: '8508.11.00' },
-  { id: 'led-face-mask', text: 'Máscara LED facial beauty device', category: 'aparato eléctrico de belleza', material: 'plástico y LEDs', fn: 'emitir luz LED sobre el rostro', code: '8543.70.99' },
   { id: 'solar-panel', text: 'Panel solar fotovoltaico ensamblado', category: 'panel fotovoltaico', material: 'células fotovoltaicas y vidrio', fn: 'generar electricidad solar', code: '8541.43.00' },
   { id: 'espresso-machine', text: 'Cafetera espresso eléctrica', category: 'cafetera', material: 'metal, plástico y resistencia eléctrica', fn: 'preparar café mediante calentamiento eléctrico', code: '8516.71.00' },
 ]
@@ -108,21 +105,16 @@ async function auditAmbiguousNcm() {
 async function auditOpportunity(id, query) {
   const response = await postJson('/api/opportunity-search', { query, userText: query, limit: 5 })
   const body = response.body || {}
-  const resultsList = Array.isArray(body.results) ? body.results : []
-  const useful = resultsList.some((item) => item?.title && item?.url && (item?.unitPriceUsd || item?.moq || item?.supplierName || item?.imageUrl))
-  const pass = response.ok && body.status === 'live' && resultsList.length > 0 && useful
+  const list = Array.isArray(body.results) ? body.results : []
+  const useful = list.some((item) => item?.title && item?.url && (item?.unitPriceUsd || item?.moq || item?.supplierName || item?.imageUrl))
+  const pass = response.ok && body.status === 'live' && list.length > 0 && useful
   record('alibaba-live', id, pass, {
     http: response.http,
     status: body.status,
     mode: body.mode,
-    count: resultsList.length,
+    count: list.length,
     creditsEstimated: body.creditsEstimated,
-    top: resultsList[0] ? {
-      title: resultsList[0].title,
-      unitPriceUsd: resultsList[0].unitPriceUsd,
-      moq: resultsList[0].moq,
-      supplierName: resultsList[0].supplierName,
-    } : null,
+    top: list[0] ? { title: list[0].title, unitPriceUsd: list[0].unitPriceUsd, moq: list[0].moq, supplierName: list[0].supplierName } : null,
     warnings: body.warnings || [],
   }, { status: 'live', realProductUrlAndCommercialFactRequired: true })
 }
@@ -130,11 +122,7 @@ async function auditOpportunity(id, query) {
 async function auditMeli(id, productName, category) {
   const status = await request('/api/mercadolibre/status')
   if (!status.ok || !status.body?.auth?.ready || status.body?.auth?.apiReady === false) {
-    record('mercadolibre', id, true, {
-      state: 'degraded-but-safe',
-      http: status.http,
-      auth: status.body?.auth || null,
-    }, { allowed: 'explicitly degraded; must not fabricate data' })
+    record('mercadolibre', id, true, { state: 'degraded-but-safe', http: status.http, auth: status.body?.auth || null }, { allowed: 'explicitly degraded; must not fabricate data' })
     return
   }
   const response = await postJson('/api/mercadolibre/benchmark', { productName, category })
@@ -154,41 +142,32 @@ async function auditMeli(id, productName, category) {
 
 async function main() {
   console.log(`ShippingAPP adversarial production audit -> ${baseUrl}`)
-  console.log(`Products in NCM/intake matrix: ${productCases.length}`)
+  console.log(`Representative live products: ${productCases.length}`)
 
-  for (const product of productCases) await auditIntake(product)
-  for (const product of productCases) await auditNcm(product)
+  await Promise.all(productCases.map(auditIntake))
+  await Promise.all(productCases.map(auditNcm))
   await auditAmbiguousNcm()
 
-  // Representative live supplier searches only, to control external provider credits.
-  await auditOpportunity('padel-racket', 'carbon padel racket EVA')
-  await auditOpportunity('usb-c-charger', 'usb c 65w gan charger')
-  await auditOpportunity('mini-projector', 'mini projector 1080p')
-  await auditOpportunity('espresso-machine', 'electric espresso coffee maker')
+  // Only three supplier searches: enough to exercise the provider/failover chain without burning credits.
+  await Promise.all([
+    auditOpportunity('padel-racket', 'carbon padel racket EVA'),
+    auditOpportunity('usb-c-charger', 'usb c 65w gan charger'),
+    auditOpportunity('espresso-machine', 'electric espresso coffee maker'),
+  ])
 
-  await auditMeli('padel-racket', 'Paleta de pádel carbono EVA', 'Padel racket')
-  await auditMeli('usb-c-charger', 'Cargador USB-C 65W GaN', 'Cargador')
+  await Promise.all([
+    auditMeli('padel-racket', 'Paleta de pádel carbono EVA', 'Padel racket'),
+    auditMeli('usb-c-charger', 'Cargador USB-C 65W GaN', 'Cargador'),
+  ])
 
   const failed = results.filter((item) => !item.pass)
   const grouped = Object.fromEntries([...new Set(results.map((item) => item.group))].map((group) => {
     const groupResults = results.filter((item) => item.group === group)
-    return [group, {
-      total: groupResults.length,
-      passed: groupResults.filter((item) => item.pass).length,
-      failed: groupResults.filter((item) => !item.pass).length,
-    }]
+    return [group, { total: groupResults.length, passed: groupResults.filter((item) => item.pass).length, failed: groupResults.filter((item) => !item.pass).length }]
   }))
 
   console.log('\n=== ADVERSARIAL ENGINE AUDIT SUMMARY ===')
-  console.log(JSON.stringify({
-    baseUrl,
-    total: results.length,
-    passed: results.length - failed.length,
-    failed: failed.length,
-    grouped,
-    failures: failed,
-  }, null, 2))
-
+  console.log(JSON.stringify({ baseUrl, total: results.length, passed: results.length - failed.length, failed: failed.length, grouped, failures: failed }, null, 2))
   if (failed.length) process.exit(1)
 }
 

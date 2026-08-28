@@ -1,0 +1,274 @@
+@font-face {
+  font-family: "72";
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.5/content/Base/baseLib/baseTheme/fonts/72-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "72";
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.5/content/Base/baseLib/baseTheme/fonts/72-Semibold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "72";
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.5/content/Base/baseLib/baseTheme/fonts/72-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}
+
+:root {
+  /* 72 Brand is preferred when available in the environment. The public SAP
+     72 webfont is the guaranteed product-safe fallback shipped to every user. */
+  --app-font: "72 Brand", "72", Arial, Helvetica, sans-serif;
+}
+
+html,
+body,
+#root,
+.journey-app {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+body,
+button,
+input,
+select,
+textarea,
+option,
+optgroup,
+table,
+th,
+td,
+a,
+p,
+span,
+small,
+label,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+summary,
+details {
+  font-family: var(--app-font);
+}
+
+button,
+input,
+select,
+textarea {
+  font-variant-numeric: tabular-nums;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Grid/flex children must be allowed to shrink instead of forcing the page wider. */
+.journey-workspace > *,
+.journey-conversation > *,
+.journey-summary-sticky > *,
+.journey-product-surface > *,
+.journey-calculator-section > *,
+.journey-output-explainer > *,
+.url-analyzer > *,
+.intake-thread > *,
+.discovery-grid > *,
+.analyst-card > *,
+.analyst-thread > *,
+.guided-import-agent > *,
+.guided-agent-main > *,
+.guided-agent-steps > *,
+.panel > *,
+.table-card > *,
+.method-card > *,
+.recommendation > * {
+  min-width: 0;
+}
+
+/* Every box inside the guided journey follows the same content rail. */
+.journey-choice-grid,
+.journey-question-card,
+.journey-product-surface,
+.journey-manual-ready {
+  width: calc(100% - 46px);
+  max-width: calc(100% - 46px);
+}
+
+.journey-product-surface .url-analyzer,
+.journey-product-surface .analyzer-copy,
+.journey-product-surface .url-form,
+.journey-product-surface .intake-suggestions,
+.journey-product-surface .intake-thread,
+.journey-product-surface .discovery-card,
+.journey-product-surface .extraction-card,
+.journey-product-surface .hot-products-section,
+.journey-app .analyst-card,
+.journey-app .guided-import-agent,
+.journey-app .manual-quote-shell {
+  width: 100%;
+  max-width: 100%;
+}
+
+.journey-app .analyst-card,
+.journey-app .guided-import-agent,
+.journey-app .manual-quote-shell {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Chat bubbles stay inside their own box even with long URLs, codes or AI text. */
+.journey-bubble,
+.intake-message,
+.analyst-message {
+  min-width: 0;
+}
+
+.journey-bubble.assistant > div {
+  max-width: calc(100% - 46px);
+  overflow-wrap: anywhere;
+}
+
+.journey-bubble.user > div {
+  max-width: 86%;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+
+.intake-message,
+.analyst-message {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.analyst-message p,
+.intake-message p,
+.journey-bubble p,
+.discovery-item h3,
+.discovery-item p,
+.customs-note,
+.assumption-note,
+.finder-cache-intro p,
+.guided-agent-copy p,
+.guided-agent-next p,
+.method-card,
+.panel,
+.recommendation {
+  overflow-wrap: anywhere;
+}
+
+.url-input-wrap,
+.analyst-form,
+.discovery-actions,
+.journey-question-head,
+.recommendation-top,
+.table-title {
+  min-width: 0;
+}
+
+.discovery-actions,
+.recommendation-top,
+.table-title {
+  flex-wrap: wrap;
+}
+
+.url-input-wrap input,
+.analyst-form input,
+.journey-question-fields input,
+.journey-question-fields select,
+.journey-question-fields textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Horizontal content stays bounded by the card while remaining scrollable. */
+.hot-products-rail,
+.guided-agent-steps,
+.table-scroll,
+.analyst-thread {
+  max-width: 100%;
+}
+
+@media (max-width: 920px) {
+  .journey-workspace,
+  .manual-quote-workspace,
+  .workspace {
+    width: 100%;
+    max-width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .journey-choice-grid,
+  .journey-question-card,
+  .journey-product-surface,
+  .journey-manual-ready {
+    width: calc(100% - 46px);
+    max-width: calc(100% - 46px);
+  }
+}
+
+@media (max-width: 640px) {
+  .journey-conversation {
+    padding: 16px;
+  }
+
+  .journey-choice-grid,
+  .journey-question-card,
+  .journey-product-surface,
+  .journey-manual-ready {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .journey-bubble {
+    gap: 8px;
+  }
+
+  .journey-bubble.assistant > div {
+    max-width: calc(100% - 42px);
+  }
+
+  .journey-bubble.user > div,
+  .intake-message,
+  .analyst-message {
+    max-width: 92%;
+  }
+
+  .analyst-card,
+  .guided-import-agent,
+  .hot-products-section,
+  .manual-quote-shell,
+  .discovery-card,
+  .extraction-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .analyst-card {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .hot-products-rail,
+  .guided-agent-steps {
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}

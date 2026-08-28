@@ -4,6 +4,7 @@ import App from './App'
 import './styles.css'
 import './styles/regulatory.css'
 import './styles/entry-simplification.css'
+import './styles/visual-consistency.css'
 
 const root = document.getElementById('root')
 

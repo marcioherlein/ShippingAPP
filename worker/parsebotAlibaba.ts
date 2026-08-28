@@ -34,6 +34,25 @@ function cleanString(value: unknown, max = 500) {
   return normalized ? normalized.slice(0, max) : null
 }
 
+function textValue(value: unknown, max = 1000): string | null {
+  const direct = cleanString(value, max)
+  if (direct) return direct
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => textValue(item, 220))
+      .filter((item): item is string => Boolean(item))
+    return parts.length ? parts.join(' > ').slice(0, max) : null
+  }
+  if (value && typeof value === 'object') {
+    const item: any = value
+    for (const key of ['name', 'title', 'label', 'value', 'category_name', 'categoryName', 'type']) {
+      const candidate = cleanString(item[key], 220)
+      if (candidate) return candidate
+    }
+  }
+  return null
+}
+
 function numberOrNull(value: unknown) {
   if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : null
   if (typeof value !== 'string') return null
@@ -52,12 +71,21 @@ function firstPresent(root: any, keys: string[]) {
   return null
 }
 
+function firstPresentAcross(roots: any[], keys: string[]) {
+  for (const root of roots) {
+    if (!root || typeof root !== 'object') continue
+    const value = firstPresent(root, keys)
+    if (value !== undefined && value !== null && value !== '') return value
+  }
+  return null
+}
+
 function normalizeSpecName(value: unknown) {
   return cleanString(value, 120)?.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() || ''
 }
 
 function specifications(root: any): Array<{ name?: unknown; value?: unknown }> {
-  const value = firstPresent(root, ['specifications', 'specs', 'product.specifications', 'data.specifications'])
+  const value = firstPresent(root, ['specifications', 'specs', 'product.specifications', 'data.specifications', 'attributes', 'product.attributes'])
   return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : []
 }
 
@@ -132,18 +160,48 @@ function compactSpecsDescription(root: any) {
   const parts = specs
     .map((spec) => {
       const name = cleanString(spec.name, 80)
-      const value = cleanString(spec.value, 160)
+      const value = textValue(spec.value, 160)
       return name && value ? `${name}: ${value}` : null
     })
     .filter(Boolean)
-    .slice(0, 10)
+    .slice(0, 14)
   return parts.length ? `Specifications: ${parts.join('; ')}` : null
 }
 
-function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
+function taxonomyCategory(roots: any[]) {
+  const directKeys = [
+    'category', 'category_name', 'categoryName', 'product_category', 'productCategory',
+    'type', 'product_type', 'productType', 'item_type', 'itemType',
+  ]
+  const direct = textValue(firstPresentAcross(roots, directKeys), 300)
+  if (direct) return direct
+
+  const taxonomyKeys = ['breadcrumbs', 'breadcrumb', 'categories', 'category_path', 'categoryPath', 'taxonomy', 'product.breadcrumbs']
+  for (const root of roots) {
+    for (const key of taxonomyKeys) {
+      const value = firstPresent(root, [key])
+      if (!value) continue
+      const rendered = textValue(value, 500)
+      if (rendered) {
+        const segments = rendered.split('>').map((part) => part.trim()).filter(Boolean)
+        return (segments[segments.length - 1] || rendered).slice(0, 300)
+      }
+    }
+  }
+  return null
+}
+
+function combineDescription(explicitValue: unknown, specsValue: string | null) {
+  const explicit = textValue(explicitValue, 1100)
+  if (explicit && specsValue) return `${explicit} ${specsValue}`.slice(0, 1500)
+  return (explicit || specsValue || null)?.slice(0, 1500) ?? null
+}
+
+export function normalizeParsebotAlibabaFacts(raw: unknown): ParsebotAlibabaFacts {
   const root: any = raw && typeof raw === 'object' ? raw : {}
   const data = root.data && typeof root.data === 'object' ? root.data : root
   const product = data.product && typeof data.product === 'object' ? data.product : data
+  const roots = [product, data, root]
   const packaging = product.packaging && typeof product.packaging === 'object' ? product.packaging : data.packaging || {}
   const shipping = product.shipping_info && typeof product.shipping_info === 'object'
     ? product.shipping_info
@@ -151,7 +209,7 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
       ? product.shippingInfo
       : data.shipping_info || data.shippingInfo || {}
 
-  const priceValue = priceFromTiers(product) ?? firstPresent(product, [
+  const priceValue = priceFromTiers(product) ?? firstPresentAcross(roots, [
     'unitPriceUsd',
     'unit_price_usd',
     'price_usd',
@@ -167,10 +225,10 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
     'unit_price',
     'min_price',
     'minPrice',
-  ]) ?? priceFromDisplay(firstPresent(product, ['price_display', 'priceDisplay', 'display_price']))
+  ]) ?? priceFromDisplay(firstPresentAcross(roots, ['price_display', 'priceDisplay', 'display_price']))
 
-  const moqValue = firstPresent(product, ['moq', 'minimum_order_quantity', 'minimumOrderQuantity', 'min_order', 'minOrder', 'minimum_order'])
-  const weightValue = firstPresent(product, [
+  const moqValue = firstPresentAcross(roots, ['moq', 'minimum_order_quantity', 'minimumOrderQuantity', 'min_order', 'minOrder', 'minimum_order'])
+  const weightValue = firstPresentAcross(roots, [
     'packedWeightKg',
     'packed_weight_kg',
     'weightKg',
@@ -180,27 +238,39 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
     'shipping_info.unit_weight',
     'shippingInfo.unitWeight',
   ]) ?? firstPresent(packaging, ['weight_kg', 'packedWeightKg', 'weightKg']) ?? firstPresent(shipping, ['unit_weight', 'unitWeight', 'weight'])
-  const volumeValue = firstPresent(product, ['volumeCbm', 'volume_cbm', 'package_volume_cbm', 'packaging.volume_cbm']) ?? firstPresent(packaging, ['volume_cbm', 'volumeCbm'])
-  const dimensionsValue = firstPresent(product, ['shipping_info.unit_size', 'shippingInfo.unitSize', 'package_size', 'package_dimensions', 'dimensions'])
+  const volumeValue = firstPresentAcross(roots, ['volumeCbm', 'volume_cbm', 'package_volume_cbm', 'packaging.volume_cbm']) ?? firstPresent(packaging, ['volume_cbm', 'volumeCbm'])
+  const dimensionsValue = firstPresentAcross(roots, ['shipping_info.unit_size', 'shippingInfo.unitSize', 'package_size', 'package_dimensions', 'dimensions'])
     ?? firstPresent(shipping, ['unit_size', 'unitSize', 'package_size', 'dimensions'])
     ?? firstPresent(packaging, ['unit_size', 'dimensions', 'size'])
 
-  const originValue = firstPresent(product, ['originCountry', 'origin_country', 'country_of_origin', 'supplier_country', 'supplier.country'])
+  const originValue = firstPresentAcross(roots, ['originCountry', 'origin_country', 'country_of_origin', 'supplier_country', 'supplier.country'])
     ?? specificationValue(product, ['place of origin', 'origin', 'country of origin', 'country/region', 'country region'])
-  const title = firstPresent(product, ['name', 'title', 'product_name', 'productName'])
-  const description = firstPresent(product, ['description', 'summary', 'product_description']) ?? compactSpecsDescription(product)
+
+  const title = firstPresentAcross(roots, [
+    'name', 'title', 'product_name', 'productName', 'product_title', 'productTitle',
+    'item_name', 'itemName', 'item_title', 'itemTitle', 'subject', 'seo_title', 'seoTitle',
+  ])
+
+  const category = taxonomyCategory(roots)
+    ?? textValue(specificationValue(product, ['product type', 'item type', 'type']), 300)
+
+  const explicitDescription = firstPresentAcross(roots, [
+    'description', 'summary', 'product_description', 'productDescription', 'short_description',
+    'shortDescription', 'overview', 'selling_points', 'sellingPoints', 'bullet_points', 'bulletPoints', 'keywords',
+  ])
+  const description = combineDescription(explicitDescription, compactSpecsDescription(product))
 
   return {
-    name: cleanString(title, 700),
-    category: cleanString(firstPresent(product, ['category', 'product_category', 'productCategory', 'type', 'product_type']), 300),
+    name: textValue(title, 700),
+    category,
     unitPriceUsd: numberOrNull(priceValue),
     moq: numberOrNull(moqValue),
     packedWeightKg: weightKg(weightValue),
     volumeCbm: numberOrNull(volumeValue) ?? dimensionsToCbm(dimensionsValue),
-    originCountry: cleanString(originValue, 120),
-    imageUrl: firstImage(product) || firstImage(data),
-    supplier: cleanString(firstPresent(product, ['supplier', 'supplier_name', 'supplierName', 'supplier.name', 'company', 'company_name']), 300),
-    description: cleanString(description, 1500),
+    originCountry: textValue(originValue, 120),
+    imageUrl: firstImage(product) || firstImage(data) || firstImage(root),
+    supplier: textValue(firstPresentAcross(roots, ['supplier', 'supplier_name', 'supplierName', 'supplier.name', 'company', 'company_name', 'companyName']), 300),
+    description,
     raw,
   }
 }
@@ -350,7 +420,7 @@ async function lookupProduct(endpoint: string, apiKey: string, attempt: Parsebot
     failures.push(`${attemptLabel(attempt)} -> ${body?.status || `HTTP ${response.status}`}`)
     return null
   }
-  const facts = normalizeFacts(body?.data ?? body)
+  const facts = normalizeParsebotAlibabaFacts(body?.data ?? body)
   const useful = Boolean(facts.name || facts.unitPriceUsd || facts.moq || facts.packedWeightKg || facts.imageUrl)
   if (!useful) {
     failures.push(`${attemptLabel(attempt)} -> no usable product facts`)
@@ -410,7 +480,7 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
 
     if (searchResult && searchResult.response.ok && searchResult.body?.status !== 'error' && searchResult.body?.status !== 'timeout') {
       const candidate = firstProductCandidate(searchResult.body)
-      const candidateFacts = normalizeFacts(candidate)
+      const candidateFacts = normalizeParsebotAlibabaFacts(candidate)
       const candidateProductId = productIdFromRaw(candidate)
       if (candidateProductId) {
         const detailLookup = await lookupProduct(endpoint, env.PARSEBOT_API_KEY, { method: 'GET', params: { product_id: candidateProductId } }, failures)

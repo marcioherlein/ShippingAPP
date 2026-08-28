@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { extractAlibabaWithParsebot } from './parsebotAlibaba'
+import { extractAlibabaWithParsebot, normalizeParsebotAlibabaFacts } from './parsebotAlibaba'
 
 const sample = {
   data: {
@@ -60,5 +60,57 @@ describe('Parse.bot Alibaba extraction', () => {
     expect(result.facts.supplier).toBe('Shenzhen Outdoor Special Display Equipment Co., Ltd.')
     expect(result.facts.originCountry).toBe('Guangdong, China')
     expect(result.facts.description).toContain('Screen Type: Capacitive')
+  })
+
+  it('extracts product identity from alternate Alibaba title and category keys', () => {
+    const facts = normalizeParsebotAlibabaFacts({
+      data: {
+        product: {
+          product_title: '2026 OEM ODM 65W GaN PD3.0 USB C Fast Wall Charger EU Plug',
+          category_name: 'Mobile Phone Chargers',
+          short_description: 'Compact gallium nitride wall power adapter for smartphones and laptops.',
+          attributes: [
+            { name: 'Product Type', value: 'Wall Charger' },
+            { name: 'Material', value: 'PC fireproof shell' },
+          ],
+        },
+      },
+    })
+    expect(facts.name).toContain('65W GaN')
+    expect(facts.category).toBe('Mobile Phone Chargers')
+    expect(facts.description).toContain('wall power adapter')
+    expect(facts.description).toContain('Product Type: Wall Charger')
+  })
+
+  it('uses taxonomy breadcrumbs as product type when a clean category field is absent', () => {
+    const facts = normalizeParsebotAlibabaFacts({
+      item_title: 'Factory Direct 18K Carbon Fiber EVA Padel Racquet Professional',
+      breadcrumbs: [
+        { name: 'Sports & Entertainment' },
+        { name: 'Racquet Sports' },
+        { name: 'Padel Rackets' },
+      ],
+      specifications: [
+        { name: 'Frame Material', value: 'Carbon Fiber' },
+        { name: 'Place of Origin', value: 'Zhejiang, China' },
+      ],
+    })
+    expect(facts.name).toContain('18K Carbon Fiber')
+    expect(facts.category).toBe('Padel Rackets')
+    expect(facts.originCountry).toBe('Zhejiang, China')
+    expect(facts.description).toContain('Frame Material: Carbon Fiber')
+  })
+
+  it('extracts item type from specifications when taxonomy is absent', () => {
+    const facts = normalizeParsebotAlibabaFacts({
+      subject: 'New Arrival Smart Android 5G Dual SIM Mobile Phone 8GB 256GB',
+      specs: [
+        { name: 'Product Type', value: 'Smartphone' },
+        { name: 'Operating System', value: 'Android' },
+      ],
+    })
+    expect(facts.name).toContain('Android 5G')
+    expect(facts.category).toBe('Smartphone')
+    expect(facts.description).toContain('Operating System: Android')
   })
 })

@@ -1,6 +1,6 @@
 @font-face {
   font-family: "72";
-  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.3/content/Base/baseLib/baseTheme/fonts/72-Regular.woff2") format("woff2");
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.5/content/Base/baseLib/baseTheme/fonts/72-Regular.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -8,7 +8,7 @@
 
 @font-face {
   font-family: "72";
-  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.3/content/Base/baseLib/baseTheme/fonts/72-Semibold.woff2") format("woff2");
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.5/content/Base/baseLib/baseTheme/fonts/72-Semibold.woff2") format("woff2");
   font-style: normal;
   font-weight: 600;
   font-display: swap;
@@ -16,7 +16,7 @@
 
 @font-face {
   font-family: "72";
-  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.3/content/Base/baseLib/baseTheme/fonts/72-Bold.woff2") format("woff2");
+  src: url("https://cdn.jsdelivr.net/npm/@sap-theming/theming-base-content@11.36.5/content/Base/baseLib/baseTheme/fonts/72-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700 900;
   font-display: swap;

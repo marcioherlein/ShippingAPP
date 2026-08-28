@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'feature/**']
+    branches: [main, 'feature/**', 'audit/**']
   pull_request:
     branches: [main]
 
@@ -80,3 +80,5 @@ jobs:
           assertNcmAsset(body.checks?.ncmIndex, 'Production')
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
           NODE
+      - name: Mercado Libre Top 50 NCM production audit
+        run: node scripts/audit-meli-top50-ncm-production.mjs

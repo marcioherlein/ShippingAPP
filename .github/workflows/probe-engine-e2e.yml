@@ -1,0 +1,38 @@
+name: Probe Production Engine E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: Product query to test end-to-end
+        required: true
+        default: '72 Brand'
+      budget_usd:
+        description: Budget used by the quantity optimizer
+        required: true
+        default: '10000'
+  push:
+    paths:
+      - .github/workflows/probe-engine-e2e.yml
+      - scripts/probe-production-engine.ts
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
+      PROBE_QUERY: ${{ github.event.inputs.query || '72 Brand' }}
+      PROBE_BUDGET_USD: ${{ github.event.inputs.budget_usd || '10000' }}
+      PROBE_REQUIRE_READY: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+      - name: Probe search → ingestion → NCM → landed cost → optimization
+        run: npx --yes tsx@4.20.5 scripts/probe-production-engine.ts

@@ -1,5 +1,6 @@
 import type { ProductAnalysis } from './productAnalysis'
 import { enrichProductAnalysisV2, type ProductAnalysisV2 } from './productAnalysisV2'
+import { apiFetch } from './apiClient'
 
 export type IntakeFacts = {
   name: string | null
@@ -36,7 +37,7 @@ export const emptyIntakeFacts = (): IntakeFacts => ({
 })
 
 export async function runProductIntake(message: string, priorFacts: IntakeFacts): Promise<IntakeClientResult> {
-  const response = await fetch('/api/intake', {
+  const response = await apiFetch('/api/intake', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ message, priorFacts }),

@@ -14,6 +14,7 @@ function coreSignals(facts: AlibabaDirectFacts) {
     facts.moq,
     facts.packedWeightKg,
     facts.volumeCbm,
+    facts.originCountry,
   ].filter(Boolean).length
 }
 
@@ -83,7 +84,7 @@ export async function extractAlibabaDirectHttp(
   if (!facts.moq) warnings.push('MOQ no expuesto por el fetch directo.')
 
   return {
-    status: signals >= 6 ? 'ready' : 'partial',
+    status: signals >= 7 ? 'ready' : 'partial',
     source: 'ShippingAPP direct Alibaba',
     facts,
     httpStatus: response.status,

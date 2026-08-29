@@ -139,7 +139,7 @@ function applySimEvidence(base: CustomsProfile, full: FullNcmApiResult): Customs
       simOpeningConfidence: 'low',
       simAlternatives: mergeUniqueSim([localCandidate, ...fullAlternatives], fullCandidate).slice(0, 4),
       simSource: `CONFLICTO SIM: seed ${localCandidate.code} vs full ${fullCandidate.code}. NCM ${ncmCode} se conserva; apertura requiere validación.`,
-      rationale: [...base.rationale, ...sim.rationale, `CONFLICTO SIM fuerte: ${localCandidate.code} vs ${fullCandidate.code}. El conflicto no cambia la NCM ni el derecho NCM-level de screening, pero bloquea el sufijo automático.`],
+      rationale: [...base.rationale, ...sim.rationale, `CONFLICTO SIM fuerte: ${localCandidate.code} vs full ${fullCandidate.code}. El conflicto no cambia la NCM ni el derecho NCM-level de screening, pero bloquea el sufijo automático.`],
       missingFacts: [...new Set([...base.missingFacts, ...sim.missingFacts, 'Resolver conflicto de apertura SIM antes de declarar/intervenciones'])],
     }
   }
@@ -181,14 +181,14 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
   // Defense in depth: even if the worker regresses and returns a tariff-bearing LOW
   // candidate, the client merge is not allowed to promote it into NCM/economics.
   if (full.confidence === 'low') {
-    const lowAlternative: NcmCandidate = {
+    const lowAlternative: NcmCandidate | null = full.code !== local.ncmCandidate ? {
       code: full.code,
       description: full.label,
       dutyRatePct: null,
       score: 0,
       reasons: ['Candidato full-catalog LOW retenido; no apto para economics.'],
       simOpening: null,
-    }
+    } : null
     return {
       ...local,
       alternatives: addUniqueAlternative([...local.alternatives], lowAlternative).slice(0, 4),

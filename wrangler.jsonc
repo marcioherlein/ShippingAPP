@@ -2,6 +2,10 @@
   "name": "shippingapp",
   "compatibility_date": "2026-08-13",
   "main": "./worker/entry.ts",
+  "vars": {
+    "AUTH_ENFORCEMENT": "false",
+    "CLERK_AUTHORIZED_PARTIES": "http://localhost:5173,https://shippingapp.marciofabrizio.workers.dev"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

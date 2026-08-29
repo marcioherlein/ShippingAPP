@@ -1,0 +1,54 @@
+.auth-account-control {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.7);
+  box-shadow: 0 12px 38px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+.auth-account-control button {
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 13px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-secondary {
+  background: transparent;
+  color: #111827;
+}
+
+.auth-primary {
+  background: #111827;
+  color: #fff;
+}
+
+.auth-saved-label {
+  padding-left: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+@media (max-width: 720px) {
+  .auth-account-control {
+    top: 10px;
+    right: 10px;
+  }
+
+  .auth-saved-label {
+    display: none;
+  }
+}

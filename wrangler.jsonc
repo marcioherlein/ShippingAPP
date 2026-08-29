@@ -13,8 +13,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "migrations_dir": "migrations",
-      "preview_database_id": "shippingapp-local"
+      "migrations_dir": "migrations"
     }
   ],
   "kv_namespaces": [

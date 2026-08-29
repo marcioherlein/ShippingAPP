@@ -1,4 +1,4 @@
-import app from './enrich'
+import app from './router'
 import { withRequestContext } from './requestContext'
 
 export default {

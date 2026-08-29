@@ -9,7 +9,10 @@ const index: NcmSearchIndex = {
   },
   records: [
     ['0101.30.00', ''],
-    ['9506.59.00', 'Raquetas de tenis, bádminton o similares, incluso sin cordaje > Las demás'],
+    ['4707.90.00', 'Papel o cartón para reciclar (desperdicios y desechos) > Los demás'],
+    ['9101.21.00', 'Relojes de pulsera con caja de metal precioso > Los demás relojes de pulsera > Automáticos'],
+    ['9102.21.00', 'Relojes de pulsera, bolsillo y similares, excepto los de la partida 91.01 > Los demás relojes de pulsera > Automáticos'],
+    ['9506.59.00', 'Raquetas de tenis, bádminton o similares, incluso sin cordaje > Las demás', 20, 20, 3, 0, 21, 20, 6, 2.5, null, false],
     ['9506.40.00', 'Artículos y material para tenis de mesa'],
     ['9506.51.00', 'Raquetas de tenis, incluso sin cordaje'],
     ['8504.40.90', 'Transformadores eléctricos, convertidores eléctricos estáticos y bobinas de reactancia > Convertidores estáticos > Los demás'],
@@ -21,6 +24,14 @@ const index: NcmSearchIndex = {
 function fakeAi(outputs: unknown[]) {
   let i = 0
   return { run: async () => ({ response: JSON.stringify(outputs[i++] ?? {}) }) }
+}
+
+const exactWatchFacts = {
+  name: 'Fully Automatic Mechanical Watches 42.5MM Green Dial Waterproof 100m Stainless Steel Wristwatch',
+  category: 'Mechanical Watches',
+  material: 'Stainless Steel',
+  functionText: 'Automatic mechanical wristwatch for timekeeping',
+  description: 'Movement: Automatic Mechanical; Case Material: Stainless Steel',
 }
 
 describe('full NCM deterministic retrieval', () => {
@@ -67,9 +78,33 @@ describe('full NCM deterministic retrieval', () => {
     ] }, shortlist)
     expect(ranking.ranking).toHaveLength(1)
   })
+
+  it('chapter-gates conventional wristwatches so chapter 47 is computationally impossible', () => {
+    const result = retrieveNcmCandidates(
+      index,
+      ['reloj de pulsera automatico', 'papel carton reciclado desperdicios'],
+      exactWatchFacts,
+      25,
+    )
+    expect(result.length).toBeGreaterThan(0)
+    expect(result.every((candidate) => candidate.code.startsWith('91'))).toBe(true)
+    expect(result.some((candidate) => candidate.code === '4707.90.00')).toBe(false)
+  })
 })
 
 describe('full NCM AI-constrained classification', () => {
+  it('classifies the exact incident watch as 9102.21.00 without asking AI to choose a chapter', async () => {
+    let aiCalls = 0
+    const ai = { run: async () => { aiCalls += 1; throw new Error('AI should not be called for deterministic watch') } }
+    const result = await classifyFullNcm(index, ai, exactWatchFacts)
+    expect(aiCalls).toBe(0)
+    expect(result.status).toBe('candidate')
+    expect(result.code).toBe('9102.21.00')
+    expect(result.confidence).toBe('medium')
+    expect(result.rationale.join(' ')).toContain('mecánico automático')
+    expect(result.code?.startsWith('47')).toBe(false)
+  })
+
   it('classifies a power adapter using AI vocabulary but only an official shortlist code', async () => {
     const ai = fakeAi([
       { searchTerms: ['convertidor eléctrico estático', 'fuente de alimentación eléctrica'], missingFacts: [] },
@@ -83,24 +118,30 @@ describe('full NCM AI-constrained classification', () => {
     expect(result.missingFacts).toContain('confirmar tensión y tipo de conversión')
   })
 
-  it('ignores a hallucinated AI winner and falls back within the deterministic shortlist', async () => {
+  it('fails closed when an AI-invented winner leaves no trusted rerank', async () => {
     const ai = fakeAi([
       { searchTerms: ['raqueta deportiva', 'bádminton similar'], missingFacts: [] },
       { ranking: [{ code: '1234.56.78', reason: 'hallucinated' }], confidence: 'high' },
     ])
     const result = await classifyFullNcm(index, ai, { name: 'Carbon padel racket', category: 'Padel racket' })
-    expect(result.code).toBe('9506.59.00')
-    expect(result.retrievalMode).toBe('deterministic_fallback')
+    expect(result.status).toBe('missing')
+    expect(result.code).toBeNull()
+    expect(result.retrievalMode).toBe('missing')
     expect(result.confidence).toBe('low')
+    expect(result.tariff).toBeNull()
   })
 
-  it('caps confidence at low when AI and deterministic retrieval disagree', async () => {
+  it('fails closed and releases no tariff when AI and deterministic retrieval disagree', async () => {
     const ai = fakeAi([
       { searchTerms: ['raqueta tenis deportiva', 'raqueta similar bádminton'], missingFacts: [] },
       { ranking: [{ code: '9506.51.00', reason: 'AI prefers tennis' }, { code: '9506.59.00' }], confidence: 'high' },
     ])
     const result = await classifyFullNcm(index, ai, { name: 'ambiguous racket', category: 'racket sport' })
-    if (result.retrievalMode === 'ai_reranked') expect(result.confidence).toBe('low')
+    expect(result.status).toBe('missing')
+    expect(result.code).toBeNull()
+    expect(result.confidence).toBe('low')
+    expect(result.tariff).toBeNull()
+    expect(result.rationale.join(' ')).toContain('FAIL-CLOSED')
   })
 
   it('returns missing rather than inventing when expansion produces no retrievable evidence', async () => {

@@ -123,6 +123,33 @@ function factsText(facts: NcmProductFacts) {
   return [facts.name, facts.category, facts.material, facts.functionText, facts.description].filter(Boolean).join(' ')
 }
 
+function conventionalWristwatchText(facts: NcmProductFacts) {
+  const text = normalizeText(factsText(facts))
+  const smartOrConnected = /\b(smartwatch|smart watch|smart watches|fitness tracker|gps watch|bluetooth watch)\b/.test(text)
+  const accessoryOrPart = /\b(watch band|watch strap|watch bracelet|correa para reloj|pulsera para reloj|watch movement|movement only|mecanismo de reloj|watch parts|partes de reloj)\b/.test(text)
+  const explicitWristwatch = /\b(wristwatch|wrist watch|wristwatches|reloj de pulsera|relojes de pulsera)\b/.test(text)
+  const mechanicalWatch = /\b(watch|watches|reloj|relojes)\b/.test(text) && /\b(mechanical|mecanico|mecanica|mecanicos|mecanicas)\b/.test(text)
+  return !smartOrConnected && !accessoryOrPart && (explicitWristwatch || mechanicalWatch) ? text : null
+}
+
+function automaticMechanicalCommonMetalWristwatch(facts: NcmProductFacts) {
+  const text = conventionalWristwatchText(facts)
+  if (!text) return false
+  const automatic = /\b(automatic|automatico|automatica|automaticos|automaticas)\b/.test(text)
+  const mechanical = /\b(mechanical|mecanico|mecanica|mecanicos|mecanicas)\b/.test(text)
+  const commonMetal = /\b(stainless steel|acero inoxidable|steel case|caja de acero|metal comun)\b/.test(text)
+  const preciousMetal = /\b(gold|oro|platinum|platino|silver|plata|precious metal|metal precioso|plaque|chapado de metal precioso)\b/.test(text)
+  return automatic && mechanical && commonMetal && !preciousMetal
+}
+
+// High-certainty family gates are intentionally conservative. They do not pick an NCM;
+// they make semantically impossible chapters unavailable to retrieval. More families can
+// be added here only with regression coverage.
+function allowedChapterPrefixes(facts: NcmProductFacts): string[] | null {
+  if (conventionalWristwatchText(facts)) return ['91']
+  return null
+}
+
 function toNumber(value: unknown, fallback = 0) {
   const n = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(n) ? n : fallback
@@ -202,6 +229,18 @@ function shortcutClassification(
 function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): FullNcmClassification | null {
   const text = normalizeText(factsText(facts))
 
+  if (automaticMechanicalCommonMetalWristwatch(facts)) {
+    const official = findOfficial(index, '9102.21.00')
+    if (official) {
+      return shortcutClassification(
+        index,
+        official,
+        ['reloj de pulsera', 'automatico', 'mecanico', 'acero inoxidable'],
+        'Producto identificado como reloj de pulsera mecánico automático con evidencia de caja/material de metal común; se excluye la partida 91.01 de caja de metal precioso.',
+      )
+    }
+  }
+
   const isCamera = ['camara', 'camera', 'security camera', 'ip camera', 'wifi camera'].some((term) => text.includes(normalizeText(term)))
   if (isCamera) {
     const official = findOfficial(index, '8525.89.19')
@@ -253,11 +292,13 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
   const queryTokens = [...new Set(rawPhrases.flatMap(tokens))]
   if (queryTokens.length < 2 && phraseNorms.every((phrase) => phrase.split(' ').length < 2)) return []
 
+  const chapterPrefixes = allowedChapterPrefixes(facts)
   const scored: NcmRetrievalCandidate[] = []
   for (const row of index.records) {
     if (!Array.isArray(row) || row.length < 2) continue
     const [code, label] = row
     if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string' || !label.trim()) continue
+    if (chapterPrefixes && !chapterPrefixes.some((prefix) => code.startsWith(prefix))) continue
     const normalizedLabel = normalizeText(label)
     const labelTokens = new Set(tokens(normalizedLabel))
     const matchedTerms: string[] = []
@@ -350,6 +391,10 @@ function deriveConfidence(shortlist: NcmRetrievalCandidate[], ranked: AiRanking)
   const gap = second ? deterministicTop.score - second.score : deterministicTop.score
   if (aiTop === deterministicTop.code && deterministicTop.score >= 38 && gap >= 10 && ranked.confidence === 'high') return 'high'
   if (aiTop === deterministicTop.code && deterministicTop.score >= 22 && gap >= 4 && ranked.confidence !== 'low') return 'medium'
+  // A sole official candidate with meaningful deterministic evidence plus an explicit
+  // HIGH AI agreement is usable at MEDIUM confidence. This preserves narrow, clear
+  // catalog matches without allowing disagreements or weak multi-candidate cases through.
+  if (aiTop === deterministicTop.code && !second && deterministicTop.score >= 12 && ranked.confidence === 'high') return 'medium'
   return 'low'
 }
 
@@ -384,17 +429,43 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   const top = ordered[0]
   const confidence = ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
   const reason = ranked.ranking.find((item) => item.code === top.code)?.reason
-  const tariff = tariffForCode(index, top.code)
+  const combinedMissingFacts = [...new Set([...expansion.missingFacts, ...(ranked.missingFacts || [])])].slice(0, 8)
 
+  if (confidence === 'low') {
+    return {
+      status: 'missing',
+      code: null,
+      label: null,
+      confidence: 'low',
+      alternatives: ordered.slice(0, 4).map(({ code, label, score }) => ({ code, label, score })),
+      missingFacts: [...new Set([...combinedMissingFacts, 'Validar clasificación antes de usar aranceles o economics'])].slice(0, 8),
+      rationale: [
+        'FAIL-CLOSED: la evidencia no alcanza para promover una NCM. Un candidato LOW nunca alimenta aranceles, impuestos ni economics.',
+        ...(allowedChapterPrefixes(facts) ? [`Family gate activo: candidatos limitados al capítulo ${allowedChapterPrefixes(facts)?.join('/')}.`] : []),
+        ...(reason ? [reason] : []),
+        `Retrieval determinístico: ${shortlist[0].code} score ${shortlist[0].score}.`,
+        ...(top.code !== shortlist[0].code ? [`AI rerank discrepó y propuso ${top.code}; la discrepancia queda bloqueada.`] : []),
+      ],
+      searchTerms,
+      sourceDate: index.meta.sourceDate,
+      source: index.meta.source,
+      catalogRecordCount: index.meta.recordCount,
+      retrievalMode: 'missing',
+      tariff: null,
+    }
+  }
+
+  const tariff = tariffForCode(index, top.code)
   return {
     status: 'candidate',
     code: top.code,
     label: top.label,
     confidence,
     alternatives: ordered.slice(1, 4).map(({ code, label, score }) => ({ code, label, score })),
-    missingFacts: [...new Set([...expansion.missingFacts, ...(ranked.missingFacts || [])])].slice(0, 8),
+    missingFacts: combinedMissingFacts,
     rationale: [
       'El candidato pertenece a la snapshot oficial ARCA; el modelo sólo pudo reordenar códigos de la shortlist determinística.',
+      ...(allowedChapterPrefixes(facts) ? [`Family gate activo: candidatos limitados al capítulo ${allowedChapterPrefixes(facts)?.join('/')}.`] : []),
       ...(tariff ? ['Tarifa NCM_APP aplicada automáticamente para economics de screening.'] : []),
       ...(reason ? [reason] : []),
       `Retrieval determinístico: ${shortlist[0].code} score ${shortlist[0].score}.`,

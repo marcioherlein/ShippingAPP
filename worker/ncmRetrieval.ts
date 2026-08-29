@@ -391,6 +391,10 @@ function deriveConfidence(shortlist: NcmRetrievalCandidate[], ranked: AiRanking)
   const gap = second ? deterministicTop.score - second.score : deterministicTop.score
   if (aiTop === deterministicTop.code && deterministicTop.score >= 38 && gap >= 10 && ranked.confidence === 'high') return 'high'
   if (aiTop === deterministicTop.code && deterministicTop.score >= 22 && gap >= 4 && ranked.confidence !== 'low') return 'medium'
+  // A sole official candidate with meaningful deterministic evidence plus an explicit
+  // HIGH AI agreement is usable at MEDIUM confidence. This preserves narrow, clear
+  // catalog matches without allowing disagreements or weak multi-candidate cases through.
+  if (aiTop === deterministicTop.code && !second && deterministicTop.score >= 12 && ranked.confidence === 'high') return 'medium'
   return 'low'
 }
 

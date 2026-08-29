@@ -102,6 +102,9 @@ jobs:
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
           NODE
 
+      - name: Production Alibaba self-scrape smoke test (no Parse.bot)
+        run: node scripts/smoke-production-alibaba-self.mjs
+
       - name: Production opportunity search smoke test
         run: node scripts/smoke-production-opportunity.mjs
 
@@ -110,6 +113,3 @@ jobs:
 
       - name: Production intake smoke test
         run: node scripts/smoke-production-intake.mjs
-
-      - name: Production Alibaba self-scrape smoke test (no Parse.bot)
-        run: node scripts/smoke-production-alibaba-self.mjs

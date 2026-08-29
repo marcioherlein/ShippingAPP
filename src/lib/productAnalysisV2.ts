@@ -1,6 +1,6 @@
 import { analyzeAlibabaUrl, applyAnalysis, type ProductAnalysis } from './productAnalysis'
 import { customsProfileFor, type CustomsProfile } from './customsClassification'
-import { classifyNcmRemote, mergeFullCustomsProfile } from './fullNcmClient'
+import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
 import type { Inputs } from './types'
 
 export type ProductAnalysisV2 = ProductAnalysis & { customs: CustomsProfile }

@@ -2,7 +2,7 @@
 
 Status: Stage 0 baseline
 
-This document records the current API surface before authentication, persistence, metering and billing are introduced. The executable source of truth is `worker/routePolicy.ts`; CI tests detect drift between exact routes implemented in `worker/enrich.ts` / `worker/index.ts` and the policy inventory.
+This document records the current API surface before authentication, persistence, metering and billing are introduced. The executable source of truth is `worker/routePolicy.ts`; CI tests detect drift between exact routes implemented in `worker/router.ts`, `worker/enrich.ts` and `worker/index.ts` and the policy inventory.
 
 ## Current route posture
 
@@ -10,6 +10,7 @@ This document records the current API surface before authentication, persistence
 |---|---|---|---|---:|---|---|
 | `/api/image-proxy` | GET, HEAD | public | public | no | medium | remote product-image host |
 | `/api/runtime-smoke` | GET | operational | internal | no | low | none |
+| `/api/alibaba-native-probe` | POST | operational | internal | no | high | Cloudflare Browser / Alibaba |
 | `/oauth/mercadolibre/callback` | GET | provider callback | provider callback | no | low | Mercado Libre |
 | `/api/mercadolibre/callback` | GET | provider callback | provider callback | no | low | Mercado Libre |
 | `/api/mercadolibre/notifications` | GET, POST | provider webhook | provider webhook | no | low | Mercado Libre |
@@ -28,7 +29,9 @@ This document records the current API surface before authentication, persistence
 
 The expensive computation routes are currently public because ShippingAPP has not yet implemented user authentication. This is accepted only as a pre-SaaS baseline and is explicitly scheduled for Stage 2 (authentication) and Stage 5 (atomic metering).
 
-High-cost routes must not remain public at SaaS launch.
+The native Alibaba probe is a diagnostic/operational route, not a paid-user capability. Its target state is `internal`; it must not remain a general public compute surface at SaaS launch.
+
+High-cost user-facing routes must not remain public at SaaS launch.
 
 ## External provider inventory
 
@@ -36,7 +39,7 @@ High-cost routes must not remain public at SaaS launch.
 Used for product extraction/classification, import analysis and conversational intake. Main risks: uncontrolled compute consumption, provider timeout, malformed model output and accidental propagation of provider errors.
 
 ### Cloudflare Browser
-Used as a fallback/live browser path for Alibaba. Main risks: expensive browser execution, timeout and abuse through repeated requests.
+Used as a fallback/live browser path for Alibaba and by the native Alibaba diagnostic probe. Main risks: expensive browser execution, timeout and abuse through repeated requests.
 
 ### Parse.bot
 Used for Alibaba product/opportunity extraction. `PARSEBOT_API_KEY` is a secret. Provider error messages must be treated as untrusted and must not expose credentials to clients.
@@ -52,7 +55,7 @@ The image proxy retrieves product images. The proxy remains a public capability,
 
 ## Request boundary introduced in Stage 0
 
-`worker/entry.ts` wraps the existing Worker without changing core domain calculations. For `/api/*` and `/oauth/*` it:
+`worker/entry.ts` wraps the latest `worker/router.ts`, preserving its native Alibaba fallback while adding the SaaS request boundary. For `/api/*` and `/oauth/*` it:
 
 1. creates a server-generated UUID request ID;
 2. ignores caller-supplied request IDs;
@@ -68,7 +71,7 @@ The image proxy retrieves product images. The proxy remains a public capability,
 - The 256 KiB boundary is enforced against declared `Content-Length`. A streaming/chunked request without a declared length is not fully bounded by this Stage 0 guard. A full bounded JSON reader can be introduced when protected request parsing is centralized.
 - Mercado Libre's current bootstrap callback displays an authorization code to the browser by design. The code is not logged; the production OAuth lifecycle should later exchange provider codes server-side rather than rely on a manual bootstrap flow.
 - Mercado Libre notification processing currently acknowledges payloads but does not act on them. When business logic is added, signature/authenticity and idempotency validation become mandatory.
-- Operational endpoints are still network-public today. Their target state is `internal`, to be enforced in a later security stage without breaking existing CI/deployment probes.
+- Operational endpoints, including the native Alibaba probe, are still network-public today. Their target state is `internal`, to be enforced in a later security stage without breaking existing CI/deployment probes.
 
 ## Change-control rule
 

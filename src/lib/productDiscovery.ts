@@ -1,3 +1,5 @@
+import { apiFetch } from './apiClient'
+
 export type DiscoveryConstraints = {
   maxUnitPriceUsd: number | null
   maxMoq: number | null
@@ -49,7 +51,7 @@ export type ProductDiscoveryResponse = {
 }
 
 export async function discoverProducts(query: string, userText: string = query): Promise<ProductDiscoveryResponse> {
-  const response = await fetch('/api/opportunity-search', {
+  const response = await apiFetch('/api/opportunity-search', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ query, userText }),

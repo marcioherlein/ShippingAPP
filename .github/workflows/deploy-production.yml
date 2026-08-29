@@ -110,3 +110,6 @@ jobs:
 
       - name: Production intake smoke test
         run: node scripts/smoke-production-intake.mjs
+
+      - name: Production Alibaba self-scrape smoke test (no Parse.bot)
+        run: node scripts/smoke-production-alibaba-self.mjs

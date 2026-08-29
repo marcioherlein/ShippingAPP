@@ -1,0 +1,7 @@
+{
+  "name": "shippingapp-alibaba-probe",
+  "compatibility_date": "2026-08-13",
+  "main": "./worker/entry.ts",
+  "ai": { "binding": "AI" },
+  "browser": { "binding": "BROWSER" }
+}

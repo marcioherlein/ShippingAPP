@@ -20,6 +20,11 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       D1_DATABASE_NAME: shippingapp-db
+      INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      CLERK_JWT_KEY: ${{ secrets.CLERK_JWT_KEY }}
+      CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,6 +41,23 @@ jobs:
           fi
           if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
             echo "::error::Missing GitHub secret CLOUDFLARE_ACCOUNT_ID. Add your Cloudflare account id as a GitHub Actions secret."
+            exit 1
+          fi
+
+      - name: Validate optional auth deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          configured=0
+          [ -n "${CLERK_SECRET_KEY:-}" ] && configured=$((configured + 1))
+          [ -n "${CLERK_JWT_KEY:-}" ] && configured=$((configured + 1))
+          [ -n "${CLERK_PUBLISHABLE_KEY:-}" ] && configured=$((configured + 1))
+          if [ "$configured" -ne 0 ] && [ "$configured" -ne 3 ]; then
+            echo "::error::Clerk deployment configuration is partial. Configure CLERK_SECRET_KEY, CLERK_JWT_KEY and repository variable VITE_CLERK_PUBLISHABLE_KEY together."
+            exit 1
+          fi
+          if [ -n "${INTERNAL_API_TOKEN:-}" ] && [ "${#INTERNAL_API_TOKEN}" -lt 32 ]; then
+            echo "::error::INTERNAL_API_TOKEN must be at least 32 characters."
             exit 1
           fi
 
@@ -70,6 +92,22 @@ jobs:
           node scripts/resolve-production-d1-config.mjs /tmp/d1-info.json wrangler.jsonc .wrangler.production.json "$D1_DATABASE_NAME"
           echo "WRANGLER_PRODUCTION_CONFIG=.wrangler.production.json" >> "$GITHUB_ENV"
 
+      - name: Sync optional auth secrets to Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          put_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | npx --yes wrangler@latest secret put "$name" --config "$WRANGLER_PRODUCTION_CONFIG" >/dev/null
+            fi
+          }
+          put_secret INTERNAL_API_TOKEN "${INTERNAL_API_TOKEN:-}"
+          put_secret CLERK_SECRET_KEY "${CLERK_SECRET_KEY:-}"
+          put_secret CLERK_JWT_KEY "${CLERK_JWT_KEY:-}"
+          put_secret CLERK_PUBLISHABLE_KEY "${CLERK_PUBLISHABLE_KEY:-}"
+
       - name: Deploy to Cloudflare Workers
         run: npx --yes wrangler@latest deploy --config "$WRANGLER_PRODUCTION_CONFIG"
 
@@ -90,11 +128,15 @@ jobs:
           if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Production D1 schema mismatch: ${JSON.stringify(names)}`)
           NODE
 
-      - name: Production Cloudflare smoke test
+      - name: Production privileged runtime smoke test
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS "$PRODUCTION_URL/api/runtime-smoke" > /tmp/production-smoke.json
+          args=(-fsS)
+          if [ -n "${INTERNAL_API_TOKEN:-}" ]; then
+            args+=(-H "x-shippingapp-internal-token: $INTERNAL_API_TOKEN")
+          fi
+          curl "${args[@]}" "$PRODUCTION_URL/api/runtime-smoke" > /tmp/production-smoke.json
           node - <<'NODE'
           const fs = require('node:fs')
           const body = JSON.parse(fs.readFileSync('/tmp/production-smoke.json', 'utf8'))
@@ -112,13 +154,21 @@ jobs:
           NODE
 
       - name: Production Alibaba self-scrape smoke test (no Parse.bot)
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-alibaba-self.mjs
 
       - name: Production opportunity search smoke test
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-opportunity.mjs
 
       - name: Production MercadoLibre benchmark smoke test
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-mercadolibre.mjs
 
       - name: Production intake smoke test
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-intake.mjs

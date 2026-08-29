@@ -1,0 +1,32 @@
+name: Alibaba No-Parse Live Probe
+
+on:
+  push:
+    branches: [test/alibaba-no-parse-probe-worker]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PRODUCTION_URL: https://shippingapp-alibaba-probe.marciofabrizio.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+
+      - name: Deploy isolated probe Worker without D1 or Parse.bot
+        run: npx --yes wrangler@latest deploy --config wrangler.alibaba-probe.jsonc
+
+      - name: Replay live Alibaba products without Parse.bot
+        run: node scripts/smoke-production-alibaba-self.mjs
+
+      - name: Remove isolated probe Worker
+        if: always()
+        run: npx --yes wrangler@latest delete --config wrangler.alibaba-probe.jsonc --force

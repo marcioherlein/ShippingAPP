@@ -5,6 +5,18 @@ import type { Inputs } from './types'
 
 export type ProductAnalysisV2 = ProductAnalysis & { customs: CustomsProfile }
 
+function unclassifiedCustoms(originCountry?: string | null): CustomsProfile {
+  // Ingestion and nomenclature are intentionally separate. Before the user
+  // confirms the product ficha we keep NCM/economics blank even if a seed
+  // classifier could guess from the title.
+  return customsProfileFor('', originCountry || '', '')
+}
+
+export async function ingestAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
+  const base = await analyzeAlibabaUrl(url)
+  return { ...base, customs: unclassifiedCustoms(base.product.originCountry) }
+}
+
 export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<ProductAnalysisV2> {
   const localCustoms = customsProfileFor(base.product.category, base.product.originCountry, base.product.name)
   let customs = localCustoms

@@ -178,6 +178,29 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
     }
   }
 
+  // Defense in depth: even if the worker regresses and returns a tariff-bearing LOW
+  // candidate, the client merge is not allowed to promote it into NCM/economics.
+  if (full.confidence === 'low') {
+    const lowAlternative: NcmCandidate = {
+      code: full.code,
+      description: full.label,
+      dutyRatePct: null,
+      score: 0,
+      reasons: ['Candidato full-catalog LOW retenido; no apto para economics.'],
+      simOpening: null,
+    }
+    return {
+      ...local,
+      alternatives: addUniqueAlternative([...local.alternatives], lowAlternative).slice(0, 4),
+      missingFacts: [...new Set([...local.missingFacts, ...full.missingFacts, 'Validar candidato full-catalog LOW antes de usar aranceles'])],
+      rationale: [...local.rationale, ...full.rationale, `FAIL-CLOSED CLIENT: ${full.code} llegó con confidence LOW; no se promueve a NCM ni se aplica su tarifa.`],
+      source: `${local.source} Full-catalog devolvió ${full.code} con confidence LOW; retenido como alternativa, economics sin cambios.`,
+      catalogScope: `Full ARCA snapshot (${full.catalogRecordCount} NCM) + ${local.catalogScope}`,
+      catalogSourceDate: full.sourceDate || local.catalogSourceDate,
+      reviewedAt: full.sourceDate || local.reviewedAt,
+    }
+  }
+
   const localStrong = !!local.ncmCandidate && strong(local.classificationConfidence)
   const fullStrong = strong(full.confidence)
 

@@ -23,7 +23,8 @@ function usableText(value, rejected = []) {
   return !rejected.some((item) => normalized === item.toLowerCase())
 }
 
-function summarizeFacts(facts = {}) {
+function summarizeFacts(input) {
+  const facts = input && typeof input === 'object' ? input : {}
   const signals = {
     identity: usableText(facts.name, ['Producto Alibaba']),
     category: usableText(facts.category, ['Sin clasificar']),
@@ -49,19 +50,33 @@ function summarizeFacts(facts = {}) {
 }
 
 async function probe(path, url) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url }),
-  })
-  let body = null
-  try { body = await response.json() } catch { body = null }
-  return { ok: response.ok, status: response.status, body }
+  try {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+    let body = null
+    try { body = await response.json() } catch { body = null }
+    return { ok: response.ok, status: response.status, body, error: null }
+  } catch (error) {
+    return {
+      ok: false,
+      status: null,
+      body: null,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+function warningsOf(probeResult) {
+  const warnings = probeResult?.body?.warnings
+  return Array.isArray(warnings) ? warnings.map(String).slice(0, 8) : probeResult?.error ? [probeResult.error] : []
 }
 
 function mergeBest(direct, native) {
-  const d = direct?.body?.facts || {}
-  const n = native?.body?.facts || {}
+  const d = direct?.body?.facts && typeof direct.body.facts === 'object' ? direct.body.facts : {}
+  const n = native?.body?.facts && typeof native.body.facts === 'object' ? native.body.facts : {}
   return {
     name: d.name || n.name || null,
     category: d.category || d.categoryPath?.at?.(-1) || n.category || n.categoryPath?.at?.(-1) || null,
@@ -78,7 +93,7 @@ function mergeBest(direct, native) {
 const results = []
 for (const testCase of cases) {
   const direct = await probe('/api/alibaba-direct-probe', testCase.url)
-  const directSummary = summarizeFacts(direct.body?.facts)
+  const directSummary = summarizeFacts(direct?.body?.facts)
 
   let native = null
   if (!direct.ok || directSummary.count < 7) {
@@ -103,8 +118,16 @@ for (const testCase of cases) {
     identityPass,
     completeFicha,
     fallback,
-    direct: { status: direct.status, signals: directSummary.count },
-    native: native ? { status: native.status, signals: summarizeFacts(native.body?.facts).count } : null,
+    direct: {
+      status: direct.status,
+      signals: directSummary.count,
+      warnings: warningsOf(direct),
+    },
+    native: native ? {
+      status: native.status,
+      signals: summarizeFacts(native?.body?.facts).count,
+      warnings: warningsOf(native),
+    } : null,
     combined: summary,
   })
 }
@@ -130,8 +153,8 @@ const report = {
 
 console.log(JSON.stringify(report, null, 2))
 
-// Availability is allowed to degrade to the mandatory user-confirmation gate,
-// but a readable page must never be accepted with the wrong product identity.
+// Availability may degrade to mandatory user confirmation. A readable page,
+// however, must never be accepted under the wrong merchandise identity.
 if (catastrophic.length) {
   throw new Error(`Alibaba self-scrape identity failure: ${catastrophic.map((item) => item.id).join(', ')}`)
 }

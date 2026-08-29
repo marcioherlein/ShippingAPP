@@ -20,6 +20,7 @@ export type AlibabaDirectFacts = {
 }
 
 type JsonObject = Record<string, unknown>
+type ScoredObject = { object: JsonObject; score: number }
 
 const PRODUCT_KEYS = new Set([
   'productid', 'product_id', 'subject', 'producttitle', 'product_title', 'productname', 'product_name',
@@ -40,7 +41,12 @@ function decodeHtml(value: string) {
 
 function cleanString(value: unknown, max = 800) {
   if (typeof value !== 'string') return null
-  const normalized = decodeHtml(value).replace(/\\u0026/g, '&').replace(/\\u003c/gi, '<').replace(/\\u003e/gi, '>').replace(/\s+/g, ' ').trim()
+  const normalized = decodeHtml(value)
+    .replace(/\\u0026/g, '&')
+    .replace(/\\u003c/gi, '<')
+    .replace(/\\u003e/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
   return normalized ? normalized.slice(0, max) : null
 }
 
@@ -84,6 +90,10 @@ function visibleText(html: string) {
     .slice(0, 30000)
 }
 
+function parseJsonSafe(value: string) {
+  try { return JSON.parse(value) } catch { return null }
+}
+
 function findBalancedJson(source: string, start: number) {
   const opener = source[start]
   if (opener !== '{' && opener !== '[') return null
@@ -112,14 +122,9 @@ function findBalancedJson(source: string, start: number) {
   return null
 }
 
-function parseJsonSafe(value: string) {
-  try { return JSON.parse(value) } catch { return null }
-}
-
 function extractJsonRoots(html: string) {
   const roots: unknown[] = []
-  const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)]
-  for (const script of scripts.slice(0, 160)) {
+  for (const script of [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)].slice(0, 160)) {
     const attrs = script[1] || ''
     const body = (script[2] || '').trim()
     if (!body || body.length > 1_500_000) continue
@@ -128,26 +133,18 @@ function extractJsonRoots(html: string) {
       if (parsed) roots.push(parsed)
       continue
     }
-
     const assignment = body.match(/(?:window\.)?[A-Za-z_$][\w$.[\]"']*\s*=\s*([{[])/)
-    if (assignment?.index !== undefined) {
-      const jsonStart = body.indexOf(assignment[1], assignment.index)
-      const candidate = findBalancedJson(body, jsonStart)
-      const parsed = candidate ? parseJsonSafe(candidate) : null
-      if (parsed) roots.push(parsed)
-    }
+    if (assignment?.index === undefined) continue
+    const jsonStart = body.indexOf(assignment[1], assignment.index)
+    const candidate = findBalancedJson(body, jsonStart)
+    const parsed = candidate ? parseJsonSafe(candidate) : null
+    if (parsed) roots.push(parsed)
   }
   return roots
 }
 
-function objectScore(value: JsonObject) {
-  let score = 0
-  for (const key of Object.keys(value)) if (PRODUCT_KEYS.has(normalizeKey(key))) score += 1
-  return score
-}
-
-function collectProductObjects(root: unknown) {
-  const results: Array<{ object: JsonObject; score: number }> = []
+function collectObjects(root: unknown, include: (object: JsonObject) => number | null) {
+  const results: ScoredObject[] = []
   const queue: unknown[] = [root]
   const seen = new Set<object>()
   let visited = 0
@@ -162,14 +159,36 @@ function collectProductObjects(root: unknown) {
       continue
     }
     const object = current as JsonObject
-    const score = objectScore(object)
-    if (score > 0) results.push({ object, score })
+    const score = include(object)
+    if (score !== null) results.push({ object, score })
     for (const child of Object.values(object)) if (child && typeof child === 'object') queue.push(child)
   }
   return results.sort((a, b) => b.score - a.score)
 }
 
-function firstValue(objects: Array<{ object: JsonObject }>, keys: string[]) {
+function collectProductObjects(root: unknown) {
+  return collectObjects(root, (object) => {
+    let score = 0
+    for (const key of Object.keys(object)) if (PRODUCT_KEYS.has(normalizeKey(key))) score += 1
+    return score > 0 ? score : null
+  })
+}
+
+function collectJsonLdProductObjects(root: unknown) {
+  const productRoots = collectObjects(root, (object) => {
+    const values = Array.isArray(object['@type']) ? object['@type'] : [object['@type']]
+    return values.some((value) => String(value || '').toLowerCase() === 'product') ? 100 : null
+  })
+  const result: ScoredObject[] = []
+  for (const product of productRoots) {
+    result.push(product)
+    const descendants = collectObjects(product.object, (object) => object === product.object ? null : 90)
+    result.push(...descendants)
+  }
+  return result.sort((a, b) => b.score - a.score)
+}
+
+function firstValue(objects: ScoredObject[], keys: string[]) {
   const wanted = new Set(keys.map(normalizeKey))
   for (const { object } of objects) {
     for (const [key, value] of Object.entries(object)) {
@@ -181,7 +200,10 @@ function firstValue(objects: Array<{ object: JsonObject }>, keys: string[]) {
 
 function stringArray(value: unknown) {
   if (!Array.isArray(value)) return []
-  return value.map((item) => cleanString(typeof item === 'object' && item ? (item as any).name ?? (item as any).title ?? (item as any).value : item, 180)).filter((item): item is string => Boolean(item)).slice(0, 20)
+  return value
+    .map((item) => cleanString(typeof item === 'object' && item ? (item as any).name ?? (item as any).title ?? (item as any).value : item, 180))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 20)
 }
 
 function normalizeWeightKg(value: unknown) {
@@ -219,7 +241,7 @@ function normalizeVolumeCbm(value: unknown) {
   return amount
 }
 
-function extractSpecs(html: string, objects: Array<{ object: JsonObject }>) {
+function extractSpecs(html: string, objects: ScoredObject[]) {
   const specs: Array<{ name: string; value: string }> = []
   const dedupe = new Set<string>()
   const push = (nameValue: unknown, valueValue: unknown) => {
@@ -232,10 +254,9 @@ function extractSpecs(html: string, objects: Array<{ object: JsonObject }>) {
     specs.push({ name, value })
   }
 
-  for (const { object } of objects.slice(0, 120)) {
+  for (const { object } of objects.slice(0, 160)) {
     for (const [key, value] of Object.entries(object)) {
-      const normalized = normalizeKey(key)
-      if (!['specifications', 'specification', 'specs', 'attributes', 'productattributes'].includes(normalized)) continue
+      if (!['specifications', 'specification', 'specs', 'attributes', 'productattributes'].includes(normalizeKey(key))) continue
       if (Array.isArray(value)) {
         for (const item of value.slice(0, 80)) {
           if (!item || typeof item !== 'object') continue
@@ -250,15 +271,19 @@ function extractSpecs(html: string, objects: Array<{ object: JsonObject }>) {
 
   if (!specs.length) {
     const text = visibleText(html)
-    const labelPattern = /(Place of Origin|Country of Origin|Material|Movement Brand|Movement|Product Type|Type|Function)\s*[:：]\s*([^|;]{2,120})/gi
-    for (const match of text.matchAll(labelPattern)) push(match[1], match[2])
+    const pattern = /(Place of Origin|Country of Origin|Material|Movement Brand|Movement|Product Type|Type|Function)\s*[:：]\s*([^|;]{2,120})/gi
+    for (const match of text.matchAll(pattern)) push(match[1], match[2])
   }
   return specs.slice(0, 80)
 }
 
 function specValue(specs: Array<{ name: string; value: string }>, names: string[]) {
-  const wanted = new Set(names.map(normalizeSpecName))
-  return specs.find((spec) => wanted.has(normalizeSpecName(spec.name)))?.value || null
+  for (const name of names) {
+    const wanted = normalizeSpecName(name)
+    const match = specs.find((spec) => normalizeSpecName(spec.name) === wanted)
+    if (match) return match.value
+  }
+  return null
 }
 
 function labelledNumber(text: string, patterns: RegExp[]) {
@@ -271,14 +296,12 @@ function labelledNumber(text: string, patterns: RegExp[]) {
 
 export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirectFacts {
   const roots = extractJsonRoots(html)
-  const objects = roots.flatMap(collectProductObjects)
-  const specs = extractSpecs(html, objects)
+  const jsonLdObjects = roots.flatMap(collectJsonLdProductObjects)
+  const productObjects = roots.flatMap(collectProductObjects)
+  const allObjects = [...jsonLdObjects, ...productObjects]
+  const specs = extractSpecs(html, allObjects)
   const evidence: string[] = []
   const text = visibleText(html)
-
-  const jsonLdRoots = roots.filter((root: any) => JSON.stringify(root).includes('"@type"'))
-  const jsonLdObjects = jsonLdRoots.flatMap(collectProductObjects)
-  const allObjects = [...jsonLdObjects, ...objects]
 
   const nameValue = firstValue(allObjects, ['productTitle', 'product_title', 'subject', 'productName', 'product_name', 'name', 'title'])
   const metaTitle = metaValue(html, 'og:title') || metaValue(html, 'twitter:title')
@@ -293,10 +316,7 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
   if (category || categoryPath.length) evidence.push('category')
 
   let unitPriceUsd = positiveNumber(firstValue(allObjects, ['priceValue', 'price_value', 'minPrice', 'min_price', 'lowPrice', 'salePrice', 'unitPrice', 'unit_price', 'price']))
-  if (!unitPriceUsd) {
-    const priceText = text.match(/(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)/i)?.[1]
-    unitPriceUsd = positiveNumber(priceText)
-  }
+  if (!unitPriceUsd) unitPriceUsd = positiveNumber(text.match(/(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)/i)?.[1])
   if (unitPriceUsd) evidence.push('price')
 
   let moq = positiveNumber(firstValue(allObjects, ['moq', 'minimumOrderQuantity', 'minimum_order_quantity', 'minOrderQuantity', 'min_order_quantity', 'minOrder', 'min_order']))
@@ -326,7 +346,7 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
   if (originCountry) evidence.push('origin')
 
   const material = specValue(specs, ['material', 'case material', 'main material'])
-  const functionText = specValue(specs, ['function', 'product type', 'type', 'movement'])
+  const functionText = specValue(specs, ['product type']) || specValue(specs, ['function']) || specValue(specs, ['type']) || specValue(specs, ['movement'])
   if (material) evidence.push('material')
   if (functionText) evidence.push('function')
 
@@ -347,7 +367,10 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
 
   const descriptionMeta = metaValue(html, 'og:description') || metaValue(html, 'description')
   const specsText = specs.length ? `Specifications: ${specs.slice(0, 18).map((spec) => `${spec.name}: ${spec.value}`).join('; ')}` : null
-  const description = [descriptionMeta, categoryPath.length ? `Category path: ${categoryPath.join(' > ')}` : null, specsText].filter(Boolean).join(' · ').slice(0, 2400) || null
+  const description = [descriptionMeta, categoryPath.length ? `Category path: ${categoryPath.join(' > ')}` : null, specsText]
+    .filter(Boolean)
+    .join(' · ')
+    .slice(0, 2400) || null
 
   return {
     name,

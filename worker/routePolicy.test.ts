@@ -4,7 +4,7 @@ import { API_ROUTE_POLICIES, resolveRoutePolicy } from './routePolicy'
 
 function exactRoutesFromSource(path: string) {
   const source = readFileSync(path, 'utf8')
-  const matches = [...source.matchAll(/url\.pathname\s*(?:===|!==)\s*['"]([^'"]+)['"]/g)]
+  const matches = [...source.matchAll(/\b[A-Za-z_$][\w$]*\.pathname\s*(?:===|!==)\s*['"]([^'"]+)['"]/g)]
   return matches.map((match) => match[1]).filter((path) => path.startsWith('/api/') || path.startsWith('/oauth/'))
 }
 
@@ -16,6 +16,7 @@ describe('SaaS API route inventory', () => {
 
   it('classifies every exact API/OAuth route currently implemented', () => {
     const implemented = new Set([
+      ...exactRoutesFromSource('worker/router.ts'),
       ...exactRoutesFromSource('worker/enrich.ts'),
       ...exactRoutesFromSource('worker/index.ts'),
     ])
@@ -24,17 +25,18 @@ describe('SaaS API route inventory', () => {
     expect([...implemented].sort()).toEqual([...classified].sort())
   })
 
-  it('marks every high-cost product computation for future authentication', () => {
+  it('keeps every high-cost route away from a public target state', () => {
     const highCost = API_ROUTE_POLICIES.filter((route) => route.costRisk === 'high')
     expect(highCost.length).toBeGreaterThan(0)
     for (const route of highCost) {
-      expect(route.targetAccess).toBe('authenticated')
-      expect(route.targetMetered).toBe(true)
+      expect(['authenticated', 'internal']).toContain(route.targetAccess)
+      if (route.targetAccess === 'authenticated') expect(route.targetMetered).toBe(true)
     }
   })
 
   it('resolves only declared method/path pairs', () => {
     expect(resolveRoutePolicy('/api/analyze', 'POST')?.id).toBe('analyze')
+    expect(resolveRoutePolicy('/api/alibaba-native-probe', 'POST')?.targetAccess).toBe('internal')
     expect(resolveRoutePolicy('/api/analyze', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/not-real', 'POST')).toBeNull()
   })

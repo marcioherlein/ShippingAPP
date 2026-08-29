@@ -40,8 +40,9 @@ describe('request safety context', () => {
     expect(text).toContain('[REDACTED]')
   })
 
-  it('does not expose an uncaught exception message or secret', async () => {
-    quietConsole()
+  it('does not expose or log an uncaught exception message or secret', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const secret = 'refresh-token-should-never-leak'
     const response = await withRequestContext(
       new Request('https://shipping.test/api/intake', { method: 'POST' }),
@@ -54,6 +55,11 @@ describe('request safety context', () => {
     expect(text).not.toContain(secret)
     expect(text).not.toContain('upstream failed')
     expect(text).toContain('Internal server error')
+
+    const logs = [...info.mock.calls, ...errorLog.mock.calls].flat().join(' ')
+    expect(logs).not.toContain(secret)
+    expect(logs).not.toContain('upstream failed')
+    expect(logs).toContain('Error')
   })
 
   it('rejects a declared oversized API body before invoking the expensive handler', async () => {

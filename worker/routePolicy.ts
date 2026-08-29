@@ -38,6 +38,17 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     notes: 'Used by GitHub Actions production smoke checks. Keep response free of secrets.',
   },
   {
+    id: 'alibaba-native-probe',
+    path: '/api/alibaba-native-probe',
+    methods: ['POST'],
+    currentAccess: 'operational',
+    targetAccess: 'internal',
+    targetMetered: false,
+    costRisk: 'high',
+    externalProviders: ['Cloudflare Browser / Alibaba'],
+    notes: 'Diagnostic route that deliberately bypasses Parse.bot. Must not remain a public production compute surface.',
+  },
+  {
     id: 'mercadolibre-oauth-callback',
     path: '/oauth/mercadolibre/callback',
     methods: ['GET'],

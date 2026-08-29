@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { analyzeAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
+import { ingestAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import { isAlibabaUrl } from '../lib/productIntake'
 import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
@@ -10,6 +10,7 @@ import HotProductsSection from './HotProductsSection'
 
 type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
+  onManualFallback?: (sourceUrl?: string) => void
   analysis?: ProductAnalysisV2 | null
   mode?: 'intake' | 'discovery'
   deferCalculation?: boolean
@@ -26,6 +27,7 @@ const starters = [
 
 function readLabel(analysis: ProductAnalysisV2) {
   if (analysis.sourceUrl.startsWith('chat://')) return 'Datos aportados en conversación'
+  if (analysis.sourceUrl.startsWith('manual://')) return 'Carga manual'
   const mode = analysis.sourceRead?.mode
   if (mode === 'parsebot') return 'Alibaba · datos estructurados'
   if (mode === 'direct') return 'Alibaba · lectura directa'
@@ -43,7 +45,7 @@ function units(value?: number | null) {
   return value ? `${value} u.` : 'MOQ pendiente'
 }
 
-export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', deferCalculation = false }: Props) {
+export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mode = 'intake', deferCalculation = false }: Props) {
   const [draft, setDraft] = useState('')
   const [messages, setMessages] = useState<ThreadMessage[]>([])
   const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(null)
@@ -51,6 +53,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
   const [selectedCachedId, setSelectedCachedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(null)
   const cachedProducts = useMemo(() => getCachedHotProducts(6), [])
 
   const constraintChecks = useMemo(
@@ -59,20 +62,22 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
   )
 
   const analyzeRealUrl = async (url: string, fromDiscovery = false, constraints: DiscoveryConstraints | null = null) => {
-    const next = await analyzeAlibabaUrlV2(url)
+    const next = await ingestAlibabaUrlV2(url)
     setSelectedConstraints(fromDiscovery ? constraints : null)
+    setFailedSourceUrl(null)
     onAnalysis(next)
     setDiscovery(null)
     setMessages((current) => [...current, {
       role: 'assistant',
       content: fromDiscovery
-        ? 'Producto seleccionado. Leí la publicación y completé los datos visibles. Confirmalos abajo antes de iniciar el cálculo.'
-        : 'Producto ingerido desde Alibaba. Revisá los datos y confirmalos antes de iniciar clasificación, aranceles y costos.',
+        ? 'Producto seleccionado. Leí lo que pude de la publicación. Confirmá y completá la ficha abajo antes de iniciar NCM o cálculo.'
+        : 'Producto ingerido desde Alibaba. Revisá y completá la ficha abajo; la clasificación NCM empieza recién después de tu confirmación.',
     }])
   }
 
   const runDiscoverySearch = async (query: string, userText: string) => {
     setSelectedCachedId(null)
+    setFailedSourceUrl(null)
     setMessages((current) => [...current, {
       role: 'assistant',
       content: 'Buscando en Alibaba. Si una fuente no responde, ShippingAPP prueba automáticamente una alternativa.',
@@ -82,7 +87,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
     setMessages((current) => [...current, {
       role: 'assistant',
       content: live.status === 'live'
-        ? `Encontré ${live.results.length} candidatos reales. Elegí uno y abro su publicación para validar precio, MOQ y logística antes de cotizar.`
+        ? `Encontré ${live.results.length} candidatos reales. Elegí uno; después confirmamos precio, MOQ, peso, volumen e identidad antes de clasificar.`
         : live.note,
     }])
   }
@@ -95,6 +100,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
     setDraft('')
     setLoading(true)
     setError('')
+    setFailedSourceUrl(null)
     setDiscovery(null)
     setSelectedConstraints(null)
     setSelectedCachedId(null)
@@ -114,11 +120,10 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
         return
       }
 
-      // This component is the product finder. Any non-URL product text means
-      // "search Alibaba" regardless of which legacy entry path opened it.
       await runDiscoverySearch(query, value)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos buscar ese producto en este momento.')
+      if (isAlibabaUrl(value)) setFailedSourceUrl(value)
+      setError(err instanceof Error ? err.message : 'No pudimos leer ese producto en este momento.')
     } finally {
       setLoading(false)
     }
@@ -128,10 +133,12 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
     if (loading || !discovery) return
     setLoading(true)
     setError('')
+    setFailedSourceUrl(null)
     setSelectedCachedId(null)
     try {
       await analyzeRealUrl(url, true, discovery.constraints)
     } catch (err) {
+      setFailedSourceUrl(url)
       setError(err instanceof Error ? err.message : 'No pudimos analizar el producto seleccionado.')
     } finally {
       setLoading(false)
@@ -143,16 +150,18 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
     setSelectedCachedId(product.id)
     setLoading(true)
     setError('')
+    setFailedSourceUrl(null)
     setDiscovery(null)
     setSelectedConstraints(null)
     setMessages((current) => [...current, {
       role: 'assistant',
-      content: 'Abriendo la oportunidad cacheada. No hago una búsqueda nueva: valido directamente la publicación real antes de cotizar.',
+      content: 'Abriendo la oportunidad cacheada. Valido la publicación real; cualquier faltante quedará editable antes de NCM.',
     }])
     try {
       await analyzeRealUrl(product.productUrl, true, null)
     } catch (err) {
       setSelectedCachedId(null)
+      setFailedSourceUrl(product.productUrl)
       setError(err instanceof Error ? err.message : 'No pudimos abrir la oportunidad cacheada.')
     } finally {
       setLoading(false)
@@ -183,7 +192,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
     <div className="analyzer-copy">
       <span className="eyebrow">Alibaba live search</span>
       <h1>Encontrá el producto que querés importar.</h1>
-      <p>Buscá en Alibaba con lenguaje natural o pegá una publicación concreta. Si preferís explorar, abajo tenés oportunidades cacheadas que no disparan una búsqueda nueva.</p>
+      <p>Buscá en Alibaba con lenguaje natural o pegá una publicación concreta. ShippingAPP intenta completar la ficha automáticamente, pero nunca usa un faltante como supuesto silencioso.</p>
     </div>
 
     {messages.length === 0 && <div className="analyst-suggestions intake-suggestions">
@@ -210,7 +219,10 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
         />
         <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Buscando…' : 'Buscar en Alibaba'}</button>
       </div>
-      {error && <p className="analyzer-error">{error}</p>}
+      {error && <div className="analyzer-error manual-fallback-error">
+        <span>{error}</span>
+        {failedSourceUrl && onManualFallback && <button type="button" onClick={() => onManualFallback(failedSourceUrl)}>Completar ficha manualmente</button>}
+      </div>}
     </form>
 
     {discovery && <section className="discovery-card">
@@ -236,8 +248,8 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
           </div>
           {(item.supplierBadges?.length || item.sellingPoints?.length) ? <p>Señales: {[...(item.sellingPoints || []), ...(item.supplierBadges || [])].slice(0, 5).join(' · ')}</p> : null}
           {item.missingFacts?.length
-            ? <p>Falta validar: {item.missingFacts.join(' · ')}. Abrí el producto para análisis profundo.</p>
-            : <p>Datos comerciales principales presentes desde búsqueda. Igual abrimos la publicación para validar specs y logística.</p>}
+            ? <p>Falta validar: {item.missingFacts.join(' · ')}. Al elegirlo, la ficha te pedirá completar lo que falte.</p>
+            : <p>Datos comerciales principales presentes desde búsqueda. Igual confirmamos la ficha antes de NCM.</p>}
           <div className="discovery-actions">
             <a href={item.url} target="_blank" rel="noreferrer">Ver en Alibaba</a>
             <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>{deferCalculation ? 'Elegir producto' : 'Elegir y cotizar'}</button>
@@ -252,7 +264,7 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
     {!analysis && <div className="finder-cached-opportunities">
       <div className="finder-cache-intro">
         <span className="eyebrow">O explorar sin buscar</span>
-        <p>Estas oportunidades vienen del cache local. Elegir una no inicia una búsqueda nueva: ShippingAPP abre la publicación real y valida sus datos antes de cotizar.</p>
+        <p>Estas oportunidades vienen del cache local. Elegir una no inicia una búsqueda nueva: ShippingAPP abre la publicación real y después te pide confirmar cualquier dato faltante.</p>
       </div>
       <HotProductsSection
         products={cachedProducts}
@@ -263,8 +275,8 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
 
     {analysis && !loading && <div className="extraction-card">
       <div className="extraction-top">
-        <div><span className="eyebrow">Ingesta de producto</span><h2>{analysis.product.name}</h2><p>{analysis.product.category}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div>
-        <span className="confidence">{analysis.confidence.overall}% datos</span>
+        <div><span className="eyebrow">Ingesta de producto</span><h2>{analysis.product.name || 'Producto por completar'}</h2><p>{analysis.product.category || 'Categoría pendiente'}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div>
+        <span className="confidence">{analysis.confidence.overall}% auto</span>
       </div>
       <div className="fact-grid">
         <div><span>Precio proveedor</span><b>{analysis.product.unitPriceUsd ? `USD ${analysis.product.unitPriceUsd.toFixed(2)}` : 'No verificado'}</b></div>
@@ -286,10 +298,10 @@ export default function UrlAnalyzer({ onAnalysis, analysis, mode = 'intake', def
       </div>}
 
       {analysis.sourceRead && <div className="customs-note"><b>{analysis.sourceRead.mode.toUpperCase()}</b><span>{analysis.sourceRead.reason}</span></div>}
-      {conversational && <div className="customs-note"><b>USER-SUPPLIED</b><span>Los datos comerciales provienen de la conversación y no fueron verificados contra proveedor/proforma.</span></div>}
+      {conversational && <div className="customs-note"><b>USER-SUPPLIED</b><span>Los datos comerciales provienen de la conversación y deben confirmarse antes de la corrida.</span></div>}
       {deferCalculation
-        ? <div className="customs-note"><b>INGESTA COMPLETA</b><span>Confirmá el producto en el siguiente paso. La clasificación NCM y los aranceles se validan en el pipeline de cálculo.</span></div>
-        : <div className="customs-note"><b>{classificationLabel}</b><span>{analysis.customs.source} · Revisado {analysis.customs.reviewedAt}. Intervenciones: verificar en CIVUCE/VUCE.</span></div>}
+        ? <div className="customs-note"><b>INGESTA, NO COTIZACIÓN</b><span>Lo leído automáticamente es sólo un borrador. Confirmá/completá la ficha abajo; recién después se ejecutan NCM y aranceles.</span></div>
+        : <div className="customs-note"><b>{classificationLabel}</b><span>{analysis.customs.source} · Revisado {analysis.customs.reviewedAt}.</span></div>}
       <details className="assumptions"><summary>Ver supuestos y calidad de datos</summary><ul>{analysis.assumptions.map((item) => <li key={item}>{item}</li>)}</ul></details>
     </div>}
   </section>

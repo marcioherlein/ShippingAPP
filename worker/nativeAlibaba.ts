@@ -65,6 +65,16 @@ function productIdFromUrl(url: URL) {
   return url.pathname.match(/_(\d{8,})\.html/i)?.[1] || null
 }
 
+function productTitleFromUrl(url: URL) {
+  const segment = url.pathname.split('/').filter(Boolean).at(-1) || ''
+  const withoutId = segment.replace(/_\d{8,}\.html$/i, '').replace(/\.html$/i, '')
+  let decoded = withoutId
+  try { decoded = decodeURIComponent(withoutId) } catch { /* keep encoded slug */ }
+  const title = decoded.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!title || /^(?:product|product detail|detail)$/i.test(title)) return null
+  return title.slice(0, 700)
+}
+
 function normalizeResult(raw: any, url: URL): ParsebotAlibabaFacts {
   const root = raw && typeof raw === 'object' ? raw : {}
   const categoryPath = Array.isArray(root.category_path)
@@ -84,13 +94,18 @@ function normalizeResult(raw: any, url: URL): ParsebotAlibabaFacts {
   }).filter(Boolean)
   const priceTiers = Array.isArray(root.price_tiers) ? root.price_tiers : []
   const firstTierPrice = priceTiers.map((tier: any) => positiveNumber(tier?.price_value ?? tier?.unit_price)).find(Boolean) || null
+  const firstTierMoq = priceTiers
+    .map((tier: any) => positiveNumber(tier?.min_quantity ?? tier?.minQuantity ?? tier?.min_qty))
+    .filter((value: number | null): value is number => Boolean(value))
+    .sort((a: number, b: number) => a - b)[0] || null
+  const categoryFromSpecs = cleanString(specValue(specs, ['product type', 'type']), 250)
 
   return {
-    name: cleanString(root.title, 700),
-    category: cleanString(root.product_type, 250) || categoryPath[categoryPath.length - 1] || null,
+    name: cleanString(root.title, 700) || productTitleFromUrl(url),
+    category: cleanString(root.product_type, 250) || categoryPath[categoryPath.length - 1] || categoryFromSpecs || null,
     categoryPath,
     unitPriceUsd: positiveNumber(root.unit_price) || firstTierPrice,
-    moq: positiveNumber(root.moq),
+    moq: positiveNumber(root.moq) || firstTierMoq,
     packedWeightKg: weightKg(root.unit_weight) || weightKg(packaging.package_weight),
     volumeCbm: explicitVolume || dimensionsToCbm(unitSize),
     unitSize,
@@ -163,21 +178,37 @@ const responseSchema = {
   },
 }
 
+function browserRequest(url: URL) {
+  return {
+    url: url.toString(),
+    prompt: [
+      'Extract ONLY facts explicitly visible or embedded in this Alibaba product page. Never infer or estimate missing values.',
+      'Inspect the rendered offer, structured page data, breadcrumb, product attributes/specifications, price tiers and logistics/package information when present.',
+      'Prefer logistics/package facts for unit_weight, unit_volume and unit_size; do not confuse product physical dimensions with packed shipping dimensions.',
+      'Use category_path for the Alibaba breadcrumb from broadest to most specific. product_type should be the concrete merchandise type, not a marketing phrase.',
+      'If MOQ is not separately labelled but a price tier explicitly starts at a minimum quantity, return that minimum in price_tiers.',
+      'Return HS code only if Alibaba or the supplier explicitly lists it. Return supplier_country separately from product origin.',
+      'For specifications include useful technical attributes such as Product Type, Type, movement, material, function, Place of Origin, model, power, composition or use.',
+      'If a requested value is absent, return null or an empty array. Do not fill it from general knowledge.',
+    ].join(' '),
+    response_format: { type: 'json_schema', json_schema: responseSchema },
+  }
+}
+
+async function wait(ms: number) {
+  await new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
 export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promise<NativeAlibabaResult> {
   let response: Response
+  let retried429 = false
   try {
-    response = await browser.quickAction('json', {
-      url: url.toString(),
-      prompt: [
-        'Extract ONLY facts explicitly visible or embedded in this Alibaba product page. Never infer or estimate missing values.',
-        'Prefer logistics/package facts for unit_weight, unit_volume and unit_size; do not confuse product physical dimensions with packed shipping dimensions.',
-        'Use category_path for the Alibaba breadcrumb from broadest to most specific. product_type should be the concrete merchandise type, not a marketing phrase.',
-        'Return HS code only if Alibaba or the supplier explicitly lists it. Return supplier_country separately from product origin.',
-        'For specifications include useful technical attributes such as type, movement, material, function, place of origin, model, power, composition or use.',
-        'If a requested value is absent, return null or an empty array. Do not fill it from general knowledge.',
-      ].join(' '),
-      response_format: { type: 'json_schema', json_schema: responseSchema },
-    })
+    response = await browser.quickAction('json', browserRequest(url))
+    if (response.status === 429) {
+      retried429 = true
+      await wait(750)
+      response = await browser.quickAction('json', browserRequest(url))
+    }
   } catch (error) {
     return {
       status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: null,
@@ -189,7 +220,7 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
   if (!response.ok) {
     return {
       status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: ms, httpStatus: response.status,
-      warnings: [`Browser Run JSON returned HTTP ${response.status}.`],
+      warnings: [`Browser Run JSON returned HTTP ${response.status}${retried429 ? ' after one bounded retry' : ''}.`],
     }
   }
 
@@ -208,6 +239,7 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
   }
 
   const warnings: string[] = []
+  if (retried429) warnings.push('Browser Run recibió HTTP 429 en el primer intento y recuperó la publicación en un único retry acotado.')
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por Alibaba; debe confirmarlo el usuario.')
   if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por Alibaba; debe confirmarlo el usuario.')
   if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto; supplier_country no se usa como sustituto.')

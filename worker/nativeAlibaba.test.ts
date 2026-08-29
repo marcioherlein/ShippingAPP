@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { extractAlibabaNative } from './nativeAlibaba'
 import type { BrowserRun } from './alibabaSource'
 
@@ -11,6 +11,17 @@ function browserWith(body: unknown, status = 200): BrowserRun {
       })
     },
   }
+}
+
+function browserSequence(items: Array<{ body: unknown; status: number }>) {
+  const quickAction = vi.fn(async () => {
+    const next = items.shift() || { body: { error: 'empty sequence' }, status: 503 }
+    return new Response(JSON.stringify(next.body), {
+      status: next.status,
+      headers: { 'content-type': 'application/json', 'X-Browser-Ms-Used': '1234' },
+    })
+  })
+  return { browser: { quickAction } as BrowserRun, quickAction }
 }
 
 const watchUrl = new URL('https://www.alibaba.com/product-detail/Fully-Automatic-Mechanical-Watches-42-5MM_1601666174891.html')
@@ -62,6 +73,26 @@ describe('extractAlibabaNative', () => {
     expect(result.browserMsUsed).toBe(1234)
   })
 
+  it('uses explicit Product Type and the first price tier when product_type and moq are absent', async () => {
+    const result = await extractAlibabaNative(watchUrl, browserWith({
+      result: {
+        title: 'Automatic Mechanical Wristwatch',
+        product_type: null,
+        moq: null,
+        unit_price: 71.5,
+        price_tiers: [{ min_quantity: '5 pieces', unit_price: 71.5 }],
+        specifications: [
+          { name: 'Product Type', value: 'Mechanical Wristwatch' },
+          { name: 'Movement', value: 'Automatic Mechanical' },
+        ],
+      },
+    }))
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    expect(result.facts.category).toBe('Mechanical Wristwatch')
+    expect(result.facts.moq).toBe(5)
+  })
+
   it('does not substitute supplier country for merchandise origin', async () => {
     const browser = browserWith({
       result: {
@@ -79,12 +110,33 @@ describe('extractAlibabaNative', () => {
     expect(result.warnings.some((warning) => warning.includes('Origen'))).toBe(true)
   })
 
-  it('fails closed when Browser Run does not expose a product title', async () => {
+  it('uses the explicit Alibaba URL slug as provisional identity when rendered JSON omits title', async () => {
     const result = await extractAlibabaNative(watchUrl, browserWith({ result: { unit_price: 71.5, moq: 5 } }))
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    expect(result.facts.name).toContain('Fully Automatic Mechanical Watches')
+    expect(result.facts.unitPriceUsd).toBe(71.5)
+    expect(result.facts.moq).toBe(5)
+  })
+
+  it('still fails closed when Browser Run exposes no product facts beyond the URL identity', async () => {
+    const result = await extractAlibabaNative(watchUrl, browserWith({ result: {} }))
     expect(result.status).toBe('unavailable')
   })
 
-  it('fails closed on Browser Run HTTP errors', async () => {
+  it('retries HTTP 429 exactly once and keeps the recovered evidence', async () => {
+    const { browser, quickAction } = browserSequence([
+      { body: { error: 'rate limited' }, status: 429 },
+      { body: { result: { title: 'Automatic Mechanical Wristwatch', product_type: 'Mechanical Wristwatch' } }, status: 200 },
+    ])
+    const result = await extractAlibabaNative(watchUrl, browser)
+    expect(quickAction).toHaveBeenCalledTimes(2)
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    expect(result.warnings.join(' ')).toContain('429')
+  })
+
+  it('fails closed on non-retriable Browser Run HTTP errors', async () => {
     const result = await extractAlibabaNative(watchUrl, browserWith({ error: 'blocked' }, 403))
     expect(result.status).toBe('unavailable')
     if (result.status !== 'unavailable') return

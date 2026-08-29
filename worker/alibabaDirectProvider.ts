@@ -18,6 +18,29 @@ function coreSignals(facts: AlibabaDirectFacts) {
   ].filter(Boolean).length
 }
 
+function productTitleFromUrl(url: URL) {
+  const segment = url.pathname.split('/').filter(Boolean).at(-1) || ''
+  const withoutId = segment
+    .replace(/_\d{8,}\.html$/i, '')
+    .replace(/\.html$/i, '')
+  let decoded = withoutId
+  try { decoded = decodeURIComponent(withoutId) } catch { /* keep encoded slug */ }
+  const title = decoded.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!title || /^(?:product|product detail|detail)$/i.test(title)) return null
+  return title.slice(0, 700)
+}
+
+function preserveUrlIdentity(facts: AlibabaDirectFacts, url: URL) {
+  if (facts.name) return facts
+  const name = productTitleFromUrl(url)
+  if (!name) return facts
+  return {
+    ...facts,
+    name,
+    evidence: [...new Set([...facts.evidence, 'url_slug_title'])],
+  }
+}
+
 export function directAlibabaCoreSignals(facts: AlibabaDirectFacts) {
   return coreSignals(facts)
 }
@@ -66,7 +89,8 @@ export async function extractAlibabaDirectHttp(
     }
   }
 
-  const facts = extractAlibabaDirectFacts(html, url)
+  const extracted = extractAlibabaDirectFacts(html, url)
+  const facts = preserveUrlIdentity(extracted, url)
   const signals = coreSignals(facts)
   const identity = Boolean(facts.name || facts.category)
   if (!identity || facts.evidence.length < 2) {
@@ -77,6 +101,9 @@ export async function extractAlibabaDirectHttp(
   }
 
   const warnings: string[] = []
+  if (facts.evidence.includes('url_slug_title') && !extracted.name) {
+    warnings.push('Alibaba bloqueó o no expuso el título en HTML; ShippingAPP preservó como identidad provisional el título explícito del URL. El usuario debe confirmarlo antes de NCM.')
+  }
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por el fetch directo.')
   if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por el fetch directo.')
   if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto por el fetch directo.')

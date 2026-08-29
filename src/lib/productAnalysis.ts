@@ -1,4 +1,5 @@
 import type { Inputs } from './types'
+import { apiFetch } from './apiClient'
 
 export type FxEvidence = {
   status: 'live' | 'unavailable'
@@ -52,7 +53,7 @@ export type ProductAnalysis = {
 }
 
 export async function analyzeAlibabaUrl(url: string): Promise<ProductAnalysis> {
-  const response = await fetch('/api/analyze', {
+  const response = await apiFetch('/api/analyze', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url }),

@@ -1,6 +1,7 @@
 import type { OpportunityDecision } from './opportunityDecision'
 import type { ProductAnalysisV2 } from './productAnalysisV2'
 import type { Inputs } from './types'
+import { apiFetch } from './apiClient'
 
 export type AnalystChatMessage = {
   id: string
@@ -108,7 +109,7 @@ export async function askImportAnalyst(
   inputs: Inputs,
   decision: OpportunityDecision,
 ): Promise<AnalystReply> {
-  const response = await fetch('/api/chat', {
+  const response = await apiFetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({

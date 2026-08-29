@@ -27,6 +27,17 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     notes: 'Public image relay. Must retain SSRF/domain restrictions in imageProxy.',
   },
   {
+    id: 'me',
+    path: '/api/me',
+    methods: ['GET'],
+    currentAccess: 'public',
+    targetAccess: 'authenticated',
+    targetMetered: false,
+    costRisk: 'low',
+    externalProviders: ['Clerk'],
+    notes: 'Authenticated account probe. Identity is derived from verified Clerk session only.',
+  },
+  {
     id: 'runtime-smoke',
     path: '/api/runtime-smoke',
     methods: ['GET'],

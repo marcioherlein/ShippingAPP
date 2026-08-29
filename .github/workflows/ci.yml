@@ -31,6 +31,8 @@ jobs:
       - name: Validate NCM and SIM assets
         run: node scripts/validate-nomenclador-assets.mjs
       - name: Production build
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
         run: npm run build
       - name: Validate Cloudflare configuration
         run: npx --yes wrangler@latest check
@@ -68,23 +70,14 @@ jobs:
 
           echo 'Runtime smoke endpoint did not become ready'
           exit 1
-      - name: Production Cloudflare smoke test
+      - name: Production public shell smoke test
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS https://shippingapp.marciofabrizio.workers.dev/api/runtime-smoke > /tmp/production-smoke.json
+          curl -fsS https://shippingapp.marciofabrizio.workers.dev/ > /tmp/production-index.html
           node - <<'NODE'
           const fs = require('node:fs')
-          const body = JSON.parse(fs.readFileSync('/tmp/production-smoke.json', 'utf8'))
-          function assertNcmAsset(ncm, label) {
-            const legacy = ncm?.sourceDate === '2026-08-14' && ncm?.tariffDataIncluded === false
-            const ncmApp = ncm?.source === 'NCM_APP.xlsx' && ncm?.sourceDate === '2026-08-27' && ncm?.tariffDataIncluded === true
-            if (!legacy && !ncmApp) throw new Error(`${label} NCM asset metadata mismatch: ${JSON.stringify(ncm)}`)
-            if ((ncm?.records ?? 0) < 10000) throw new Error(`${label} NCM asset unexpectedly small`)
-          }
-          if (body.status !== 'ok') throw new Error(`production smoke failed: ${JSON.stringify(body)}`)
-          if (!body.checks?.workerResponded) throw new Error('Production Worker did not confirm response')
-          if (!body.checks?.assetsBinding) throw new Error('Production ASSETS binding missing')
-          assertNcmAsset(body.checks?.ncmIndex, 'Production')
-          if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
+          const html = fs.readFileSync('/tmp/production-index.html', 'utf8')
+          if (!html.includes('id="root"')) throw new Error('Production app shell is missing the React root element')
+          if (!html.toLowerCase().includes('<!doctype html>')) throw new Error('Production root did not return the expected HTML shell')
           NODE

@@ -1,19 +1,28 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { ClerkProvider } from '@clerk/react'
 import App from './App'
+import ClerkShell from './auth/ClerkShell'
 import './styles.css'
 import './styles/regulatory.css'
 import './styles/entry-simplification.css'
 import './styles/visual-consistency.css'
 
 const root = document.getElementById('root')
+const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.trim()
 
 if (!root) {
   throw new Error('Root element not found')
 }
 
+const application = clerkPublishableKey
+  ? <ClerkProvider publishableKey={clerkPublishableKey}>
+      <ClerkShell><App /></ClerkShell>
+    </ClerkProvider>
+  : <App />
+
 createRoot(root).render(
   <React.StrictMode>
-    <App />
+    {application}
   </React.StrictMode>,
 )

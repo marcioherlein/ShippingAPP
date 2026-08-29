@@ -1,4 +1,5 @@
 import enrichWorker from './enrich'
+import { readTrustedUserId } from './auth'
 import { extractAlibabaNative } from './nativeAlibaba'
 import { extractAlibabaDirectHttp, type DirectAlibabaResult } from './alibabaDirectProvider'
 import type { BrowserRun } from './alibabaSource'
@@ -286,6 +287,12 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const requestUrl = new URL(request.url)
 
+    if (requestUrl.pathname === '/api/me' && request.method === 'GET') {
+      const accountId = readTrustedUserId(request)
+      return accountId
+        ? json({ authenticated: true, accountId })
+        : json({ error: 'Unauthorized.', code: 'unauthorized' }, 401)
+    }
     if (requestUrl.pathname === '/api/alibaba-direct-probe' && request.method === 'POST') return directProbe(request)
     if (requestUrl.pathname === '/api/alibaba-native-probe' && request.method === 'POST') return nativeProbe(request, env)
 

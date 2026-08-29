@@ -59,8 +59,16 @@ export function requiredAlibabaSignalCount(data: any) {
   ].filter(Boolean).length
 }
 
+function hasTrustedAlibabaEvidence(data: any) {
+  return data?.sourceRead?.mode === 'parsebot'
+    || Boolean(data?.sourceEvidence?.directAlibaba)
+    || Boolean(data?.sourceEvidence?.nativeAlibaba)
+}
+
 export function needsAlibabaSupplement(data: any) {
-  return Boolean(data && typeof data === 'object' && requiredAlibabaSignalCount(data) < 7)
+  if (!data || typeof data !== 'object') return false
+  if (!hasTrustedAlibabaEvidence(data)) return true
+  return requiredAlibabaSignalCount(data) < 7
 }
 
 function trustedPriorNumber(prior: any, key: string, trustPrior: boolean) {

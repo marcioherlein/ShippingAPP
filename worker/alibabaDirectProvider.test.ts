@@ -8,7 +8,7 @@ function htmlWithProduct(product: Record<string, unknown>) {
 }
 
 describe('ShippingAPP direct Alibaba provider', () => {
-  it('returns ready when all six core quotation signals are explicit', async () => {
+  it('returns ready when all seven core quotation signals are explicit', async () => {
     const fetchImpl = vi.fn(async () => new Response(htmlWithProduct({
       productId: '1601666174891',
       productTitle: 'Fully Automatic Mechanical Stainless Steel Wristwatch',
@@ -48,10 +48,19 @@ describe('ShippingAPP direct Alibaba provider', () => {
     expect(result.httpStatus).toBe(403)
   })
 
-  it('does not mistake a challenge page for product evidence', async () => {
+  it('preserves only URL identity when the HTML is an anti-bot challenge', async () => {
     const challenge = `<!doctype html><html><body>${'CAPTCHA verify you are human unusual traffic '.repeat(40)}</body></html>`
     const result = await extractAlibabaDirectHttp(watchUrl, async () => new Response(challenge, { status: 200 }))
-    expect(result.status).toBe('unavailable')
+    expect(result.status).toBe('partial')
+    if (result.status === 'unavailable') return
+    expect(result.facts.name).toContain('Fully Automatic Mechanical Watches')
+    expect(result.facts.productId).toBe('1601666174891')
+    expect(result.facts.unitPriceUsd).toBeNull()
+    expect(result.facts.moq).toBeNull()
+    expect(result.facts.packedWeightKg).toBeNull()
+    expect(result.facts.volumeCbm).toBeNull()
+    expect(result.facts.evidence).toContain('url_slug_title')
+    expect(result.warnings.join(' ')).toContain('identidad provisional')
   })
 
   it('turns network exceptions into controlled unavailability', async () => {

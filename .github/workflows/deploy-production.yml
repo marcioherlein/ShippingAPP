@@ -43,6 +43,15 @@ jobs:
       - name: Unit and integration tests
         run: npx --yes vitest@3.2.4 run
 
+      - name: Validate D1 migrations and schema locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .d1-ci
+          npx --yes wrangler@latest d1 migrations apply DB --local --persist-to .d1-ci
+          npx --yes wrangler@latest d1 migrations apply DB --local --persist-to .d1-ci
+          node scripts/validate-d1-schema.mjs
+
       - name: Validate NCM and SIM assets
         run: node scripts/validate-nomenclador-assets.mjs
 
@@ -54,6 +63,23 @@ jobs:
 
       - name: Deploy to Cloudflare Workers
         run: npx --yes wrangler@latest deploy
+
+      - name: Apply production D1 migrations
+        run: npx --yes wrangler@latest d1 migrations apply DB --remote
+
+      - name: Verify production D1 schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@latest d1 execute DB --remote --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','plans','subscriptions','usage_periods','credit_ledger','analyses','watchlist_items','watchlist_snapshots','email_preferences','email_events','billing_events') ORDER BY name" > /tmp/d1-schema.json
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const parsed = JSON.parse(fs.readFileSync('/tmp/d1-schema.json', 'utf8'))
+          const rows = Array.isArray(parsed) ? parsed.flatMap((part) => part.results || []) : (parsed.results || [])
+          const names = rows.map((row) => row.name).sort()
+          const expected = ['analyses','billing_events','credit_ledger','email_events','email_preferences','plans','subscriptions','usage_periods','users','watchlist_items','watchlist_snapshots'].sort()
+          if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Production D1 schema mismatch: ${JSON.stringify(names)}`)
+          NODE
 
       - name: Production Cloudflare smoke test
         shell: bash

@@ -10,6 +10,12 @@
   },
   "ai": { "binding": "AI" },
   "browser": { "binding": "BROWSER" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "migrations_dir": "migrations"
+    }
+  ],
   "kv_namespaces": [
     {
       "binding": "MERCADOLIBRE_TOKEN_STORE",

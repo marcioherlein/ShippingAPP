@@ -20,6 +20,14 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Unit and integration tests
         run: npx --yes vitest@3.2.4 run
+      - name: Validate D1 migrations and schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .d1-ci
+          npx --yes wrangler@latest d1 migrations apply DB --local --persist-to .d1-ci
+          npx --yes wrangler@latest d1 migrations apply DB --local --persist-to .d1-ci
+          node scripts/validate-d1-schema.mjs
       - name: Validate NCM and SIM assets
         run: node scripts/validate-nomenclador-assets.mjs
       - name: Production build

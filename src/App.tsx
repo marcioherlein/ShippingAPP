@@ -5,8 +5,14 @@ import CalculationPipeline, { type CalculationPipelineStatus, type CalculationPi
 import ImportQuoteFlow, { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
 import { getCachedHotProducts, hotProductToQuotePrefill, type QuotePrefill } from './lib/hotProducts'
 import type { HotProduct } from './data/hotProducts'
-import { analyzeAlibabaUrlV2, enrichProductAnalysisV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
+import { enrichProductAnalysisV2, ingestAlibabaUrlV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
+import {
+  applyProductConfirmation,
+  createManualProductAnalysis,
+  missingProductConfirmationFields,
+  type ProductConfirmationData,
+} from './lib/productConfirmation'
 
 type EntryIntent = 'have_product' | 'search_product' | 'discover' | null
 type BudgetMode = 'budget' | 'units' | 'unknown' | null
@@ -54,20 +60,24 @@ function makeAnalysisPrefill(
 ): QuotePrefill {
   const fx = analysis.fx?.status === 'live' && analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0 ? analysis.fx.arsPerUsd : null
   const estimatedLocalUsd = fx && analysis.market.estimatedPriceArs ? analysis.market.estimatedPriceArs / fx : 0
-  const fallbackQuantity = analysis.product.moq || analysis.suggestedQuantities[0] || 100
+  const confirmedQuantity = analysis.product.moq || analysis.suggestedQuantities[0] || 0
   return {
     productName: analysis.product.name,
-    originCountry: analysis.product.originCountry || 'China',
-    quantity: fallbackQuantity,
+    originCountry: analysis.product.originCountry || '',
+    quantity: confirmedQuantity,
     unitPriceUsd: analysis.product.unitPriceUsd || 0,
     unitWeightKg: analysis.product.packedWeightKg || 0,
     unitVolumeCbm: analysis.product.volumeCbm || 0,
-    moq: analysis.product.moq || fallbackQuantity,
+    moq: analysis.product.moq || 0,
     budgetUsd: budgetMode === 'budget' ? budgetUsd : 0,
     monthlyDemand: analysis.market.estimatedMonthlyDemand || 0,
     localSellPriceUsd: estimatedLocalUsd,
     sensitiveCategory: sensitiveCategory || 'unknown',
-    sourceLabel: analysis.sourceUrl.startsWith('chat://') ? 'Datos aportados en conversación' : 'Producto analizado por ShippingAPP',
+    sourceLabel: analysis.sourceUrl.startsWith('manual://')
+      ? 'Ficha cargada manualmente'
+      : analysis.sourceUrl.startsWith('chat://')
+        ? 'Datos aportados en conversación'
+        : 'Producto ingerido por ShippingAPP',
     ncmCode: analysis.customs.ncmCandidate,
     simCode: analysis.customs.simOpeningCandidate?.code ?? null,
     classificationConfidence: analysis.customs.classificationConfidence,
@@ -136,11 +146,7 @@ export default function App() {
     sensitiveCategory: sensitiveCategory || 'unknown',
   }), [budgetMode, budgetUsd, unitsMin, unitsMax, purpose, entityType, signature, sensitiveCategory])
 
-  const progressStep = intent === 'have_product'
-    ? (step >= 3 ? 4 : step)
-    : calculationStatus === 'ready'
-      ? 4
-      : step
+  const progressStep = calculationStatus === 'ready' ? 4 : step
 
   const resetPipeline = () => {
     setCalculationStatus('confirm')
@@ -166,6 +172,10 @@ export default function App() {
     window.setTimeout(() => document.getElementById('case-confirmation')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
+  const handleManualFallback = (sourceUrl?: string) => {
+    handleAnalysis(createManualProductAnalysis(sourceUrl || 'manual://product'))
+  }
+
   const handleHotProductQuote = async (product: HotProduct) => {
     if (selectionLoading) return
     setSelectedHotProduct(product)
@@ -173,40 +183,71 @@ export default function App() {
     setSelectionError('')
     resetPipeline()
     try {
-      const next = await analyzeAlibabaUrlV2(product.productUrl)
+      const next = await ingestAlibabaUrlV2(product.productUrl)
       handleAnalysis(next)
     } catch (error) {
-      setAnalysis(null)
-      setSelectionError(error instanceof Error ? error.message : 'No pudimos hacer la ingesta profunda de este producto.')
+      setAnalysis(createManualProductAnalysis(product.productUrl))
+      setSelectionError(error instanceof Error ? `${error.message} Completá la ficha manualmente abajo.` : 'No pudimos hacer la ingesta profunda. Completá la ficha manualmente abajo.')
+      window.setTimeout(() => document.getElementById('case-confirmation')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
     } finally {
       setSelectionLoading(false)
     }
   }
 
   const editSelectedProduct = () => {
-    setAnalysis(null)
     setSelectedHotProduct(null)
     resetPipeline()
     setStep(3)
+    if (intent === 'have_product') {
+      setAnalysis(createManualProductAnalysis())
+      window.setTimeout(() => document.getElementById('case-confirmation')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+      return
+    }
+    setAnalysis(null)
     window.setTimeout(() => document.querySelector('.journey-product-surface')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
-  const confirmAndCalculate = async () => {
+  const reviewProductData = () => {
+    setCalculationStatus('confirm')
+    setPipelineStage(0)
+    setPipelineSummary(null)
+    setPipelineBlocker(null)
+    window.setTimeout(() => document.getElementById('case-confirmation')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+  }
+
+  const confirmAndCalculate = async (confirmedProduct: ProductConfirmationData) => {
     if (!analysis) return
+
+    const missing = missingProductConfirmationFields(confirmedProduct)
+    if (missing.length > 0) {
+      setPipelineBlocker(`La ficha sigue incompleta: ${missing.map((item) => item.label).join(', ')}.`)
+      setCalculationStatus('blocked')
+      setPipelineStage(0)
+      return
+    }
+
+    const confirmedAnalysis = applyProductConfirmation(analysis, confirmedProduct)
+    setAnalysis(confirmedAnalysis)
     setCalculationStatus('processing')
     setPipelineStage(0)
     setPipelineSummary(null)
     setPipelineBlocker(null)
 
     try {
-      // Re-run the nomenclator enrichment after explicit user confirmation so
-      // the tariff evidence used for economics is refreshed at calculation time.
-      const refreshed = await enrichProductAnalysisV2(analysis)
+      // Nomenclature starts only after the user-confirmed snapshot is frozen.
+      const refreshed = await enrichProductAnalysisV2(confirmedAnalysis)
       setAnalysis(refreshed)
 
       if (!refreshed.customs.ncmCandidate || refreshed.customs.classificationConfidence === 'missing') {
         setPipelineStage(0)
-        setPipelineBlocker('No pude resolver una NCM candidata suficiente con los datos del producto. Necesito más detalle de material, función o composición antes de calcular.')
+        setPipelineBlocker('No pude cerrar una NCM con evidencia suficiente. Completá los datos técnicos que aparecen abajo y volvé a confirmar la ficha; no voy a cotizar hasta resolver la clasificación.')
+        setCalculationStatus('blocked')
+        return
+      }
+
+      if (refreshed.customs.classificationConfidence === 'low') {
+        setPipelineStage(0)
+        setPipelineBlocker('La clasificación quedó con confianza baja. Necesito más detalle del producto o una corrección de la ficha antes de nomenclar y cotizar.')
         setCalculationStatus('blocked')
         return
       }
@@ -214,8 +255,8 @@ export default function App() {
       await nextPaint()
       setPipelineStage(1)
 
-      if (refreshed.customs.dutyRatePct === null || refreshed.customs.dutyRatePct === undefined || refreshed.customs.classificationConfidence === 'low') {
-        setPipelineBlocker('La NCM quedó con confianza baja o sin derecho utilizable. ShippingAPP detiene el cálculo para no aplicar un arancel inventado.')
+      if (refreshed.customs.dutyRatePct === null || refreshed.customs.dutyRatePct === undefined) {
+        setPipelineBlocker('La NCM no tiene un derecho utilizable confirmado en el motor. ShippingAPP detiene la cotización antes de inventar un arancel.')
         setCalculationStatus('blocked')
         return
       }
@@ -224,13 +265,19 @@ export default function App() {
       await nextPaint()
       setPipelineStage(2)
 
-      if (prefill.unitPriceUsd <= 0 || prefill.unitWeightKg <= 0 || prefill.unitVolumeCbm <= 0) {
-        setPipelineBlocker('Para calcular flete y costo unitario necesito precio FOB, peso y volumen unitario. Alguno de esos datos no pudo verificarse en la publicación.')
+      if (!prefill.originCountry || prefill.unitPriceUsd <= 0 || prefill.moq <= 0 || prefill.unitWeightKg <= 0 || prefill.unitVolumeCbm <= 0) {
+        setPipelineBlocker('La ficha confirmada perdió un dato obligatorio de origen, FOB, MOQ, peso o volumen. Volvé a la ficha y corregilo antes de cotizar.')
         setCalculationStatus('blocked')
         return
       }
 
-      const baseQuantity = quoteSetup.quantity ?? prefill.quantity ?? prefill.moq ?? 1
+      const baseQuantity = quoteSetup.quantity ?? prefill.quantity ?? prefill.moq
+      if (!baseQuantity || baseQuantity <= 0) {
+        setPipelineBlocker('Necesito una cantidad base positiva para distribuir flete y gastos por unidad.')
+        setCalculationStatus('blocked')
+        return
+      }
+
       const comparison = compareLandedCost({
         originCountry: prefill.originCountry,
         quantity: baseQuantity,
@@ -284,7 +331,9 @@ export default function App() {
   }
 
   const continueBudget = () => {
-    if (budgetAnswered) setStep(3)
+    if (!budgetAnswered) return
+    if (intent === 'have_product' && !analysis) setAnalysis(createManualProductAnalysis())
+    setStep(3)
   }
 
   const resetJourney = () => {
@@ -381,28 +430,28 @@ export default function App() {
             <div className="journey-bubble assistant">
               <span className="journey-avatar">S</span>
               <div>
-                <b>{intent === 'have_product' ? 'Perfecto. Pasame los datos del producto y calculamos.' : intent === 'search_product' ? 'Describime el producto como se lo explicarías a una persona.' : 'Buscá en Alibaba o elegí una oportunidad lista.'}</b>
+                <b>{intent === 'have_product' ? 'Perfecto. Completemos y confirmemos la ficha del producto.' : intent === 'search_product' ? 'Describime el producto como se lo explicarías a una persona.' : 'Buscá en Alibaba o elegí una oportunidad lista.'}</b>
                 <p>{intent === 'have_product'
-                  ? 'Precio, origen, peso, volumen y MOQ son suficientes para arrancar. Si algo falta, podés completar después.'
+                  ? 'Necesito identidad, origen, FOB, MOQ, peso y volumen antes de clasificar. No usamos aranceles por defecto ni dejamos avanzar una ficha incompleta.'
                   : intent === 'search_product'
                     ? 'Podés escribir “buscame paletas de pádel de carbono hasta USD 30 y MOQ menor a 100”, pegar un link o describir lo que necesitás.'
                     : 'Escribí cualquier producto para buscarlo en Alibaba. Si sólo querés explorar, abajo siguen disponibles oportunidades cacheadas sin iniciar una búsqueda nueva.'}</p>
               </div>
             </div>
 
-            {intent === 'search_product' && <div className="journey-product-surface"><UrlAnalyzer deferCalculation onAnalysis={handleAnalysis} analysis={analysis} /></div>}
+            {intent === 'search_product' && <div className="journey-product-surface"><UrlAnalyzer deferCalculation onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>}
 
             {intent === 'discover' && <>
-              <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode="discovery" onAnalysis={handleAnalysis} analysis={analysis} /></div>
+              <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode="discovery" onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>
               <div className="journey-product-surface">
-                <div className="journey-section-heading"><span className="eyebrow">O explorar sin buscar</span><h2>Oportunidades cacheadas</h2><p>Al elegir una, ShippingAPP abre la publicación real y completa la ingesta antes de pedirte confirmación.</p></div>
+                <div className="journey-section-heading"><span className="eyebrow">O explorar sin buscar</span><h2>Oportunidades cacheadas</h2><p>Al elegir una, ShippingAPP abre la publicación real y completa lo que pueda; cualquier faltante se confirma manualmente antes de NCM.</p></div>
                 <HotProductsSection products={hotProducts} selectedId={selectedHotProduct?.id ?? null} onQuote={handleHotProductQuote} />
-                {selectionLoading && <div className="journey-selection-status"><span className="journey-spinner" /><div><b>Leyendo la publicación seleccionada</b><p>Estoy completando precio, MOQ, peso, volumen y descripción antes de pasar al cálculo.</p></div></div>}
-                {selectionError && <div className="pipeline-warning"><b>No pude completar la ingesta.</b><span>{selectionError}</span></div>}
+                {selectionLoading && <div className="journey-selection-status"><span className="journey-spinner" /><div><b>Leyendo la publicación seleccionada</b><p>Estoy intentando completar precio, MOQ, peso, volumen y descripción antes de pedirte confirmación.</p></div></div>}
+                {selectionError && <div className="pipeline-warning"><b>La fuente automática quedó incompleta.</b><span>{selectionError}</span></div>}
               </div>
             </>}
 
-            {intent === 'have_product' && <div className="journey-manual-ready"><span>✓</span><div><b>Listo para cargar tu producto</b><p>La calculadora de abajo empieza con datos editables. Reemplazalos por los de tu proveedor.</p></div><a href="#calculator">Abrir calculadora</a></div>}
+            {intent === 'have_product' && <div className="journey-manual-ready"><span>✓</span><div><b>Ficha manual preparada</b><p>Completá los campos obligatorios abajo. Recién después ShippingAPP intenta NCM y calcula.</p></div><a href="#case-confirmation">Completar ficha</a></div>}
           </>}
         </>}
       </div>
@@ -419,12 +468,12 @@ export default function App() {
             <div><span>Capacidad</span><b>{budgetMode === 'budget' ? `USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} u.` : budgetMode === 'unknown' ? 'A definir' : 'Pendiente'}</b></div>
             <div><span>Producto</span><b>{productStatusLabel}</b></div>
           </div>
-          <div className="journey-summary-note"><span>La lógica</span><p>Producto confirmado → NCM → aranceles → flete → costo puesto por unidad → optimización. Si una etapa no tiene evidencia suficiente, el motor se detiene y la marca como pendiente.</p></div>
+          <div className="journey-summary-note"><span>La lógica</span><p>Ficha confirmada → NCM → aranceles → flete → costo puesto por unidad → optimización. Si falta evidencia, la app vuelve a pedir el dato; nunca completa economics con supuestos inventados.</p></div>
         </div>
       </aside>
     </section>
 
-    {analysis && analysisPrefill && intent !== 'have_product' && <section className="journey-pipeline-section">
+    {analysis && analysisPrefill && <section className="journey-pipeline-section">
       <CalculationPipeline
         analysis={analysis}
         prefill={analysisPrefill}
@@ -432,14 +481,10 @@ export default function App() {
         activeStage={pipelineStage}
         summary={pipelineSummary}
         blocker={pipelineBlocker}
-        onConfirm={() => void confirmAndCalculate()}
+        onConfirm={(product) => void confirmAndCalculate(product)}
         onEditProduct={editSelectedProduct}
+        onReviewProduct={reviewProductData}
       />
-    </section>}
-
-    {intent === 'have_product' && step >= 3 && <section className="journey-calculator-section" id="calculator">
-      <div className="journey-section-heading"><span className="eyebrow">Cálculo manual</span><h2>Completá los datos físicos y comerciales.</h2><p>En el camino manual todavía podés editar todos los supuestos. Para productos ingeridos desde Alibaba, el flujo automático valida NCM y aranceles antes de llegar acá.</p></div>
-      <ImportQuoteFlow setup={quoteSetup} />
     </section>}
 
     {analysisPrefill && calculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
@@ -448,8 +493,8 @@ export default function App() {
     </section>}
 
     <section className="journey-output-explainer">
-      <div><span>01</span><b>Confirmación</b><p>Validás que el producto, precio, origen, peso, volumen y MOQ sean los correctos.</p></div>
-      <div><span>02</span><b>NCM + aranceles</b><p>Clasificación automática y extracción de derechos, tasa, IVA, percepciones y señales SIM.</p></div>
+      <div><span>01</span><b>Confirmación</b><p>Validás producto, origen, FOB, MOQ, peso, volumen y contexto técnico; completás cualquier faltante.</p></div>
+      <div><span>02</span><b>NCM + aranceles</b><p>La clasificación empieza recién con la ficha confirmada. LOW o missing vuelve a pedir información y no cotiza.</p></div>
       <div><span>03</span><b>Costo unitario</b><p>Flete, CIF, tributos y gastos distribuidos por unidad dentro de la cantidad base.</p></div>
       <div><span>04</span><b>Optimización</b><p>Escenarios de cantidad, presupuesto, costo unitario, stock y modo logístico recomendado.</p></div>
     </section>

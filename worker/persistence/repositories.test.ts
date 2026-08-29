@@ -55,10 +55,13 @@ describe('SaaS D1 persistence foundation', () => {
     expect(sqlite.prepare('SELECT COUNT(*) AS count FROM users').get()).toEqual({ count: 3 })
   })
 
-  it('initializes a usage period idempotently and rejects semantic collisions', async () => {
-    const first = await repo.initializeUsagePeriod({ id: ids('period-a'), userId: ids('user-a'), planId: ids('plan'), periodStart: PERIOD_START, periodEnd: PERIOD_END, creditsGranted: 10 })
-    const replay = await repo.initializeUsagePeriod({ id: ids('period-replay'), userId: ids('user-a'), planId: ids('plan'), periodStart: PERIOD_START, periodEnd: PERIOD_END, creditsGranted: 10 })
+  it('initializes concurrent usage-period requests idempotently and rejects semantic collisions', async () => {
+    const [first, replay] = await Promise.all([
+      repo.initializeUsagePeriod({ id: ids('period-a'), userId: ids('user-a'), planId: ids('plan'), periodStart: PERIOD_START, periodEnd: PERIOD_END, creditsGranted: 10 }),
+      repo.initializeUsagePeriod({ id: ids('period-replay'), userId: ids('user-a'), planId: ids('plan'), periodStart: PERIOD_START, periodEnd: PERIOD_END, creditsGranted: 10 }),
+    ])
     expect(replay.id).toBe(first.id)
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM usage_periods').get()).toEqual({ count: 1 })
     await expect(repo.initializeUsagePeriod({ id: ids('period-bad'), userId: ids('user-a'), planId: ids('plan'), periodStart: PERIOD_START, periodEnd: PERIOD_END, creditsGranted: 999 })).rejects.toThrow('idempotency collision')
   })
 
@@ -72,6 +75,13 @@ describe('SaaS D1 persistence foundation', () => {
   it('enforces tenant ownership when a watchlist references an analysis', async () => {
     await repo.createAnalysis({ id: ids('analysis-a'), userId: ids('user-a'), input: { product: 'charger' } })
     await expect(repo.createWatchlistItem({ id: ids('watch-cross'), userId: ids('user-b'), analysisId: ids('analysis-a'), title: 'Cross user', sourceUrl: 'https://www.alibaba.com/product-detail/cross.html' })).rejects.toThrow()
+  })
+
+  it('enforces subscription ownership on billing-event links', async () => {
+    await repo.createSubscription({ id: ids('sub-a'), userId: ids('user-a'), planId: ids('plan'), provider: 'testpay', providerSubscriptionId: 'sub_provider_a', status: 'active' })
+    await expect(repo.recordBillingEvent({ id: ids('billing-cross'), provider: 'testpay', providerEventId: 'evt_cross', eventType: 'subscription.updated', userId: ids('user-b'), subscriptionId: ids('sub-a'), payloadSha256: 'c'.repeat(64) })).rejects.toThrow()
+    await expect(repo.recordBillingEvent({ id: ids('billing-ownerless'), provider: 'testpay', providerEventId: 'evt_ownerless', eventType: 'subscription.updated', subscriptionId: ids('sub-a'), payloadSha256: 'd'.repeat(64) })).rejects.toThrow()
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM billing_events').get()).toEqual({ count: 0 })
   })
 
   it('provides parameterized CRUD boundaries for watchlists and email preferences', async () => {
@@ -94,10 +104,12 @@ describe('SaaS D1 persistence foundation', () => {
     await expect(repo.recordBillingEvent({ id: ids('billing-tampered'), provider: 'testpay', providerEventId: 'evt_1', eventType: 'subscription.updated', payloadSha256: 'b'.repeat(64) })).rejects.toThrow('replay mismatch')
   })
 
-  it('rejects invalid foreign keys and oversized values before persistence', async () => {
+  it('rejects invalid foreign keys, unexpected empty values and oversized values before persistence', async () => {
     await expect(repo.createSubscription({ id: ids('sub-bad'), userId: ids('missing-user'), planId: ids('plan'), provider: 'testpay', status: 'active' })).rejects.toThrow()
+    await expect(repo.createUser({ id: '', authProvider: 'test', authSubject: 'empty-id' })).rejects.toThrow('id')
     await expect(repo.createWatchlistItem({ id: ids('watch-big'), userId: ids('user-a'), title: 'x'.repeat(241), sourceUrl: 'https://example.test' })).rejects.toThrow('title')
     await expect(repo.createAnalysis({ id: ids('analysis-big'), userId: ids('user-a'), input: { value: 'x'.repeat(262144) } })).rejects.toThrow('analysis input')
+    await expect(repo.addWatchlistSnapshot({ id: ids('snapshot-bad'), watchlistItemId: ids('missing-watch'), observedAt: FIXED_NOW.toISOString(), idempotencyKey: 'missing-watch' })).rejects.toThrow()
   })
 
   it('preserves already-applied schema when a later migration transaction fails', () => {

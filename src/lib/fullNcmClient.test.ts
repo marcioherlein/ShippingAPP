@@ -63,6 +63,31 @@ describe('full NCM vs seed reconciliation', () => {
     expect(merged.alternatives.some((item) => item.code === '9506.51.00')).toBe(true)
   })
 
+  it('never promotes a LOW cross-family candidate or its tariff when the local seed is missing', () => {
+    const local = customsProfileFor(
+      'Mechanical Watches',
+      'China',
+      'Fully Automatic Mechanical Watches 42.5MM Green Dial Waterproof 100m Stainless Steel Wristwatch',
+    )
+    expect(local.ncmCandidate).toBeNull()
+    const merged = mergeFullCustomsProfile(local, full({
+      code: '4707.90.00',
+      label: 'Papel o cartón para reciclar (desperdicios y desechos) > Los demás',
+      confidence: 'low',
+      tariff: {
+        aecPct: 0, diePct: 0, tePct: 3, diiPct: 0, vatPct: 21,
+        vatAdditionalPct: 20, gainsPct: 6, iibbPct: 2.5,
+        internalTax: null, capitalGoodEligible: false,
+      },
+    }))
+    expect(merged.ncmCandidate).toBeNull()
+    expect(merged.dutyRatePct).toBeNull()
+    expect(merged.dutyRateStatus).toBe('missing')
+    expect(merged.tariff).toBeNull()
+    expect(merged.alternatives.some((item) => item.code === '4707.90.00')).toBe(true)
+    expect(merged.rationale.join(' ')).toContain('FAIL-CLOSED CLIENT')
+  })
+
   it('keeps the local fail-closed state when full retrieval returns missing', () => {
     const local = customsProfileFor('Power adapter', 'China', 'Mystery adapter')
     const merged = mergeFullCustomsProfile(local, full({ status: 'missing', code: null, label: null, confidence: 'missing', retrievalMode: 'missing' }))

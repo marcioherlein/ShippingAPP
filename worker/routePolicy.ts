@@ -38,6 +38,17 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     notes: 'Used by GitHub Actions production smoke checks. Keep response free of secrets.',
   },
   {
+    id: 'alibaba-direct-probe',
+    path: '/api/alibaba-direct-probe',
+    methods: ['POST'],
+    currentAccess: 'operational',
+    targetAccess: 'internal',
+    targetMetered: false,
+    costRisk: 'medium',
+    externalProviders: ['Alibaba'],
+    notes: 'Diagnostic zero-credit HTTPS/HTML extractor. Internal-only target because it performs remote fetch work.',
+  },
+  {
     id: 'alibaba-native-probe',
     path: '/api/alibaba-native-probe',
     methods: ['POST'],
@@ -166,7 +177,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetAccess: 'authenticated',
     targetMetered: true,
     costRisk: 'high',
-    externalProviders: ['Parse.bot / Alibaba', 'Cloudflare Browser', 'Cloudflare Workers AI', 'Mercado Libre', 'BCRA'],
+    externalProviders: ['Parse.bot / Alibaba', 'ShippingAPP direct Alibaba', 'Cloudflare Browser', 'Cloudflare Workers AI', 'Mercado Libre', 'BCRA'],
     notes: 'Full import analysis. Primary paid-work boundary for Stage 5.',
   },
 ] as const

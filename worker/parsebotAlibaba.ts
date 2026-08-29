@@ -7,19 +7,29 @@ type ParsebotEnv = {
 
 const DEFAULT_PARSEBOT_SCRAPER_ID = 'ba2822dd-f985-4faa-8d3b-81d795bda2a7'
 const DEFAULT_PARSEBOT_ALIBABA_ENDPOINT = `https://api.parse.bot/scraper/${DEFAULT_PARSEBOT_SCRAPER_ID}/get_product`
-const DEFAULT_PARSEBOT_ALIBABA_SEARCH_ENDPOINT = `https://api.parse.bot/scraper/${DEFAULT_PARSEBOT_SCRAPER_ID}/search_products`
 
 export type ParsebotAlibabaFacts = {
   name?: string | null
   category?: string | null
+  categoryPath?: string[]
   unitPriceUsd?: number | null
   moq?: number | null
   packedWeightKg?: number | null
   volumeCbm?: number | null
+  unitSize?: string | null
   originCountry?: string | null
+  supplierCountry?: string | null
   imageUrl?: string | null
   supplier?: string | null
+  supplierBadges?: string[]
   description?: string | null
+  hsCode?: string | null
+  productId?: string | null
+  productCategoryId?: string | null
+  quantityUnit?: string | null
+  leadTime?: unknown
+  packaging?: unknown
+  tariffInfo?: unknown
   raw?: unknown
 }
 
@@ -32,6 +42,14 @@ function cleanString(value: unknown, max = 500) {
   if (typeof value !== 'string') return null
   const normalized = value.replace(/\s+/g, ' ').trim()
   return normalized ? normalized.slice(0, max) : null
+}
+
+function cleanStringArray(value: unknown, maxItems = 20, maxLength = 180) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => cleanString(item, maxLength))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, maxItems)
 }
 
 function numberOrNull(value: unknown) {
@@ -112,12 +130,30 @@ function weightKg(value: unknown) {
   const text = cleanString(value, 120)
   const amount = numberOrNull(value)
   if (!amount) return null
-  if (text && /\bg\b|grams?/i.test(text) && !/kg/i.test(text)) return amount / 1000
+  if (text && /\b(?:g|gram|grams)\b/i.test(text) && !/\bkg\b|kilogram/i.test(text)) return Number((amount / 1000).toFixed(6))
+  return amount
+}
+
+function volumeToCbm(value: unknown) {
+  const text = cleanString(value, 160)
+  const amount = numberOrNull(value)
+  if (!amount) return null
+  if (text && /\b(?:cm3|cm\^3|cubic\s*centimet)/i.test(text)) return Number((amount / 1_000_000).toFixed(6))
+  if (text && /\b(?:litre|liter|litres|liters|l)\b/i.test(text) && !/\bml\b/i.test(text)) return Number((amount / 1000).toFixed(6))
   return amount
 }
 
 function dimensionsToCbm(value: unknown) {
-  const text = cleanString(value, 200)
+  let text = cleanString(value, 200)
+  if (!text && value && typeof value === 'object') {
+    const root: any = value
+    const length = numberOrNull(root.length ?? root.l)
+    const width = numberOrNull(root.width ?? root.w)
+    const height = numberOrNull(root.height ?? root.h)
+    if (!length || !width || !height) return null
+    const unit = cleanString(root.unit ?? root.units, 30) || 'cm'
+    text = `${length}x${width}x${height} ${unit}`
+  }
   if (!text) return null
   const dims = text.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) || []
   if (dims.length !== 3 || dims.some((n) => !Number.isFinite(n) || n <= 0)) return null
@@ -136,7 +172,7 @@ function compactSpecsDescription(root: any) {
       return name && value ? `${name}: ${value}` : null
     })
     .filter(Boolean)
-    .slice(0, 10)
+    .slice(0, 14)
   return parts.length ? `Specifications: ${parts.join('; ')}` : null
 }
 
@@ -171,36 +207,75 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
 
   const moqValue = firstPresent(product, ['moq', 'minimum_order_quantity', 'minimumOrderQuantity', 'min_order', 'minOrder', 'minimum_order'])
   const weightValue = firstPresent(product, [
+    'unit_weight',
+    'unitWeight',
     'packedWeightKg',
     'packed_weight_kg',
     'weightKg',
     'weight_kg',
     'package_weight_kg',
+    'package_weight',
+    'packaging.package_weight',
     'packaging.weight_kg',
     'shipping_info.unit_weight',
     'shippingInfo.unitWeight',
-  ]) ?? firstPresent(packaging, ['weight_kg', 'packedWeightKg', 'weightKg']) ?? firstPresent(shipping, ['unit_weight', 'unitWeight', 'weight'])
-  const volumeValue = firstPresent(product, ['volumeCbm', 'volume_cbm', 'package_volume_cbm', 'packaging.volume_cbm']) ?? firstPresent(packaging, ['volume_cbm', 'volumeCbm'])
-  const dimensionsValue = firstPresent(product, ['shipping_info.unit_size', 'shippingInfo.unitSize', 'package_size', 'package_dimensions', 'dimensions'])
-    ?? firstPresent(shipping, ['unit_size', 'unitSize', 'package_size', 'dimensions'])
-    ?? firstPresent(packaging, ['unit_size', 'dimensions', 'size'])
+  ]) ?? firstPresent(packaging, ['package_weight', 'weight', 'weight_kg', 'packedWeightKg', 'weightKg']) ?? firstPresent(shipping, ['unit_weight', 'unitWeight', 'weight'])
+  const volumeValue = firstPresent(product, [
+    'unit_volume',
+    'unitVolume',
+    'volumeCbm',
+    'volume_cbm',
+    'package_volume_cbm',
+    'packaging.volume_cbm',
+  ]) ?? firstPresent(packaging, ['unit_volume', 'volume', 'volume_cbm', 'volumeCbm'])
+  const dimensionsValue = firstPresent(product, [
+    'unit_size',
+    'unitSize',
+    'shipping_info.unit_size',
+    'shippingInfo.unitSize',
+    'package_size',
+    'package_dimensions',
+    'packaging.package_dimensions',
+    'dimensions',
+  ]) ?? firstPresent(shipping, ['unit_size', 'unitSize', 'package_size', 'package_dimensions', 'dimensions'])
+    ?? firstPresent(packaging, ['package_dimensions', 'unit_size', 'dimensions', 'size'])
 
-  const originValue = firstPresent(product, ['originCountry', 'origin_country', 'country_of_origin', 'supplier_country', 'supplier.country'])
+  // Supplier country is not the same thing as country of origin. Only explicit product-origin
+  // evidence can populate originCountry; supplier_country is kept separately.
+  const originValue = firstPresent(product, ['originCountry', 'origin_country', 'country_of_origin'])
     ?? specificationValue(product, ['place of origin', 'origin', 'country of origin', 'country/region', 'country region'])
+  const supplierCountryValue = firstPresent(product, ['supplier_country', 'supplierCountry', 'supplier.country'])
   const title = firstPresent(product, ['name', 'title', 'product_name', 'productName'])
-  const description = firstPresent(product, ['description', 'summary', 'product_description']) ?? compactSpecsDescription(product)
+  const categoryPath = cleanStringArray(firstPresent(product, ['category_path', 'categoryPath', 'breadcrumb', 'breadcrumbs']), 16, 180)
+  const categoryValue = firstPresent(product, ['category', 'product_category', 'productCategory', 'type', 'product_type'])
+    ?? categoryPath[categoryPath.length - 1]
+  const explicitDescription = firstPresent(product, ['description', 'summary', 'product_description'])
+  const specDescription = compactSpecsDescription(product)
+  const categoryDescription = categoryPath.length ? `Category path: ${categoryPath.join(' > ')}` : null
+  const description = [cleanString(explicitDescription, 900), specDescription, categoryDescription].filter(Boolean).join(' · ') || null
 
   return {
     name: cleanString(title, 700),
-    category: cleanString(firstPresent(product, ['category', 'product_category', 'productCategory', 'type', 'product_type']), 300),
+    category: cleanString(categoryValue, 300),
+    categoryPath,
     unitPriceUsd: numberOrNull(priceValue),
     moq: numberOrNull(moqValue),
     packedWeightKg: weightKg(weightValue),
-    volumeCbm: numberOrNull(volumeValue) ?? dimensionsToCbm(dimensionsValue),
+    volumeCbm: volumeToCbm(volumeValue) ?? dimensionsToCbm(dimensionsValue),
+    unitSize: cleanString(dimensionsValue, 200),
     originCountry: cleanString(originValue, 120),
+    supplierCountry: cleanString(supplierCountryValue, 120),
     imageUrl: firstImage(product) || firstImage(data),
     supplier: cleanString(firstPresent(product, ['supplier', 'supplier_name', 'supplierName', 'supplier.name', 'company', 'company_name']), 300),
-    description: cleanString(description, 1500),
+    supplierBadges: cleanStringArray(firstPresent(product, ['supplier_badges', 'supplierBadges']), 20, 120),
+    description: cleanString(description, 1800),
+    hsCode: cleanString(firstPresent(product, ['hs_code', 'hsCode']), 120),
+    productId: cleanString(firstPresent(product, ['product_id', 'productId', 'id']), 100),
+    productCategoryId: cleanString(firstPresent(product, ['product_category_id', 'productCategoryId']), 100),
+    quantityUnit: cleanString(firstPresent(product, ['quantity_unit', 'quantityUnit']), 80),
+    leadTime: firstPresent(product, ['lead_time', 'leadTime']),
+    packaging: firstPresent(product, ['packaging']),
+    tariffInfo: firstPresent(product, ['tariff_info', 'tariffInfo']),
     raw,
   }
 }
@@ -271,7 +346,7 @@ async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotA
   const headers = {
     accept: 'application/json',
     'x-api-key': apiKey,
-    'user-agent': 'ShippingAPP/2.5 ParsebotAlibaba',
+    'user-agent': 'ShippingAPP/2.6 ParsebotAlibaba',
   }
   const request = attempt.method === 'GET'
     ? fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal: controller.signal })
@@ -351,7 +426,7 @@ async function lookupProduct(endpoint: string, apiKey: string, attempt: Parsebot
     return null
   }
   const facts = normalizeFacts(body?.data ?? body)
-  const useful = Boolean(facts.name || facts.unitPriceUsd || facts.moq || facts.packedWeightKg || facts.imageUrl)
+  const useful = Boolean(facts.name || facts.unitPriceUsd || facts.moq || facts.packedWeightKg || facts.volumeCbm || facts.category || facts.imageUrl)
   if (!useful) {
     failures.push(`${attemptLabel(attempt)} -> no usable product facts`)
     return null
@@ -424,7 +499,7 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
           }
         }
       }
-      if (candidate && Boolean(candidateFacts.name || candidateFacts.unitPriceUsd || candidateFacts.moq || candidateFacts.imageUrl)) {
+      if (candidate && Boolean(candidateFacts.name || candidateFacts.unitPriceUsd || candidateFacts.moq || candidateFacts.packedWeightKg || candidateFacts.volumeCbm || candidateFacts.category || candidateFacts.imageUrl)) {
         return {
           status: 'ready',
           source: 'Parse.bot · search_products',

@@ -19,6 +19,7 @@ jobs:
       PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      D1_DATABASE_NAME: shippingapp-db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo "::error::Missing GitHub secret CLOUDFLARE_API_TOKEN. Add a Cloudflare API token with Workers Scripts edit/deploy permissions."
+            echo "::error::Missing GitHub secret CLOUDFLARE_API_TOKEN. Add a Cloudflare API token with Workers Scripts edit/deploy and D1 write permissions."
             exit 1
           fi
           if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
@@ -61,17 +62,25 @@ jobs:
       - name: Validate Cloudflare configuration
         run: npx --yes wrangler@latest check
 
+      - name: Resolve existing production D1 binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@latest d1 info "$D1_DATABASE_NAME" --json > /tmp/d1-info.json
+          node scripts/resolve-production-d1-config.mjs /tmp/d1-info.json wrangler.jsonc .wrangler.production.json "$D1_DATABASE_NAME"
+          echo "WRANGLER_PRODUCTION_CONFIG=.wrangler.production.json" >> "$GITHUB_ENV"
+
       - name: Deploy to Cloudflare Workers
-        run: npx --yes wrangler@latest deploy
+        run: npx --yes wrangler@latest deploy --config "$WRANGLER_PRODUCTION_CONFIG"
 
       - name: Apply production D1 migrations
-        run: npx --yes wrangler@latest d1 migrations apply DB --remote
+        run: npx --yes wrangler@latest d1 migrations apply DB --remote --config "$WRANGLER_PRODUCTION_CONFIG"
 
       - name: Verify production D1 schema
         shell: bash
         run: |
           set -euo pipefail
-          npx --yes wrangler@latest d1 execute DB --remote --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','plans','subscriptions','usage_periods','credit_ledger','analyses','watchlist_items','watchlist_snapshots','email_preferences','email_events','billing_events') ORDER BY name" > /tmp/d1-schema.json
+          npx --yes wrangler@latest d1 execute DB --remote --config "$WRANGLER_PRODUCTION_CONFIG" --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','plans','subscriptions','usage_periods','credit_ledger','analyses','watchlist_items','watchlist_snapshots','email_preferences','email_events','billing_events') ORDER BY name" > /tmp/d1-schema.json
           node - <<'NODE'
           const fs = require('node:fs')
           const parsed = JSON.parse(fs.readFileSync('/tmp/d1-schema.json', 'utf8'))

@@ -14,15 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
-      ALIBABA_URL: "https://www.alibaba.com/product-detail/Newest-Smart-Wifi-Video-Door-Phone_1601456927609.html?spm=a2700.product_home_fy25.just_for_you.15.2ce267afu8PhBI&priceId=3cd0b54d562c4bc3a5c1f60ca3f2a245"
+      ALIBABA_URL: "https://www.alibaba.com/product-detail/Fully-Automatic-Mechanical-Watches-42-5MM_1601666174891.html?spm=a2706.products_search.normal_offer.7.136d67afME8WWH&priceId=ae738f92db4f4b0aba0e6d90353cbf56"
     steps:
-      - name: Probe production /api/analyze with provided Alibaba link
+      - name: Probe production native Alibaba extractor without Parse.bot
         shell: bash
         run: |
           set -euo pipefail
           node - <<'NODE'
           const controller = new AbortController()
-          const timeout = setTimeout(() => controller.abort(), 45000)
+          const timeout = setTimeout(() => controller.abort(), 60000)
           const baseUrl = process.env.PRODUCTION_URL
           const alibabaUrl = process.env.ALIBABA_URL
           let response
@@ -31,7 +31,7 @@ jobs:
             response = await fetch(`${baseUrl}/api/analyze`, {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ url: alibabaUrl }),
+              body: JSON.stringify({ url: alibabaUrl, sourceMode: 'native' }),
               signal: controller.signal,
             })
             text = await response.text()
@@ -44,30 +44,39 @@ jobs:
           } catch {
             throw new Error(`Non-JSON response HTTP ${response?.status}: ${String(text).slice(0, 1000)}`)
           }
-          if (!response.ok) {
-            throw new Error(`/api/analyze failed HTTP ${response.status}: ${JSON.stringify(body).slice(0, 2000)}`)
+          console.log(JSON.stringify({ httpStatus: response.status, ...body }, null, 2))
+          if (!response.ok) throw new Error(`Native analyze failed HTTP ${response.status}: ${JSON.stringify(body).slice(0, 2000)}`)
+          const name = String(body.product?.name || '').toLowerCase()
+          const category = String(body.product?.category || '').toLowerCase()
+          const source = String(body.sourceRead?.reason || '').toLowerCase()
+          if (!name) throw new Error('No product name extracted')
+          if (!/(watch|wristwatch|reloj)/.test(`${name} ${category}`)) {
+            throw new Error(`Native extractor did not identify the merchandise as a watch: name=${body.product?.name} category=${body.product?.category}`)
           }
-          const summary = {
-            status: 'ok',
-            httpStatus: response.status,
-            sourceUrl: body.sourceUrl,
-            fetched: body.fetched,
-            sourceRead: body.sourceRead,
-            product: body.product,
-            market: {
-              estimatedPriceArs: body.market?.estimatedPriceArs,
-              source: body.market?.source,
-              detailsStatus: body.market?.details?.status,
-              detailsSource: body.market?.details?.source,
-              warnings: body.market?.details?.warnings,
-            },
-            fx: body.fx,
-            suggestedQuantities: body.suggestedQuantities,
+          if (String(body.sourceRead?.mode) !== 'browser') {
+            throw new Error(`Expected native Browser Run source, got ${body.sourceRead?.mode}`)
+          }
+          if (!source.includes('browser run')) {
+            throw new Error(`Expected Browser Run reason, got ${body.sourceRead?.reason}`)
+          }
+          if (source.includes('parse.bot') && !source.includes('no entregó')) {
+            throw new Error('Probe unexpectedly depended on Parse.bot')
+          }
+          const report = {
+            productName: body.product?.name || null,
+            category: body.product?.category || null,
+            priceUsd: body.product?.unitPriceUsd || null,
+            moq: body.product?.moq || null,
+            weightKg: body.product?.packedWeightKg || null,
+            volumeCbm: body.product?.volumeCbm || null,
+            originCountry: body.product?.originCountry || null,
+            hsCode: body.sourceEvidence?.nativeAlibaba?.hsCode || null,
+            categoryPath: body.sourceEvidence?.nativeAlibaba?.categoryPath || [],
+            productId: body.sourceEvidence?.nativeAlibaba?.productId || null,
+            browserMsUsed: body.sourceRead?.browserMsUsed || null,
             confidence: body.confidence,
-            assumptions: body.assumptions,
           }
-          console.log(JSON.stringify(summary, null, 2))
-          if (!summary.product?.name) throw new Error('No product name extracted')
+          console.log('NATIVE_ALIBABA_WATCH_REPORT=' + JSON.stringify(report))
           NODE
 
-# probe rerun marker: 2026-08-25T17:31Z
+# native watch probe: 2026-08-29

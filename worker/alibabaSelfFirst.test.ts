@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { requiredSelfFirstSignals, resolveAlibabaSelfFirst } from './alibabaSelfFirst'
 import type { DirectAlibabaResult } from './alibabaDirectProvider'
+import type { RenderedAlibabaResult } from './alibabaRenderedProvider'
 import type { ParsebotAlibabaResult } from './parsebotAlibaba'
 import type { NativeAlibabaResult } from './nativeAlibaba'
 
@@ -32,6 +33,19 @@ function direct(overrides: Record<string, unknown> = {}): DirectAlibabaResult {
       ...overrides,
     },
   } as DirectAlibabaResult
+}
+
+function rendered(overrides: Record<string, unknown> = {}): RenderedAlibabaResult {
+  const base = direct(overrides)
+  if (base.status === 'unavailable') throw new Error('fixture')
+  return {
+    status: 'ready',
+    source: 'ShippingAPP rendered Alibaba',
+    httpStatus: 200,
+    browserMsUsed: 800,
+    warnings: [],
+    facts: base.facts,
+  }
 }
 
 function parsebot(overrides: Record<string, unknown> = {}): ParsebotAlibabaResult {
@@ -81,22 +95,41 @@ const nativeOut: NativeAlibabaResult = {
 describe('Alibaba self-scrape-first orchestration', () => {
   it('uses zero-Parse-credit direct extraction first and skips paid providers when complete', async () => {
     const directReader = vi.fn(async () => direct())
+    const renderedReader = vi.fn(async () => rendered())
     const parsebotReader = vi.fn(async () => parsebot())
     const nativeReader = vi.fn(async () => native())
-    const result = await resolveAlibabaSelfFirst(url, env, { directReader, parsebotReader, nativeReader })
+    const result = await resolveAlibabaSelfFirst(url, env, { directReader, renderedReader, parsebotReader, nativeReader })
     expect(requiredSelfFirstSignals(result)).toBe(7)
     expect(directReader).toHaveBeenCalledTimes(1)
+    expect(renderedReader).not.toHaveBeenCalled()
     expect(parsebotReader).not.toHaveBeenCalled()
     expect(nativeReader).not.toHaveBeenCalled()
     expect(result.confidence.productSource).toContain('direct')
   })
 
-  it('uses Parse.bot only to fill facts missing from the first-party read', async () => {
+  it('renders Alibaba and reuses the deterministic parser before spending Parse.bot credits', async () => {
     const partial = direct({ packedWeightKg: null, volumeCbm: null, evidence: ['title', 'category', 'price', 'moq', 'origin'] })
     ;(partial as any).status = 'partial'
+    const renderedReader = vi.fn(async () => rendered())
     const parsebotReader = vi.fn(async () => parsebot())
     const nativeReader = vi.fn(async () => native())
-    const result = await resolveAlibabaSelfFirst(url, env, { directReader: async () => partial, parsebotReader, nativeReader })
+    const result = await resolveAlibabaSelfFirst(url, env, { directReader: async () => partial, renderedReader, parsebotReader, nativeReader })
+    expect(renderedReader).toHaveBeenCalledTimes(1)
+    expect(parsebotReader).not.toHaveBeenCalled()
+    expect(nativeReader).not.toHaveBeenCalled()
+    expect(requiredSelfFirstSignals(result)).toBe(7)
+    expect(result.confidence.productSource).toContain('rendered-html')
+  })
+
+  it('uses Parse.bot only to fill facts still missing after first-party reads', async () => {
+    const partial = direct({ packedWeightKg: null, volumeCbm: null, evidence: ['title', 'category', 'price', 'moq', 'origin'] })
+    ;(partial as any).status = 'partial'
+    const renderedOut: RenderedAlibabaResult = {
+      status: 'unavailable', source: 'ShippingAPP rendered Alibaba', facts: null, httpStatus: 200, browserMsUsed: 300, warnings: ['rendered incomplete'],
+    }
+    const parsebotReader = vi.fn(async () => parsebot())
+    const nativeReader = vi.fn(async () => native())
+    const result = await resolveAlibabaSelfFirst(url, env, { directReader: async () => partial, renderedReader: async () => renderedOut, parsebotReader, nativeReader })
     expect(parsebotReader).toHaveBeenCalledTimes(1)
     expect(nativeReader).not.toHaveBeenCalled()
     expect(result.product.packedWeightKg).toBe(0.2)
@@ -104,12 +137,16 @@ describe('Alibaba self-scrape-first orchestration', () => {
     expect(requiredSelfFirstSignals(result)).toBe(7)
   })
 
-  it('survives exhausted Parse.bot credits by falling through to Browser Run', async () => {
+  it('survives exhausted Parse.bot credits by falling through to Browser Run JSON', async () => {
     const partial = direct({ packedWeightKg: null, volumeCbm: null, evidence: ['title', 'category', 'price', 'moq', 'origin'] })
     ;(partial as any).status = 'partial'
+    const renderedOut: RenderedAlibabaResult = {
+      status: 'unavailable', source: 'ShippingAPP rendered Alibaba', facts: null, httpStatus: 200, browserMsUsed: 300, warnings: ['rendered incomplete'],
+    }
     const nativeReader = vi.fn(async () => native())
     const result = await resolveAlibabaSelfFirst(url, env, {
       directReader: async () => partial,
+      renderedReader: async () => renderedOut,
       parsebotReader: async () => parsebotOut,
       nativeReader,
     })
@@ -123,8 +160,12 @@ describe('Alibaba self-scrape-first orchestration', () => {
   it('never invents missing logistics when Parse.bot and Browser Run are both unavailable', async () => {
     const partial = direct({ packedWeightKg: null, volumeCbm: null, originCountry: null, evidence: ['title', 'category', 'price', 'moq'] })
     ;(partial as any).status = 'partial'
+    const renderedOut: RenderedAlibabaResult = {
+      status: 'unavailable', source: 'ShippingAPP rendered Alibaba', facts: null, httpStatus: 200, browserMsUsed: 300, warnings: ['rendered incomplete'],
+    }
     const result = await resolveAlibabaSelfFirst(url, env, {
       directReader: async () => partial,
+      renderedReader: async () => renderedOut,
       parsebotReader: async () => parsebotOut,
       nativeReader: async () => nativeOut,
     })
@@ -139,8 +180,12 @@ describe('Alibaba self-scrape-first orchestration', () => {
     const directOut: DirectAlibabaResult = {
       status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: 403, warnings: ['blocked'],
     }
+    const renderedOut: RenderedAlibabaResult = {
+      status: 'unavailable', source: 'ShippingAPP rendered Alibaba', facts: null, httpStatus: 403, browserMsUsed: null, warnings: ['blocked'],
+    }
     const result = await resolveAlibabaSelfFirst(url, env, {
       directReader: async () => directOut,
+      renderedReader: async () => renderedOut,
       parsebotReader: async () => parsebotOut,
       nativeReader: async () => nativeOut,
     })

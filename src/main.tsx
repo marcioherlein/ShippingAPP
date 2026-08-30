@@ -1,6 +1,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
+import { esES } from '@clerk/localizations/es-ES'
 import App from './App'
 import ClerkShell from './auth/ClerkShell'
 import './styles.css'
@@ -16,7 +17,7 @@ if (!root) {
 }
 
 const application = clerkPublishableKey
-  ? <ClerkProvider publishableKey={clerkPublishableKey}>
+  ? <ClerkProvider publishableKey={clerkPublishableKey} localization={esES}>
       <ClerkShell><App /></ClerkShell>
     </ClerkProvider>
   : <App />

@@ -90,6 +90,14 @@ function hasValidInternalToken(request: Request, env: EnvLike) {
   return supplied.length >= 32 && constantTimeTextEqual(supplied, configured)
 }
 
+function hasBearerCredential(request: Request) {
+  return /^Bearer\s+\S+/i.test(request.headers.get('authorization')?.trim() || '')
+}
+
+function clerkConfigured(env: EnvLike) {
+  return Boolean(textEnv(env, 'CLERK_SECRET_KEY') && textEnv(env, 'CLERK_PUBLISHABLE_KEY') && textEnv(env, 'CLERK_JWT_KEY'))
+}
+
 function authorizedParties(env: EnvLike) {
   const configured = textEnv(env, 'CLERK_AUTHORIZED_PARTIES')
   if (!configured) return [...DEFAULT_AUTHORIZED_PARTIES]
@@ -115,6 +123,44 @@ export async function verifyClerkSession(request: Request, env: EnvLike): Promis
   return typeof auth.userId === 'string' && auth.userId ? { subject: auth.userId } : null
 }
 
+async function resolveUserIdentity(
+  incomingRequest: Request,
+  request: Request,
+  env: EnvLike,
+  dependencies: AuthDependencies,
+): Promise<{ request: Request; identity: Extract<AuthIdentity, { kind: 'user' }> } | null> {
+  if (!env.DB || !clerkConfigured(env)) return null
+
+  const verify = dependencies.verifySession ?? verifyClerkSession
+  let verified: VerifiedSession | null
+  try {
+    verified = await verify(incomingRequest, env)
+  } catch {
+    return null
+  }
+  if (!verified?.subject) return null
+
+  const ensure = dependencies.ensureUser ?? ((db, input) => ensureAuthUser(db, input))
+  let user: { id: string }
+  try {
+    user = await ensure(env.DB, {
+      id: (dependencies.randomId ?? (() => crypto.randomUUID()))(),
+      provider: 'clerk',
+      subject: verified.subject,
+    })
+  } catch {
+    return null
+  }
+
+  const identity: Extract<AuthIdentity, { kind: 'user' }> = {
+    kind: 'user',
+    provider: 'clerk',
+    subject: verified.subject,
+    userId: user.id,
+  }
+  return { request: withTrustedIdentity(request, identity), identity }
+}
+
 export async function authorizeRequest(
   incomingRequest: Request,
   env: EnvLike,
@@ -128,8 +174,18 @@ export async function authorizeRequest(
     return { ok: true, request, identity: null }
   }
 
-  if (!authEnforcementEnabled(env)) {
-    return { ok: true, request, identity: null }
+  const enforcementEnabled = authEnforcementEnabled(env)
+  if (!enforcementEnabled) {
+    // Shadow-auth mode lets a real signed-in browser prove Clerk -> D1 identity
+    // before the cutover. Anonymous or invalid credentials remain non-blocking,
+    // preserving the current rollout while all caller-forged trusted headers stay stripped.
+    if (policy.targetAccess !== 'authenticated' || !hasBearerCredential(incomingRequest)) {
+      return { ok: true, request, identity: null }
+    }
+    const shadowIdentity = await resolveUserIdentity(incomingRequest, request, env, dependencies)
+    return shadowIdentity
+      ? { ok: true, request: shadowIdentity.request, identity: shadowIdentity.identity }
+      : { ok: true, request, identity: null }
   }
 
   const serviceAuthenticated = hasValidInternalToken(incomingRequest, env)
@@ -148,38 +204,28 @@ export async function authorizeRequest(
     return { ok: true, request: withTrustedIdentity(request, { kind: 'service' }), identity: { kind: 'service' } }
   }
 
-  if (!textEnv(env, 'CLERK_SECRET_KEY') || !textEnv(env, 'CLERK_PUBLISHABLE_KEY') || !textEnv(env, 'CLERK_JWT_KEY')) {
+  if (!clerkConfigured(env)) {
     return { ok: false, response: jsonError(503, 'auth_not_configured', 'Authentication is not configured.') }
   }
   if (!env.DB) {
     return { ok: false, response: jsonError(503, 'auth_store_not_configured', 'Authentication storage is not configured.') }
   }
 
-  const verify = dependencies.verifySession ?? verifyClerkSession
-  let verified: VerifiedSession | null
-  try {
-    verified = await verify(incomingRequest, env)
-  } catch {
-    return { ok: false, response: jsonError(401, 'unauthorized', 'Unauthorized.') }
-  }
-  if (!verified?.subject) {
-    return { ok: false, response: jsonError(401, 'unauthorized', 'Unauthorized.') }
-  }
-
-  const ensure = dependencies.ensureUser ?? ((db, input) => ensureAuthUser(db, input))
-  let user: { id: string }
-  try {
-    user = await ensure(env.DB, {
-      id: (dependencies.randomId ?? (() => crypto.randomUUID()))(),
-      provider: 'clerk',
-      subject: verified.subject,
-    })
-  } catch {
+  const resolvedIdentity = await resolveUserIdentity(incomingRequest, request, env, dependencies)
+  if (!resolvedIdentity) {
+    // Keep the enforced path fail-closed even though the same resolver is deliberately
+    // fail-open in shadow mode.
+    const verify = dependencies.verifySession ?? verifyClerkSession
+    try {
+      const verified = await verify(incomingRequest, env)
+      if (!verified?.subject) return { ok: false, response: jsonError(401, 'unauthorized', 'Unauthorized.') }
+    } catch {
+      return { ok: false, response: jsonError(401, 'unauthorized', 'Unauthorized.') }
+    }
     return { ok: false, response: jsonError(503, 'auth_identity_unavailable', 'Authentication identity is temporarily unavailable.') }
   }
 
-  const identity: AuthIdentity = { kind: 'user', provider: 'clerk', subject: verified.subject, userId: user.id }
-  return { ok: true, request: withTrustedIdentity(request, identity), identity }
+  return { ok: true, request: resolvedIdentity.request, identity: resolvedIdentity.identity }
 }
 
 export function readTrustedUserId(request: Request) {

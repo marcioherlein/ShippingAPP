@@ -42,12 +42,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          CI_INTERNAL_TOKEN='ci-local-only-internal-token-000000000000000000000000'
+          printf 'INTERNAL_API_TOKEN="%s"\n' "$CI_INTERNAL_TOKEN" > .dev.vars
           npx --yes wrangler@latest dev --local --ip 127.0.0.1 --port 8787 > /tmp/wrangler-smoke.log 2>&1 &
           WRANGLER_PID=$!
-          trap 'kill $WRANGLER_PID >/dev/null 2>&1 || true; cat /tmp/wrangler-smoke.log' EXIT
+          trap 'kill $WRANGLER_PID >/dev/null 2>&1 || true; rm -f .dev.vars; cat /tmp/wrangler-smoke.log' EXIT
 
           for i in {1..40}; do
-            if curl -fsS http://127.0.0.1:8787/api/runtime-smoke > /tmp/runtime-smoke.json; then
+            if curl -fsS -H "x-shippingapp-internal-token: $CI_INTERNAL_TOKEN" http://127.0.0.1:8787/api/runtime-smoke > /tmp/runtime-smoke.json; then
               node - <<'NODE'
           const fs = require('node:fs')
           const body = JSON.parse(fs.readFileSync('/tmp/runtime-smoke.json', 'utf8'))

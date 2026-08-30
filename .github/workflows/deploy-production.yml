@@ -128,6 +128,9 @@ jobs:
           if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Production D1 schema mismatch: ${JSON.stringify(names)}`)
           NODE
 
+      - name: Production auth boundary adversarial smoke test
+        run: node scripts/smoke-production-auth-boundary.mjs
+
       - name: Production privileged runtime smoke test
         shell: bash
         run: |

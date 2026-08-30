@@ -146,4 +146,76 @@ describe('Stage 2 auth gate', () => {
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.request.headers.get(TRUSTED_USER_ID_HEADER)).toBeNull()
   })
+
+  it('maps a valid Clerk bearer credential to D1 in shadow mode without enabling enforcement', async () => {
+    const shadowEnsureUser = vi.fn(async (_db: D1DatabaseLike, input: { id: string; provider: string; subject: string }) => ({
+      id: `shadow-${input.subject}`,
+    }))
+    const result = await authorizeRequest(
+      new Request('https://shippingapp.test/api/me', {
+        headers: { authorization: 'Bearer valid.shadow.session' },
+      }),
+      env({ AUTH_ENFORCEMENT: 'false' }),
+      {
+        verifySession: async () => ({ subject: 'clerk-shadow-user' }),
+        ensureUser: shadowEnsureUser,
+        randomId: () => 'shadow-new-id',
+      },
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity).toEqual({
+      kind: 'user',
+      provider: 'clerk',
+      subject: 'clerk-shadow-user',
+      userId: 'shadow-clerk-shadow-user',
+    })
+    expect(result.request.headers.get(TRUSTED_USER_ID_HEADER)).toBe('shadow-clerk-shadow-user')
+    expect(result.request.headers.get(TRUSTED_AUTH_SUBJECT_HEADER)).toBe('clerk-shadow-user')
+    expect(shadowEnsureUser).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an invalid shadow-mode bearer non-blocking but never grants trusted identity', async () => {
+    const shadowEnsureUser = vi.fn(async () => ({ id: 'must-not-exist' }))
+    const result = await authorizeRequest(
+      new Request('https://shippingapp.test/api/analyze', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer forged.shadow.session',
+          [TRUSTED_USER_ID_HEADER]: 'victim-id',
+          [TRUSTED_AUTH_KIND_HEADER]: 'user',
+        },
+      }),
+      env({ AUTH_ENFORCEMENT: 'false' }),
+      {
+        verifySession: async () => { throw new Error('invalid signature') },
+        ensureUser: shadowEnsureUser,
+      },
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity).toBeNull()
+    expect(result.request.headers.get(TRUSTED_USER_ID_HEADER)).toBeNull()
+    expect(result.request.headers.get(TRUSTED_AUTH_KIND_HEADER)).toBeNull()
+    expect(shadowEnsureUser).not.toHaveBeenCalled()
+  })
+
+  it('keeps shadow mode fail-open if Clerk configuration is unavailable', async () => {
+    const verifySession = vi.fn(async () => ({ subject: 'must-not-run' }))
+    const result = await authorizeRequest(
+      new Request('https://shippingapp.test/api/analyze', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-looking.session' },
+      }),
+      env({ AUTH_ENFORCEMENT: 'false', CLERK_SECRET_KEY: undefined }),
+      { verifySession, ensureUser },
+    )
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity).toBeNull()
+    expect(verifySession).not.toHaveBeenCalled()
+  })
 })

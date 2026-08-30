@@ -1,6 +1,7 @@
 import app from './router'
 import { authorizeRequest } from './auth'
 import { withRequestContext } from './requestContext'
+import { analyzeAlibabaSelfFirst, parseAlibabaSelfFirstUrl } from './alibabaSelfFirst'
 
 export default {
   async fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
@@ -14,6 +15,24 @@ export default {
           return Response.json({ error: 'Authentication rollout is not enabled.', code: 'auth_disabled' }, { status: 404 })
         }
         return Response.json({ authenticated: true, accountId: gate.identity.userId })
+      }
+
+      // Normal Alibaba analysis is self-scrape first. Parse.bot is now only an
+      // optional supplement when first-party HTML/JSON does not complete the
+      // mandatory product ficha. Explicit diagnostic sourceMode requests keep
+      // using the existing router probes unchanged.
+      if (url.pathname === '/api/analyze' && gate.request.method === 'POST') {
+        let body: any = null
+        try { body = await gate.request.clone().json() } catch { body = null }
+        const alibabaUrl = !body?.sourceMode ? parseAlibabaSelfFirstUrl(body?.url) : null
+        if (alibabaUrl) {
+          try {
+            return Response.json(await analyzeAlibabaSelfFirst(alibabaUrl, env as any))
+          } catch {
+            // Reliability backstop: if the new orchestrator itself fails, keep
+            // the previous router pipeline available rather than dropping the case.
+          }
+        }
       }
 
       return app.fetch(gate.request, env as never)

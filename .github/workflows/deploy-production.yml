@@ -100,7 +100,7 @@ jobs:
             local name="$1"
             local value="$2"
             if [ -n "$value" ]; then
-              printf '%s' "$value" | npx --yes wrangler@latest secret put "$name" --config "$WRANGLER_PRODUCTION_CONFIG" >/dev/null
+              printf '%s' "$value" | npx --yes wrangler@latest versions secret put "$name" --config "$WRANGLER_PRODUCTION_CONFIG" >/dev/null
             fi
           }
           put_secret INTERNAL_API_TOKEN "${INTERNAL_API_TOKEN:-}"

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { Show, SignInButton, SignUpButton, UserButton, useAuth, useClerk } from '@clerk/react'
-import { setApiTokenProvider } from '../lib/apiClient'
+import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
 import './auth.css'
 
 export default function ClerkShell({ children }: { children: React.ReactNode }) {
@@ -12,7 +12,14 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
       setApiTokenProvider(null)
       return
     }
+
     setApiTokenProvider(() => getToken())
+
+    // Shadow-auth calls /api/me immediately after sign-in. Before enforcement is
+    // enabled this proves the real Clerk session can be verified and mapped to D1
+    // without making anonymous users depend on auth availability.
+    void apiFetch('/api/me').catch(() => undefined)
+
     return () => setApiTokenProvider(null)
   }, [getToken, isLoaded, isSignedIn])
 

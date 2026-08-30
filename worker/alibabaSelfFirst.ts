@@ -1,4 +1,6 @@
 import { extractAlibabaDirectHttp, type DirectAlibabaResult } from './alibabaDirectProvider'
+import type { AlibabaDirectFacts } from './alibabaDirectExtract'
+import { extractAlibabaRenderedHtml, type RenderedAlibabaResult } from './alibabaRenderedProvider'
 import { extractAlibabaWithParsebot, type ParsebotAlibabaFacts, type ParsebotAlibabaResult } from './parsebotAlibaba'
 import { extractAlibabaNative, type NativeAlibabaResult } from './nativeAlibaba'
 import type { BrowserRun } from './alibabaSource'
@@ -15,11 +17,13 @@ type Env = MercadoLibreAuthEnv & {
 }
 
 type DirectReader = (url: URL) => Promise<DirectAlibabaResult>
+type RenderedReader = (url: URL, browser: BrowserRun) => Promise<RenderedAlibabaResult>
 type ParsebotReader = (url: URL, env: Env) => Promise<ParsebotAlibabaResult>
 type NativeReader = (url: URL, browser: BrowserRun) => Promise<NativeAlibabaResult>
 
 export type AlibabaSourceDeps = {
   directReader?: DirectReader
+  renderedReader?: RenderedReader
   parsebotReader?: ParsebotReader
   nativeReader?: NativeReader
 }
@@ -222,17 +226,83 @@ function mergeDirect(data: any, direct: Exclude<DirectAlibabaResult, { status: '
   }
 }
 
+function mergeRendered(data: any, rendered: Exclude<RenderedAlibabaResult, { status: 'unavailable' }>) {
+  const facts: AlibabaDirectFacts = rendered.facts
+  const prior = data.product || {}
+  const priorSource = String(data.confidence?.productSource || '')
+  const priorNameProvisional = priorSource === 'url-only' || priorSource.includes('provisional')
+  const renderedNameProvisional = facts.evidence.includes('url_slug_title')
+  const finalMoq = usableNumber(prior.moq) ? prior.moq : usableNumber(facts.moq) ? Math.round(facts.moq) : null
+  const product = {
+    ...prior,
+    name: priorNameProvisional && usableText(facts.name) && !renderedNameProvisional
+      ? facts.name
+      : usableText(prior.name, ['Producto Alibaba']) ? prior.name : facts.name || prior.name,
+    category: usableText(prior.category, ['Sin clasificar']) ? prior.category : facts.category || facts.categoryPath.at(-1) || prior.category,
+    unitPriceUsd: usableNumber(prior.unitPriceUsd) ? prior.unitPriceUsd : usableNumber(facts.unitPriceUsd) ? facts.unitPriceUsd : null,
+    moq: finalMoq,
+    packedWeightKg: usableNumber(prior.packedWeightKg) ? prior.packedWeightKg : usableNumber(facts.packedWeightKg) ? facts.packedWeightKg : 0,
+    volumeCbm: usableNumber(prior.volumeCbm) ? prior.volumeCbm : usableNumber(facts.volumeCbm) ? facts.volumeCbm : 0,
+    originCountry: usableText(prior.originCountry) ? prior.originCountry : usableText(facts.originCountry) ? facts.originCountry : '',
+    imageUrl: prior.imageUrl || facts.imageUrl || null,
+    supplier: prior.supplier || facts.supplier || null,
+    description: prior.description || facts.description || null,
+    material: prior.material || facts.material || null,
+    functionText: prior.functionText || facts.functionText || null,
+  }
+  const signals = requiredSelfFirstSignals({ product })
+  const notes = [
+    `ShippingAPP pasó el HTML ya renderizado por Chromium por su parser determinístico: ${facts.evidence.length} señales explícitas.`,
+    facts.categoryPath.length ? `Alibaba category path renderizado: ${facts.categoryPath.join(' > ')}.` : null,
+    facts.hsCode ? `HS visible/embebido recuperado del HTML renderizado: ${facts.hsCode}; no sustituye la NCM argentina.` : null,
+    facts.unitSize ? `Dimensiones logísticas renderizadas: ${facts.unitSize}.` : null,
+    ...rendered.warnings,
+  ].filter((item): item is string => Boolean(item))
+  return {
+    ...data,
+    fetched: true,
+    product,
+    sourceRead: {
+      mode: 'browser' as const,
+      quality: Math.max(Number(data.sourceRead?.quality) || 0, Math.min(10, 2 + signals)),
+      directStatus: data.sourceRead?.directStatus ?? rendered.httpStatus,
+      browserAttempted: true,
+      browserMsUsed: rendered.browserMsUsed,
+      reason: 'El fetch directo fue incompleto; ShippingAPP renderizó Alibaba y volvió a aplicar su extractor propio antes de consultar Parse.bot.',
+    },
+    suggestedQuantities: quantitiesFromMoq(finalMoq),
+    confidence: {
+      ...data.confidence,
+      overall: Math.min(94, Math.max(Number(data.confidence?.overall) || 0, 35 + signals * 8)),
+      productSource: priorSource && priorSource !== 'url-only' ? `${priorSource}+rendered-html` : 'rendered-html',
+      logistics: usableNumber(product.packedWeightKg) && usableNumber(product.volumeCbm) ? 'medium' : 'missing',
+    },
+    assumptions: [...notes, ...(data.assumptions || [])],
+    sourceEvidence: {
+      ...(data.sourceEvidence || {}),
+      renderedAlibaba: {
+        status: rendered.status,
+        productId: facts.productId,
+        categoryPath: facts.categoryPath,
+        hsCode: facts.hsCode,
+        unitSize: facts.unitSize,
+        evidence: facts.evidence,
+      },
+    },
+  }
+}
+
 function mergeParsebot(data: any, parsebot: Extract<ParsebotAlibabaResult, { status: 'ready' }>) {
   const merged = mergeCommonFacts(data, parsebot.facts, {
     source: 'parsebot',
-    reason: 'El extractor propio dejó datos faltantes; Parse.bot se usó sólo como suplemento estructurado.',
-    browserAttempted: false,
-    browserMsUsed: null,
+    reason: 'Los extractores propios dejaron datos faltantes; Parse.bot se usó sólo como suplemento estructurado.',
+    browserAttempted: Boolean(data.sourceRead?.browserAttempted),
+    browserMsUsed: data.sourceRead?.browserMsUsed ?? null,
   })
   return {
     ...merged,
     assumptions: [
-      `Parse.bot se consultó porque la lectura propia tenía ${requiredSelfFirstSignals(data)}/7 señales obligatorias.`,
+      `Parse.bot se consultó sólo después de fetch directo + HTML renderizado; quedaban ${7 - requiredSelfFirstSignals(data)} señales obligatorias por resolver.`,
       ...parsebot.warnings,
       ...(merged.assumptions || []),
     ],
@@ -253,7 +323,7 @@ function mergeParsebot(data: any, parsebot: Extract<ParsebotAlibabaResult, { sta
 function mergeNative(data: any, native: Extract<NativeAlibabaResult, { status: 'ready' }>) {
   const merged = mergeCommonFacts(data, native.facts, {
     source: 'browser',
-    reason: 'La lectura propia y el suplemento estructurado no completaron la ficha; ShippingAPP usó un único Browser Run JSON.',
+    reason: 'Fetch, HTML renderizado y suplemento estructurado no completaron la ficha; ShippingAPP usó Browser Run JSON para un último intento automático.',
     browserAttempted: true,
     browserMsUsed: native.browserMsUsed,
   })
@@ -281,6 +351,7 @@ export async function resolveAlibabaSelfFirst(
   deps: AlibabaSourceDeps = {},
 ) {
   const directReader = deps.directReader || extractAlibabaDirectHttp
+  const renderedReader = deps.renderedReader || extractAlibabaRenderedHtml
   const parsebotReader = deps.parsebotReader || extractAlibabaWithParsebot
   const nativeReader = deps.nativeReader || extractAlibabaNative
 
@@ -289,7 +360,15 @@ export async function resolveAlibabaSelfFirst(
   if (direct.status !== 'unavailable') data = mergeDirect(data, direct)
   else data.assumptions = [...direct.warnings, ...(data.assumptions || [])]
 
-  // Parse.bot is now an optional supplement, never the first provider.
+  // Before spending any Parse.bot credits, render the page and run the same
+  // deterministic parser over the post-JS HTML/embedded data.
+  if (requiredSelfFirstSignals(data) < 7) {
+    const rendered = await renderedReader(url, env.BROWSER)
+    if (rendered.status !== 'unavailable') data = mergeRendered(data, rendered)
+    else data.assumptions = [...rendered.warnings, ...(data.assumptions || [])]
+  }
+
+  // Parse.bot is an optional enrichment provider, never a prerequisite.
   if (requiredSelfFirstSignals(data) < 7) {
     const parsebot = await parsebotReader(url, env)
     if (parsebot.status === 'ready') data = mergeParsebot(data, parsebot)
@@ -303,7 +382,7 @@ export async function resolveAlibabaSelfFirst(
       data.sourceRead = {
         ...data.sourceRead,
         browserAttempted: true,
-        browserMsUsed: native.browserMsUsed,
+        browserMsUsed: native.browserMsUsed ?? data.sourceRead?.browserMsUsed ?? null,
         reason: 'Los proveedores automáticos no completaron la ficha; ShippingAPP solicita al usuario sólo los datos faltantes.',
       }
       data.assumptions = [

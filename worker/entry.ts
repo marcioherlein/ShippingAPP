@@ -2,6 +2,7 @@ import app from './router'
 import { authorizeRequest } from './auth'
 import { withRequestContext } from './requestContext'
 import { analyzeAlibabaSelfFirst, parseAlibabaSelfFirstUrl } from './alibabaSelfFirst'
+import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory'
 
 export default {
   async fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
@@ -15,6 +16,10 @@ export default {
           return Response.json({ error: 'Authentication rollout is not enabled.', code: 'auth_disabled' }, { status: 404 })
         }
         return Response.json({ authenticated: true, accountId: gate.identity.userId })
+      }
+
+      if (isAnalysisHistoryRoute(url.pathname)) {
+        return handleAnalysisHistory(gate.request, env as any)
       }
 
       // Normal Alibaba analysis is self-scrape first. Parse.bot is now only an

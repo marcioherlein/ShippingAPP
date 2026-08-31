@@ -26,10 +26,11 @@ const TOKEN_ALIASES: Record<string, string> = {
   organizadora: 'storage', organizador: 'storage', storage: 'storage',
 }
 
-const STOPWORDS = new Set(['a', 'al', 'and', 'con', 'de', 'del', 'el', 'en', 'for', 'la', 'las', 'los', 'of', 'para', 'por', 'the', 'un', 'una', 'with', 'generic', 'generico', 'generica', 'nuevo', 'nueva', 'original', 'premium'])
+const STOPWORDS = new Set(['a', 'al', 'and', 'con', 'de', 'del', 'el', 'en', 'for', 'la', 'las', 'los', 'of', 'para', 'por', 'the', 'un', 'una', 'with', 'generic', 'generico', 'generica', 'nuevo', 'nueva', 'original', 'premium', 'marca', 'sin'])
 const ACCESSORY_TERMS = new Set([...EXCLUDED_LISTING_TERMS, 'case', 'cover', 'replacement', 'repuesto', 'spare', 'accesorio', 'carcasa', 'filtro', 'cable', 'cargador', 'soporte'])
 const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit'])
 const DISPLAY_SHORTHANDS = new Set(['3k', '4k', '6k', '8k', '12k', '18k', '24k'])
+const REQUIRED_TRAITS = new Set(['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter'])
 
 function normalizedTokens(value: string) {
   return cleanText(value)
@@ -47,9 +48,21 @@ function containsBrand(value: string) {
   return HIGH_BRAND_EQUITY.some((brand) => haystack.includes(` ${cleanText(brand)} `))
 }
 
+function normalizeSpecText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/(\d)\s*["”″]/g, '$1 inch ')
+    .replace(/(\d),(\d)/g, '$1.$2')
+    .replace(/[^a-z0-9.+ ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function strippedIdentityText(value: string) {
-  return cleanText(value)
-    .replace(new RegExp(`\\d+(?:[.,]\\d+)?\\s*(${SPEC_UNITS})\\b`, 'g'), ' ')
+  return normalizeSpecText(value)
+    .replace(new RegExp(`\\d+(?:\\.\\d+)?\\s*(${SPEC_UNITS})\\b`, 'g'), ' ')
     .replace(/\b(?:pack\s*(?:x\s*)?|x\s*)\d{1,3}\b/g, ' ')
     .replace(/\b\d{1,3}\s*(?:unidades|unidad|units|pcs|piezas)\b/g, ' ')
     .replace(/\s+/g, ' ')
@@ -61,7 +74,7 @@ function hasStrongIdentity(productName: string) {
   const stripped = strippedIdentityText(productName)
   const tokens = stripped.split(' ').filter(Boolean)
   if (tokens.some((token) => /[a-z]/.test(token) && /\d/.test(token) && !DISPLAY_SHORTHANDS.has(token))) return true
-  if (/\b\d+[.,]\d+\b/.test(stripped)) return true
+  if (/\b\d+\.\d+\b/.test(stripped)) return true
   if ((stripped.match(/\b\d{2,4}\b/g) || []).some((value) => Number(value) >= 10)) return true
   return false
 }
@@ -76,10 +89,10 @@ function itemEvidence(item: MlResult) {
 
 function extractSpecs(value: string) {
   const specs = new Map<string, Set<string>>()
-  const re = new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${SPEC_UNITS})\\b`, 'g')
-  for (const match of cleanText(value).matchAll(re)) {
+  const re = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*(${SPEC_UNITS})\\b`, 'g')
+  for (const match of normalizeSpecText(value).matchAll(re)) {
     const unit = SPEC_UNIT_ALIASES[match[2]] || match[2]
-    const amount = Number(match[1].replace(',', '.'))
+    const amount = Number(match[1])
     if (!Number.isFinite(amount)) continue
     const values = specs.get(unit) || new Set<string>()
     values.add(String(amount))
@@ -88,12 +101,12 @@ function extractSpecs(value: string) {
   return specs
 }
 
-function hasSpecConflict(target: string, candidate: string) {
+function hasMissingOrConflictingSpecs(target: string, candidate: string) {
   const expected = extractSpecs(target)
   const actual = extractSpecs(candidate)
   for (const [unit, expectedValues] of expected) {
     const actualValues = actual.get(unit)
-    if (!actualValues?.size) continue
+    if (!actualValues?.size) return true
     if (![...expectedValues].every((value) => actualValues.has(value))) return true
   }
   return false
@@ -139,19 +152,18 @@ function hasBundleMismatch(target: string, candidate: string) {
 function hasCriticalTraitConflict(target: string, candidate: string) {
   const expected = tokenSet(target)
   const actual = tokenSet(candidate)
-  const targetCarbon = expected.has('carbon')
+
+  for (const trait of REQUIRED_TRAITS) {
+    if (expected.has(trait) && !actual.has(trait)) return true
+  }
+
   const candidateGlass = actual.has('fiberglass') || actual.has('vidrio') || (actual.has('fibra') && actual.has('vidrio'))
-  if (targetCarbon && candidateGlass && !actual.has('carbon')) return true
+  if (expected.has('carbon') && candidateGlass && !actual.has('carbon')) return true
 
-  const targetElectric = expected.has('electric')
-  const candidateElectric = actual.has('electric')
-  const targetGas = expected.has('gas')
-  const candidateGas = actual.has('gas')
-  if ((targetElectric && candidateGas && !candidateElectric) || (targetGas && candidateElectric && !candidateGas)) return true
-
-  const targetWireless = expected.has('wireless')
-  const candidateWireless = actual.has('wireless')
-  if (targetWireless && (actual.has('cableado') || actual.has('wired')) && !candidateWireless) return true
+  if (expected.has('electric') && actual.has('gas')) return true
+  if (expected.has('gas') && actual.has('electric')) return true
+  if (expected.has('frontal') && (actual.has('superior') || actual.has('semiautomatico') || actual.has('semi'))) return true
+  if (expected.has('wireless') && (actual.has('cableado') || actual.has('wired'))) return true
   return false
 }
 
@@ -167,16 +179,15 @@ function categoryEvidenceScore(category: string, candidate: string) {
   const categoryTokens = tokenSet(category)
   const actual = tokenSet(candidate)
   if (!categoryTokens.size) return 0
-  const common = [...categoryTokens].filter((token) => actual.has(token)).length
-  if (common === 0) return 0
-  return Math.min(38, 22 + (common / categoryTokens.size) * 16)
+  if (![...categoryTokens].every((token) => actual.has(token))) return 0
+  return 38
 }
 
 function traitBonus(target: string, candidate: string) {
   const expected = tokenSet(target)
   const actual = tokenSet(candidate)
   let score = 0
-  for (const trait of ['carbon', 'wireless', 'electric', 'eva', 'diamante', 'redonda', 'lagrima']) {
+  for (const trait of ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'eva', 'diamante', 'redonda', 'lagrima']) {
     if (expected.has(trait) && actual.has(trait)) score += 7
   }
   return Math.min(18, score)
@@ -186,7 +197,7 @@ export function buildFunctionalMarketQuery(productName: string, category: string
   const specs = [...extractSpecs(productName).entries()].flatMap(([unit, values]) => [...values].map((value) => `${value}${unit}`))
   const productTokens = normalizedTokens(productName).filter((token) => !containsBrand(token)).filter((token) => token.length >= 3)
   const categoryTokens = normalizedTokens(category)
-  const usefulTraits = productTokens.filter((token) => ['carbon', 'wireless', 'electric', 'eva', 'diamante', 'redonda', 'lagrima', 'storage', 'box'].includes(token))
+  const usefulTraits = productTokens.filter((token) => ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'eva', 'diamante', 'redonda', 'lagrima', 'storage', 'box'].includes(token))
   const query = [...categoryTokens, ...usefulTraits, ...specs]
   return [...new Set(query)].slice(0, 8).join(' ') || cleanText(category || productName)
 }
@@ -199,7 +210,7 @@ export function functionalComparableScore(item: MlResult, productName: string, c
   if (item.condition && item.condition !== 'new') return 0
   if (hasAccessoryMismatch(target, title)) return 0
   if (hasBundleMismatch(target, title)) return 0
-  if (hasSpecConflict(target, evidence)) return 0
+  if (hasMissingOrConflictingSpecs(target, evidence)) return 0
   if (hasCriticalTraitConflict(target, evidence)) return 0
 
   const targetPack = extractPackQuantity(target)

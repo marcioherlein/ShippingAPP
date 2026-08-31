@@ -1,10 +1,16 @@
 import { extractAlibabaDirectFacts, type AlibabaDirectFacts } from './alibabaDirectExtract'
+import { corroborateAlibabaPublicListing, type AlibabaPublicCorroborationResult } from './alibabaPublicCorroboration'
 
 export type DirectAlibabaResult =
   | { status: 'ready' | 'partial'; source: 'ShippingAPP direct Alibaba'; facts: AlibabaDirectFacts; httpStatus: number; warnings: string[] }
   | { status: 'unavailable'; source: 'ShippingAPP direct Alibaba'; facts: null; httpStatus: number | null; warnings: string[] }
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+type CorroborationReader = (
+  url: URL,
+  hints: { name?: string | null; category?: string | null },
+  fetchImpl: FetchLike,
+) => Promise<AlibabaPublicCorroborationResult>
 
 function coreSignals(facts: AlibabaDirectFacts) {
   return [
@@ -41,6 +47,25 @@ function preserveUrlIdentity(facts: AlibabaDirectFacts, url: URL) {
   }
 }
 
+function mergePublicCorroboration(
+  facts: AlibabaDirectFacts,
+  publicResult: Extract<AlibabaPublicCorroborationResult, { status: 'ready' }>,
+): AlibabaDirectFacts {
+  const publicFacts = publicResult.facts
+  return {
+    ...facts,
+    name: facts.name || publicFacts.name,
+    category: facts.category || publicFacts.category,
+    unitPriceUsd: facts.unitPriceUsd ?? publicFacts.unitPriceUsd,
+    moq: facts.moq ?? publicFacts.moq,
+    supplier: facts.supplier || publicFacts.supplier,
+    evidence: [...new Set([
+      ...facts.evidence,
+      ...publicFacts.evidence.map((item) => `public_listing:${item}`),
+    ])],
+  }
+}
+
 export function directAlibabaCoreSignals(facts: AlibabaDirectFacts) {
   return coreSignals(facts)
 }
@@ -48,12 +73,13 @@ export function directAlibabaCoreSignals(facts: AlibabaDirectFacts) {
 export async function extractAlibabaDirectHttp(
   url: URL,
   fetchImpl: FetchLike = fetch,
+  corroborationReader: CorroborationReader = corroborateAlibabaPublicListing,
 ): Promise<DirectAlibabaResult> {
   let response: Response
   try {
     response = await fetchImpl(url.toString(), {
       headers: {
-        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/2.0; +https://shippingapp.marciofabrizio.workers.dev)',
+        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/3.0; +https://shippingapp.marciofabrizio.workers.dev)',
         accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
         'accept-language': 'en-US,en;q=0.9',
         'cache-control': 'no-cache',
@@ -90,25 +116,44 @@ export async function extractAlibabaDirectHttp(
   }
 
   const extracted = extractAlibabaDirectFacts(html, url)
-  const facts = preserveUrlIdentity(extracted, url)
+  let facts = preserveUrlIdentity(extracted, url)
+  const corroborationWarnings: string[] = []
+
+  // Alibaba product-detail HTML is frequently sparse while its public
+  // category/showroom/wholesale cards still expose the exact product id, price
+  // range and MOQ. Before spending Parse.bot or Browser Run credits, try those
+  // public surfaces. Only an exact product_id match can contribute facts.
+  if (coreSignals(facts) < 7) {
+    try {
+      const publicResult = await corroborationReader(url, { name: facts.name, category: facts.category }, fetchImpl)
+      corroborationWarnings.push(...publicResult.warnings)
+      if (publicResult.status === 'ready') facts = mergePublicCorroboration(facts, publicResult)
+    } catch (error) {
+      corroborationWarnings.push(`Alibaba public listing corroboration failed safely: ${error instanceof Error ? error.message : 'unknown error'}.`)
+    }
+  }
+
   const signals = coreSignals(facts)
   const identity = Boolean(facts.name || facts.category)
   if (!identity || facts.evidence.length < 2) {
     return {
       status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: response.status,
-      warnings: ['Direct Alibaba HTML did not expose enough trustworthy product evidence.'],
+      warnings: ['Direct Alibaba HTML/public listings did not expose enough trustworthy product evidence.', ...corroborationWarnings],
     }
   }
 
-  const warnings: string[] = []
+  const warnings: string[] = [...corroborationWarnings]
   if (facts.evidence.includes('url_slug_title') && !extracted.name) {
     warnings.push('Alibaba bloqueó o no expuso el título en HTML; ShippingAPP preservó como identidad provisional el título explícito del URL. El usuario debe confirmarlo antes de NCM.')
   }
-  if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por el fetch directo.')
-  if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por el fetch directo.')
-  if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto por el fetch directo.')
-  if (!facts.unitPriceUsd) warnings.push('Precio unitario no expuesto por el fetch directo.')
-  if (!facts.moq) warnings.push('MOQ no expuesto por el fetch directo.')
+  if (facts.evidence.some((item) => item.startsWith('public_listing:'))) {
+    warnings.push('ShippingAPP corroboró datos comerciales en una superficie pública de Alibaba usando el mismo product_id; siguen sujetos a confirmación obligatoria antes de NCM/economics.')
+  }
+  if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por la lectura pública directa.')
+  if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por la lectura pública directa.')
+  if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto por la lectura pública directa.')
+  if (!facts.unitPriceUsd) warnings.push('Precio unitario no expuesto/corroborado por la lectura pública directa.')
+  if (!facts.moq) warnings.push('MOQ no expuesto/corroborado por la lectura pública directa.')
 
   return {
     status: signals >= 7 ? 'ready' : 'partial',

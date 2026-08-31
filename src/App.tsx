@@ -252,8 +252,6 @@ export default function App() {
     setPipelineBlocker(null)
 
     try {
-      // If the user only completed price/logistics after a resolved NCM, keep
-      // that classification. Identity edits invalidate customs and rerun it.
       const refreshed = hasUsableClassification(confirmedAnalysis)
         ? confirmedAnalysis
         : await enrichProductAnalysisV2(confirmedAnalysis)
@@ -332,13 +330,35 @@ export default function App() {
       await nextPaint()
       setPipelineStage(3)
       const winner = comparison.modes[comparison.bestMode]
-      setPipelineSummary({
+      const completedSummary: CalculationPipelineSummary = {
         baseQuantity,
         selectedMode: comparison.bestMode,
         unitCostUsd: winner.unitCostUsd,
         totalCostUsd: winner.totalCostUsd,
         freightCostUsd: winner.freightCostUsd,
-      })
+      }
+      setPipelineSummary(completedSummary)
+      window.dispatchEvent(new CustomEvent('shippingapp:analysis-completed', {
+        detail: {
+          input: {
+            intent,
+            purpose: purpose || 'unknown',
+            entityType: entityType || 'unknown',
+            signature: signature || 'unknown',
+            sensitiveCategory: sensitiveCategory || 'unknown',
+            budgetMode: budgetMode || 'unknown',
+            budgetUsd,
+            unitsMin,
+            unitsMax,
+            productName: refreshed.product.name,
+            sourceUrl: refreshed.sourceUrl,
+          },
+          result: {
+            analysis: refreshed,
+            pipelineSummary: completedSummary,
+          },
+        },
+      }))
       await nextPaint(120)
       setCalculationStatus('ready')
       setStep(4)

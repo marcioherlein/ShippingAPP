@@ -48,6 +48,7 @@ const ACCESSORY_TERMS = new Set([
 ])
 
 const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit'])
+const DISPLAY_SHORTHANDS = new Set(['3k', '4k', '6k', '8k', '12k', '18k', '24k'])
 const VARIANT_MODIFIERS = new Set(['pro', 'max', 'plus', 'ultra', 'mini', 'lite', 'air', 'se'])
 const SPEC_UNIT_ALIASES: Record<string, string> = {
   tb: 'tb', gb: 'gb', mb: 'mb', mah: 'mah', w: 'w', watt: 'w', watts: 'w', kw: 'kw', v: 'v', volt: 'v', volts: 'v',
@@ -141,8 +142,6 @@ function hasConflictingSpecs(target: string, candidate: string) {
   for (const [unit, expectedValues] of expected) {
     const actualValues = actual.get(unit)
     if (!actualValues?.size) continue
-    // A shared unit can encode multiple independent facts (e.g. RAM + SSD both in GB).
-    // Requiring every explicitly stated target value prevents 8GB/512GB from matching 8GB/128GB.
     if (![...expectedValues].every((value) => actualValues.has(value))) return true
   }
   return false
@@ -164,7 +163,8 @@ function modelCodes(value: string) {
     if (!/[a-z]/.test(token) || !/\d/.test(token)) return false
     if (/^\d+x\d+/.test(token)) return false
     if (/^\d+(tb|gb|mb|mah|w|kw|v|hz|kg|g|l|ml|cm|mm|pa)$/.test(token)) return false
-    return token.length >= 3
+    if (DISPLAY_SHORTHANDS.has(token)) return false
+    return token.length >= 2
   }))
 }
 
@@ -282,13 +282,16 @@ function hasVariantModifierConflict(target: string, candidate: string) {
 function compactSeriesVersion(productName: string) {
   const brand = matchedKnownBrand(productName)
   if (!brand) return null
-  const brandTokens = tokenSet(brand)
-  const remaining = tokens(productName).filter((token) => {
-    if (brandTokens.has(token)) return false
-    if (/^\d+(tb|gb|mb|mah|w|kw|v|hz|kg|g|l|ml|cm|mm|pa)$/.test(token)) return false
-    if (/^\d+x\d+/.test(token)) return false
-    return true
-  })
+  const brandTokens = new Set(cleanText(brand).split(' ').map(normalizeToken).filter(Boolean))
+  const remaining = cleanText(productName)
+    .split(' ')
+    .map(normalizeToken)
+    .filter((token) => {
+      if (!token || STOPWORDS.has(token) || brandTokens.has(token)) return false
+      if (/^\d+(tb|gb|mb|mah|w|kw|v|hz|kg|g|l|ml|cm|mm|pa)$/.test(token)) return false
+      if (/^\d+x\d+/.test(token)) return false
+      return true
+    })
   if (remaining.length !== 2) return null
   const [first, second] = remaining
   if (!/^[a-z][a-z0-9]*$/.test(first) || !/^\d{1,2}$/.test(second)) return null
@@ -298,8 +301,8 @@ function compactSeriesVersion(productName: string) {
 function hasCompactSeriesVersionConflict(productName: string, candidate: string) {
   const expected = compactSeriesVersion(productName)
   if (!expected) return false
-  const actual = tokenSet(candidate)
-  return !actual.has(expected.family) || !actual.has(expected.version)
+  const actualRaw = new Set(cleanText(candidate).split(' ').map(normalizeToken).filter(Boolean))
+  return !actualRaw.has(expected.family) || !actualRaw.has(expected.version)
 }
 
 function distinctiveFamilyTokens(productName: string, category: string) {

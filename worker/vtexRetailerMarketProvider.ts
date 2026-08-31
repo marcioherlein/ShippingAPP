@@ -83,6 +83,27 @@ export const DEFAULT_ARGENTINA_VTEX_RETAILERS: readonly ArgentinaVtexRetailer[] 
     tradePolicy: '1',
     maxCandidates: 12,
   },
+  {
+    id: 'naldo',
+    name: 'Naldo',
+    baseUrl: 'https://www.naldo.com.ar',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
+  {
+    id: 'oncity',
+    name: 'OnCity',
+    baseUrl: 'https://www.oncity.com',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
+  {
+    id: 'megatone',
+    name: 'Megatone',
+    baseUrl: 'https://www.megatone.net',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
 ]
 
 function positiveNumber(value: unknown): number | null {
@@ -276,14 +297,16 @@ export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarke
         requestTimeoutMs,
       )))
       const candidates = results.flatMap((result) => result.candidates)
-      const active = results.filter((result) => result.mode !== 'unavailable')
-      if (!active.length) {
+      const available = results.filter((result) => result.mode !== 'unavailable')
+      if (!available.length) {
         const diagnostics = results.flatMap((result) => result.warnings).join(' ')
         throw new Error(`Direct Argentine retailer discovery unavailable. ${diagnostics}`.slice(0, 900))
       }
+      const contributors = results.filter((result) => result.candidates.length > 0)
+      const sourceResults = contributors.length ? contributors : available
       return {
         providerId: 'argentina-direct-retailers',
-        sourceLabel: `Retailers argentinos directos · ${active.map((result) => result.retailer.name).join(' + ')}`,
+        sourceLabel: `Retailers argentinos directos · ${sourceResults.map((result) => result.retailer.name).join(' + ')}`,
         candidates,
         categoryHint: null,
         warnings: [

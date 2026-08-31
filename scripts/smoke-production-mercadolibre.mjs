@@ -81,6 +81,23 @@ function publicAuthSummary(status) {
   }
 }
 
+function sanitizedAttempts(attempts) {
+  return attempts.map((attempt) => ({
+    probe: attempt.probe,
+    state: attempt.policy.state,
+    benchmarkStatus: attempt.benchmark.status,
+    query: attempt.benchmark.query,
+    source: attempt.benchmark.market?.source,
+    rawCount: attempt.benchmark.market?.rawCount,
+    comparableCount: attempt.benchmark.market?.comparableCount,
+    effectivePriceCount: attempt.benchmark.market?.effectivePriceCount,
+    suggestedPriceArs: attempt.benchmark.market?.suggestedPriceArs,
+    warnings: Array.isArray(attempt.benchmark.market?.warnings)
+      ? attempt.benchmark.market.warnings.slice(0, 12)
+      : [],
+  }))
+}
+
 function enforcePolicy(policy, context) {
   if (STRICT_CONFIGURED && policy.shouldFailStrictConfigured) {
     const failed = policy.checks.filter((check) => check.applicable && !check.passed).map((check) => check.name)
@@ -129,6 +146,17 @@ async function main() {
   }
 
   const representativePolicy = evaluateRepresentativeMarketProbes(status, attempts.map((attempt) => attempt.benchmark))
+
+  // Emit only sanitized aggregate/provider evidence before enforcing the gate.
+  // This makes a red production run actionable without logging credentials or
+  // dumping raw listings/titles that are unnecessary for diagnosis.
+  console.log(JSON.stringify({
+    event: 'mercadolibre.production_probe_evidence',
+    state: representativePolicy.state,
+    auth: publicAuthSummary(status),
+    attempts: sanitizedAttempts(attempts),
+  }, null, 2))
+
   enforcePolicy(representativePolicy, 'meli-benchmark')
 
   const winner = attempts.find((attempt) => attempt.policy.healthy) || attempts.at(-1)
@@ -141,17 +169,7 @@ async function main() {
     baseUrl,
     marketHealth: representativePolicy,
     auth: publicAuthSummary(status),
-    attempts: attempts.map((attempt) => ({
-      probe: attempt.probe,
-      state: attempt.policy.state,
-      benchmarkStatus: attempt.benchmark.status,
-      query: attempt.benchmark.query,
-      source: attempt.benchmark.market?.source,
-      rawCount: attempt.benchmark.market?.rawCount,
-      comparableCount: attempt.benchmark.market?.comparableCount,
-      suggestedPriceArs: attempt.benchmark.market?.suggestedPriceArs,
-      warnings: attempt.benchmark.market?.warnings,
-    })),
+    attempts: sanitizedAttempts(attempts),
   }, null, 2))
 }
 

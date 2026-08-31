@@ -40,7 +40,7 @@ jobs:
             exit 1
           fi
           if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-            echo "::error::Missing GitHub secret CLOUDFLARE_ACCOUNT_ID. Add your Cloudflare account id as a GitHub Actions secret."
+            echo "::error::Missing GitHub secret CLOUDFLARE_ACCOUNT_ID. Add your Cloudflare account id."
             exit 1
           fi
 
@@ -179,10 +179,16 @@ jobs:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-alibaba-self.mjs
 
-      # Market benchmark is an independent provider gate. Run it before the
-      # opportunity-search provider so a billing/availability failure in that
-      # separate service cannot hide Mercado Libre production evidence.
-      - name: Production MercadoLibre benchmark smoke test
+      # Product-level gate: the free direct-retailer tier must prove at least one
+      # real live benchmark with >=5 traceable comparables. Mercado Libre can be
+      # independently degraded without blocking the whole Argentina capability.
+      - name: Production free Argentina market benchmark gate
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+        run: node scripts/smoke-production-argentina-market.mjs
+
+      - name: Production MercadoLibre provider diagnostic
+        continue-on-error: true
         env:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-mercadolibre.mjs

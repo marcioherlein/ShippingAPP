@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { assertCanonicalLabelSentinels } from './ncm-label-reconciliation.mjs'
 
 const root = process.cwd()
 const ncmPath = path.join(root, 'public', 'data', 'ncm-index.json')
@@ -100,6 +101,8 @@ if (simFiles.length < 80) fail(`too few SIM chapter files: ${simFiles.length}`)
 let simOpeningCount = 0
 let simParentCount = 0
 const simCodes = new Set()
+const simParentLabels = new Map()
+const simSourceDates = new Set()
 for (const fileName of simFiles) {
   const chapter = fileName.slice(0, 2)
   const payload = readJson(path.join(simDir, fileName))
@@ -110,6 +113,7 @@ for (const fileName of simFiles) {
   if (payload?.meta?.chapter !== chapter) fail(`${fileName}: chapter metadata mismatch`)
   if (!Array.isArray(payload?.records)) fail(`${fileName}: missing records`)
   if (payload.meta.recordCount !== payload.records.length) fail(`${fileName}: recordCount mismatch`)
+  simSourceDates.add(payload.meta.sourceDate)
 
   for (const row of payload.records) {
     if (!Array.isArray(row) || row.length !== 3) fail(`${fileName}: invalid SIM parent row shape`)
@@ -117,8 +121,10 @@ for (const fileName of simFiles) {
     if (!validNcm(ncmCode)) fail(`${fileName}: invalid parent NCM ${ncmCode}`)
     if (!ncmCode.startsWith(chapter)) fail(`${fileName}: parent NCM ${ncmCode} is in wrong chapter`)
     if (!ncmCodes.has(ncmCode)) fail(`${fileName}: SIM parent ${ncmCode} missing from NCM catalog`)
-    if (typeof label !== 'string') fail(`${fileName}: invalid parent label for ${ncmCode}`)
+    if (typeof label !== 'string' || !label.trim()) fail(`${fileName}: invalid parent label for ${ncmCode}`)
+    if (simParentLabels.has(ncmCode)) fail(`${fileName}: duplicate SIM parent ${ncmCode}`)
     if (!Array.isArray(openings) || openings.length === 0) fail(`${fileName}: parent ${ncmCode} has no openings`)
+    simParentLabels.set(ncmCode, label.trim())
     simParentCount += 1
 
     for (const opening of openings) {
@@ -132,6 +138,17 @@ for (const fileName of simFiles) {
       simOpeningCount += 1
     }
   }
+}
+
+if (simSourceDates.size !== 1) fail(`inconsistent SIM source dates: ${[...simSourceDates].join(', ')}`)
+if (simParentCount !== ncm.records.length) fail(`canonical label coverage mismatch: SIM parents=${simParentCount}, NCM records=${ncm.records.length}`)
+for (const code of ncmCodes) {
+  if (!simParentLabels.has(code)) fail(`canonical SIM label missing for NCM ${code}`)
+}
+try {
+  assertCanonicalLabelSentinels(simParentLabels)
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error))
 }
 
 console.log(JSON.stringify({
@@ -148,4 +165,7 @@ console.log(JSON.stringify({
   simChapterFiles: simFiles.length,
   simParents: simParentCount,
   simOpenings: simOpeningCount,
+  canonicalLabelCoverage: simParentLabels.size,
+  canonicalLabelSourceDate: [...simSourceDates][0],
+  semanticSentinels: 'PASS',
 }, null, 2))

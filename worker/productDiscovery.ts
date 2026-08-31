@@ -258,8 +258,8 @@ export async function discoverAlibabaProducts(
   }
 
   const rendered = await browserSearch(searchUrl, browser)
-  const renderedResults = mergeDiscoveryResults([freeDirectResults, rendered.results], 8)
-  if (renderedResults.length > 0) {
+  if (rendered.results.length > 0) {
+    const renderedResults = mergeDiscoveryResults([freeDirectResults, rendered.results], 8)
     return {
       status: 'live', mode: 'browser', query: normalized,
       results: renderedResults, browserAttempted: true, browserMsUsed: rendered.ms,

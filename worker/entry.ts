@@ -4,6 +4,7 @@ import { withRequestContext } from './requestContext'
 import { analyzeAlibabaSelfFirst, parseAlibabaSelfFirstUrl } from './alibabaSelfFirst'
 import { analyzeArgentinaMarketHybrid } from './argentinaMarketOrchestrator'
 import { resolveMercadoLibreAccessToken } from './mercadoLibreAuth'
+import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory'
 
 function benchmarkRequest(body: unknown) {
   const raw = body && typeof body === 'object' ? body as any : {}
@@ -57,6 +58,10 @@ export default {
           return Response.json({ error: 'Authentication rollout is not enabled.', code: 'auth_disabled' }, { status: 404 })
         }
         return Response.json({ authenticated: true, accountId: gate.identity.userId })
+      }
+
+      if (isAnalysisHistoryRoute(url.pathname)) {
+        return handleAnalysisHistory(gate.request, env as any)
       }
 
       if (url.pathname === '/api/argentina-market/benchmark' && gate.request.method === 'POST') {

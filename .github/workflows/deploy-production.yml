@@ -128,8 +128,26 @@ jobs:
           if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Production D1 schema mismatch: ${JSON.stringify(names)}`)
           NODE
 
+      - name: Verify production analysis history schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@latest d1 execute DB --remote --config "$WRANGLER_PRODUCTION_CONFIG" --json --command "SELECT (SELECT COUNT(*) FROM pragma_table_info('analyses') WHERE name='deleted_at') AS deleted_at_column, (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_analyses_user_visible_created') AS visible_index" > /tmp/d1-history-schema.json
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const parsed = JSON.parse(fs.readFileSync('/tmp/d1-history-schema.json', 'utf8'))
+          const rows = Array.isArray(parsed) ? parsed.flatMap((part) => part.results || []) : (parsed.results || [])
+          const row = rows[0]
+          if (!row || Number(row.deleted_at_column) !== 1 || Number(row.visible_index) !== 1) {
+            throw new Error(`Stage 3 production D1 history schema mismatch: ${JSON.stringify(row)}`)
+          }
+          NODE
+
       - name: Production auth boundary adversarial smoke test
         run: node scripts/smoke-production-auth-boundary.mjs
+
+      - name: Production private-history boundary adversarial smoke test
+        run: node scripts/smoke-production-history-boundary.mjs
 
       - name: Production privileged runtime smoke test
         shell: bash

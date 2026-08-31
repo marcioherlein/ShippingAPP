@@ -1,3 +1,5 @@
+import { enforceOpportunitySearchSmoke } from './opportunity-smoke-policy.mjs'
+
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 25000)
 
@@ -38,15 +40,8 @@ async function main() {
     limit: 6,
   }, 'opportunity-search')
 
-  if (body.status !== 'live') throw new Error(`opportunity-search: expected live, got ${JSON.stringify(body).slice(0, 2000)}`)
-  if (body.mode !== 'parsebot') throw new Error(`opportunity-search: expected parsebot mode, got ${body.mode}`)
-  if (!Array.isArray(body.results) || body.results.length < 1) throw new Error(`opportunity-search: no results ${JSON.stringify(body).slice(0, 2000)}`)
-
+  const health = enforceOpportunitySearchSmoke(body)
   const top = body.results[0]
-  if (!top.title || !top.url) throw new Error(`opportunity-search: top result missing title/url ${JSON.stringify(top).slice(0, 1200)}`)
-  if (!top.unitPriceUsd && !top.moq && !top.supplierName && !top.imageUrl) {
-    throw new Error(`opportunity-search: top result lacks useful commercial facts ${JSON.stringify(top).slice(0, 1200)}`)
-  }
 
   console.log(JSON.stringify({
     status: 'ok',
@@ -55,14 +50,20 @@ async function main() {
     mode: body.mode,
     resultCount: body.results.length,
     creditsEstimated: body.creditsEstimated,
+    opportunityHealth: health,
+    structuredProviderWarning: Array.isArray(body.warnings)
+      ? body.warnings.find((warning) => /structured search returned/i.test(String(warning))) || null
+      : null,
     top: {
       title: top.title,
       url: top.url,
+      source: top.source,
       unitPriceUsd: top.unitPriceUsd,
       moq: top.moq,
       supplierName: top.supplierName,
       opportunityScore: top.opportunityScore,
       missingFacts: top.missingFacts,
+      nextAction: top.nextAction,
     },
   }, null, 2))
 }

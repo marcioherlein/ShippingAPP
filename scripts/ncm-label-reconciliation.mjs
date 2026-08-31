@@ -19,6 +19,28 @@ export function normalizeLabel(value) {
     .trim()
 }
 
+function hierarchySegments(value) {
+  return String(value || '').split(/\s*>\s*/).map((part) => part.trim()).filter(Boolean)
+}
+
+export function deriveCanonicalParentLabel(parentLabel, openings) {
+  if (typeof parentLabel === 'string' && parentLabel.trim()) return parentLabel.trim()
+  const paths = (Array.isArray(openings) ? openings : [])
+    .map((opening) => Array.isArray(opening) ? hierarchySegments(opening[1]) : [])
+    .filter((segments) => segments.length)
+  if (!paths.length) return ''
+  if (paths.length === 1) return paths[0].join(' > ')
+
+  const common = []
+  const max = Math.min(...paths.map((segments) => segments.length))
+  for (let i = 0; i < max; i += 1) {
+    const reference = normalizeLabel(paths[0][i])
+    if (!reference || !paths.every((segments) => normalizeLabel(segments[i]) === reference)) break
+    common.push(paths[0][i])
+  }
+  return common.join(' > ')
+}
+
 export function assertCanonicalLabelSentinels(labelsByCode) {
   for (const sentinel of NCM_LABEL_SENTINELS) {
     const label = labelsByCode.get(sentinel.code)
@@ -43,6 +65,7 @@ export function loadCanonicalSimParentLabels(simDir) {
 
   const labelsByCode = new Map()
   const sourceDates = new Set()
+  let derivedFromOpenings = 0
   for (const fileName of files) {
     const chapter = fileName.slice(0, 2)
     const payload = JSON.parse(fs.readFileSync(path.join(simDir, fileName), 'utf8'))
@@ -54,19 +77,21 @@ export function loadCanonicalSimParentLabels(simDir) {
 
     for (const row of payload.records) {
       if (!Array.isArray(row) || row.length !== 3) throw new Error(`${fileName}: invalid SIM parent row`)
-      const [code, label] = row
+      const [code, label, openings] = row
       if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || !code.startsWith(chapter)) {
         throw new Error(`${fileName}: invalid SIM parent code ${code}`)
       }
-      if (typeof label !== 'string' || !label.trim()) throw new Error(`${fileName}: blank SIM parent label for ${code}`)
       if (labelsByCode.has(code)) throw new Error(`${fileName}: duplicate SIM parent ${code}`)
-      labelsByCode.set(code, label.trim())
+      const canonical = deriveCanonicalParentLabel(label, openings)
+      if (!canonical) throw new Error(`${fileName}: cannot derive canonical SIM parent label for ${code}`)
+      if (!(typeof label === 'string' && label.trim())) derivedFromOpenings += 1
+      labelsByCode.set(code, canonical)
     }
   }
 
   if (sourceDates.size !== 1) throw new Error(`SIM parent labels contain inconsistent source dates: ${[...sourceDates].join(', ')}`)
   assertCanonicalLabelSentinels(labelsByCode)
-  return { labelsByCode, sourceDate: [...sourceDates][0], chapterFiles: files.length }
+  return { labelsByCode, sourceDate: [...sourceDates][0], chapterFiles: files.length, derivedFromOpenings }
 }
 
 export function reconcileNcmIndexLabels(ncm, labelsByCode, sourceDate) {

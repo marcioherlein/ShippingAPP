@@ -25,6 +25,7 @@ jobs:
       CLERK_JWT_KEY: ${{ secrets.CLERK_JWT_KEY }}
       CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,7 +41,7 @@ jobs:
             exit 1
           fi
           if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-            echo "::error::Missing GitHub secret CLOUDFLARE_ACCOUNT_ID. Add your Cloudflare account id as a GitHub Actions secret."
+            echo "::error::Missing GitHub secret CLOUDFLARE_ACCOUNT_ID. Add your Cloudflare account id."
             exit 1
           fi
 
@@ -92,7 +93,7 @@ jobs:
           node scripts/resolve-production-d1-config.mjs /tmp/d1-info.json wrangler.jsonc .wrangler.production.json "$D1_DATABASE_NAME"
           echo "WRANGLER_PRODUCTION_CONFIG=.wrangler.production.json" >> "$GITHUB_ENV"
 
-      - name: Sync optional auth secrets to Cloudflare
+      - name: Sync optional runtime and provider secrets to Cloudflare
         shell: bash
         run: |
           set -euo pipefail
@@ -107,6 +108,7 @@ jobs:
           put_secret CLERK_SECRET_KEY "${CLERK_SECRET_KEY:-}"
           put_secret CLERK_JWT_KEY "${CLERK_JWT_KEY:-}"
           put_secret CLERK_PUBLISHABLE_KEY "${CLERK_PUBLISHABLE_KEY:-}"
+          put_secret SERPAPI_API_KEY "${SERPAPI_API_KEY:-}"
 
       - name: Deploy to Cloudflare Workers
         run: npx --yes wrangler@latest deploy --config "$WRANGLER_PRODUCTION_CONFIG"
@@ -161,13 +163,20 @@ jobs:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-alibaba-self.mjs
 
-      # Market benchmark is an independent provider gate. Run it before the
-      # opportunity-search provider so a billing/availability failure in that
-      # separate service cannot hide Mercado Libre production evidence.
-      - name: Production MercadoLibre benchmark smoke test
+      # Mercado Libre remains independently observable. It must report its real
+      # health, but the product-level gate below decides whether ShippingAPP can
+      # obtain a usable Argentina benchmark across all configured providers.
+      - name: Production MercadoLibre provider health smoke
         env:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+          MARKET_SMOKE_STRICT_CONFIGURED: '0'
         run: node scripts/smoke-production-mercadolibre.mjs
+
+      - name: Production hybrid Argentina market smoke test
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+          REQUIRE_GOOGLE_SHOPPING: '1'
+        run: node scripts/smoke-production-argentina-market.mjs
 
       - name: Production opportunity search smoke test
         env:

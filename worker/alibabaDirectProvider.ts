@@ -1,5 +1,6 @@
 import { extractAlibabaDirectFacts, type AlibabaDirectFacts } from './alibabaDirectExtract'
 import { corroborateAlibabaPublicListing, type AlibabaPublicCorroborationResult } from './alibabaPublicCorroboration'
+import { corroborateAlibabaHighSignalRoutes } from './alibabaHighSignalCorroboration'
 
 export type DirectAlibabaResult =
   | { status: 'ready' | 'partial'; source: 'ShippingAPP direct Alibaba'; facts: AlibabaDirectFacts; httpStatus: number; warnings: string[] }
@@ -74,6 +75,7 @@ export async function extractAlibabaDirectHttp(
   url: URL,
   fetchImpl: FetchLike = fetch,
   corroborationReader: CorroborationReader = corroborateAlibabaPublicListing,
+  highSignalReader: CorroborationReader = corroborateAlibabaHighSignalRoutes,
 ): Promise<DirectAlibabaResult> {
   let response: Response
   try {
@@ -118,6 +120,7 @@ export async function extractAlibabaDirectHttp(
   const extracted = extractAlibabaDirectFacts(html, url)
   let facts = preserveUrlIdentity(extracted, url)
   const corroborationWarnings: string[] = []
+  const hints = { name: facts.name, category: facts.category }
 
   // Alibaba product-detail HTML is frequently sparse while its public
   // category/showroom/wholesale cards still expose the exact product id, price
@@ -125,11 +128,25 @@ export async function extractAlibabaDirectHttp(
   // public surfaces. Only an exact product_id match can contribute facts.
   if (coreSignals(facts) < 7) {
     try {
-      const publicResult = await corroborationReader(url, { name: facts.name, category: facts.category }, fetchImpl)
+      const publicResult = await corroborationReader(url, hints, fetchImpl)
       corroborationWarnings.push(...publicResult.warnings)
       if (publicResult.status === 'ready') facts = mergePublicCorroboration(facts, publicResult)
     } catch (error) {
       corroborationWarnings.push(`Alibaba public listing corroboration failed safely: ${error instanceof Error ? error.message : 'unknown error'}.`)
+    }
+  }
+
+  // Full-title search routes often miss Alibaba's shorter SEO index route. If
+  // the ficha is still incomplete, derive technical routes such as `100m-watch`
+  // or `65w-charger`. Exact product_id matching remains mandatory, so this can
+  // improve recall without borrowing facts from a similar listing.
+  if (coreSignals(facts) < 7) {
+    try {
+      const highSignalResult = await highSignalReader(url, { name: facts.name, category: facts.category }, fetchImpl)
+      corroborationWarnings.push(...highSignalResult.warnings)
+      if (highSignalResult.status === 'ready') facts = mergePublicCorroboration(facts, highSignalResult)
+    } catch (error) {
+      corroborationWarnings.push(`Alibaba high-signal public corroboration failed safely: ${error instanceof Error ? error.message : 'unknown error'}.`)
     }
   }
 

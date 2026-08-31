@@ -30,6 +30,35 @@ for (const name of expectedIndexes) if (!indexes.includes(name)) throw new Error
 const analysisColumns = db.prepare('PRAGMA table_info(analyses)').all().map((row) => row.name)
 if (!analysisColumns.includes('deleted_at')) throw new Error('Stage 3 analyses.deleted_at column is missing')
 
+const watchlistIndexes = db.prepare("PRAGMA index_list('watchlist_items')").all()
+const watchlistUniqueIndexes = watchlistIndexes.filter((row) => Number(row.unique) === 1)
+const hasUserSourceUnique = watchlistUniqueIndexes.some((index) => {
+  const columns = db.prepare(`PRAGMA index_info('${String(index.name).replaceAll("'", "''")}')`).all().sort((a, b) => Number(a.seqno) - Number(b.seqno)).map((row) => row.name)
+  return JSON.stringify(columns) === JSON.stringify(['user_id', 'source_url'])
+})
+if (!hasUserSourceUnique) throw new Error('Stage 4 watchlist UNIQUE(user_id, source_url) is missing')
+
+const snapshotIndexes = db.prepare("PRAGMA index_list('watchlist_snapshots')").all()
+const hasSnapshotIdempotencyUnique = snapshotIndexes.filter((row) => Number(row.unique) === 1).some((index) => {
+  const columns = db.prepare(`PRAGMA index_info('${String(index.name).replaceAll("'", "''")}')`).all().sort((a, b) => Number(a.seqno) - Number(b.seqno)).map((row) => row.name)
+  return JSON.stringify(columns) === JSON.stringify(['idempotency_key'])
+})
+if (!hasSnapshotIdempotencyUnique) throw new Error('Stage 4 watchlist snapshot idempotency uniqueness is missing')
+
+const watchlistFks = db.prepare("PRAGMA foreign_key_list('watchlist_items')").all()
+if (!watchlistFks.some((row) => row.table === 'users' && row.from === 'user_id' && row.to === 'id')) {
+  throw new Error('Stage 4 watchlist user ownership FK is missing')
+}
+const analysisFkRows = watchlistFks.filter((row) => row.table === 'analyses')
+const analysisFkColumns = new Set(analysisFkRows.map((row) => `${row.from}->${row.to}`))
+if (!analysisFkColumns.has('analysis_id->id') || !analysisFkColumns.has('user_id->user_id')) {
+  throw new Error('Stage 4 composite watchlist-to-analysis ownership FK is missing')
+}
+const snapshotFks = db.prepare("PRAGMA foreign_key_list('watchlist_snapshots')").all()
+if (!snapshotFks.some((row) => row.table === 'watchlist_items' && row.from === 'watchlist_item_id' && row.to === 'id')) {
+  throw new Error('Stage 4 snapshot parent FK is missing')
+}
+
 if (db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) throw new Error('Foreign keys are not enabled')
 
 let failed = false
@@ -44,4 +73,4 @@ if (db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' A
 if (db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='users'").get().count !== 1) throw new Error('Failed migration damaged prior schema')
 
 db.close()
-console.log(`D1 schema validation passed: ${expectedTables.length} tables, ${expectedIndexes.length} required indexes, ${migrationFiles.length} migrations, rollback probe PASS`)
+console.log(`D1 schema validation passed: ${expectedTables.length} tables, ${expectedIndexes.length} required indexes, ${migrationFiles.length} migrations, Stage 4 ownership/dedupe constraints PASS, rollback probe PASS`)

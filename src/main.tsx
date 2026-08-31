@@ -8,6 +8,7 @@ import './styles.css'
 import './styles/regulatory.css'
 import './styles/entry-simplification.css'
 import './styles/visual-consistency.css'
+import './styles/progressive-product-confirmation.css'
 
 const root = document.getElementById('root')
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.trim()

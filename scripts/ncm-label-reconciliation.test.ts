@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertCanonicalLabelSentinels, reconcileNcmIndexLabels } from './ncm-label-reconciliation.mjs'
+import { assertCanonicalLabelSentinels, deriveCanonicalParentLabel, reconcileNcmIndexLabels } from './ncm-label-reconciliation.mjs'
 
 const canonicalSentinels = new Map<string, string>([
   ['9506.51.00', 'Artículos y material para deportes > Raquetas de tenis, bádminton o similares > Raquetas de tenis, incluso sin cordaje'],
@@ -45,6 +45,17 @@ describe('NCM canonical label reconciliation', () => {
     expect(result.meta.canonicalLabelCoverage).toBe(10000)
     expect(result.meta.canonicalLabelSourceDate).toBe('2026-08-14')
     expect(result.meta.runtimeLabelReconciled).toBe(true)
+  })
+
+  it('derives a trustworthy parent from official SIM openings when the raw parent label is blank', () => {
+    expect(deriveCanonicalParentLabel('', [
+      ['0101.30.00.000T', 'CABALLOS, ASNOS, MULOS Y BURDEGANOS, VIVOS. > Asnos'],
+    ])).toBe('CABALLOS, ASNOS, MULOS Y BURDEGANOS, VIVOS. > Asnos')
+
+    expect(deriveCanonicalParentLabel('', [
+      ['9999.99.99.100A', 'Familia oficial > Subfamilia > Variante A'],
+      ['9999.99.99.200B', 'Familia oficial > Subfamilia > Variante B'],
+    ])).toBe('Familia oficial > Subfamilia')
   })
 
   it('fails closed if any NCM code lacks a canonical SIM parent label', () => {

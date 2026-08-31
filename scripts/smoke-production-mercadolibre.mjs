@@ -2,7 +2,7 @@ import { evaluateMarketSmoke } from './market-smoke-policy.mjs'
 
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 20000)
-const STRICT_CONFIGURED = process.env.MARKET_SMOKE_STRICT_CONFIGURED === '1'
+const STRICT_CONFIGURED = process.env.MARKET_SMOKE_STRICT_CONFIGURED !== '0'
 
 async function postJson(path, payload, label) {
   const controller = new AbortController()

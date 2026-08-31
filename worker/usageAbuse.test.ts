@@ -89,7 +89,7 @@ describe('Stage 5 economic-abuse hardening', () => {
     expect(scalar(sqlite, "SELECT credits_consumed AS value FROM usage_periods WHERE user_id=? AND period_start='2026-08-01T00:00:00.000Z'", USER)).toBe(0)
   })
 
-  it('does not auto-refund useful full-analysis work while waiting for NCM continuation', async () => {
+  it('does not auto-refund useful full-analysis work while waiting for NCM continuation, even across period rollover', async () => {
     let nowMs = Date.parse(NOW)
     let ids = 0
     const repo = new UsageRepository(db, () => new Date(nowMs), () => `wait-id-${++ids}`)
@@ -109,15 +109,20 @@ describe('Stage 5 economic-abuse hardening', () => {
     })
     expect((await repo.usageView(USER)).period.creditsConsumed).toBe(1)
 
+    // Cross midnight UTC into September. The new period must start clean, while
+    // the useful August analysis remains charged in its original period.
     nowMs += 6 * 60 * 60 * 1000
     const later = await repo.usageView(USER)
     const reservation = await repo.getReservationForUser(USER, started.reservation.id)
-    expect(later.period.creditsConsumed).toBe(1)
+    expect(later.period.start).toBe('2026-09-01T00:00:00.000Z')
+    expect(later.period.creditsConsumed).toBe(0)
+    expect(scalar(sqlite, "SELECT credits_consumed AS value FROM usage_periods WHERE id=?", started.reservation.usage_period_id)).toBe(1)
     expect(reservation?.status).toBe('continuation_ready')
 
     const claim = await repo.claimContinuation(USER, started.reservation.id)
     expect(claim.kind).toBe('started')
-    expect((await repo.usageView(USER)).period.creditsConsumed).toBe(1)
+    expect((await repo.usageView(USER)).period.creditsConsumed).toBe(0)
+    expect(scalar(sqlite, "SELECT credits_consumed AS value FROM usage_periods WHERE id=?", started.reservation.usage_period_id)).toBe(1)
   })
 
   it('caps refunded provider attempts so failures cannot create unlimited free external work', async () => {

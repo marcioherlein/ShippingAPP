@@ -294,6 +294,20 @@ function labelledNumber(text: string, patterns: RegExp[]) {
   return null
 }
 
+/**
+ * Visible Alibaba pages contain many currency amounts that are not the product
+ * offer (new-buyer coupons, samples, freight, etc). Treat visible text as price
+ * evidence only when the merchandise relationship is explicit. Generic
+ * `Price: USD 1` is deliberately not trusted because it can be preceded by a
+ * promotional modifier after HTML has been flattened into text.
+ */
+function labelledProductPrice(text: string) {
+  return labelledNumber(text, [
+    /(?:FOB Price|Unit Price|Reference Price|Product Price)\s*[:：-]?\s*(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)/i,
+    /(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)\s*(?:\/\s*(?:piece|pieces|pc|pcs|unit|units|set|sets)|per\s+(?:piece|pc|unit|set))/i,
+  ])
+}
+
 export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirectFacts {
   const roots = extractJsonRoots(html)
   const jsonLdObjects = roots.flatMap(collectJsonLdProductObjects)
@@ -315,8 +329,16 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
     || specValue(specs, ['product type', 'type'])
   if (category || categoryPath.length) evidence.push('category')
 
-  let unitPriceUsd = positiveNumber(firstValue(allObjects, ['priceValue', 'price_value', 'minPrice', 'min_price', 'lowPrice', 'salePrice', 'unitPrice', 'unit_price', 'price']))
-  if (!unitPriceUsd) unitPriceUsd = positiveNumber(text.match(/(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)/i)?.[1])
+  // Product-state prices must come from product-specific keys. A generic `price`
+  // key is accepted only inside a JSON-LD Product/Offer subtree. This prevents an
+  // unrelated promotion/coupon object elsewhere in Alibaba state from becoming FOB.
+  const productStatePrice = positiveNumber(firstValue(productObjects, [
+    'priceValue', 'price_value', 'minPrice', 'min_price', 'lowPrice', 'salePrice', 'unitPrice', 'unit_price',
+  ]))
+  const jsonLdPrice = positiveNumber(firstValue(jsonLdObjects, [
+    'price', 'lowPrice', 'highPrice', 'priceValue', 'price_value', 'unitPrice', 'unit_price',
+  ]))
+  const unitPriceUsd = productStatePrice || jsonLdPrice || labelledProductPrice(text)
   if (unitPriceUsd) evidence.push('price')
 
   let moq = positiveNumber(firstValue(allObjects, ['moq', 'minimumOrderQuantity', 'minimum_order_quantity', 'minOrderQuantity', 'min_order_quantity', 'minOrder', 'min_order']))

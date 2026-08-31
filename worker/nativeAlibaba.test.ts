@@ -95,6 +95,7 @@ describe('extractAlibabaNative', () => {
             product_type: 'Mechanical Watches',
             moq: 5,
             unit_price: 71.5,
+            price_tiers: [{ min_quantity: 5, unit_price: 71.5 }],
             unit_size: '12X10X8 cm',
             hs_code: '910221',
             specifications: [{ name: 'Place of Origin', value: 'Chongqing, China' }],
@@ -201,7 +202,11 @@ describe('extractAlibabaNative', () => {
   })
 
   it('uses the explicit Alibaba URL slug as provisional identity when structured JSON omits title', async () => {
-    const result = await extractAlibabaNative(watchUrl, browserWithJson({ result: { unit_price: 71.5, moq: 5 } }))
+    const result = await extractAlibabaNative(watchUrl, browserWithJson({ result: {
+      unit_price: 71.5,
+      moq: 5,
+      price_tiers: [{ min_quantity: 5, unit_price: 71.5 }],
+    } }))
     expect(result.status).toBe('ready')
     if (result.status !== 'ready') return
     expect(result.facts.name).toContain('Fully Automatic Mechanical Watches')

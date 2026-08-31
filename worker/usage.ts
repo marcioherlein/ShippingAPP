@@ -180,6 +180,20 @@ async function handleInitial(
       usage: begin.usage,
     }, 402, { [CREDITS_REMAINING_HEADER]: '0' })
   }
+  if (begin.kind === 'attempt_limit_exhausted') {
+    return json({
+      error: 'Se alcanzó el límite de reintentos protegidos de este período. Tus créditos normales no se redujeron por los intentos fallidos.',
+      code: 'usage_attempt_limit_exhausted',
+      usage: begin.usage,
+    }, 429, { [CREDITS_REMAINING_HEADER]: String(begin.usage.period.creditsRemaining) })
+  }
+  if (begin.kind === 'period_expired') {
+    return json({
+      error: 'Este intento pertenece a un período de uso anterior. Iniciá una operación nueva.',
+      code: 'usage_operation_period_expired',
+      usage: begin.usage,
+    }, 409, { [CREDITS_REMAINING_HEADER]: String(begin.usage.period.creditsRemaining) })
+  }
   if (begin.kind === 'collision') {
     return json({ error: 'This idempotency key belongs to a different operation.', code: 'idempotency_collision' }, 409)
   }

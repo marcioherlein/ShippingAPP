@@ -17,6 +17,7 @@ describe('SaaS API route inventory', () => {
   it('classifies every exact API/OAuth route currently implemented', () => {
     const implemented = new Set([
       ...exactRoutesFromSource('worker/entry.ts'),
+      ...exactRoutesFromSource('worker/analysisHistory.ts'),
       ...exactRoutesFromSource('worker/router.ts'),
       ...exactRoutesFromSource('worker/enrich.ts'),
       ...exactRoutesFromSource('worker/index.ts'),

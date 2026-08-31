@@ -40,6 +40,7 @@ type MarketSearchData = {
 }
 
 const API_ROOT = 'https://api.mercadolibre.com'
+const CATALOG_HYDRATION_LIMIT = 12
 
 class MercadoLibreApiError extends Error {
   status: number
@@ -129,13 +130,32 @@ function numericPrice(value: unknown): number | null {
   return null
 }
 
+function catalogWinner(product: CatalogProduct): Record<string, unknown> | null {
+  return product.buy_box_winner && typeof product.buy_box_winner === 'object'
+    ? product.buy_box_winner
+    : null
+}
+
+function catalogWinnerItemId(product: CatalogProduct): string | null {
+  const value = catalogWinner(product)?.item_id
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return /^MLA\d{6,}$/.test(trimmed) ? trimmed : null
+}
+
+function catalogWinnerCurrency(product: CatalogProduct): string | null {
+  const value = catalogWinner(product)?.currency_id
+  return typeof value === 'string' ? value.trim().toUpperCase() : null
+}
+
 function catalogProductPrice(product: CatalogProduct): number | null {
+  const winner = catalogWinner(product)
   const candidates: unknown[] = [
+    winner?.price,
+    winner?.amount,
+    winner?.sale_price,
     product.price,
     product.amount,
-    product.buy_box_winner && (product.buy_box_winner as any).price,
-    product.buy_box_winner && (product.buy_box_winner as any).amount,
-    product.buy_box_winner && (product.buy_box_winner as any).sale_price,
   ]
 
   const range = product.buy_box_winner_price_range as any
@@ -156,28 +176,83 @@ function catalogProductPrice(product: CatalogProduct): number | null {
   return null
 }
 
+function catalogProductIsBuyable(product: CatalogProduct) {
+  return Boolean(
+    catalogWinnerItemId(product)
+    && catalogWinnerCurrency(product) === 'ARS'
+    && catalogProductPrice(product),
+  )
+}
+
+async function hydrateCatalogProducts(
+  fetchImpl: typeof fetch,
+  products: CatalogProduct[],
+  accessToken: string,
+  warnings: string[],
+): Promise<CatalogProduct[]> {
+  const selected = products
+    .filter((product) => typeof product?.id === 'string' && product.id.trim())
+    .slice(0, CATALOG_HYDRATION_LIMIT)
+
+  let fetchedDetails = 0
+  const settled = await Promise.allSettled(selected.map(async (product) => {
+    if (catalogProductIsBuyable(product)) return product
+    fetchedDetails += 1
+    const id = String(product.id).trim()
+    const detail = await mercadoLibreGet<CatalogProduct>(
+      fetchImpl,
+      `/products/${encodeURIComponent(id)}`,
+      accessToken,
+      'authenticated',
+    )
+    return {
+      ...product,
+      ...detail,
+      id: detail.id || product.id,
+      name: detail.name || product.name,
+      title: detail.title || product.title,
+      domain_id: detail.domain_id || product.domain_id,
+      permalink: detail.permalink || product.permalink,
+      attributes: Array.isArray(detail.attributes) ? detail.attributes : product.attributes,
+    }
+  }))
+
+  const hydrated: CatalogProduct[] = []
+  let failures = 0
+  for (const result of settled) {
+    if (result.status === 'fulfilled') hydrated.push(result.value)
+    else failures += 1
+  }
+
+  const buyable = hydrated.filter(catalogProductIsBuyable).length
+  warnings.push(`MercadoLibre catalog fallback inspected ${selected.length} catalog product(s); ${buyable} exposed a buy-box item with an ARS price${fetchedDetails ? ` after ${fetchedDetails} product-detail request(s)` : ''}.`)
+  if (failures) warnings.push(`${failures} MercadoLibre catalog product-detail request(s) failed and were skipped.`)
+  if (products.length > selected.length) warnings.push(`Catalog hydration was bounded to ${CATALOG_HYDRATION_LIMIT} products to cap provider fan-out.`)
+
+  return hydrated
+}
+
 function catalogProductsToSearch(data: CatalogProductSearch, productName: string, category: string): MlSearch {
   const results = Array.isArray(data.results) ? data.results : []
   return {
     paging: { total: data.paging?.total ?? results.length },
     results: results.flatMap((product) => {
       const title = product.name || product.title || product.id || ''
+      const itemId = catalogWinnerItemId(product)
       const price = catalogProductPrice(product)
-      if (!title || !price) return []
+      const currency = catalogWinnerCurrency(product)
+      if (!title || !itemId || !price || currency !== 'ARS') return []
+      const winner = catalogWinner(product)
       return [{
-        id: product.buy_box_winner && typeof (product.buy_box_winner as any).item_id === 'string'
-          ? (product.buy_box_winner as any).item_id
-          : product.id,
+        id: itemId,
         title,
         price,
         currency_id: 'ARS',
         condition: 'new',
-        category_id: product.domain_id,
+        category_id: typeof winner?.category_id === 'string' ? winner.category_id : product.domain_id,
         catalog_product_id: product.id,
         permalink: product.permalink,
-        seller: product.buy_box_winner && typeof (product.buy_box_winner as any).seller_id === 'number'
-          ? { id: (product.buy_box_winner as any).seller_id }
-          : undefined,
+        seller: typeof winner?.seller_id === 'number' ? { id: winner.seller_id } : undefined,
         attributes: Array.isArray(product.attributes) ? product.attributes : [],
       }]
     }).filter((item) => comparableScore(item as any, productName, category, {}) >= 45),
@@ -195,16 +270,18 @@ async function catalogSearchFallback(
   const path = `/products/search?status=active&site_id=MLA&limit=20&q=${encodeURIComponent(query)}`
   try {
     const catalog = await mercadoLibreGet<CatalogProductSearch>(fetchImpl, path, accessToken, 'authenticated')
-    warnings.push('MercadoLibre listing search endpoint was blocked for this app; ShippingAPP used the official catalog products fallback instead.')
+    const rawProducts = Array.isArray(catalog.results) ? catalog.results : []
+    const hydratedProducts = await hydrateCatalogProducts(fetchImpl, rawProducts, accessToken, warnings)
+    warnings.push('MercadoLibre listing search endpoint was blocked for this app; ShippingAPP used official catalog discovery plus product-detail buy-box hydration instead.')
     return {
-      data: catalogProductsToSearch(catalog, productName, category),
+      data: catalogProductsToSearch({ ...catalog, results: hydratedProducts }, productName, category),
       prediction: null,
-      searchMode: 'catalog products fallback after listing search block',
-      sourceSuffix: 'catalog products fallback',
+      searchMode: 'catalog product-detail fallback after listing search block',
+      sourceSuffix: 'catalog buy-box hydration fallback',
     }
   } catch (error) {
     if (isForbiddenError(error)) {
-      warnings.push('MercadoLibre validated the token through /users/me, but listing search and catalog search are blocked for this app. No market benchmark is promoted into economics.')
+      warnings.push('MercadoLibre validated the token through /users/me, but listing search and catalog discovery are blocked for this app. No market benchmark is promoted into economics.')
       return {
         data: { paging: { total: 0 }, results: [] },
         prediction: null,
@@ -273,7 +350,7 @@ export function createMercadoLibreMarketProviders(options: MercadoLibreMarketPro
         accessToken,
         warnings,
       )
-      salePriceLookupAllowed = !search.sourceSuffix.includes('catalog') && !search.searchMode.includes('blocked')
+      salePriceLookupAllowed = !search.searchMode.includes('api search blocked')
       const raw = Array.isArray(search.data.results) ? search.data.results : []
       const candidates = raw.flatMap((item) => {
         const candidate = marketCandidate(item)

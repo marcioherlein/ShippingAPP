@@ -46,6 +46,10 @@ CREATE INDEX idx_credit_reservations_lease
 -- Quota is claimed in the same SQLite statement that creates the reservation.
 -- D1 serializes writes, and the trigger re-checks the current period counter at
 -- write time, so concurrent inserts cannot all observe the same last credit.
+-- Refunded attempts still remain in the append-only consume ledger. We cap
+-- attempted paid work to 4x the period allowance so provider-error/refund loops
+-- cannot become unlimited free external work while genuine provider failures
+-- can still restore the user's normal credit balance.
 CREATE TRIGGER trg_credit_reservations_before_insert
 BEFORE INSERT ON credit_reservations
 BEGIN
@@ -56,12 +60,31 @@ BEGIN
       SELECT 1 FROM usage_periods up
       WHERE up.id = NEW.usage_period_id AND up.user_id = NEW.user_id
     ) THEN RAISE(ABORT, 'usage_period_not_found')
+    WHEN NOT EXISTS (
+      SELECT 1 FROM usage_periods up
+      WHERE up.id = NEW.usage_period_id
+        AND up.user_id = NEW.user_id
+        AND up.period_start <= NEW.created_at
+        AND NEW.created_at < up.period_end
+    ) THEN RAISE(ABORT, 'reservation_period_expired')
     WHEN EXISTS (
       SELECT 1 FROM usage_periods up
       WHERE up.id = NEW.usage_period_id
         AND up.user_id = NEW.user_id
         AND up.credits_consumed + NEW.credits > up.credits_granted
     ) THEN RAISE(ABORT, 'quota_exhausted')
+    WHEN EXISTS (
+      SELECT 1 FROM usage_periods up
+      WHERE up.id = NEW.usage_period_id
+        AND up.user_id = NEW.user_id
+        AND COALESCE((
+          SELECT SUM(-cl.delta_credits)
+          FROM credit_ledger cl
+          WHERE cl.user_id = NEW.user_id
+            AND cl.usage_period_id = NEW.usage_period_id
+            AND cl.entry_type = 'consume'
+        ), 0) + NEW.credits > up.credits_granted * 4
+    ) THEN RAISE(ABORT, 'attempt_limit_exhausted')
   END;
 END;
 
@@ -122,17 +145,43 @@ BEGIN
         OR (OLD.status = 'released' AND NEW.status = 'running')
       )
       THEN RAISE(ABORT, 'reservation_status_transition_invalid')
+    WHEN OLD.status = 'released' AND NEW.status = 'running' AND NOT EXISTS (
+      SELECT 1 FROM usage_periods up
+      WHERE up.id = OLD.usage_period_id
+        AND up.user_id = OLD.user_id
+        AND up.period_start <= NEW.updated_at
+        AND NEW.updated_at < up.period_end
+    ) THEN RAISE(ABORT, 'reservation_period_expired')
     WHEN OLD.status = 'released' AND NEW.status = 'running' AND EXISTS (
       SELECT 1 FROM usage_periods up
       WHERE up.id = OLD.usage_period_id
         AND up.user_id = OLD.user_id
         AND up.credits_consumed + OLD.credits > up.credits_granted
     ) THEN RAISE(ABORT, 'quota_exhausted')
+    WHEN OLD.status = 'released' AND NEW.status = 'running' AND EXISTS (
+      SELECT 1 FROM usage_periods up
+      WHERE up.id = OLD.usage_period_id
+        AND up.user_id = OLD.user_id
+        AND COALESCE((
+          SELECT SUM(-cl.delta_credits)
+          FROM credit_ledger cl
+          WHERE cl.user_id = OLD.user_id
+            AND cl.usage_period_id = OLD.usage_period_id
+            AND cl.entry_type = 'consume'
+        ), 0) + OLD.credits > up.credits_granted * 4
+    ) THEN RAISE(ABORT, 'attempt_limit_exhausted')
+    WHEN OLD.status <> 'released' AND NEW.status = 'released' AND EXISTS (
+      SELECT 1 FROM usage_periods up
+      WHERE up.id = OLD.usage_period_id
+        AND up.user_id = OLD.user_id
+        AND up.credits_consumed < OLD.credits
+    ) THEN RAISE(ABORT, 'reservation_refund_counter_invalid')
   END;
 END;
 
--- A released reservation may be retried under the same user operation key. The
--- new attempt consumes exactly once and receives a distinct immutable ledger key.
+-- A released reservation may be retried only inside its original active usage
+-- period and within the non-refundable attempt budget. The new attempt consumes
+-- exactly once and receives a distinct immutable ledger key.
 CREATE TRIGGER trg_credit_reservations_after_retry
 AFTER UPDATE OF status ON credit_reservations
 WHEN OLD.status = 'released' AND NEW.status = 'running'
@@ -159,7 +208,8 @@ BEGIN
 END;
 
 -- Release is an exactly-once state transition. Only the first transition into
--- released can decrement usage and append a refund ledger entry.
+-- released can decrement usage and append a refund ledger entry; the transition
+-- trigger above aborts instead of allowing ledger/counter divergence.
 CREATE TRIGGER trg_credit_reservations_after_release
 AFTER UPDATE OF status ON credit_reservations
 WHEN OLD.status <> 'released' AND NEW.status = 'released'

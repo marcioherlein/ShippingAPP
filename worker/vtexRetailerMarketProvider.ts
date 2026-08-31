@@ -1,0 +1,293 @@
+import type { ArgentinaMarketCandidate, ArgentinaMarketDiscoveryProvider } from './marketProviderContracts'
+import type { MlAttribute } from './marketTypes'
+
+export type ArgentinaVtexRetailer = {
+  id: string
+  name: string
+  baseUrl: string
+  tradePolicy?: string
+  maxCandidates?: number
+}
+
+export type VtexRetailerMarketProviderOptions = {
+  fetchImpl?: typeof fetch
+  retailers?: ArgentinaVtexRetailer[]
+  requestTimeoutMs?: number
+}
+
+type VtexCommercialOffer = {
+  Price?: number
+  ListPrice?: number
+  AvailableQuantity?: number
+}
+
+type VtexSeller = {
+  sellerId?: string
+  sellerName?: string
+  commertialOffer?: VtexCommercialOffer
+  commercialOffer?: VtexCommercialOffer
+}
+
+type VtexItem = {
+  itemId?: string
+  name?: string
+  nameComplete?: string
+  sellers?: VtexSeller[]
+}
+
+type VtexProperty = {
+  name?: string
+  values?: string[]
+}
+
+type VtexSpecification = {
+  name?: string
+  values?: string[]
+}
+
+type VtexSpecificationGroup = {
+  specifications?: VtexSpecification[]
+}
+
+type VtexProduct = {
+  productId?: string
+  productName?: string
+  brand?: string
+  link?: string
+  linkText?: string
+  productReference?: string
+  items?: VtexItem[]
+  properties?: VtexProperty[]
+  specificationGroups?: VtexSpecificationGroup[]
+}
+
+type RetailerDiscovery = {
+  retailer: ArgentinaVtexRetailer
+  mode: 'intelligent-search' | 'legacy-search' | 'unavailable'
+  candidates: ArgentinaMarketCandidate[]
+  warnings: string[]
+}
+
+export const DEFAULT_ARGENTINA_VTEX_RETAILERS: readonly ArgentinaVtexRetailer[] = [
+  {
+    id: 'fravega',
+    name: 'Frávega',
+    baseUrl: 'https://www.fravega.com',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
+  {
+    id: 'cetrogar',
+    name: 'Cetrogar',
+    baseUrl: 'https://www.cetrogar.com.ar',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
+]
+
+function positiveNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function offerOf(seller: VtexSeller) {
+  return seller.commertialOffer || seller.commercialOffer || null
+}
+
+function productsOf(value: unknown): VtexProduct[] {
+  if (Array.isArray(value)) return value as VtexProduct[]
+  if (!value || typeof value !== 'object') return []
+  const record = value as Record<string, unknown>
+  if (Array.isArray(record.products)) return record.products as VtexProduct[]
+  if (record.productSearch && typeof record.productSearch === 'object') {
+    const nested = record.productSearch as Record<string, unknown>
+    if (Array.isArray(nested.products)) return nested.products as VtexProduct[]
+  }
+  if (record.data && typeof record.data === 'object') {
+    const nested = record.data as Record<string, unknown>
+    if (Array.isArray(nested.products)) return nested.products as VtexProduct[]
+  }
+  return []
+}
+
+function text(value: unknown) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
+}
+
+function attributesOf(product: VtexProduct): MlAttribute[] {
+  const rows: MlAttribute[] = []
+  const seen = new Set<string>()
+  const add = (nameValue: unknown, valuesValue: unknown) => {
+    const name = text(nameValue)
+    const values = Array.isArray(valuesValue) ? valuesValue.map(text).filter(Boolean) : []
+    if (!name || !values.length) return
+    const key = `${name.toLowerCase()}=${values.join('|').toLowerCase()}`
+    if (seen.has(key)) return
+    seen.add(key)
+    rows.push({ name, value_name: values.join(', ') })
+  }
+  for (const property of product.properties || []) add(property.name, property.values)
+  for (const group of product.specificationGroups || []) {
+    for (const specification of group.specifications || []) add(specification.name, specification.values)
+  }
+  if (text(product.brand)) add('Marca', [text(product.brand)])
+  if (text(product.productReference)) add('Modelo', [text(product.productReference)])
+  return rows.slice(0, 32)
+}
+
+function titleOf(product: VtexProduct, item: VtexItem) {
+  const productName = text(product.productName)
+  const itemName = text(item.nameComplete) || text(item.name)
+  if (!itemName || itemName.toLowerCase() === productName.toLowerCase()) return productName
+  if (productName.toLowerCase().includes(itemName.toLowerCase())) return productName
+  return `${productName} ${itemName}`.trim()
+}
+
+function permalinkOf(retailer: ArgentinaVtexRetailer, product: VtexProduct) {
+  const direct = text(product.link)
+  if (direct) {
+    try {
+      const url = new URL(direct, retailer.baseUrl)
+      if (url.protocol === 'https:' && url.hostname.endsWith(new URL(retailer.baseUrl).hostname)) return url.toString()
+    } catch { /* ignore malformed provider link */ }
+  }
+  const linkText = text(product.linkText).replace(/^\/+|\/+$/g, '')
+  return linkText ? `${retailer.baseUrl}/${linkText}/p` : undefined
+}
+
+function candidatesFromProducts(retailer: ArgentinaVtexRetailer, products: VtexProduct[]): ArgentinaMarketCandidate[] {
+  const candidates: ArgentinaMarketCandidate[] = []
+  const maxCandidates = Math.max(1, Math.min(30, retailer.maxCandidates ?? 12))
+  for (const product of products) {
+    const attributes = attributesOf(product)
+    for (const item of product.items || []) {
+      for (const seller of item.sellers || []) {
+        const offer = offerOf(seller)
+        const priceArs = positiveNumber(offer?.Price)
+        if (!priceArs) continue
+        if (typeof offer?.AvailableQuantity === 'number' && offer.AvailableQuantity <= 0) continue
+        const title = titleOf(product, item)
+        if (!title) continue
+        const itemId = text(item.itemId) || text(product.productId) || `unknown-${candidates.length + 1}`
+        const sellerId = text(seller.sellerId) || text(seller.sellerName) || 'seller'
+        candidates.push({
+          id: `${retailer.id}:${itemId}:${sellerId}`,
+          title,
+          priceArs,
+          condition: 'new',
+          sellerKey: `${retailer.name}:${text(seller.sellerName) || sellerId}`,
+          permalink: permalinkOf(retailer, product),
+          attributes,
+        })
+        if (candidates.length >= maxCandidates) return candidates
+      }
+    }
+  }
+  return candidates
+}
+
+async function fetchJsonWithTimeout(fetchImpl: typeof fetch, url: string, requestTimeoutMs: number) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
+  try {
+    const response = await fetchImpl(url, {
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'ShippingAPP/2.1 (+Argentina market comparison; public storefront catalog only)',
+      },
+      signal: controller.signal,
+    })
+    if (!response.ok) return { ok: false as const, status: response.status, data: null }
+    return { ok: true as const, status: response.status, data: await response.json() as unknown }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function intelligentSearchUrl(retailer: ArgentinaVtexRetailer, query: string) {
+  const params = new URLSearchParams({ query, count: String(Math.max(1, Math.min(30, retailer.maxCandidates ?? 12))), page: '1' })
+  const tradePolicy = encodeURIComponent(retailer.tradePolicy || '1')
+  return `${retailer.baseUrl}/api/io/_v/api/intelligent-search/product_search/trade-policy/${tradePolicy}?${params.toString()}`
+}
+
+function legacySearchUrl(retailer: ArgentinaVtexRetailer, query: string) {
+  const normalized = encodeURIComponent(query.trim()).replace(/%20/g, '%20')
+  return `${retailer.baseUrl}/api/catalog_system/pub/products/search/${normalized}`
+}
+
+async function discoverRetailer(
+  retailer: ArgentinaVtexRetailer,
+  query: string,
+  fetchImpl: typeof fetch,
+  requestTimeoutMs: number,
+): Promise<RetailerDiscovery> {
+  const warnings: string[] = []
+  try {
+    const intelligent = await fetchJsonWithTimeout(fetchImpl, intelligentSearchUrl(retailer, query), requestTimeoutMs)
+    if (intelligent.ok) {
+      const products = productsOf(intelligent.data)
+      const candidates = candidatesFromProducts(retailer, products)
+      if (products.length || candidates.length) {
+        return { retailer, mode: 'intelligent-search', candidates, warnings }
+      }
+      warnings.push(`${retailer.name} Intelligent Search returned no products; legacy public search was attempted.`)
+    } else {
+      warnings.push(`${retailer.name} Intelligent Search returned HTTP ${intelligent.status}; legacy public search was attempted.`)
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'request failed'
+    warnings.push(`${retailer.name} Intelligent Search failed (${reason}); legacy public search was attempted.`)
+  }
+
+  try {
+    const legacy = await fetchJsonWithTimeout(fetchImpl, legacySearchUrl(retailer, query), requestTimeoutMs)
+    if (!legacy.ok) {
+      warnings.push(`${retailer.name} legacy public search returned HTTP ${legacy.status}.`)
+      return { retailer, mode: 'unavailable', candidates: [], warnings }
+    }
+    const products = productsOf(legacy.data)
+    return {
+      retailer,
+      mode: 'legacy-search',
+      candidates: candidatesFromProducts(retailer, products),
+      warnings,
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'request failed'
+    warnings.push(`${retailer.name} legacy public search failed (${reason}).`)
+    return { retailer, mode: 'unavailable', candidates: [], warnings }
+  }
+}
+
+export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarketProviderOptions = {}): ArgentinaMarketDiscoveryProvider {
+  const fetchImpl = options.fetchImpl || fetch
+  const retailers = (options.retailers?.length ? options.retailers : [...DEFAULT_ARGENTINA_VTEX_RETAILERS]).map((retailer) => ({
+    ...retailer,
+    baseUrl: retailer.baseUrl.replace(/\/+$/, ''),
+  }))
+  const requestTimeoutMs = Math.max(1000, Math.min(12000, options.requestTimeoutMs ?? 5000))
+
+  return {
+    id: 'argentina-direct-retailers',
+    async discover(context) {
+      const results = await Promise.all(retailers.map((retailer) => discoverRetailer(
+        retailer,
+        context.query,
+        fetchImpl,
+        requestTimeoutMs,
+      )))
+      const candidates = results.flatMap((result) => result.candidates)
+      const active = results.filter((result) => result.mode !== 'unavailable')
+      return {
+        providerId: 'argentina-direct-retailers',
+        sourceLabel: `Retailers argentinos directos · ${active.map((result) => result.retailer.name).join(' + ') || 'sin respuesta'}`,
+        candidates,
+        categoryHint: null,
+        warnings: [
+          'Discovery uses public VTEX storefront catalog endpoints only; no browser scraping, checkout automation, account login, or private API credentials are used.',
+          'Retailer prices are treated as ARS because the configured storefronts are Argentine storefronts; every candidate still passes ShippingAPP deterministic product matching before economics.',
+          ...results.flatMap((result) => result.warnings),
+        ],
+      }
+    },
+  }
+}

@@ -2,6 +2,7 @@ const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizi
 const REQUEST_TIMEOUT_MS = Number(process.env.COVERAGE_REQUEST_TIMEOUT_MS || 30000)
 const CONCURRENCY = Math.max(1, Math.min(5, Number(process.env.COVERAGE_CONCURRENCY || 3)))
 const MIN_COMPARABLES = 5
+const RETAILERS = ['Frávega', 'Cetrogar', 'Naldo', 'OnCity', 'Pardo']
 
 const probes = [
   { id: 'samsung-a16', group: 'smartphones', productName: 'Samsung Galaxy A16 128GB 4GB', category: 'celular' },
@@ -58,7 +59,7 @@ async function postBenchmark(probe) {
     const market = body?.market || {}
     const source = String(market.source || '')
     const direct = source.includes('Retailers argentinos directos')
-    const contributors = ['Frávega', 'Cetrogar', 'Naldo', 'OnCity', 'Megatone'].filter((name) => source.includes(name))
+    const contributors = RETAILERS.filter((name) => source.includes(name))
     const comparableTitles = Array.isArray(market.comparables)
       ? market.comparables.slice(0, 5).map((item) => item?.title).filter(Boolean)
       : []
@@ -132,7 +133,7 @@ async function main() {
   const live = results.filter((result) => result.status === 'live' && result.comparableCount >= MIN_COMPARABLES)
   const directLive = live.filter((result) => result.direct)
   const errors = results.filter((result) => !result.ok)
-  const retailerContribution = Object.fromEntries(['Frávega', 'Cetrogar', 'Naldo', 'OnCity', 'Megatone'].map((name) => [
+  const retailerContribution = Object.fromEntries(RETAILERS.map((name) => [
     name,
     results.filter((result) => result.contributors.includes(name)).length,
   ]))

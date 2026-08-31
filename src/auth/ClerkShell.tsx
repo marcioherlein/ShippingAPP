@@ -1,19 +1,24 @@
 import React, { useEffect, useState } from 'react'
 import { Show, SignInButton, SignUpButton, UserButton, useAuth, useClerk } from '@clerk/react'
 import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
+import { saveCompletedAnalysis } from '../lib/analysisHistory'
+import AnalysisHistory from '../components/AnalysisHistory'
 import './auth.css'
 
 type AccountSyncState = 'idle' | 'syncing' | 'ready' | 'error'
+type HistorySaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function ClerkShell({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn } = useAuth()
   const clerk = useClerk()
   const [accountSync, setAccountSync] = useState<AccountSyncState>('idle')
+  const [historySave, setHistorySave] = useState<HistorySaveState>('idle')
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
       setApiTokenProvider(null)
       setAccountSync('idle')
+      setHistorySave('idle')
       return
     }
 
@@ -21,8 +26,6 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
     setApiTokenProvider(() => getToken())
     setAccountSync('syncing')
 
-    // Shadow-auth calls /api/me immediately after sign-in. A 200 response proves
-    // the live Clerk session was verified by the Worker and mapped to the D1 user.
     void apiFetch('/api/me')
       .then((response) => {
         if (active) setAccountSync(response.ok ? 'ready' : 'error')
@@ -38,13 +41,48 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
   }, [getToken, isLoaded, isSignedIn])
 
   useEffect(() => {
+    if (!isLoaded || !isSignedIn) return
+
+    let active = true
+    const completed = (event: Event) => {
+      const detail = (event as CustomEvent<{ input?: unknown; result?: unknown }>).detail
+      if (!detail || detail.input === undefined || detail.result === undefined) return
+      setHistorySave('saving')
+      void saveCompletedAnalysis(detail.input, detail.result)
+        .then(() => {
+          if (!active) return
+          setHistorySave('saved')
+          window.dispatchEvent(new CustomEvent('shippingapp:history-updated'))
+          window.setTimeout(() => {
+            if (active) setHistorySave('idle')
+          }, 1800)
+        })
+        .catch(() => {
+          if (active) setHistorySave('error')
+        })
+    }
+
+    window.addEventListener('shippingapp:analysis-completed', completed)
+    return () => {
+      active = false
+      window.removeEventListener('shippingapp:analysis-completed', completed)
+    }
+  }, [isLoaded, isSignedIn])
+
+  useEffect(() => {
     const requestSignIn = () => clerk.openSignIn({})
     window.addEventListener('shippingapp:auth-required', requestSignIn)
     return () => window.removeEventListener('shippingapp:auth-required', requestSignIn)
   }, [clerk])
 
   const accountLabel = accountSync === 'ready'
-    ? 'Cuenta conectada · tus análisis quedan guardados'
+    ? historySave === 'saving'
+      ? 'Cuenta conectada · guardando análisis…'
+      : historySave === 'saved'
+        ? 'Cuenta conectada · análisis guardado'
+        : historySave === 'error'
+          ? 'Cuenta conectada · el último análisis no se guardó'
+          : 'Cuenta conectada · tus análisis quedan guardados'
     : accountSync === 'error'
       ? 'No pudimos sincronizar la cuenta'
       : 'Conectando cuenta…'
@@ -60,7 +98,8 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
         </SignUpButton>
       </Show>
       <Show when="signed-in">
-        <span className="auth-saved-label" data-account-sync={accountSync}>{accountLabel}</span>
+        <span className="auth-saved-label" data-account-sync={accountSync} data-history-save={historySave}>{accountLabel}</span>
+        <AnalysisHistory />
         <UserButton />
       </Show>
     </div>

@@ -52,9 +52,6 @@ export async function analyzeArgentinaMarketHybrid(
 
   if (primary.status === 'live') return primary
 
-  // Free tier before paid discovery: query public storefront catalog endpoints
-  // from major Argentine retailers. These candidates still pass the same
-  // deterministic matcher and >=5 comparable floor as Mercado Libre.
   const retailerProvider = createArgentinaDirectRetailerProvider({
     fetchImpl: options.fetchImpl,
   })
@@ -70,7 +67,7 @@ export async function analyzeArgentinaMarketHybrid(
   if (!googleShoppingApiKey) {
     const chosen = chooseNonLive(primary, retailers)
     chosen.warnings.push(
-      `Free Argentina market discovery did not reach the live floor: ${evidenceSummary('Mercado Libre', primary)}; ${evidenceSummary('direct retailers', retailers)}.`,
+      `Secondary Argentina market evidence also did not reach the live floor. Free discovery summary: ${evidenceSummary('Mercado Libre', primary)}; ${evidenceSummary('direct retailers', retailers)}.`,
     )
     return chosen
   }
@@ -109,7 +106,7 @@ export async function analyzeArgentinaMarketHybrid(
 
   const chosen = chooseNonLive(primary, retailers, google)
   chosen.warnings.push(
-    `Argentina market evidence did not reach the live floor: ${evidenceSummary('Mercado Libre', primary)}; ${evidenceSummary('direct retailers', retailers)}; ${evidenceSummary('Google Shopping', google)}.`,
+    `Secondary Argentina market evidence also did not reach the live floor. Argentina market summary: ${evidenceSummary('Mercado Libre', primary)}; ${evidenceSummary('direct retailers', retailers)}; ${evidenceSummary('Google Shopping', google)}.`,
   )
   return chosen
 }

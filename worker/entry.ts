@@ -17,11 +17,11 @@ const LEGACY_MARKET_ENV_KEYS = [
 
 /**
  * `/api/analyze` and `/api/intake` get their authoritative Argentina benchmark
- * from `overlayHybridMarketEconomics` after the legacy router returns. The old
- * enrich layer still contains an ML-only benchmark for backwards-compatible
- * direct use, so hide only its ML credentials on these two inner calls. This
- * prevents a duplicate authenticated ML discovery/OAuth lookup while keeping
- * dedicated Mercado Libre diagnostics and benchmarks untouched.
+ * from `overlayHybridMarketEconomics` after the legacy pipeline returns. Hide
+ * ML credentials from every inner legacy analysis call — including the Alibaba
+ * self-first fast path — so those layers can hydrate non-market facts/FX without
+ * performing a second authenticated ML discovery. Dedicated Mercado Libre
+ * diagnostics and the outer hybrid benchmark keep the original environment.
  */
 export function withoutLegacyMarketCredentials(env: Record<string, unknown>, pathname: string) {
   if (pathname !== '/api/analyze' && pathname !== '/api/intake') return env
@@ -132,7 +132,12 @@ export default {
         const alibabaUrl = !body?.sourceMode ? parseAlibabaSelfFirstUrl(body?.url) : null
         if (alibabaUrl) {
           try {
-            const analysis = await analyzeAlibabaSelfFirst(alibabaUrl, env as any)
+            // Self-first still owns Alibaba extraction + FX hydration, but its
+            // legacy ML-only hydration must not see provider credentials. The
+            // authoritative hybrid overlay immediately below gets the original
+            // env and performs the single real Argentina-market lookup.
+            const selfFirstEnv = withoutLegacyMarketCredentials(env, '/api/analyze')
+            const analysis = await analyzeAlibabaSelfFirst(alibabaUrl, selfFirstEnv as any)
             return Response.json(await overlayHybridMarketEconomics(analysis, env as any))
           } catch {
             // Reliability backstop: if the new orchestrator itself fails, keep

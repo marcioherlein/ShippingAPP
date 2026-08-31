@@ -322,7 +322,12 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
     || specValue(specs, ['product type', 'type'])
   if (category || categoryPath.length) evidence.push('category')
 
-  let unitPriceUsd = positiveNumber(firstValue(allObjects, ['priceValue', 'price_value', 'minPrice', 'min_price', 'lowPrice', 'salePrice', 'unitPrice', 'unit_price', 'price']))
+  // Generic currency amounts on Alibaba can be coupons, samples or promotions.
+  // Accept product-state prices only from product-specific keys; accept a generic
+  // `price` only when it sits under a JSON-LD Product/Offer tree.
+  const productStatePrice = positiveNumber(firstValue(productObjects, ['priceValue', 'price_value', 'minPrice', 'min_price', 'lowPrice', 'salePrice', 'unitPrice', 'unit_price']))
+  const jsonLdPrice = positiveNumber(firstValue(jsonLdObjects, ['price', 'lowPrice', 'highPrice', 'priceValue', 'unitPrice', 'unit_price']))
+  let unitPriceUsd = productStatePrice || jsonLdPrice
   if (!unitPriceUsd) unitPriceUsd = labelledPrice(text)
   if (unitPriceUsd) evidence.push('price')
 

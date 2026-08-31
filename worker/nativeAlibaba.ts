@@ -266,21 +266,44 @@ const responseSchema = {
   },
 }
 
+const browserExtractionPrompt = [
+  'Extract ONLY facts explicitly visible or embedded in this Alibaba product page. Never infer or estimate missing values.',
+  'Inspect the rendered offer, structured page data, breadcrumb, product attributes/specifications, price tiers and logistics/package information when present.',
+  'For unit_price, return only the merchandise offer price. Never use coupons, new-buyer incentives, sample prices, shipping/freight charges or unrelated currency amounts.',
+  'Prefer logistics/package facts for unit_weight, unit_volume and unit_size; do not confuse product physical dimensions with packed shipping dimensions.',
+  'Use category_path for the Alibaba breadcrumb from broadest to most specific. product_type should be the concrete merchandise type, not a marketing phrase.',
+  'If MOQ is not separately labelled but a price tier explicitly starts at a minimum quantity, return that minimum in price_tiers.',
+  'Return HS code only if Alibaba or the supplier explicitly lists it. Return supplier_country separately from product origin.',
+  'For specifications include useful technical attributes such as Product Type, Type, movement, material, function, Place of Origin, model, power, composition or use.',
+  'If a requested value is absent, return null or an empty array. Do not fill it from general knowledge.',
+].join(' ')
+
 function browserRequest(url: URL) {
   return {
     url: url.toString(),
-    prompt: [
-      'Extract ONLY facts explicitly visible or embedded in this Alibaba product page. Never infer or estimate missing values.',
-      'Inspect the rendered offer, structured page data, breadcrumb, product attributes/specifications, price tiers and logistics/package information when present.',
-      'For unit_price, return only the merchandise offer price. Never use coupons, new-buyer incentives, sample prices, shipping/freight charges or unrelated currency amounts.',
-      'Prefer logistics/package facts for unit_weight, unit_volume and unit_size; do not confuse product physical dimensions with packed shipping dimensions.',
-      'Use category_path for the Alibaba breadcrumb from broadest to most specific. product_type should be the concrete merchandise type, not a marketing phrase.',
-      'If MOQ is not separately labelled but a price tier explicitly starts at a minimum quantity, return that minimum in price_tiers.',
-      'Return HS code only if Alibaba or the supplier explicitly lists it. Return supplier_country separately from product origin.',
-      'For specifications include useful technical attributes such as Product Type, Type, movement, material, function, Place of Origin, model, power, composition or use.',
-      'If a requested value is absent, return null or an empty array. Do not fill it from general knowledge.',
-    ].join(' '),
+    prompt: browserExtractionPrompt,
     response_format: { type: 'json_schema', json_schema: responseSchema },
+  }
+}
+
+/**
+ * Cloudflare Browser Run can reject a complex JSON Schema with HTTP 422 even
+ * after the page itself rendered successfully. In that case we make one
+ * bounded prompt-only extraction attempt. The result still passes through the
+ * same trust gates below: a bare semantic unit_price is never enough to release
+ * FOB, supplier country is never substituted for origin, and missing logistics
+ * remain user-confirmation fields.
+ */
+function browserPromptOnlyRequest(url: URL) {
+  return {
+    url: url.toString(),
+    prompt: [
+      browserExtractionPrompt,
+      'Return one JSON object using these exact keys when available: title, product_type, moq, unit_price, unit_weight, unit_volume, unit_size, hs_code, product_id, product_category_id, quantity_unit, supplier_name, supplier_country, image_url, category_path, supplier_badges, specifications, price_tiers, packaging, lead_time, tariff_info.',
+      'category_path and supplier_badges must be arrays. specifications must be an array of objects with name and value. price_tiers must be an array of objects that keeps min_quantity and unit_price together when shown. Missing scalar values must be null and missing arrays must be empty.',
+    ].join(' '),
+    gotoOptions: { waitUntil: 'networkidle2', timeout: 20000 },
+    rejectResourceTypes: ['image', 'media', 'font'],
   }
 }
 
@@ -357,26 +380,42 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
 
   let response: Response
   let retried429 = false
+  let usedPromptOnly422Fallback = false
+  let structuredMs: number | null = null
   try {
     response = await browser.quickAction('json', browserRequest(url))
+    structuredMs = combinedBrowserMs(structuredMs, browserMs(response))
     if (response.status === 429) {
       retried429 = true
       await wait(750)
       response = await browser.quickAction('json', browserRequest(url))
+      structuredMs = combinedBrowserMs(structuredMs, browserMs(response))
+    }
+
+    if (response.status === 422) {
+      usedPromptOnly422Fallback = true
+      warnings.push('Browser Run rechazó el JSON Schema con HTTP 422; ShippingAPP reintentó una sola vez con extracción prompt-only simplificada y mantiene los mismos controles de confianza.')
+      response = await browser.quickAction('json', browserPromptOnlyRequest(url))
+      structuredMs = combinedBrowserMs(structuredMs, browserMs(response))
+      if (response.status === 429) {
+        retried429 = true
+        await wait(750)
+        response = await browser.quickAction('json', browserPromptOnlyRequest(url))
+        structuredMs = combinedBrowserMs(structuredMs, browserMs(response))
+      }
     }
   } catch (error) {
     if (rendered.facts) {
       warnings.push(`Structured Browser Run failed, but rendered HTML remains usable: ${error instanceof Error ? error.message : 'unknown error'}`)
-      return { status: 'ready', source: 'Cloudflare Browser Run JSON', facts: rendered.facts, warnings, browserMsUsed: rendered.ms }
+      return { status: 'ready', source: 'Cloudflare Browser Run JSON', facts: rendered.facts, warnings, browserMsUsed: combinedBrowserMs(rendered.ms, structuredMs) }
     }
     return {
-      status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: rendered.ms,
+      status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: combinedBrowserMs(rendered.ms, structuredMs),
       warnings: [...warnings, `Native Alibaba extraction failed: ${error instanceof Error ? error.message : 'unknown error'}`],
     }
   }
 
-  const jsonMs = browserMs(response)
-  const totalMs = combinedBrowserMs(rendered.ms, jsonMs)
+  const totalMs = combinedBrowserMs(rendered.ms, structuredMs)
   if (!response.ok) {
     if (rendered.facts) {
       warnings.push(`Browser Run JSON returned HTTP ${response.status}${retried429 ? ' after one bounded retry' : ''}; rendered HTML evidence is preserved instead of failing the product.`)
@@ -430,7 +469,8 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
     }
   }
 
-  if (retried429) warnings.push('Browser Run recibió HTTP 429 en el primer intento y recuperó la publicación en un único retry acotado.')
+  if (usedPromptOnly422Fallback) warnings.push('La extracción prompt-only recuperó datos después del HTTP 422 del schema; cada dato sigue sujeto a los gates determinísticos antes de cotizar.')
+  if (retried429) warnings.push('Browser Run recibió HTTP 429 y aplicó un único retry acotado para la etapa afectada.')
   if (rendered.facts) warnings.push('La extracción estructurada se fusionó con evidencia determinística del HTML renderizado; los valores determinísticos tienen prioridad.')
   if (!facts.unitPriceUsd) warnings.push('Precio unitario FOB no quedó corroborado por evidencia de producto; debe confirmarlo el usuario/proveedor.')
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por Alibaba; debe confirmarlo el usuario.')

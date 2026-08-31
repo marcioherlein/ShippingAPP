@@ -210,7 +210,7 @@ function intelligentSearchUrl(retailer: ArgentinaVtexRetailer, query: string) {
 }
 
 function legacySearchUrl(retailer: ArgentinaVtexRetailer, query: string) {
-  const normalized = encodeURIComponent(query.trim()).replace(/%20/g, '%20')
+  const normalized = encodeURIComponent(query.trim())
   return `${retailer.baseUrl}/api/catalog_system/pub/products/search/${normalized}`
 }
 
@@ -277,9 +277,13 @@ export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarke
       )))
       const candidates = results.flatMap((result) => result.candidates)
       const active = results.filter((result) => result.mode !== 'unavailable')
+      if (!active.length) {
+        const diagnostics = results.flatMap((result) => result.warnings).join(' ')
+        throw new Error(`Direct Argentine retailer discovery unavailable. ${diagnostics}`.slice(0, 900))
+      }
       return {
         providerId: 'argentina-direct-retailers',
-        sourceLabel: `Retailers argentinos directos · ${active.map((result) => result.retailer.name).join(' + ') || 'sin respuesta'}`,
+        sourceLabel: `Retailers argentinos directos · ${active.map((result) => result.retailer.name).join(' + ')}`,
         candidates,
         categoryHint: null,
         warnings: [

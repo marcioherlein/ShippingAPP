@@ -47,6 +47,7 @@ const ACCESSORY_TERMS = new Set([
   'case', 'cover', 'replacement', 'repuesto', 'spare', 'accesorio', 'carcasa', 'filtro', 'cable', 'cargador', 'soporte',
 ])
 
+const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit'])
 const VARIANT_MODIFIERS = new Set(['pro', 'max', 'plus', 'ultra', 'mini', 'lite', 'air', 'se'])
 const SPEC_UNIT_ALIASES: Record<string, string> = {
   tb: 'tb', gb: 'gb', mb: 'mb', mah: 'mah', w: 'w', watt: 'w', watts: 'w', kw: 'kw', v: 'v', volt: 'v', volts: 'v',
@@ -73,9 +74,20 @@ function tokenSet(value: string) {
   return new Set(tokens(value))
 }
 
+function containsPhrase(value: string, phrase: string) {
+  const haystack = ` ${cleanText(value)} `
+  const needle = ` ${cleanText(phrase)} `
+  return needle.trim().length > 0 && haystack.includes(needle)
+}
+
+function matchedKnownBrand(value: string) {
+  return [...HIGH_BRAND_EQUITY]
+    .sort((a, b) => cleanText(b).length - cleanText(a).length)
+    .find((brand) => containsPhrase(value, brand)) || null
+}
+
 function hasKnownBrand(value: string) {
-  const text = cleanText(value)
-  return HIGH_BRAND_EQUITY.some((brand) => text.includes(cleanText(brand)))
+  return Boolean(matchedKnownBrand(value))
 }
 
 function specTokens(value: string) {
@@ -97,6 +109,14 @@ function comparableAttributeScore(item: MlResult, inferred: MlAttribute[] | unde
     score += expectedValue === actualValue ? 5 : -8
   }
   return Math.max(-24, Math.min(18, score))
+}
+
+function itemIdentityEvidence(item: MlResult) {
+  const values = [item.title || '']
+  for (const attribute of item.attributes || []) {
+    if (attribute.value_name) values.push(attribute.value_name)
+  }
+  return values.join(' ')
 }
 
 function extractSpecs(value: string) {
@@ -121,8 +141,9 @@ function hasConflictingSpecs(target: string, candidate: string) {
   for (const [unit, expectedValues] of expected) {
     const actualValues = actual.get(unit)
     if (!actualValues?.size) continue
-    const intersects = [...expectedValues].some((value) => actualValues.has(value))
-    if (!intersects) return true
+    // A shared unit can encode multiple independent facts (e.g. RAM + SSD both in GB).
+    // Requiring every explicitly stated target value prevents 8GB/512GB from matching 8GB/128GB.
+    if (![...expectedValues].every((value) => actualValues.has(value))) return true
   }
   return false
 }
@@ -133,7 +154,7 @@ function matchedSpecCount(target: string, candidate: string) {
   let matches = 0
   for (const [unit, expectedValues] of expected) {
     const actualValues = actual.get(unit)
-    if (actualValues && [...expectedValues].some((value) => actualValues.has(value))) matches += 1
+    if (actualValues && [...expectedValues].every((value) => actualValues.has(value))) matches += 1
   }
   return matches
 }
@@ -153,6 +174,12 @@ function standaloneVersionNumbers(value: string) {
     .replace(/\d+(?:[.,]\d+)?\s*(tb|gb|mb|mah|w|watt|watts|kw|v|volt|volts|hz|kg|g|l|lt|litro|litros|ml|cm|mm|pa|inch|inches|pulgada|pulgadas)\b/g, ' ')
     .replace(/\b\d+x\d+(?:x\d+)?\b/g, ' ')
   return new Set((stripped.match(/\b\d{2,4}\b/g) || []).filter((value) => Number(value) >= 10))
+}
+
+function decimalModelVersions(value: string) {
+  const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const stripped = normalized.replace(/\b\d+(?:[.,]\d+)?\s*(tb|gb|mb|mah|w|watt|watts|kw|v|volt|volts|hz|kg|g|l|lt|litro|litros|ml|cm|mm|pa|inch|inches|pulgada|pulgadas)\b/g, ' ')
+  return new Set((stripped.match(/\b\d+[.,]\d+\b/g) || []).map((match) => match.replace(',', '.')))
 }
 
 function variantModifiers(value: string) {
@@ -190,6 +217,12 @@ function hasAccessoryMismatch(target: string, candidate: string) {
   return false
 }
 
+function hasBundleMismatch(target: string, candidate: string) {
+  const targetTokens = tokenSet(target)
+  const candidateTokens = tokenSet(candidate)
+  return [...BUNDLE_TERMS].some((term) => candidateTokens.has(term) && !targetTokens.has(term))
+}
+
 function lexicalOverlap(target: string, candidate: string) {
   const expected = tokenSet(target)
   const actual = tokenSet(candidate)
@@ -206,11 +239,25 @@ function hasConflictingModelCode(target: string, candidate: string) {
   return ![...expected].some((code) => actual.has(code))
 }
 
+function hasMissingStrongModelCode(productName: string, candidate: string) {
+  const expected = modelCodes(productName)
+  if (!expected.size) return false
+  const actual = modelCodes(candidate)
+  return ![...expected].some((code) => actual.has(code))
+}
+
 function hasConflictingVersionNumber(target: string, candidate: string) {
   const expected = standaloneVersionNumbers(target)
   const actual = standaloneVersionNumbers(candidate)
   if (!expected.size || !actual.size) return false
-  return ![...expected].some((version) => actual.has(version))
+  return ![...expected].every((version) => actual.has(version))
+}
+
+function hasDecimalVersionConflict(productName: string, candidate: string) {
+  const expected = decimalModelVersions(productName)
+  if (!expected.size) return false
+  const actual = decimalModelVersions(candidate)
+  return ![...expected].every((version) => actual.has(version))
 }
 
 function modelEvidenceScore(target: string, candidate: string) {
@@ -220,7 +267,7 @@ function modelEvidenceScore(target: string, candidate: string) {
 
   const expectedVersions = standaloneVersionNumbers(target)
   const actualVersions = standaloneVersionNumbers(candidate)
-  if (expectedVersions.size && actualVersions.size && [...expectedVersions].some((version) => actualVersions.has(version))) return 10
+  if (expectedVersions.size && actualVersions.size && [...expectedVersions].every((version) => actualVersions.has(version))) return 10
   return 0
 }
 
@@ -230,6 +277,60 @@ function hasVariantModifierConflict(target: string, candidate: string) {
   if (setsEqual(expected, actual)) return false
   if (expected.size) return true
   return actual.size > 0 && modelEvidenceScore(target, candidate) > 0
+}
+
+function compactSeriesVersion(productName: string) {
+  const brand = matchedKnownBrand(productName)
+  if (!brand) return null
+  const brandTokens = tokenSet(brand)
+  const remaining = tokens(productName).filter((token) => {
+    if (brandTokens.has(token)) return false
+    if (/^\d+(tb|gb|mb|mah|w|kw|v|hz|kg|g|l|ml|cm|mm|pa)$/.test(token)) return false
+    if (/^\d+x\d+/.test(token)) return false
+    return true
+  })
+  if (remaining.length !== 2) return null
+  const [first, second] = remaining
+  if (!/^[a-z][a-z0-9]*$/.test(first) || !/^\d{1,2}$/.test(second)) return null
+  return { family: first, version: second }
+}
+
+function hasCompactSeriesVersionConflict(productName: string, candidate: string) {
+  const expected = compactSeriesVersion(productName)
+  if (!expected) return false
+  const actual = tokenSet(candidate)
+  return !actual.has(expected.family) || !actual.has(expected.version)
+}
+
+function distinctiveFamilyTokens(productName: string, category: string) {
+  if (modelCodes(productName).size) return new Set<string>()
+  const brand = matchedKnownBrand(productName)
+  if (!brand) return new Set<string>()
+  const brandTokens = tokenSet(brand)
+  const categoryTokens = tokenSet(category)
+  return new Set(tokens(productName).filter((token) => (
+    /^[a-z]+$/.test(token)
+    && token.length >= 6
+    && !brandTokens.has(token)
+    && !categoryTokens.has(token)
+  )))
+}
+
+function hasDistinctiveFamilyMismatch(productName: string, category: string, candidate: string) {
+  const expected = distinctiveFamilyTokens(productName, category)
+  if (!expected.size) return false
+  const actual = tokenSet(candidate)
+  return ![...expected].every((token) => actual.has(token))
+}
+
+function hasEnergyTypeConflict(target: string, candidate: string) {
+  const expected = tokenSet(target)
+  const actual = tokenSet(candidate)
+  const targetElectric = expected.has('electrico') || expected.has('electrica') || expected.has('electric')
+  const candidateElectric = actual.has('electrico') || actual.has('electrica') || actual.has('electric')
+  const targetGas = expected.has('gas')
+  const candidateGas = actual.has('gas')
+  return (targetElectric && candidateGas && !candidateElectric) || (targetGas && candidateElectric && !candidateGas)
 }
 
 export function buildMarketQuery(productName: string, category: string) {
@@ -254,25 +355,34 @@ export function comparableScore(item: MlResult, productName: string, category: s
   const title = item.title || ''
   const cleanedTitle = cleanText(title)
   const target = cleanText(`${productName} ${category}`)
+  const identityTarget = cleanText(productName)
+  const identityEvidence = itemIdentityEvidence(item)
+  const cleanedEvidence = cleanText(identityEvidence)
   if (!cleanedTitle || !item.price || item.currency_id !== 'ARS') return 0
   if (item.condition && item.condition !== 'new') return 0
   if (context.categoryId && item.category_id && item.category_id !== context.categoryId) return 0
   if (hasAccessoryMismatch(target, cleanedTitle)) return 0
+  if (hasBundleMismatch(target, cleanedTitle)) return 0
   if (!hasKnownBrand(productName) && hasKnownBrand(cleanedTitle)) return 0
-  if (hasConflictingSpecs(target, cleanedTitle)) return 0
-  if (hasConflictingModelCode(target, cleanedTitle)) return 0
-  if (hasConflictingVersionNumber(target, cleanedTitle)) return 0
+  if (hasConflictingSpecs(target, cleanedEvidence)) return 0
+  if (hasConflictingModelCode(identityTarget, cleanedEvidence)) return 0
+  if (hasMissingStrongModelCode(productName, cleanedEvidence)) return 0
+  if (hasConflictingVersionNumber(identityTarget, cleanedEvidence)) return 0
+  if (hasDecimalVersionConflict(productName, identityEvidence)) return 0
+  if (hasCompactSeriesVersionConflict(productName, cleanedEvidence)) return 0
+  if (hasDistinctiveFamilyMismatch(productName, category, cleanedEvidence)) return 0
+  if (hasEnergyTypeConflict(target, cleanedEvidence)) return 0
 
   const targetPack = extractPackQuantity(target)
   const candidatePack = extractPackQuantity(cleanedTitle)
   if (targetPack && candidatePack && targetPack !== candidatePack) return 0
   if (!targetPack && candidatePack && candidatePack > 1) return 0
-  if (hasVariantModifierConflict(target, cleanedTitle)) return 0
+  if (hasVariantModifierConflict(target, cleanedEvidence)) return 0
 
   let score = 0
   score += lexicalOverlap(target, cleanedTitle) * 52
-  score += modelEvidenceScore(target, cleanedTitle)
-  score += Math.min(24, matchedSpecCount(target, cleanedTitle) * 12)
+  score += modelEvidenceScore(identityTarget, cleanedEvidence)
+  score += Math.min(24, matchedSpecCount(target, cleanedEvidence) * 12)
   score += comparableAttributeScore(item, context.inferredAttributes)
   if (context.categoryId && item.category_id === context.categoryId) score += 12
   if (item.condition === 'new' || !item.condition) score += 10

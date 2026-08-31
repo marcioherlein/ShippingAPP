@@ -137,7 +137,10 @@ function directFactsToNative(facts: AlibabaDirectFacts, url: URL): ParsebotAliba
     name: facts.name || productTitleFromUrl(url),
     category: facts.category || facts.categoryPath.at(-1) || null,
     categoryPath: facts.categoryPath,
-    unitPriceUsd: facts.unitPriceUsd,
+    // Rendered Alibaba pages contain coupons, samples and promotional amounts
+    // beside the offer. Until direct extraction carries price provenance, a
+    // naked rendered price is not safe enough to drive FOB economics.
+    unitPriceUsd: null,
     moq: facts.moq,
     packedWeightKg: facts.packedWeightKg,
     volumeCbm: facts.volumeCbm,
@@ -158,32 +161,34 @@ function directFactsToNative(facts: AlibabaDirectFacts, url: URL): ParsebotAliba
   }
 }
 
-function mergeFacts(primary: ParsebotAlibabaFacts | null, supplement: ParsebotAlibabaFacts | null): ParsebotAlibabaFacts | null {
-  if (!primary) return supplement
-  if (!supplement) return primary
+function mergeFacts(rendered: ParsebotAlibabaFacts | null, structured: ParsebotAlibabaFacts | null): ParsebotAlibabaFacts | null {
+  if (!rendered) return structured
+  if (!structured) return rendered
   return {
-    name: primary.name || supplement.name,
-    category: primary.category || supplement.category,
-    categoryPath: primary.categoryPath.length ? primary.categoryPath : supplement.categoryPath,
-    unitPriceUsd: primary.unitPriceUsd || supplement.unitPriceUsd,
-    moq: primary.moq || supplement.moq,
-    packedWeightKg: primary.packedWeightKg || supplement.packedWeightKg,
-    volumeCbm: primary.volumeCbm || supplement.volumeCbm,
-    unitSize: primary.unitSize || supplement.unitSize,
-    originCountry: primary.originCountry || supplement.originCountry,
-    supplierCountry: primary.supplierCountry || supplement.supplierCountry,
-    imageUrl: primary.imageUrl || supplement.imageUrl,
-    supplier: primary.supplier || supplement.supplier,
-    supplierBadges: primary.supplierBadges.length ? primary.supplierBadges : supplement.supplierBadges,
-    description: primary.description || supplement.description,
-    hsCode: primary.hsCode || supplement.hsCode,
-    productId: primary.productId || supplement.productId,
-    productCategoryId: primary.productCategoryId || supplement.productCategoryId,
-    quantityUnit: primary.quantityUnit || supplement.quantityUnit,
-    leadTime: primary.leadTime ?? supplement.leadTime,
-    packaging: primary.packaging ?? supplement.packaging,
-    tariffInfo: primary.tariffInfo ?? supplement.tariffInfo,
-    raw: supplement.raw,
+    name: rendered.name || structured.name,
+    category: rendered.category || structured.category,
+    categoryPath: rendered.categoryPath.length ? rendered.categoryPath : structured.categoryPath,
+    // Structured Browser Run extraction explicitly targets the offer price and
+    // price tiers. Prefer it over unproven rendered-page currency amounts.
+    unitPriceUsd: structured.unitPriceUsd || rendered.unitPriceUsd,
+    moq: rendered.moq || structured.moq,
+    packedWeightKg: rendered.packedWeightKg || structured.packedWeightKg,
+    volumeCbm: rendered.volumeCbm || structured.volumeCbm,
+    unitSize: rendered.unitSize || structured.unitSize,
+    originCountry: rendered.originCountry || structured.originCountry,
+    supplierCountry: rendered.supplierCountry || structured.supplierCountry,
+    imageUrl: rendered.imageUrl || structured.imageUrl,
+    supplier: rendered.supplier || structured.supplier,
+    supplierBadges: rendered.supplierBadges.length ? rendered.supplierBadges : structured.supplierBadges,
+    description: rendered.description || structured.description,
+    hsCode: rendered.hsCode || structured.hsCode,
+    productId: rendered.productId || structured.productId,
+    productCategoryId: rendered.productCategoryId || structured.productCategoryId,
+    quantityUnit: rendered.quantityUnit || structured.quantityUnit,
+    leadTime: rendered.leadTime ?? structured.leadTime,
+    packaging: rendered.packaging ?? structured.packaging,
+    tariffInfo: rendered.tariffInfo ?? structured.tariffInfo,
+    raw: structured.raw,
   }
 }
 
@@ -308,7 +313,10 @@ async function extractRenderedHtml(url: URL, browser: BrowserRun) {
       facts,
       ms,
       status: response.status,
-      warnings: [`ShippingAPP recovered ${coreFichaSignals(facts)}/7 required ficha signals from rendered Alibaba HTML before structured extraction.`],
+      warnings: [
+        `ShippingAPP recovered ${coreFichaSignals(facts)}/7 required ficha signals from rendered Alibaba HTML before structured extraction.`,
+        'Los montos monetarios del DOM renderizado no se promueven a FOB sin confirmación estructurada o del usuario.',
+      ],
     }
   } catch (error) {
     return {
@@ -323,19 +331,6 @@ async function extractRenderedHtml(url: URL, browser: BrowserRun) {
 export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promise<NativeAlibabaResult> {
   const rendered = await extractRenderedHtml(url, browser)
   const warnings: string[] = [...rendered.warnings]
-
-  // A complete deterministic ficha from the rendered DOM is preferable to an
-  // AI/JSON extraction and avoids a second Browser Run request entirely.
-  if (rendered.facts && coreFichaSignals(rendered.facts) === 7) {
-    warnings.push('La ficha obligatoria quedó completa desde HTML renderizado; no fue necesario ejecutar Browser Run JSON.')
-    return {
-      status: 'ready',
-      source: 'Cloudflare Browser Run JSON',
-      facts: rendered.facts,
-      warnings,
-      browserMsUsed: rendered.ms,
-    }
-  }
 
   let response: Response
   let retried429 = false
@@ -391,7 +386,7 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
   }
 
   if (retried429) warnings.push('Browser Run recibió HTTP 429 en el primer intento y recuperó la publicación en un único retry acotado.')
-  if (rendered.facts) warnings.push('La extracción estructurada se fusionó con evidencia determinística del HTML renderizado; los valores determinísticos tienen prioridad.')
+  if (rendered.facts) warnings.push('La extracción estructurada se fusionó con evidencia del HTML renderizado; el precio estructurado tiene prioridad y el resto conserva evidencia determinística cuando existe.')
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por Alibaba; debe confirmarlo el usuario.')
   if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por Alibaba; debe confirmarlo el usuario.')
   if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto; supplier_country no se usa como sustituto.')

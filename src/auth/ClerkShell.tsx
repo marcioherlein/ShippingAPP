@@ -3,6 +3,7 @@ import { Show, SignInButton, SignUpButton, UserButton, useAuth, useClerk } from 
 import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
 import { saveCompletedAnalysis } from '../lib/analysisHistory'
 import AnalysisHistory from '../components/AnalysisHistory'
+import Watchlist from '../components/Watchlist'
 import './auth.css'
 
 type AccountSyncState = 'idle' | 'syncing' | 'ready' | 'error'
@@ -99,6 +100,7 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
       </Show>
       <Show when="signed-in">
         <span className="auth-saved-label" data-account-sync={accountSync} data-history-save={historySave}>{accountLabel}</span>
+        <Watchlist />
         <AnalysisHistory />
         <UserButton />
       </Show>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { deleteAnalysisHistoryItem, getAnalysisHistoryItem, listAnalysisHistory, type AnalysisHistoryItem, type AnalysisHistorySummary } from '../lib/analysisHistory'
+import { addAnalysisToWatchlist } from '../lib/watchlist'
 import './AnalysisHistory.css'
 
 function money(value: number | null | undefined) {
@@ -21,6 +22,8 @@ export default function AnalysisHistory() {
   const [error, setError] = useState('')
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [followingId, setFollowingId] = useState<string | null>(null)
+  const [followedId, setFollowedId] = useState<string | null>(null)
 
   const load = async (nextCursor: string | null = null, append = false) => {
     setLoading(true)
@@ -39,6 +42,7 @@ export default function AnalysisHistory() {
   useEffect(() => {
     if (!open) return
     setDetail(null)
+    setFollowedId(null)
     void load()
   }, [open])
 
@@ -53,12 +57,27 @@ export default function AnalysisHistory() {
   const openAnalysis = async (id: string) => {
     setOpeningId(id)
     setError('')
+    setFollowedId(null)
     try {
       setDetail(await getAnalysisHistoryItem(id))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No pudimos abrir este análisis.')
     } finally {
       setOpeningId(null)
+    }
+  }
+
+  const follow = async (id: string) => {
+    setFollowingId(id)
+    setError('')
+    try {
+      await addAnalysisToWatchlist(id)
+      setFollowedId(id)
+      window.dispatchEvent(new CustomEvent('shippingapp:watchlist-updated'))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No pudimos seguir este producto.')
+    } finally {
+      setFollowingId(null)
     }
   }
 
@@ -109,7 +128,10 @@ export default function AnalysisHistory() {
           <div><small>FOB unitario</small><b>{money(detailAnalysis?.product?.unitPriceUsd)}</b></div>
         </div>
         {detailAnalysis?.sourceUrl && !String(detailAnalysis.sourceUrl).startsWith('manual://') && <a className="analysis-history-source" href={String(detailAnalysis.sourceUrl)} target="_blank" rel="noreferrer">Abrir fuente del producto ↗</a>}
-        <button type="button" className="analysis-history-delete-detail" onClick={() => void remove(detail.id)} disabled={deletingId === detail.id}>{deletingId === detail.id ? 'Eliminando…' : 'Eliminar de mi historial'}</button>
+        <div className="analysis-history-actions">
+          <button type="button" onClick={() => void follow(detail.id)} disabled={followingId === detail.id || followedId === detail.id}>{followingId === detail.id ? 'Siguiendo…' : followedId === detail.id ? '★ Producto seguido' : '☆ Seguir producto'}</button>
+          <button type="button" className="danger" onClick={() => void remove(detail.id)} disabled={deletingId === detail.id}>{deletingId === detail.id ? 'Eliminando…' : 'Eliminar de mi historial'}</button>
+        </div>
       </div> : <>
         {!loading && items.length === 0 && !error && <div className="analysis-history-empty"><b>Todavía no hay análisis guardados.</b><span>Cuando una cotización llegue a resultado, se guarda automáticamente acá.</span></div>}
 
@@ -123,6 +145,7 @@ export default function AnalysisHistory() {
             </div>
             <div className="analysis-history-actions">
               <button type="button" onClick={() => void openAnalysis(item.id)} disabled={openingId === item.id}>{openingId === item.id ? 'Abriendo…' : 'Abrir análisis'}</button>
+              <button type="button" onClick={() => void follow(item.id)} disabled={followingId === item.id || followedId === item.id}>{followingId === item.id ? 'Siguiendo…' : followedId === item.id ? '★ Seguido' : '☆ Seguir'}</button>
               <button type="button" className="danger" onClick={() => void remove(item.id)} disabled={deletingId === item.id}>{deletingId === item.id ? 'Eliminando…' : 'Eliminar'}</button>
             </div>
           </article>)}

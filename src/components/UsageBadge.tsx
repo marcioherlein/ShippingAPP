@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { loadUsage, usageLabel, type UsageSummary } from '../lib/usage'
 
 type State =
@@ -8,20 +8,32 @@ type State =
 
 export default function UsageBadge() {
   const [state, setState] = useState<State>({ kind: 'loading' })
+  const requestGeneration = useRef(0)
+  const mounted = useRef(true)
 
   const refresh = useCallback(() => {
-    let cancelled = false
+    const generation = ++requestGeneration.current
     void loadUsage()
       .then((usage) => {
-        if (!cancelled) setState({ kind: 'ready', usage })
+        if (mounted.current && generation === requestGeneration.current) {
+          setState({ kind: 'ready', usage })
+        }
       })
       .catch(() => {
-        if (!cancelled) setState({ kind: 'error' })
+        if (mounted.current && generation === requestGeneration.current) {
+          setState({ kind: 'error' })
+        }
       })
-    return () => { cancelled = true }
   }, [])
 
-  useEffect(() => refresh(), [refresh])
+  useEffect(() => {
+    mounted.current = true
+    refresh()
+    return () => {
+      mounted.current = false
+      requestGeneration.current += 1
+    }
+  }, [refresh])
 
   useEffect(() => {
     const updated = () => { refresh() }
@@ -33,7 +45,7 @@ export default function UsageBadge() {
     return <span className="auth-usage-badge" aria-label="Créditos disponibles">Créditos…</span>
   }
   if (state.kind === 'error') {
-    return <button type="button" className="auth-usage-badge auth-usage-retry" onClick={() => refresh()} aria-label="Reintentar consulta de créditos">Créditos no disponibles</button>
+    return <button type="button" className="auth-usage-badge auth-usage-retry" onClick={refresh} aria-label="Reintentar consulta de créditos">Créditos no disponibles</button>
   }
 
   return <span

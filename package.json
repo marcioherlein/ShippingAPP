@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.app.json && vite build",
+    "build": "tsc -p tsconfig.app.json && vite build && node scripts/reconcile-dist-ncm-index.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

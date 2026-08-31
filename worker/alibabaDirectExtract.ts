@@ -294,6 +294,13 @@ function labelledNumber(text: string, patterns: RegExp[]) {
   return null
 }
 
+function labelledPrice(text: string) {
+  return labelledNumber(text, [
+    /(?:FOB Price|Unit Price|Reference Price|Product Price|Price)\s*[:：-]?\s*(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)/i,
+    /(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)\s*(?:\/\s*(?:piece|pieces|pc|pcs|unit|units|set|sets)|per\s+(?:piece|pc|unit|set))/i,
+  ])
+}
+
 export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirectFacts {
   const roots = extractJsonRoots(html)
   const jsonLdObjects = roots.flatMap(collectJsonLdProductObjects)
@@ -316,7 +323,7 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
   if (category || categoryPath.length) evidence.push('category')
 
   let unitPriceUsd = positiveNumber(firstValue(allObjects, ['priceValue', 'price_value', 'minPrice', 'min_price', 'lowPrice', 'salePrice', 'unitPrice', 'unit_price', 'price']))
-  if (!unitPriceUsd) unitPriceUsd = positiveNumber(text.match(/(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)/i)?.[1])
+  if (!unitPriceUsd) unitPriceUsd = labelledPrice(text)
   if (unitPriceUsd) evidence.push('price')
 
   let moq = positiveNumber(firstValue(allObjects, ['moq', 'minimumOrderQuantity', 'minimum_order_quantity', 'minOrderQuantity', 'min_order_quantity', 'minOrder', 'min_order']))

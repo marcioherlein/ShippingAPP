@@ -40,7 +40,7 @@ function normalized(value) {
 function explicitValues(value, unit) {
   const text = normalized(value)
   const patterns = {
-    inch: /(\d+(?:\.\d+)?)\s*(?:["”″]|pulgadas?|inches?|inch)\b?/g,
+    inch: /(\d+(?:\.\d+)?)\s*(?:["”″]|pulgadas?\b|inches?\b|inch\b)/g,
     kg: /(\d+(?:\.\d+)?)\s*kg\b/g,
     l: /(\d+(?:\.\d+)?)\s*(?:l|lt|litros?|litro)\b/g,
     w: /(\d+(?:\.\d+)?)\s*(?:w|watt|watts)\b/g,

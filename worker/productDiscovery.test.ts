@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildAlibabaSearchUrl, buildAlibabaSeoSearchUrls, canonicalAlibabaProductUrl, discoverAlibabaProducts, extractAlibabaProductLinks } from './productDiscovery'
+import {
+  buildAlibabaSearchUrl,
+  buildAlibabaSeoSearchUrls,
+  canonicalAlibabaProductUrl,
+  discoverAlibabaProducts,
+  extractAlibabaProductLinks,
+  isAlibabaDiscoveryTitleUseful,
+  titleFromAlibabaProductUrl,
+} from './productDiscovery'
 
 const product = (href: string, title: string) => `<a href="${href}" title="${title}"><span>${title}</span></a>`
 
@@ -50,6 +58,27 @@ describe('Alibaba discovery URL/parser adversaries', () => {
     expect(canonicalAlibabaProductUrl('http://www.alibaba.com/product-detail/Test_1601234567890.html')).toBeNull()
     expect(canonicalAlibabaProductUrl('https://alibaba.com.evil.example/product-detail/Test_1601234567890.html')).toBeNull()
     expect(canonicalAlibabaProductUrl('https://www.alibaba.com/trade/search?SearchText=test')).toBeNull()
+  })
+
+  it('rejects carousel controls as titles and derives a bounded title only from a canonical product URL slug', () => {
+    expect(isAlibabaDiscoveryTitleUseful('Previous slide Next slide')).toBe(false)
+    expect(isAlibabaDiscoveryTitleUseful('TYSH Tuya Wifi Smart Video Door')).toBe(true)
+    expect(titleFromAlibabaProductUrl('https://www.alibaba.com/product-detail/TYSH-Tuya-Wifi-Smart-Video-Door_1601617472654.html')).toBe('TYSH Tuya Wifi Smart Video Door')
+    expect(titleFromAlibabaProductUrl('https://evil.example/product-detail/Fake-Title_1601617472654.html')).toBeNull()
+  })
+
+  it('repairs the exact live Alibaba SEO regression where carousel navigation text owns a real product URL', () => {
+    const html = '<a href="https://www.alibaba.com/product-detail/TYSH-Tuya-Wifi-Smart-Video-Door_1601617472654.html"><span>Previous slide</span><span>Next slide</span></a>'
+    expect(extractAlibabaProductLinks(html)).toEqual([{
+      title: 'TYSH Tuya Wifi Smart Video Door',
+      url: 'https://www.alibaba.com/product-detail/TYSH-Tuya-Wifi-Smart-Video-Door_1601617472654.html',
+      evidence: 'live',
+    }])
+  })
+
+  it('does not promote arbitrary short or unknown labels through the URL-title fallback', () => {
+    const html = '<a href="https://www.alibaba.com/product-detail/No-title_1600000000002.html">x</a>'
+    expect(extractAlibabaProductLinks(html)).toEqual([])
   })
 
   it('extracts only titled product links, dedupes canonical URLs and ignores unrelated anchors', () => {

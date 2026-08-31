@@ -90,10 +90,15 @@ function slugFrom(tokens: string[]) {
   return tokens.join('-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 140)
 }
 
+function isKnownTitleNoise(raw: string | null | undefined) {
+  const title = cleanText(raw || '')
+  return Boolean(title) && TITLE_NOISE_PATTERNS.some((pattern) => pattern.test(title))
+}
+
 export function isAlibabaDiscoveryTitleUseful(raw: string | null | undefined) {
   const title = cleanText(raw || '')
   if (title.length < 8 || title.length > 300) return false
-  if (TITLE_NOISE_PATTERNS.some((pattern) => pattern.test(title))) return false
+  if (isKnownTitleNoise(title)) return false
   const alphaWords = title.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9+.-]*/g) || []
   return alphaWords.length >= 2
 }
@@ -181,12 +186,17 @@ export function extractAlibabaProductLinks(html: string, maxResults = 8): Discov
     const bodyText = cleanText(match[3])
     if (!titleAttr && CARD_COMMERCE_PATTERNS.some((pattern) => pattern.test(bodyText))) continue
 
+    const preferredObserved = titleAttr || bodyText
     const observedTitle = isAlibabaDiscoveryTitleUseful(titleAttr)
       ? titleAttr
       : isAlibabaDiscoveryTitleUseful(bodyText)
         ? bodyText
         : null
-    const title = observedTitle || titleFromAlibabaProductUrl(url)
+    // Alibaba's SEO cards sometimes put the product URL on a carousel-control
+    // anchor whose visible text is only “Previous slide Next slide”. In that
+    // narrowly recognized case, derive the name from the canonical product URL
+    // slug. Unknown/empty/one-letter labels still fail closed.
+    const title = observedTitle || (isKnownTitleNoise(preferredObserved) ? titleFromAlibabaProductUrl(url) : null)
     if (!title) continue
 
     seen.add(url)

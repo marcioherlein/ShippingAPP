@@ -1,0 +1,27 @@
+name: Argentina Market Coverage Audit
+
+on:
+  push:
+    branches:
+      - audit/argentina-market-30-product-coverage
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
+      INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+      COVERAGE_CONCURRENCY: '3'
+      COVERAGE_REQUEST_TIMEOUT_MS: '30000'
+      NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run 30-product production coverage audit
+        run: node scripts/audit-production-argentina-market-coverage.mjs

@@ -58,7 +58,8 @@
 
 .analysis-history-head small,
 .analysis-history-title small,
-.analysis-history-metrics small {
+.analysis-history-metrics small,
+.analysis-history-detail-grid small {
   color: #64748b;
 }
 
@@ -130,7 +131,9 @@
 }
 
 .analysis-history-actions button,
-.analysis-history-more {
+.analysis-history-more,
+.analysis-history-back,
+.analysis-history-delete-detail {
   border: 0;
   border-radius: 999px;
   padding: 8px 11px;
@@ -142,13 +145,15 @@
   cursor: pointer;
 }
 
-.analysis-history-actions button.danger {
+.analysis-history-actions button.danger,
+.analysis-history-delete-detail {
   background: rgba(185,28,28,.08);
   color: #991b1b;
 }
 
 .analysis-history-actions button:disabled,
-.analysis-history-more:disabled {
+.analysis-history-more:disabled,
+.analysis-history-delete-detail:disabled {
   opacity: .55;
   cursor: wait;
 }
@@ -187,6 +192,54 @@
   margin-top: 12px;
   background: rgba(15,23,42,.08);
   color: #0f172a;
+}
+
+.analysis-history-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.analysis-history-detail h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 19px;
+}
+
+.analysis-history-back {
+  justify-self: start;
+  padding-left: 0;
+  background: transparent;
+  color: #475569;
+}
+
+.analysis-history-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analysis-history-detail-grid > div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.64);
+}
+
+.analysis-history-detail-grid b {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.analysis-history-source {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.analysis-history-delete-detail {
+  justify-self: end;
 }
 
 @media (max-width: 640px) {

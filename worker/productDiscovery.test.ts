@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildAlibabaSearchUrl, canonicalAlibabaProductUrl, discoverAlibabaProducts, extractAlibabaProductLinks } from './productDiscovery'
+import { buildAlibabaSearchUrl, buildAlibabaSeoSearchUrls, canonicalAlibabaProductUrl, discoverAlibabaProducts, extractAlibabaProductLinks } from './productDiscovery'
 
 const product = (href: string, title: string) => `<a href="${href}" title="${title}"><span>${title}</span></a>`
 
@@ -16,6 +16,30 @@ describe('Alibaba discovery URL/parser adversaries', () => {
     expect(url.pathname).toBe('/trade/search')
     expect(url.searchParams.get('SearchText')).toBe('carbon padel & racket? MOQ < 100')
     expect(url.searchParams.get('IndexArea')).toBe('product_en')
+  })
+
+  it('builds only fixed-host public Alibaba SEO fallbacks and derives a useful core slug', () => {
+    const urls = buildAlibabaSeoSearchUrls('smart wifi video door phone')
+    expect(urls.length).toBeGreaterThanOrEqual(2)
+    expect(urls.length).toBeLessThanOrEqual(4)
+    expect(urls.some((url) => url.includes('/showroom/video-door-phone.html'))).toBe(true)
+    for (const raw of urls) {
+      const url = new URL(raw)
+      expect(url.origin).toBe('https://www.alibaba.com')
+      expect(url.pathname.endsWith('.html')).toBe(true)
+      expect(url.search).toBe('')
+    }
+  })
+
+  it('does not let punctuation or path-like input escape the fixed Alibaba SEO host', () => {
+    const urls = buildAlibabaSeoSearchUrls('../evil.example/%2f smart camera ?x=1')
+    expect(urls.length).toBeGreaterThan(0)
+    for (const raw of urls) {
+      const url = new URL(raw)
+      expect(url.origin).toBe('https://www.alibaba.com')
+      expect(url.pathname).not.toContain('..')
+      expect(url.search).toBe('')
+    }
   })
 
   it('normalizes only known public https Alibaba product-detail hosts', () => {
@@ -81,9 +105,44 @@ describe('Alibaba discovery provider adversaries', () => {
     expect(result.mode).toBe('direct')
     expect(result.results).toHaveLength(3)
     expect(b.quickAction).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('uses Browser Run only when direct search is insufficient and returns its source evidence', async () => {
+  it('recovers from blocked trade search through free Alibaba SEO pages without Browser Run', async () => {
+    const b = browser('')
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/trade/search')) return new Response('access denied', { status: 403 })
+      if (url.includes('/showroom/video-door-phone.html')) {
+        return new Response([
+          product('/product-detail/Door-A_1600000000011.html', 'Tuya Smart Video Door Phone A'),
+          product('/product-detail/Door-B_1600000000012.html', 'Wireless Video Door Phone B'),
+          product('/product-detail/Door-C_1600000000013.html', '1080P Video Door Phone C'),
+        ].join(''), { status: 200 })
+      }
+      return new Response('', { status: 404 })
+    })
+
+    const result = await discoverAlibabaProducts('smart wifi video door phone', b, fetchMock)
+    expect(result.status).toBe('live')
+    expect(result.mode).toBe('direct')
+    expect(result.results).toHaveLength(3)
+    expect(result.note).toContain('SEO')
+    expect(b.quickAction).not.toHaveBeenCalled()
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/showroom/video-door-phone.html'))).toBe(true)
+  })
+
+  it('dedupes sparse direct evidence but still fails closed if Browser Run adds no independent result', async () => {
+    const b = browser('')
+    const common = product('/product-detail/Common_1600000000020.html', 'Common Verified Product')
+    const fetchMock = vi.fn(async () => new Response(common, { status: 200 }))
+    const result = await discoverAlibabaProducts('common verified product', b, fetchMock)
+    expect(result.status).toBe('unavailable')
+    expect(result.results).toEqual([])
+    expect(b.quickAction).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses Browser Run only when trade and free SEO search are insufficient and returns its source evidence', async () => {
     const b = browser(three, 200, 2345)
     const fetchMock = vi.fn(async () => new Response(product('/product-detail/A_1600000000001.html', 'Only One Direct Product'), { status: 200 }))
     const result = await discoverAlibabaProducts('padel', b, fetchMock)
@@ -94,12 +153,13 @@ describe('Alibaba discovery provider adversaries', () => {
     expect(b.quickAction).toHaveBeenCalledTimes(1)
   })
 
-  it('fails closed with zero synthetic results if both direct and browser sources fail', async () => {
+  it('fails closed with zero synthetic results if trade, SEO and browser sources fail', async () => {
     const b = browser('security verification captcha')
     const fetchMock = vi.fn(async () => new Response('access denied', { status: 403 }))
     const result = await discoverAlibabaProducts('mystery product', b, fetchMock)
     expect(result.status).toBe('unavailable')
     expect(result.results).toEqual([])
     expect(result.note).toContain('no genera una lista sintética')
+    expect(result.note).toContain('superficies SEO públicas')
   })
 })

@@ -36,6 +36,11 @@ const CARD_COMMERCE_PATTERNS = [
   /\b\d[\d,.]*\s+sold\b/i,
 ]
 
+const SEO_NOISE_TOKENS = new Set([
+  'best', 'cheap', 'factory', 'high', 'latest', 'new', 'oem', 'odm', 'price', 'quality',
+  'smart', 'supplier', 'suppliers', 'wholesale', 'wifi', 'with', 'for', 'and', 'the',
+])
+
 function cleanText(value: string) {
   return value
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
@@ -55,8 +60,27 @@ function attr(tag: string, name: string) {
   return match?.[2]?.trim() || null
 }
 
+function normalizedQuery(query: string) {
+  return query.trim().replace(/\s+/g, ' ').slice(0, 220)
+}
+
+function slugTokens(query: string) {
+  return normalizedQuery(query)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+function slugFrom(tokens: string[]) {
+  return tokens.join('-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 140)
+}
+
 export function buildAlibabaSearchUrl(query: string) {
-  const normalized = query.trim().replace(/\s+/g, ' ').slice(0, 220)
+  const normalized = normalizedQuery(query)
   if (!normalized) throw new Error('missing_query')
   const url = new URL('https://www.alibaba.com/trade/search')
   url.searchParams.set('fsb', 'y')
@@ -64,6 +88,30 @@ export function buildAlibabaSearchUrl(query: string) {
   url.searchParams.set('CatId', '')
   url.searchParams.set('SearchText', normalized)
   return url.toString()
+}
+
+/**
+ * Alibaba exposes public, search-engine-facing category/showroom pages that are
+ * materially more cacheable than /trade/search. They are used only as a free,
+ * read-only discovery fallback; every returned item still needs a real Alibaba
+ * product-detail URL before ShippingAPP treats it as evidence.
+ */
+export function buildAlibabaSeoSearchUrls(query: string) {
+  const tokens = slugTokens(query)
+  if (!tokens.length) return []
+
+  const full = slugFrom(tokens)
+  const reducedTokens = tokens.filter((token) => !SEO_NOISE_TOKENS.has(token))
+  const reduced = reducedTokens.length >= 2 ? slugFrom(reducedTokens) : ''
+  const tail = tokens.length >= 4 ? slugFrom(tokens.slice(-3)) : ''
+  const slugs = Array.from(new Set([full, reduced, tail].filter(Boolean)))
+
+  const urls: string[] = []
+  for (const slug of slugs) {
+    urls.push(`https://www.alibaba.com/showroom/${encodeURIComponent(slug)}.html`)
+    urls.push(`https://www.alibaba.com/countrysearch/CN/${encodeURIComponent(slug)}.html`)
+  }
+  return urls.slice(0, 4)
 }
 
 export function canonicalAlibabaProductUrl(rawHref: string, base = 'https://www.alibaba.com') {
@@ -115,19 +163,48 @@ function browserMs(response: Response) {
 }
 
 async function directSearch(searchUrl: string, fetchImpl: FetchLike) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 4500)
   try {
     const response = await fetchImpl(searchUrl, {
       headers: {
-        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/1.6; +https://shippingapp.workers.dev)',
+        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/2.8; +https://shippingapp.workers.dev)',
         accept: 'text/html,application/xhtml+xml',
         'accept-language': 'en-US,en;q=0.8',
       },
       redirect: 'follow',
+      signal: controller.signal,
     })
     const html = response.ok ? await response.text() : ''
     return { status: response.status, results: extractAlibabaProductLinks(html) }
   } catch {
     return { status: null, results: [] as DiscoveryResult[] }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function mergeDiscoveryResults(groups: DiscoveryResult[][], maxResults = 8) {
+  const merged: DiscoveryResult[] = []
+  const seen = new Set<string>()
+  for (const group of groups) {
+    for (const item of group) {
+      if (seen.has(item.url)) continue
+      seen.add(item.url)
+      merged.push(item)
+      if (merged.length >= maxResults) return merged
+    }
+  }
+  return merged
+}
+
+async function freeSeoSearch(query: string, fetchImpl: FetchLike) {
+  const urls = buildAlibabaSeoSearchUrls(query)
+  if (!urls.length) return { results: [] as DiscoveryResult[], attempted: 0 }
+  const attempts = await Promise.all(urls.map((url) => directSearch(url, fetchImpl)))
+  return {
+    results: mergeDiscoveryResults(attempts.map((attempt) => attempt.results), 8),
+    attempted: attempts.length,
   }
 }
 
@@ -152,7 +229,7 @@ export async function discoverAlibabaProducts(
   fetchImpl: FetchLike = fetch,
 ): Promise<DiscoveryResponse> {
   const searchUrl = buildAlibabaSearchUrl(query)
-  const normalizedQuery = new URL(searchUrl).searchParams.get('SearchText') || query.trim()
+  const normalized = new URL(searchUrl).searchParams.get('SearchText') || query.trim()
   const direct = await directSearch(searchUrl, fetchImpl)
 
   // A direct search with several real product URLs is sufficient and avoids
@@ -160,24 +237,39 @@ export async function discoverAlibabaProducts(
   // incomplete because navigation/footer links can create false confidence.
   if (direct.results.length >= 3) {
     return {
-      status: 'live', mode: 'direct', query: normalizedQuery,
+      status: 'live', mode: 'direct', query: normalized,
       results: direct.results, browserAttempted: false, browserMsUsed: null,
       note: `${direct.results.length} productos Alibaba con URL fuente real extraídos por lectura directa.`,
     }
   }
 
+  // Parse.bot's structured search is optional and may return HTTP 402 when its
+  // credit pool is exhausted. Before spending Browser Run time, use Alibaba's
+  // own public SEO/showroom surfaces. No third-party key, login or synthetic
+  // product data is involved.
+  const seo = await freeSeoSearch(normalized, fetchImpl)
+  const freeDirectResults = mergeDiscoveryResults([direct.results, seo.results], 8)
+  if (freeDirectResults.length >= 3) {
+    return {
+      status: 'live', mode: 'direct', query: normalized,
+      results: freeDirectResults, browserAttempted: false, browserMsUsed: null,
+      note: `${freeDirectResults.length} productos Alibaba con URL fuente real extraídos mediante búsqueda pública directa/SEO.`,
+    }
+  }
+
   const rendered = await browserSearch(searchUrl, browser)
   if (rendered.results.length > 0) {
+    const renderedResults = mergeDiscoveryResults([freeDirectResults, rendered.results], 8)
     return {
-      status: 'live', mode: 'browser', query: normalizedQuery,
-      results: rendered.results, browserAttempted: true, browserMsUsed: rendered.ms,
-      note: `${rendered.results.length} productos Alibaba con URL fuente real extraídos mediante Browser Run.`,
+      status: 'live', mode: 'browser', query: normalized,
+      results: renderedResults, browserAttempted: true, browserMsUsed: rendered.ms,
+      note: `${renderedResults.length} productos Alibaba con URL fuente real extraídos mediante fuentes públicas y Browser Run.`,
     }
   }
 
   return {
-    status: 'unavailable', mode: 'unavailable', query: normalizedQuery,
+    status: 'unavailable', mode: 'unavailable', query: normalized,
     results: [], browserAttempted: true, browserMsUsed: rendered.ms,
-    note: 'Alibaba no expuso resultados de producto verificables. ShippingAPP no genera una lista sintética.',
+    note: `Alibaba no expuso resultados de producto verificables después de trade search, ${seo.attempted} superficies SEO públicas y Browser Run. ShippingAPP no genera una lista sintética.`,
   }
 }

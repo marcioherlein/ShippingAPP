@@ -1,10 +1,10 @@
 import { buildMarketQuery, cleanText, comparableScore } from './catalogMatch'
 import {
-  buildFunctionalMarketQuery,
   functionalComparableScore,
   inferArgentinaMarketMatchMode,
   type ArgentinaMarketMatchMode,
 } from './functionalMarketMatch'
+import { buildArgentinaFunctionalMarketQuery } from './functionalMarketQuery'
 import { percentile, trimPriceOutliers } from './catalogStats'
 import type { ArgentinaMarketResult, MarketComparable, MlResult } from './marketTypes'
 import type {
@@ -113,7 +113,7 @@ export async function runArgentinaMarketBenchmark(
 ): Promise<ArgentinaMarketResult> {
   const matchMode = inferArgentinaMarketMatchMode(productName, category)
   const query = matchMode === 'functional'
-    ? buildFunctionalMarketQuery(productName, category)
+    ? buildArgentinaFunctionalMarketQuery(productName, category)
     : buildMarketQuery(productName, category)
   const minimumComparables = Math.max(1, Math.min(20, options.minimumComparables ?? 5))
   const warnings = [

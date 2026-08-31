@@ -1,8 +1,17 @@
-import { evaluateMarketSmoke } from './market-smoke-policy.mjs'
+import { evaluateMarketSmoke, evaluateRepresentativeMarketProbes } from './market-smoke-policy.mjs'
 
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 20000)
 const STRICT_CONFIGURED = process.env.MARKET_SMOKE_STRICT_CONFIGURED !== '0'
+
+// A provider-health smoke should not depend on one niche catalog query having
+// five comparable listings at every instant. Each probe remains subject to the
+// exact same strict live/comparable/price policy; we only broaden the sample.
+const REPRESENTATIVE_PROBES = [
+  { productName: 'Paleta de pádel', category: 'Padel' },
+  { productName: 'Mouse inalámbrico', category: 'Mouse' },
+  { productName: 'Auriculares bluetooth', category: 'Auriculares' },
+]
 
 async function postJson(path, payload, label) {
   const controller = new AbortController()
@@ -75,7 +84,8 @@ function publicAuthSummary(status) {
 function enforcePolicy(policy, context) {
   if (STRICT_CONFIGURED && policy.shouldFailStrictConfigured) {
     const failed = policy.checks.filter((check) => check.applicable && !check.passed).map((check) => check.name)
-    throw new Error(`${context}: configured market provider failed strict gate (${policy.state}); failed checks: ${failed.join(', ')}`)
+    const probeStates = policy.representativeProbes?.map((probe) => probe.policy.state).join(', ') || 'n/a'
+    throw new Error(`${context}: configured market provider failed strict gate (${policy.state}); failed checks: ${failed.join(', ')}; probe states: ${probeStates}`)
   }
 }
 
@@ -105,37 +115,43 @@ async function main() {
     return
   }
 
-  const benchmark = await postJson('/api/mercadolibre/benchmark', {
-    productName: 'Paleta de pádel carbono EVA',
-    category: 'Padel racket',
-  }, 'meli-benchmark')
+  const attempts = []
+  for (const probe of REPRESENTATIVE_PROBES) {
+    const benchmark = await postJson('/api/mercadolibre/benchmark', probe, `meli-benchmark:${probe.productName}`)
+    const allText = textOf(benchmark)
+    if (allText.includes('Mercado Libre API 403')) {
+      throw new Error(`meli-benchmark:${probe.productName}: benchmark still reports raw 403 failure: ${allText.slice(0, 2000)}`)
+    }
 
-  const allText = textOf(benchmark)
-  if (allText.includes('Mercado Libre API 403')) {
-    throw new Error(`meli-benchmark: benchmark still reports raw 403 failure: ${allText.slice(0, 2000)}`)
+    const policy = evaluateMarketSmoke(status, benchmark)
+    attempts.push({ probe, benchmark, policy })
+    if (policy.healthy) break
   }
 
-  const policy = evaluateMarketSmoke(status, benchmark)
-  enforcePolicy(policy, 'meli-benchmark')
+  const representativePolicy = evaluateRepresentativeMarketProbes(status, attempts.map((attempt) => attempt.benchmark))
+  enforcePolicy(representativePolicy, 'meli-benchmark')
 
-  if (benchmark.status === 'live' && (!benchmark.market?.suggestedPriceArs || benchmark.market.suggestedPriceArs <= 0)) {
-    throw new Error(`meli-benchmark: live benchmark without suggestedPriceArs: ${allText.slice(0, 2000)}`)
+  const winner = attempts.find((attempt) => attempt.policy.healthy) || attempts.at(-1)
+  if (winner?.benchmark.status === 'live' && (!winner.benchmark.market?.suggestedPriceArs || winner.benchmark.market.suggestedPriceArs <= 0)) {
+    throw new Error(`meli-benchmark:${winner.probe.productName}: live benchmark without suggestedPriceArs: ${textOf(winner.benchmark).slice(0, 2000)}`)
   }
 
   console.log(JSON.stringify({
-    status: policy.healthy ? 'ok' : policy.state,
+    status: representativePolicy.healthy ? 'ok' : representativePolicy.state,
     baseUrl,
-    marketHealth: policy,
+    marketHealth: representativePolicy,
     auth: publicAuthSummary(status),
-    benchmark: {
-      status: benchmark.status,
-      query: benchmark.query,
-      source: benchmark.market?.source,
-      rawCount: benchmark.market?.rawCount,
-      comparableCount: benchmark.market?.comparableCount,
-      suggestedPriceArs: benchmark.market?.suggestedPriceArs,
-      warnings: benchmark.market?.warnings,
-    },
+    attempts: attempts.map((attempt) => ({
+      probe: attempt.probe,
+      state: attempt.policy.state,
+      benchmarkStatus: attempt.benchmark.status,
+      query: attempt.benchmark.query,
+      source: attempt.benchmark.market?.source,
+      rawCount: attempt.benchmark.market?.rawCount,
+      comparableCount: attempt.benchmark.market?.comparableCount,
+      suggestedPriceArs: attempt.benchmark.market?.suggestedPriceArs,
+      warnings: attempt.benchmark.market?.warnings,
+    })),
   }, null, 2))
 }
 

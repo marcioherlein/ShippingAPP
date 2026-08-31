@@ -142,7 +142,7 @@ function initialSnapshotPayload(row: AnalysisHistoryRow, basis: WatchlistBasis, 
   }
 }
 
-function refreshSnapshotPayload(market: ArgentinaMarketResult | null, basis: WatchlistBasis, observedAt: string, providerError?: string) {
+function refreshSnapshotPayload(market: ArgentinaMarketResult | null, basis: WatchlistBasis, observedAt: string, providerFailed = false) {
   const trustedMarketPrice = market?.status === 'live' ? positiveNumber(market.suggestedPriceArs) : null
   const landed = landedCostArs(basis)
   return {
@@ -169,7 +169,7 @@ function refreshSnapshotPayload(market: ArgentinaMarketResult | null, basis: Wat
         comparableCount: 0,
         confidence: 0,
         sourceObservedAt: observedAt,
-        warnings: providerError ? [providerError] : ['Market provider unavailable.'],
+        warnings: providerFailed ? ['Market provider unavailable.'] : [],
       },
       landedCost: {
         basis: 'completed-analysis-pipeline',
@@ -366,11 +366,11 @@ export async function handleWatchlist(request: Request, env: Env, dependencies: 
 
     const observedAt = clock().toISOString()
     let market: ArgentinaMarketResult | null = null
-    let providerError: string | undefined
+    let providerFailed = false
     try {
       market = await marketLookup(basis.productName, basis.category, env)
-    } catch (error) {
-      providerError = error instanceof Error ? error.message.slice(0, 240) : 'Market provider unavailable.'
+    } catch {
+      providerFailed = true
     }
 
     const marketPriceArs = market?.status === 'live' ? positiveNumber(market.suggestedPriceArs) : null
@@ -383,7 +383,7 @@ export async function handleWatchlist(request: Request, env: Env, dependencies: 
         observedAt,
         marketPriceArs,
         landedCostArs: landed,
-        payload: refreshSnapshotPayload(market, basis, observedAt, providerError),
+        payload: refreshSnapshotPayload(market, basis, observedAt, providerFailed),
         idempotencyKey: serverKey,
       })
     } catch (error) {

@@ -137,10 +137,7 @@ function directFactsToNative(facts: AlibabaDirectFacts, url: URL): ParsebotAliba
     name: facts.name || productTitleFromUrl(url),
     category: facts.category || facts.categoryPath.at(-1) || null,
     categoryPath: facts.categoryPath,
-    // Rendered Alibaba pages contain coupons, samples and promotional amounts
-    // beside the offer. Until direct extraction carries price provenance, a
-    // naked rendered price is not safe enough to drive FOB economics.
-    unitPriceUsd: null,
+    unitPriceUsd: facts.unitPriceUsd,
     moq: facts.moq,
     packedWeightKg: facts.packedWeightKg,
     volumeCbm: facts.volumeCbm,
@@ -168,8 +165,6 @@ function mergeFacts(rendered: ParsebotAlibabaFacts | null, structured: ParsebotA
     name: rendered.name || structured.name,
     category: rendered.category || structured.category,
     categoryPath: rendered.categoryPath.length ? rendered.categoryPath : structured.categoryPath,
-    // Structured Browser Run extraction explicitly targets the offer price and
-    // price tiers. Prefer it over unproven rendered-page currency amounts.
     unitPriceUsd: structured.unitPriceUsd || rendered.unitPriceUsd,
     moq: rendered.moq || structured.moq,
     packedWeightKg: rendered.packedWeightKg || structured.packedWeightKg,
@@ -200,6 +195,36 @@ function coreFichaSignals(facts: ParsebotAlibabaFacts | null) {
 function evidenceSignals(facts: ParsebotAlibabaFacts | null) {
   if (!facts) return 0
   return [facts.name, facts.category, facts.unitPriceUsd, facts.moq, facts.packedWeightKg, facts.volumeCbm, facts.hsCode, facts.description].filter(Boolean).length
+}
+
+function pricesAgree(a: number | null | undefined, b: number | null | undefined, tolerance = 0.08) {
+  if (!a || !b) return false
+  return Math.abs(a - b) / Math.max(a, b) <= tolerance
+}
+
+function explicitTierPrice(raw: any) {
+  const root = raw && typeof raw === 'object' ? raw : {}
+  const tiers = Array.isArray(root.price_tiers) ? root.price_tiers : []
+  for (const tier of tiers) {
+    const price = positiveNumber(tier?.price_value ?? tier?.unit_price)
+    const minQuantity = positiveNumber(tier?.min_quantity ?? tier?.minQuantity ?? tier?.min_qty)
+    if (price && minQuantity) return price
+  }
+  return null
+}
+
+function trustedStructuredPrice(raw: any, structured: ParsebotAlibabaFacts, rendered: ParsebotAlibabaFacts | null) {
+  const tierPrice = explicitTierPrice(raw)
+  const renderedPrice = rendered?.unitPriceUsd ?? null
+  if (tierPrice) {
+    // When both independent sources expose a price, disagreement is a red flag:
+    // use neither Browser value nor tier over the deterministic rendered fact.
+    if (renderedPrice && !pricesAgree(tierPrice, renderedPrice)) return null
+    return tierPrice
+  }
+  const structuredPrice = structured.unitPriceUsd
+  if (structuredPrice && renderedPrice && pricesAgree(structuredPrice, renderedPrice)) return structuredPrice
+  return null
 }
 
 const responseSchema = {
@@ -263,6 +288,7 @@ function browserRequest(url: URL) {
       'Prefer logistics/package facts for unit_weight, unit_volume and unit_size; do not confuse product physical dimensions with packed shipping dimensions.',
       'Use category_path for the Alibaba breadcrumb from broadest to most specific. product_type should be the concrete merchandise type, not a marketing phrase.',
       'If MOQ is not separately labelled but a price tier explicitly starts at a minimum quantity, return that minimum in price_tiers.',
+      'Return unit_price only for the actual merchandise offer, never coupons, samples, freight, promotions or new-buyer discounts. Include price_tiers whenever the page exposes quantity-linked prices.',
       'Return HS code only if Alibaba or the supplier explicitly lists it. Return supplier_country separately from product origin.',
       'For specifications include useful technical attributes such as Product Type, Type, movement, material, function, Place of Origin, model, power, composition or use.',
       'If a requested value is absent, return null or an empty array. Do not fill it from general knowledge.',
@@ -313,10 +339,7 @@ async function extractRenderedHtml(url: URL, browser: BrowserRun) {
       facts,
       ms,
       status: response.status,
-      warnings: [
-        `ShippingAPP recovered ${coreFichaSignals(facts)}/7 required ficha signals from rendered Alibaba HTML before structured extraction.`,
-        'Los montos monetarios del DOM renderizado no se promueven a FOB sin confirmación estructurada o del usuario.',
-      ],
+      warnings: [`ShippingAPP recovered ${coreFichaSignals(facts)}/7 required ficha signals from rendered Alibaba HTML before structured extraction.`],
     }
   } catch (error) {
     return {
@@ -331,6 +354,19 @@ async function extractRenderedHtml(url: URL, browser: BrowserRun) {
 export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promise<NativeAlibabaResult> {
   const rendered = await extractRenderedHtml(url, browser)
   const warnings: string[] = [...rendered.warnings]
+
+  // A fully populated deterministic ficha from product-state/JSON-LD/labelled
+  // evidence is stronger than another AI extraction and avoids extra Browser cost.
+  if (rendered.facts && coreFichaSignals(rendered.facts) === 7) {
+    warnings.push('La ficha obligatoria quedó completa desde evidencia estructurada/renderizada; no fue necesario ejecutar Browser Run JSON.')
+    return {
+      status: 'ready',
+      source: 'Cloudflare Browser Run JSON',
+      facts: rendered.facts,
+      warnings,
+      browserMsUsed: rendered.ms,
+    }
+  }
 
   let response: Response
   let retried429 = false
@@ -375,7 +411,12 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
   }
 
   const raw = body?.result ?? body
-  const structured = normalizeResult(raw, url)
+  const normalized = normalizeResult(raw, url)
+  const safeStructuredPrice = trustedStructuredPrice(raw, normalized, rendered.facts)
+  if (normalized.unitPriceUsd && !safeStructuredPrice) {
+    warnings.push('Browser Run devolvió un monto sin corroboración suficiente como FOB; ShippingAPP lo retuvo y pedirá confirmación en vez de cotizar con un posible cupón/promoción.')
+  }
+  const structured = { ...normalized, unitPriceUsd: safeStructuredPrice }
   const facts = mergeFacts(rendered.facts, structured)
   const signals = evidenceSignals(facts)
   if (!facts?.name || signals < 2) {
@@ -386,7 +427,8 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
   }
 
   if (retried429) warnings.push('Browser Run recibió HTTP 429 en el primer intento y recuperó la publicación en un único retry acotado.')
-  if (rendered.facts) warnings.push('La extracción estructurada se fusionó con evidencia del HTML renderizado; el precio estructurado tiene prioridad y el resto conserva evidencia determinística cuando existe.')
+  if (rendered.facts) warnings.push('La extracción estructurada se fusionó con evidencia determinística del HTML renderizado; los campos comerciales sólo se promueven cuando superan sus gates de evidencia.')
+  if (!facts.unitPriceUsd) warnings.push('Precio FOB unitario no corroborado; debe confirmarlo el usuario antes de cotizar.')
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por Alibaba; debe confirmarlo el usuario.')
   if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por Alibaba; debe confirmarlo el usuario.')
   if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto; supplier_country no se usa como sustituto.')

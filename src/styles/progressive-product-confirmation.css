@@ -1,0 +1,352 @@
+.owned-product-intake,
+.progressive-product-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.owned-product-intake {
+  padding: 28px;
+  border: 1px solid rgba(120, 138, 180, 0.18);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 18px 50px rgba(20, 31, 56, 0.06);
+  backdrop-filter: blur(22px);
+}
+
+.owned-product-intro h2,
+.progressive-confirm-head h2 {
+  margin: 8px 0 10px;
+}
+
+.owned-product-intro p,
+.progressive-confirm-head p {
+  max-width: 780px;
+  margin: 0;
+}
+
+.owned-product-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.owned-product-options > button {
+  position: relative;
+  min-width: 0;
+  padding: 22px;
+  text-align: left;
+  border: 1px solid rgba(109, 126, 170, 0.18);
+  border-radius: 22px;
+  background: rgba(248, 250, 255, 0.88);
+  cursor: pointer;
+}
+
+.owned-product-options > button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(82, 101, 244, 0.32);
+}
+
+.owned-product-options b,
+.owned-product-options small {
+  display: block;
+}
+
+.owned-product-options b {
+  margin: 14px 0 7px;
+  font-size: 1.08rem;
+}
+
+.owned-product-options small {
+  line-height: 1.45;
+}
+
+.owned-product-options em {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(78, 101, 245, 0.09);
+  color: #4053c9;
+  font-style: normal;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.owned-product-option-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(78, 101, 245, 0.1);
+  font-size: 1.1rem;
+}
+
+.owned-product-entry {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid rgba(109, 126, 170, 0.18);
+  border-radius: 22px;
+  background: rgba(248, 250, 255, 0.84);
+}
+
+.owned-product-entry-head,
+.owned-product-entry-actions,
+.owned-product-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.owned-product-entry-head b,
+.owned-product-entry-head small {
+  display: block;
+}
+
+.owned-product-entry-head small {
+  margin-top: 4px;
+}
+
+.owned-product-entry-head > button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.owned-product-entry input,
+.owned-product-entry textarea,
+.pipeline-progressive-fields input,
+.pipeline-progressive-fields textarea,
+.pipeline-clarification-card textarea,
+.pipeline-dimensions input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.owned-product-link-row input {
+  flex: 1 1 420px;
+  min-height: 48px;
+}
+
+.owned-product-entry-actions small {
+  max-width: 590px;
+}
+
+.owned-product-progress {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.progressive-product-card {
+  display: grid;
+  gap: 18px;
+}
+
+.pipeline-understood-card,
+.pipeline-clarification-card,
+.pipeline-classification-ready,
+.pipeline-progressive-fields {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid rgba(109, 126, 170, 0.16);
+  border-radius: 22px;
+  background: rgba(248, 250, 255, 0.78);
+}
+
+.pipeline-understood-sentence {
+  margin: 8px 0 16px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.pipeline-known-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pipeline-known-fact {
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.pipeline-known-fact span,
+.pipeline-known-fact b {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.pipeline-known-fact span {
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+}
+
+.pipeline-source-detail {
+  margin-top: 14px;
+}
+
+.pipeline-source-detail p {
+  overflow-wrap: anywhere;
+}
+
+.pipeline-understood-actions {
+  margin-top: 16px;
+}
+
+.pipeline-progressive-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.pipeline-progressive-title,
+.pipeline-confirm-field.wide,
+.pipeline-volume-entry.wide {
+  grid-column: 1 / -1;
+}
+
+.pipeline-progressive-title b,
+.pipeline-progressive-title small {
+  display: block;
+}
+
+.pipeline-progressive-title small {
+  margin-top: 4px;
+}
+
+.pipeline-clarification-card {
+  display: grid;
+  gap: 10px;
+  border-color: rgba(238, 167, 53, 0.34);
+  background: rgba(255, 248, 229, 0.78);
+}
+
+.pipeline-clarification-card ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.pipeline-clarification-card label span {
+  display: block;
+  margin-bottom: 7px;
+  font-weight: 700;
+}
+
+.pipeline-classification-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-color: rgba(33, 181, 105, 0.25);
+  background: rgba(235, 252, 243, 0.75);
+}
+
+.pipeline-classification-ready h3,
+.pipeline-classification-ready p {
+  margin: 4px 0 0;
+}
+
+.pipeline-classification-ready > span {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 15px;
+  background: rgba(33, 181, 105, 0.13);
+  color: #16834d;
+  font-weight: 900;
+}
+
+.quote-known-card > .pipeline-secondary {
+  margin-top: 16px;
+}
+
+.pipeline-volume-entry {
+  display: grid;
+  gap: 10px;
+}
+
+.pipeline-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pipeline-or::before,
+.pipeline-or::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: rgba(109, 126, 170, 0.16);
+}
+
+.pipeline-dimensions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pipeline-dimensions label span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.progressive-confirm-actions {
+  margin-top: 0;
+}
+
+@media (max-width: 700px) {
+  .owned-product-intake {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .owned-product-options,
+  .pipeline-known-grid,
+  .pipeline-progressive-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline-progressive-title,
+  .pipeline-confirm-field.wide,
+  .pipeline-volume-entry.wide {
+    grid-column: auto;
+  }
+
+  .owned-product-entry-head,
+  .owned-product-entry-actions,
+  .owned-product-link-row,
+  .pipeline-classification-ready {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .owned-product-link-row .journey-primary-action,
+  .owned-product-entry-actions .journey-primary-action,
+  .progressive-confirm-actions .journey-primary-action,
+  .progressive-confirm-actions .pipeline-secondary {
+    width: 100%;
+  }
+
+  .pipeline-dimensions {
+    grid-template-columns: 1fr;
+  }
+}

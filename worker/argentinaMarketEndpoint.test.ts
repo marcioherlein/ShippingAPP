@@ -8,6 +8,29 @@ function json(body: unknown, status = 200) {
   })
 }
 
+function retailerProducts(prefix: string, title: string, count = 3) {
+  return Array.from({ length: count }, (_, index) => ({
+    productId: `${prefix}-product-${index + 1}`,
+    productName: title,
+    brand: title.split(' ')[0],
+    productReference: title,
+    linkText: `${prefix}-${index + 1}`,
+    items: [{
+      itemId: `${prefix}-sku-${index + 1}`,
+      name: title,
+      sellers: [{
+        sellerId: `${prefix}-seller-${index + 1}`,
+        sellerName: `${prefix} seller ${index + 1}`,
+        commertialOffer: {
+          Price: 120000 + index * 5000,
+          ListPrice: 140000 + index * 5000,
+          AvailableQuantity: 5,
+        },
+      }],
+    }],
+  }))
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -48,7 +71,22 @@ describe('Argentina market hybrid endpoint', () => {
     expect(text).not.toContain('secret-serp-key')
   })
 
-  it('reports provider configuration truthfully when neither source can run', async () => {
+  it('produces a live benchmark from Frávega + Cetrogar without Mercado Libre or paid search credentials', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.includes('fravega.com/api/io/_v/api/intelligent-search/')) {
+        return json({ products: retailerProducts('fravega', 'Logitech MX Master 3S') })
+      }
+      if (url.includes('cetrogar.com.ar/api/io/_v/api/intelligent-search/')) {
+        return json({ products: retailerProducts('cetrogar', 'Logitech MX Master 3S') })
+      }
+      if (url.includes('serpapi.com') || url.includes('api.mercadolibre.com')) {
+        throw new Error(`paid/authenticated provider should not be needed: ${url}`)
+      }
+      return json({}, 404)
+    })
+    vi.stubGlobal('fetch', fetchImpl)
+
     const response = await worker.fetch(new Request('https://shipping.test/api/argentina-market/benchmark', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -57,7 +95,25 @@ describe('Argentina market hybrid endpoint', () => {
     const body: any = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.status).toBe('configuration_required')
+    expect(body.status).toBe('live')
+    expect(body.market.source).toContain('Retailers argentinos directos')
+    expect(body.market.comparableCount).toBe(6)
+    expect(body.market.suggestedPriceArs).toBeGreaterThan(0)
+    expect(body.providers.googleShoppingConfigured).toBe(false)
+  })
+
+  it('reports free retailer outage truthfully when no authenticated or paid fallback exists', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => json({}, 503))
+    vi.stubGlobal('fetch', fetchImpl)
+    const response = await worker.fetch(new Request('https://shipping.test/api/argentina-market/benchmark', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ productName: 'Logitech MX Master 3S', category: 'mouse' }),
+    }), {})
+    const body: any = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.status).toBe('unavailable')
     expect(body.providers.googleShoppingConfigured).toBe(false)
     expect(body.market.suggestedPriceArs).toBeNull()
   })

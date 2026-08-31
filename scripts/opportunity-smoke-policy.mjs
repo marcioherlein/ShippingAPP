@@ -1,5 +1,16 @@
 const ALLOWED_MODES = new Set(['parsebot', 'direct', 'browser'])
 
+const TITLE_NOISE_PATTERNS = [
+  /^previous\s+slide\s+next\s+slide$/i,
+  /^previous\s+slide$/i,
+  /^next\s+slide$/i,
+  /^contact\s+supplier$/i,
+  /^chat\s+now$/i,
+  /^view\s+(?:more|details?)$/i,
+  /^learn\s+more$/i,
+  /^image(?:\s+\w+)*$/i,
+]
+
 function isCanonicalAlibabaProductUrl(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return false
   try {
@@ -10,6 +21,14 @@ function isCanonicalAlibabaProductUrl(raw) {
   } catch {
     return false
   }
+}
+
+function isUsefulTitle(raw) {
+  if (typeof raw !== 'string') return false
+  const title = raw.replace(/\s+/g, ' ').trim()
+  if (title.length < 8 || title.length > 300) return false
+  if (TITLE_NOISE_PATTERNS.some((pattern) => pattern.test(title))) return false
+  return (title.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9+.-]*/g) || []).length >= 2
 }
 
 function hasCommercialFact(item) {
@@ -40,8 +59,7 @@ export function evaluateOpportunitySearchSmoke(body) {
     {
       name: 'all_results_traceable',
       passed: results.length >= 1 && results.every((item) => (
-        typeof item?.title === 'string'
-        && item.title.trim().length >= 3
+        isUsefulTitle(item?.title)
         && isCanonicalAlibabaProductUrl(item?.url)
       )),
     },

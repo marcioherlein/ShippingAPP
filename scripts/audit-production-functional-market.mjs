@@ -33,9 +33,32 @@ async function postBenchmark(probe) {
   }
 }
 
+function normalized(value) {
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/(\d),(\d)/g, '$1.$2')
+}
+
+function explicitValues(value, unit) {
+  const text = normalized(value)
+  const patterns = {
+    inch: /(\d+(?:\.\d+)?)\s*(?:["”″]|pulgadas?|inches?|inch)\b?/g,
+    kg: /(\d+(?:\.\d+)?)\s*kg\b/g,
+    l: /(\d+(?:\.\d+)?)\s*(?:l|lt|litros?|litro)\b/g,
+    w: /(\d+(?:\.\d+)?)\s*(?:w|watt|watts)\b/g,
+  }
+  return [...text.matchAll(patterns[unit])].map((match) => Number(match[1])).filter(Number.isFinite)
+}
+
+function hasExplicitMismatch(titles, unit, expected) {
+  return titles.some((title) => {
+    const values = explicitValues(title, unit)
+    return values.length > 0 && !values.includes(expected)
+  })
+}
+
 function inspect(probe, body) {
   const market = body?.market || {}
   const comparables = Array.isArray(market.comparables) ? market.comparables : []
+  const titles = comparables.map((row) => String(row?.title || ''))
   const failures = []
 
   if (market.matchMode !== probe.expectedMode) failures.push(`expected mode ${probe.expectedMode}, got ${market.matchMode}`)
@@ -51,14 +74,42 @@ function inspect(probe, body) {
   }
 
   if (probe.id === 'exact-iphone16') {
-    if (comparables.some((row) => /iphone\s*15\b/i.test(String(row?.title || '')))) failures.push('iPhone 15 leaked into exact iPhone 16 benchmark')
-    if (comparables.some((row) => /\bpro\b|\bplus\b/i.test(String(row?.title || '')))) failures.push('variant leaked into exact base iPhone benchmark')
+    if (titles.some((title) => /iphone\s*15\b/i.test(title))) failures.push('iPhone 15 leaked into exact iPhone 16 benchmark')
+    if (titles.some((title) => /\bpro\b|\bplus\b/i.test(title))) failures.push('variant leaked into exact base iPhone benchmark')
   }
 
-  if (probe.id === 'functional-water-heater-80l' && comparables.some((row) => /\bgas\b/i.test(String(row?.title || '')))) {
-    failures.push('gas water heater leaked into electric functional benchmark')
+  if (probe.id === 'functional-microwave-20l' && hasExplicitMismatch(titles, 'l', 20)) failures.push('non-20L microwave leaked into 20L benchmark')
+
+  if (probe.id === 'functional-kettle-17l') {
+    if (!String(market.query || '').includes('1.7l')) failures.push(`decimal query regression: ${market.query}`)
+    if (/\b7l\b/.test(String(market.query || ''))) failures.push(`1.7L was truncated to 7L: ${market.query}`)
+    if (hasExplicitMismatch(titles, 'l', 1.7)) failures.push('wrong-capacity kettle leaked into 1.7L benchmark')
+    if (hasExplicitMismatch(titles, 'w', 2200)) failures.push('wrong-power kettle leaked into 2200W benchmark')
   }
-  if (probe.id === 'functional-carbon-padel' && comparables.some((row) => /fibra\s+de\s+vidrio|fiberglass/i.test(String(row?.title || '')) && !/carbon/i.test(String(row?.title || '')))) {
+
+  if (probe.id === 'functional-fan-20in') {
+    if (hasExplicitMismatch(titles, 'inch', 20)) failures.push('wrong-inch fan leaked into 20-inch benchmark')
+    if (hasExplicitMismatch(titles, 'w', 100)) failures.push('wrong-power fan leaked into 100W benchmark')
+  }
+
+  if (probe.id === 'functional-water-heater-80l') {
+    if (titles.some((title) => /\bgas\b/i.test(title))) failures.push('gas water heater leaked into electric functional benchmark')
+    if (hasExplicitMismatch(titles, 'l', 80)) failures.push('wrong-capacity water heater leaked into 80L benchmark')
+  }
+
+  if (probe.id === 'functional-washer-65kg') {
+    if (!String(market.query || '').includes('6.5kg')) failures.push(`decimal query regression: ${market.query}`)
+    if (/\b5kg\b/.test(String(market.query || ''))) failures.push(`6.5kg was truncated to 5kg: ${market.query}`)
+    if (hasExplicitMismatch(titles, 'kg', 6.5)) failures.push('wrong-capacity washer leaked into 6.5kg benchmark')
+    if (titles.some((title) => /carga\s+superior|semiautom|semi\s*automatic/i.test(title))) failures.push('non-frontal washer leaked into frontal benchmark')
+  }
+
+  if (probe.id === 'functional-tv-55') {
+    if (hasExplicitMismatch(titles, 'inch', 55)) failures.push('wrong-inch TV leaked into 55-inch benchmark')
+    if (titles.some((title) => /\btv\b/i.test(title) && !/\bsmart\b/i.test(title))) failures.push('non-smart TV leaked into smart-TV benchmark')
+  }
+
+  if (probe.id === 'functional-carbon-padel' && titles.some((title) => /fibra\s+de\s+vidrio|fiberglass/i.test(title) && !/carbon/i.test(title))) {
     failures.push('fiberglass-only racket leaked into carbon functional benchmark')
   }
 
@@ -72,7 +123,7 @@ function inspect(probe, body) {
     comparableCount: market.comparableCount || 0,
     suggestedPriceArs: market.suggestedPriceArs || null,
     confidence: market.confidence || 0,
-    comparableTitles: comparables.slice(0, 8).map((row) => row?.title).filter(Boolean),
+    comparableTitles: titles.slice(0, 8),
     comparableIds: comparables.slice(0, 8).map((row) => row?.id).filter(Boolean),
     failures,
   }

@@ -5,6 +5,7 @@ import { analyzeAlibabaSelfFirst, parseAlibabaSelfFirstUrl } from './alibabaSelf
 import { analyzeArgentinaMarketHybrid } from './argentinaMarketOrchestrator'
 import { resolveMercadoLibreAccessToken } from './mercadoLibreAuth'
 import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory'
+import { overlayHybridMarketEconomics } from './hybridMarketEconomics'
 
 function benchmarkRequest(body: unknown) {
   const raw = body && typeof body === 'object' ? body as any : {}
@@ -46,6 +47,26 @@ async function hybridMarketBenchmark(request: Request, env: Record<string, unkno
   })
 }
 
+async function overlayUserAnalysisResponse(
+  response: Response,
+  route: '/api/analyze' | '/api/intake',
+  env: Record<string, unknown>,
+) {
+  if (!response.ok) return response
+  let body: any
+  try { body = await response.clone().json() } catch { return response }
+
+  if (route === '/api/intake') {
+    if (!body?.analysis?.product) return response
+    body.analysis = await overlayHybridMarketEconomics(body.analysis, env as any)
+  } else {
+    if (!body?.product) return response
+    body = await overlayHybridMarketEconomics(body, env as any)
+  }
+
+  return Response.json(body, { status: response.status })
+}
+
 export default {
   async fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
     return withRequestContext(request, env, async () => {
@@ -78,7 +99,8 @@ export default {
         const alibabaUrl = !body?.sourceMode ? parseAlibabaSelfFirstUrl(body?.url) : null
         if (alibabaUrl) {
           try {
-            return Response.json(await analyzeAlibabaSelfFirst(alibabaUrl, env as any))
+            const analysis = await analyzeAlibabaSelfFirst(alibabaUrl, env as any)
+            return Response.json(await overlayHybridMarketEconomics(analysis, env as any))
           } catch {
             // Reliability backstop: if the new orchestrator itself fails, keep
             // the previous router pipeline available rather than dropping the case.
@@ -86,7 +108,14 @@ export default {
         }
       }
 
-      return app.fetch(gate.request, env as never)
+      const response = await app.fetch(gate.request, env as never)
+      if (gate.request.method === 'POST' && url.pathname === '/api/analyze') {
+        return overlayUserAnalysisResponse(response, '/api/analyze', env)
+      }
+      if (gate.request.method === 'POST' && url.pathname === '/api/intake') {
+        return overlayUserAnalysisResponse(response, '/api/intake', env)
+      }
+      return response
     })
   },
 }

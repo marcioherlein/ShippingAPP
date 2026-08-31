@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import worker from './entry'
+import worker, { withoutLegacyMarketCredentials } from './entry'
 
 const quietConsole = () => {
   vi.spyOn(console, 'info').mockImplementation(() => undefined)
@@ -43,5 +43,38 @@ describe('Stage 0 Worker boundary', () => {
     expect(response.status).toBe(404)
     expect(response.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/i)
     expect(await response.json()).toEqual({ error: 'Not found' })
+  })
+
+  it('removes Mercado Libre credentials only from inner user-analysis paths so the legacy layer cannot perform a duplicate provider lookup', () => {
+    const tokenStore = { get: vi.fn(), put: vi.fn() }
+    const env = {
+      MERCADOLIBRE_ACCESS_TOKEN: 'access',
+      MERCADOLIBRE_CLIENT_ID: 'client',
+      MERCADOLIBRE_CLIENT_SECRET: 'secret',
+      MERCADOLIBRE_REFRESH_TOKEN: 'refresh',
+      MERCADOLIBRE_TOKEN_STORE: tokenStore,
+      BROWSER: { marker: true },
+      OTHER_BINDING: 'preserved',
+    }
+
+    for (const path of ['/api/analyze', '/api/intake']) {
+      const isolated = withoutLegacyMarketCredentials(env, path)
+      expect(isolated).not.toBe(env)
+      expect(isolated.MERCADOLIBRE_ACCESS_TOKEN).toBeUndefined()
+      expect(isolated.MERCADOLIBRE_CLIENT_ID).toBeUndefined()
+      expect(isolated.MERCADOLIBRE_CLIENT_SECRET).toBeUndefined()
+      expect(isolated.MERCADOLIBRE_REFRESH_TOKEN).toBeUndefined()
+      expect(isolated.MERCADOLIBRE_TOKEN_STORE).toBeUndefined()
+      expect(isolated.BROWSER).toBe(env.BROWSER)
+      expect(isolated.OTHER_BINDING).toBe('preserved')
+    }
+
+    expect(env.MERCADOLIBRE_ACCESS_TOKEN).toBe('access')
+    expect(env.MERCADOLIBRE_TOKEN_STORE).toBe(tokenStore)
+
+    const diagnosticEnv = withoutLegacyMarketCredentials(env, '/api/mercadolibre/benchmark')
+    expect(diagnosticEnv).toBe(env)
+    expect(diagnosticEnv.MERCADOLIBRE_ACCESS_TOKEN).toBe('access')
+    expect(diagnosticEnv.MERCADOLIBRE_TOKEN_STORE).toBe(tokenStore)
   })
 })

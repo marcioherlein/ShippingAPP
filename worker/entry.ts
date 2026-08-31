@@ -7,6 +7,29 @@ import { resolveMercadoLibreAccessToken } from './mercadoLibreAuth'
 import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory'
 import { overlayHybridMarketEconomics } from './hybridMarketEconomics'
 
+const LEGACY_MARKET_ENV_KEYS = [
+  'MERCADOLIBRE_ACCESS_TOKEN',
+  'MERCADOLIBRE_CLIENT_ID',
+  'MERCADOLIBRE_CLIENT_SECRET',
+  'MERCADOLIBRE_REFRESH_TOKEN',
+  'MERCADOLIBRE_TOKEN_STORE',
+] as const
+
+/**
+ * `/api/analyze` and `/api/intake` get their authoritative Argentina benchmark
+ * from `overlayHybridMarketEconomics` after the legacy router returns. The old
+ * enrich layer still contains an ML-only benchmark for backwards-compatible
+ * direct use, so hide only its ML credentials on these two inner calls. This
+ * prevents a duplicate authenticated ML discovery/OAuth lookup while keeping
+ * dedicated Mercado Libre diagnostics and benchmarks untouched.
+ */
+export function withoutLegacyMarketCredentials(env: Record<string, unknown>, pathname: string) {
+  if (pathname !== '/api/analyze' && pathname !== '/api/intake') return env
+  const isolated = { ...env }
+  for (const key of LEGACY_MARKET_ENV_KEYS) delete isolated[key]
+  return isolated
+}
+
 function benchmarkRequest(body: unknown) {
   const raw = body && typeof body === 'object' ? body as any : {}
   const productName = typeof raw.productName === 'string'
@@ -118,7 +141,8 @@ export default {
         }
       }
 
-      const response = await app.fetch(gate.request, env as never)
+      const innerEnv = withoutLegacyMarketCredentials(env, url.pathname)
+      const response = await app.fetch(gate.request, innerEnv as never)
       if (gate.request.method === 'POST' && url.pathname === '/api/analyze') {
         return overlayUserAnalysisResponse(response, '/api/analyze', env)
       }

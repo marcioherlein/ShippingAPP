@@ -33,3 +33,49 @@ export function evaluateMarketSmoke(status, benchmark = null) {
     shouldFailStrictConfigured: authConfigured && state !== 'healthy',
   }
 }
+
+export function evaluateRepresentativeMarketProbes(status, benchmarks = []) {
+  const provider = evaluateMarketSmoke(status)
+  const authConfigured = Boolean(status?.auth?.ready)
+  const apiAccessOk = authConfigured ? status?.auth?.apiReady !== false : null
+
+  if (!authConfigured || apiAccessOk === false) {
+    return {
+      ...provider,
+      representativeProbes: [],
+    }
+  }
+
+  const representativeProbes = benchmarks.map((benchmark, index) => ({
+    index,
+    policy: evaluateMarketSmoke(status, benchmark),
+  }))
+  const representativeHealthy = representativeProbes.some((probe) => probe.policy.healthy)
+
+  const checks = [
+    { name: 'provider_configured', applicable: true, passed: authConfigured },
+    { name: 'authenticated_api_access', applicable: authConfigured, passed: apiAccessOk === true },
+    {
+      name: 'representative_benchmark_live',
+      applicable: authConfigured && apiAccessOk === true,
+      passed: representativeHealthy,
+    },
+  ]
+  const applicable = checks.filter((check) => check.applicable)
+  const passed = applicable.filter((check) => check.passed)
+
+  let state = 'configured_incomplete'
+  if (representativeHealthy) state = 'healthy'
+  else if (representativeProbes.length > 0 && representativeProbes.every((probe) => probe.policy.state === 'configured_insufficient')) state = 'configured_insufficient'
+  else if (representativeProbes.length > 0 && representativeProbes.every((probe) => probe.policy.state === 'configured_unavailable')) state = 'configured_unavailable'
+
+  return {
+    state,
+    successRate: applicable.length ? passed.length / applicable.length : 0,
+    checks,
+    configured: authConfigured,
+    healthy: state === 'healthy',
+    shouldFailStrictConfigured: authConfigured && state !== 'healthy',
+    representativeProbes,
+  }
+}

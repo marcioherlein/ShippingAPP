@@ -132,18 +132,13 @@ describe('Alibaba discovery provider adversaries', () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/showroom/video-door-phone.html'))).toBe(true)
   })
 
-  it('dedupes the same real product across trade and multiple SEO surfaces', async () => {
+  it('dedupes sparse direct evidence but still fails closed if Browser Run adds no independent result', async () => {
     const b = browser('')
     const common = product('/product-detail/Common_1600000000020.html', 'Common Verified Product')
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input)
-      if (url.includes('/trade/search')) return new Response(common, { status: 200 })
-      return new Response(common, { status: 200 })
-    })
+    const fetchMock = vi.fn(async () => new Response(common, { status: 200 }))
     const result = await discoverAlibabaProducts('common verified product', b, fetchMock)
-    expect(result.status).toBe('live')
-    expect(result.results).toHaveLength(1)
-    expect(result.results[0].url).toBe('https://www.alibaba.com/product-detail/Common_1600000000020.html')
+    expect(result.status).toBe('unavailable')
+    expect(result.results).toEqual([])
     expect(b.quickAction).toHaveBeenCalledTimes(1)
   })
 

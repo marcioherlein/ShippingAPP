@@ -3,7 +3,7 @@ import { customsProfileFor, type CustomsProfile } from './customsClassification'
 import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
 import type { Inputs } from './types'
 
-export type ProductAnalysisV2 = ProductAnalysis & { customs: CustomsProfile }
+export type ProductAnalysisV2 = Omit<ProductAnalysis, 'usageReservationId'> & { customs: CustomsProfile }
 
 function unclassifiedCustoms(originCountry?: string | null): CustomsProfile {
   // Ingestion and nomenclature are intentionally separate. Before the user
@@ -12,7 +12,7 @@ function unclassifiedCustoms(originCountry?: string | null): CustomsProfile {
   return customsProfileFor('', originCountry || '', '')
 }
 
-export async function ingestAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
+export async function ingestAlibabaUrlV2(url: string): Promise<ProductAnalysis & { customs: CustomsProfile }> {
   const base = await analyzeAlibabaUrl(url)
   return { ...base, customs: unclassifiedCustoms(base.product.originCountry) }
 }
@@ -28,7 +28,7 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
       material: base.product.material ?? null,
       functionText: base.product.functionText ?? null,
       description: base.product.description ?? null,
-    })
+    }, base.usageReservationId || '')
     customs = mergeFullCustomsProfile(localCustoms, full)
   } catch {
     customs = {
@@ -38,10 +38,14 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
     }
   }
 
+  // The reservation is a transport credential for the one-credit continuation,
+  // not product/history data. Strip it regardless of classification outcome.
+  const { usageReservationId: _usageReservationId, ...cleanBase } = base
+
   // Market evidence and customs evidence are independent. A missing/LOW duty
   // blocks landed-cost economics through decisionReadiness, but must not erase
   // a valid local-market observation that is still useful to the user.
-  return { ...base, customs }
+  return { ...cleanBase, customs }
 }
 
 export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
@@ -52,9 +56,8 @@ export function applyAnalysisV2(current: Inputs, analysis: ProductAnalysisV2): I
   const base = applyAnalysis(current, analysis)
   return {
     ...base,
-    // A new scan must replace the previous product's customs state. When the
-    // classifier deliberately withholds duty (missing/LOW confidence), reset
-    // the numeric field to a neutral sentinel instead of retaining stale duty.
+    // A new scan must replace the previous product's customs state. Missing/LOW
+    // confidence resets the numeric field instead of retaining stale duty.
     dutyRatePct: analysis.customs.dutyRatePct ?? 0,
     dutyRateVerified: false,
     statisticsRatePct: analysis.customs.statisticsRatePct,

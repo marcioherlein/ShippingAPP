@@ -58,6 +58,16 @@ describe('opportunity production smoke policy', () => {
     expect(health.failedChecks).toContain('all_results_traceable')
   })
 
+  it('rejects Alibaba carousel navigation text as a product title even when the URL is real', () => {
+    const health = evaluateOpportunitySearchSmoke({
+      status: 'live',
+      mode: 'direct',
+      results: [baseItem({ title: 'Previous slide Next slide' })],
+    })
+    expect(health.healthy).toBe(false)
+    expect(health.failedChecks).toContain('all_results_traceable')
+  })
+
   it('rejects provider/mode mismatch', () => {
     const health = evaluateOpportunitySearchSmoke({
       status: 'live',

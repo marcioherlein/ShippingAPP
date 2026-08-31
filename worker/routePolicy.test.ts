@@ -16,6 +16,7 @@ describe('SaaS API route inventory', () => {
 
   it('classifies every exact API/OAuth route currently implemented', () => {
     const implemented = new Set([
+      ...exactRoutesFromSource('worker/entry.ts'),
       ...exactRoutesFromSource('worker/router.ts'),
       ...exactRoutesFromSource('worker/enrich.ts'),
       ...exactRoutesFromSource('worker/index.ts'),
@@ -34,10 +35,18 @@ describe('SaaS API route inventory', () => {
     }
   })
 
+  it('keeps private history authenticated and unmetered', () => {
+    expect(resolveRoutePolicy('/api/history', 'GET')).toMatchObject({ id: 'analysis-history', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/history', 'POST')).toMatchObject({ id: 'analysis-history', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/history-item', 'GET')).toMatchObject({ id: 'analysis-history-item', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/history-item', 'DELETE')).toMatchObject({ id: 'analysis-history-item', targetAccess: 'authenticated', targetMetered: false })
+  })
+
   it('resolves only declared method/path pairs', () => {
     expect(resolveRoutePolicy('/api/analyze', 'POST')?.id).toBe('analyze')
     expect(resolveRoutePolicy('/api/alibaba-native-probe', 'POST')?.targetAccess).toBe('internal')
     expect(resolveRoutePolicy('/api/analyze', 'GET')).toBeNull()
+    expect(resolveRoutePolicy('/api/history', 'DELETE')).toBeNull()
     expect(resolveRoutePolicy('/api/not-real', 'POST')).toBeNull()
   })
 })

@@ -119,6 +119,8 @@ async function run(db: D1DatabaseLike, sql: string, values: D1Value[]) {
 
 function dbErrorCode(error: unknown) {
   const text = error instanceof Error ? error.message : String(error)
+  if (text.includes('attempt_limit_exhausted')) return 'attempt_limit_exhausted'
+  if (text.includes('reservation_period_expired')) return 'period_expired'
   if (text.includes('quota_exhausted')) return 'quota_exhausted'
   if (text.includes('UNIQUE constraint failed: credit_reservations.user_id, credit_reservations.operation_key')) return 'operation_exists'
   if (text.includes('reservation_')) return 'reservation_invariant'
@@ -215,7 +217,7 @@ export class UsageRepository {
       `UPDATE credit_reservations
        SET status = 'released', last_error_code = 'lease_expired', released_at = ?, updated_at = ?
        WHERE user_id = ?
-         AND status IN ('running', 'continuation_ready', 'continuation_running')
+         AND status IN ('running', 'continuation_running')
          AND lease_expires_at <= ?`,
       [now, now, owner, now],
     )
@@ -268,6 +270,8 @@ export class UsageRepository {
     | { kind: 'started'; reservation: CreditReservationRow; usage: UsageView }
     | { kind: 'existing'; reservation: CreditReservationRow; usage: UsageView }
     | { kind: 'quota_exhausted'; usage: UsageView }
+    | { kind: 'attempt_limit_exhausted'; usage: UsageView }
+    | { kind: 'period_expired'; usage: UsageView }
     | { kind: 'collision'; reservation: CreditReservationRow; usage: UsageView }
   > {
     const userId = required('userId', input.userId, MAX.id)
@@ -292,6 +296,8 @@ export class UsageRepository {
     } catch (error) {
       const code = dbErrorCode(error)
       if (code === 'quota_exhausted') return { kind: 'quota_exhausted', usage: await this.usageView(userId) }
+      if (code === 'attempt_limit_exhausted') return { kind: 'attempt_limit_exhausted', usage: await this.usageView(userId) }
+      if (code === 'period_expired') return { kind: 'period_expired', usage: await this.usageView(userId) }
       if (code !== 'operation_exists') throw error
     }
 
@@ -305,6 +311,12 @@ export class UsageRepository {
     if (row.id === id) return { kind: 'started', reservation: row, usage: await this.usageView(userId) }
 
     if (row.status === 'released') {
+      // Operation keys are period-bound. A retry from a prior period must never
+      // consume the old allowance while leaving the current quota untouched.
+      if (row.usage_period_id !== period.id) {
+        return { kind: 'period_expired', usage: await this.usageView(userId) }
+      }
+
       const retryNow = this.now()
       try {
         const result = await run(this.db,
@@ -324,7 +336,10 @@ export class UsageRepository {
           return { kind: 'started', reservation: retried, usage: await this.usageView(userId) }
         }
       } catch (error) {
-        if (dbErrorCode(error) === 'quota_exhausted') return { kind: 'quota_exhausted', usage: await this.usageView(userId) }
+        const code = dbErrorCode(error)
+        if (code === 'quota_exhausted') return { kind: 'quota_exhausted', usage: await this.usageView(userId) }
+        if (code === 'attempt_limit_exhausted') return { kind: 'attempt_limit_exhausted', usage: await this.usageView(userId) }
+        if (code === 'period_expired') return { kind: 'period_expired', usage: await this.usageView(userId) }
         throw error
       }
       row = await this.getOperationForUser(userId, operationKey)

@@ -4,6 +4,7 @@ import { runArgentinaMarketBenchmark } from './marketBenchmarkEngine'
 import { createMercadoLibreMarketProviders } from './mercadoLibreMarketProvider'
 import type { ArgentinaMarketPriceResolver } from './marketProviderContracts'
 import type { ArgentinaMarketResult } from './marketTypes'
+import { createArgentinaDirectRetailerProvider } from './vtexRetailerMarketProvider'
 
 export type ArgentinaMarketHybridOptions = {
   mercadoLibreAccessToken?: string | null
@@ -23,13 +24,16 @@ function fallbackRank(result: ArgentinaMarketResult) {
   return 1
 }
 
-function chooseNonLive(primary: ArgentinaMarketResult, secondary: ArgentinaMarketResult) {
-  const primaryRank = fallbackRank(primary)
-  const secondaryRank = fallbackRank(secondary)
-  if (secondaryRank > primaryRank) return secondary
-  if (primaryRank > secondaryRank) return primary
-  if (secondary.comparableCount > primary.comparableCount) return secondary
-  return primary
+function chooseNonLive(...results: ArgentinaMarketResult[]) {
+  return [...results].sort((left, right) => {
+    const rankDelta = fallbackRank(right) - fallbackRank(left)
+    if (rankDelta) return rankDelta
+    return right.comparableCount - left.comparableCount
+  })[0]
+}
+
+function evidenceSummary(label: string, result: ArgentinaMarketResult) {
+  return `${label} returned ${result.status} with ${result.comparableCount} accepted comparable(s)`
 }
 
 export async function analyzeArgentinaMarketHybrid(
@@ -46,7 +50,30 @@ export async function analyzeArgentinaMarketHybrid(
     salePriceLookupLimit: options.salePriceLookupLimit,
   })
 
-  if (primary.status === 'live' || !googleShoppingApiKey) return primary
+  if (primary.status === 'live') return primary
+
+  // Free tier before paid discovery: query public storefront catalog endpoints
+  // from major Argentine retailers. These candidates still pass the same
+  // deterministic matcher and >=5 comparable floor as Mercado Libre.
+  const retailerProvider = createArgentinaDirectRetailerProvider({
+    fetchImpl: options.fetchImpl,
+  })
+  const retailers = await runArgentinaMarketBenchmark(productName, category, retailerProvider)
+
+  if (retailers.status === 'live') {
+    retailers.warnings.unshift(
+      `${evidenceSummary('Mercado Libre primary discovery', primary)}; direct Argentine retailers produced the live benchmark without a paid search API.`,
+    )
+    return retailers
+  }
+
+  if (!googleShoppingApiKey) {
+    const chosen = chooseNonLive(primary, retailers)
+    chosen.warnings.push(
+      `Free Argentina market discovery did not reach the live floor: ${evidenceSummary('Mercado Libre', primary)}; ${evidenceSummary('direct retailers', retailers)}.`,
+    )
+    return chosen
+  }
 
   const googleProvider = createGoogleShoppingArgentinaProvider({
     apiKey: googleShoppingApiKey,
@@ -68,22 +95,21 @@ export async function analyzeArgentinaMarketHybrid(
     }
   }
 
-  const secondary = await runArgentinaMarketBenchmark(productName, category, googleProvider, {
+  const google = await runArgentinaMarketBenchmark(productName, category, googleProvider, {
     priceResolver: effectivePriceResolver,
     priceLookupLimit: Math.max(0, Math.min(30, options.salePriceLookupLimit ?? 24)),
   })
 
-  if (secondary.status === 'live') {
-    secondary.warnings.unshift(
-      `Mercado Libre primary discovery returned ${primary.status} with ${primary.comparableCount} accepted comparable(s); Google Shopping Argentina fallback produced the live benchmark.`,
+  if (google.status === 'live') {
+    google.warnings.unshift(
+      `${evidenceSummary('Mercado Libre primary discovery', primary)}; ${evidenceSummary('direct retailer discovery', retailers)}; Google Shopping Argentina fallback produced the live benchmark.`,
     )
-    return secondary
+    return google
   }
 
-  const chosen = chooseNonLive(primary, secondary)
-  const other = chosen === primary ? secondary : primary
+  const chosen = chooseNonLive(primary, retailers, google)
   chosen.warnings.push(
-    `Secondary Argentina market evidence also did not reach the live floor: ${other.source} returned ${other.status} with ${other.comparableCount} accepted comparable(s).`,
+    `Argentina market evidence did not reach the live floor: ${evidenceSummary('Mercado Libre', primary)}; ${evidenceSummary('direct retailers', retailers)}; ${evidenceSummary('Google Shopping', google)}.`,
   )
   return chosen
 }

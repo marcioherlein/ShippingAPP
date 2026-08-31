@@ -126,6 +126,81 @@ const fixtures: Fixture[] = [
     target: 'IANONI Super Power Carbon Fiber Padel Racket', category: 'Padel racket',
     candidate: 'Paleta Padel Bullpadel Neuron Carbon 3K', expected: 'reject', severity: 'high',
   },
+  {
+    name: 'same Logitech MX Master 3S production model',
+    target: 'Logitech MX Master 3S', category: 'mouse inalámbrico',
+    candidate: 'Mouse Inalambrico Logitech MX Master 3S 8000dpi Bluetooth', expected: 'accept',
+  },
+  {
+    name: 'reject MX Master 4 against MX Master 3S audit regression',
+    target: 'Logitech MX Master 3S', category: 'mouse inalámbrico',
+    candidate: 'Mouse Inalambrico Logitech MX Master 4', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'same JBL Go 4 production model',
+    target: 'JBL Go 4', category: 'parlante bluetooth',
+    candidate: 'Parlante portátil JBL Go 4 Bluetooth', expected: 'accept',
+  },
+  {
+    name: 'reject JBL Go 3 against Go 4 audit regression',
+    target: 'JBL Go 4', category: 'parlante bluetooth',
+    candidate: 'Parlante Portatil Go 3 Bluetooth JBL', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'reject JBL Go Essential when target specifies Go 4',
+    target: 'JBL Go 4', category: 'parlante bluetooth',
+    candidate: 'Parlante Portatil Go Essential Bluetooth JBL', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'same Adidas Metalbone decimal generation',
+    target: 'Adidas Metalbone 3.4', category: 'paleta de padel',
+    candidate: 'Paleta de Padel Adidas Metalbone 3.4', expected: 'accept',
+  },
+  {
+    name: 'reject Metalbone 3.5 against target 3.4',
+    target: 'Adidas Metalbone 3.4', category: 'paleta de padel',
+    candidate: 'Paleta Pala De Padel Adidas Metalbone Team Light 2026 3.5', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'reject different Adidas padel family against Metalbone',
+    target: 'Adidas Metalbone 3.4', category: 'paleta de padel',
+    candidate: 'Paleta Padel Adidas Cross It 2024', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'same Lenovo family RAM and storage',
+    target: 'Lenovo IdeaPad Slim 3 15 8GB 512GB', category: 'notebook',
+    candidate: 'Notebook Lenovo IdeaPad Slim 3 Ryzen 5 8GB 512GB SSD 15.6', expected: 'accept',
+  },
+  {
+    name: 'reject wrong Lenovo RAM even when SSD matches',
+    target: 'Lenovo IdeaPad Slim 3 15 8GB 512GB', category: 'notebook',
+    candidate: 'Notebook Lenovo IdeaPad Slim 3 Ryzen 7 16GB 512GB SSD 15.6', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'reject wrong Lenovo SSD even when RAM matches',
+    target: 'Lenovo IdeaPad Slim 3 15 8GB 512GB', category: 'notebook',
+    candidate: 'Notebook Lenovo IdeaPad Slim 3 N100 8GB 128GB 15.6', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'same Samsung TV exact model',
+    target: 'Samsung 55DU7000 55 pulgadas', category: 'smart tv',
+    candidate: 'Smart TV Samsung 55DU7000 55 pulgadas 4K', expected: 'accept',
+  },
+  {
+    name: 'reject generic Samsung 55 inch TV when exact model is requested',
+    target: 'Samsung 55DU7000 55 pulgadas', category: 'smart tv',
+    candidate: 'Smart Tv Samsung Crystal 55 Pulgadas 4K UHD 50 Hz', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'reject gas Rheem against electric target',
+    target: 'Rheem termotanque eléctrico 80 litros', category: 'termotanque',
+    candidate: 'Termotanque Rheem 80 Litros De Pie Gas Natural', expected: 'reject', severity: 'high',
+  },
+  {
+    name: 'reject bundle when target is Black Decker G720 only',
+    target: 'Black Decker G720 820W', category: 'amoladora',
+    candidate: 'Combo Black Decker Taladro TM500 + Amoladora G720 820W', expected: 'reject', severity: 'high',
+  },
 ]
 
 describe('Argentina market matcher V2 adversarial corpus', () => {

@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { assertCanonicalLabelSentinels } from './ncm-label-reconciliation.mjs'
+import { assertCanonicalLabelSentinels, deriveCanonicalParentLabel } from './ncm-label-reconciliation.mjs'
 
 const root = process.cwd()
 const ncmPath = path.join(root, 'public', 'data', 'ncm-index.json')
@@ -100,6 +100,7 @@ if (simFiles.length < 80) fail(`too few SIM chapter files: ${simFiles.length}`)
 
 let simOpeningCount = 0
 let simParentCount = 0
+let derivedParentLabelCount = 0
 const simCodes = new Set()
 const simParentLabels = new Map()
 const simSourceDates = new Set()
@@ -121,10 +122,13 @@ for (const fileName of simFiles) {
     if (!validNcm(ncmCode)) fail(`${fileName}: invalid parent NCM ${ncmCode}`)
     if (!ncmCode.startsWith(chapter)) fail(`${fileName}: parent NCM ${ncmCode} is in wrong chapter`)
     if (!ncmCodes.has(ncmCode)) fail(`${fileName}: SIM parent ${ncmCode} missing from NCM catalog`)
-    if (typeof label !== 'string' || !label.trim()) fail(`${fileName}: invalid parent label for ${ncmCode}`)
+    if (typeof label !== 'string') fail(`${fileName}: invalid parent label type for ${ncmCode}`)
     if (simParentLabels.has(ncmCode)) fail(`${fileName}: duplicate SIM parent ${ncmCode}`)
     if (!Array.isArray(openings) || openings.length === 0) fail(`${fileName}: parent ${ncmCode} has no openings`)
-    simParentLabels.set(ncmCode, label.trim())
+    const canonicalParentLabel = deriveCanonicalParentLabel(label, openings)
+    if (!canonicalParentLabel) fail(`${fileName}: cannot derive canonical parent label for ${ncmCode}`)
+    if (!label.trim()) derivedParentLabelCount += 1
+    simParentLabels.set(ncmCode, canonicalParentLabel)
     simParentCount += 1
 
     for (const opening of openings) {
@@ -133,7 +137,7 @@ for (const fileName of simFiles) {
       if (!validSim(simCode)) fail(`${fileName}: invalid SIM code ${simCode}`)
       if (!simCode.startsWith(`${ncmCode}.`)) fail(`${fileName}: SIM ${simCode} does not belong to ${ncmCode}`)
       if (simCodes.has(simCode)) fail(`${fileName}: duplicate SIM code ${simCode}`)
-      if (typeof simLabel !== 'string') fail(`${fileName}: invalid label for ${simCode}`)
+      if (typeof simLabel !== 'string' || !simLabel.trim()) fail(`${fileName}: invalid label for ${simCode}`)
       simCodes.add(simCode)
       simOpeningCount += 1
     }
@@ -167,5 +171,6 @@ console.log(JSON.stringify({
   simOpenings: simOpeningCount,
   canonicalLabelCoverage: simParentLabels.size,
   canonicalLabelSourceDate: [...simSourceDates][0],
+  derivedParentLabelCount,
   semanticSentinels: 'PASS',
 }, null, 2))

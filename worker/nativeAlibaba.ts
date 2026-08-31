@@ -187,6 +187,23 @@ function mergeFacts(primary: ParsebotAlibabaFacts | null, supplement: ParsebotAl
   }
 }
 
+function pricesAgree(a: number | null | undefined, b: number | null | undefined, tolerance = 0.08) {
+  if (!a || !b) return false
+  const denominator = Math.max(a, b)
+  return denominator > 0 && Math.abs(a - b) / denominator <= tolerance
+}
+
+/** A Browser-extracted tier is usable only when the price is explicitly tied to a minimum quantity. */
+function explicitTierPrice(raw: any) {
+  const tiers = Array.isArray(raw?.price_tiers) ? raw.price_tiers : []
+  for (const tier of tiers) {
+    const minQuantity = positiveNumber(tier?.min_quantity ?? tier?.minQuantity ?? tier?.min_qty)
+    const price = positiveNumber(tier?.price_value ?? tier?.unit_price)
+    if (minQuantity && price) return price
+  }
+  return null
+}
+
 function coreFichaSignals(facts: ParsebotAlibabaFacts | null) {
   if (!facts) return 0
   return [facts.name, facts.category, facts.unitPriceUsd, facts.moq, facts.packedWeightKg, facts.volumeCbm, facts.originCountry].filter(Boolean).length
@@ -255,6 +272,7 @@ function browserRequest(url: URL) {
     prompt: [
       'Extract ONLY facts explicitly visible or embedded in this Alibaba product page. Never infer or estimate missing values.',
       'Inspect the rendered offer, structured page data, breadcrumb, product attributes/specifications, price tiers and logistics/package information when present.',
+      'For unit_price, return only the merchandise offer price. Never use coupons, new-buyer incentives, sample prices, shipping/freight charges or unrelated currency amounts.',
       'Prefer logistics/package facts for unit_weight, unit_volume and unit_size; do not confuse product physical dimensions with packed shipping dimensions.',
       'Use category_path for the Alibaba breadcrumb from broadest to most specific. product_type should be the concrete merchandise type, not a marketing phrase.',
       'If MOQ is not separately labelled but a price tier explicitly starts at a minimum quantity, return that minimum in price_tiers.',
@@ -381,7 +399,29 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
 
   const raw = body?.result ?? body
   const structured = normalizeResult(raw, url)
-  const facts = mergeFacts(rendered.facts, structured)
+  const tierPrice = explicitTierPrice(raw)
+  const isolatedStructuredPrice = positiveNumber(raw?.unit_price)
+  const renderedPrice = rendered.facts?.unitPriceUsd ?? null
+
+  // Browser JSON is semantic extraction from the same page, not independent
+  // evidence. Therefore a bare unit_price cannot fill an absent FOB. It may
+  // corroborate an already deterministic rendered price, while a quantity-linked
+  // price tier can stand on its own because the offer relationship is explicit.
+  const structuredPrice = tierPrice || (renderedPrice && isolatedStructuredPrice && pricesAgree(renderedPrice, isolatedStructuredPrice)
+    ? isolatedStructuredPrice
+    : null)
+  const structuredSafe = { ...structured, unitPriceUsd: structuredPrice }
+
+  if (!renderedPrice && isolatedStructuredPrice && !tierPrice) {
+    warnings.push('Browser Run expuso un unit_price sin precio determinístico ni tier con cantidad; ShippingAPP lo retuvo como no corroborado y solicita confirmación del proveedor.')
+  } else if (renderedPrice && isolatedStructuredPrice && !pricesAgree(renderedPrice, isolatedStructuredPrice)) {
+    warnings.push('Browser Run unit_price contradijo el precio determinístico del producto; ShippingAPP conservó la evidencia determinística y descartó el importe estructurado.')
+  }
+  if (renderedPrice && tierPrice && !pricesAgree(renderedPrice, tierPrice)) {
+    warnings.push('El tier de precio estructurado contradijo el precio determinístico; ShippingAPP conservó el precio determinístico y reportó la inconsistencia.')
+  }
+
+  const facts = mergeFacts(rendered.facts, structuredSafe)
   const signals = evidenceSignals(facts)
   if (!facts?.name || signals < 2) {
     return {
@@ -392,6 +432,7 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
 
   if (retried429) warnings.push('Browser Run recibió HTTP 429 en el primer intento y recuperó la publicación en un único retry acotado.')
   if (rendered.facts) warnings.push('La extracción estructurada se fusionó con evidencia determinística del HTML renderizado; los valores determinísticos tienen prioridad.')
+  if (!facts.unitPriceUsd) warnings.push('Precio unitario FOB no quedó corroborado por evidencia de producto; debe confirmarlo el usuario/proveedor.')
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por Alibaba; debe confirmarlo el usuario.')
   if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por Alibaba; debe confirmarlo el usuario.')
   if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto; supplier_country no se usa como sustituto.')

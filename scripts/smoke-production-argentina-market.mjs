@@ -1,3 +1,5 @@
+import { evaluateArgentinaMarketSmoke } from './argentina-market-smoke-policy.mjs'
+
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 25000)
 const MIN_COMPARABLES = Number(process.env.ARGENTINA_MARKET_MIN_COMPARABLES || 5)
@@ -37,44 +39,32 @@ async function postJson(path, payload) {
   return body
 }
 
-function fail(message, body) {
-  throw new Error(`${message}: ${JSON.stringify(body).slice(0, 2200)}`)
-}
-
 async function main() {
   const body = await postJson('/api/argentina-market/benchmark', {
     productName: 'Logitech MX Master 3S',
     category: 'mouse inalámbrico',
   })
 
-  if (REQUIRE_GOOGLE && body.providers?.googleShoppingConfigured !== true) {
-    fail('Argentina market production gate requires Google Shopping but SERPAPI_API_KEY is not configured in the Worker', body)
-  }
-
-  if (body.status !== 'live' || body.market?.status !== 'live') {
-    fail(`Argentina market benchmark is not live (status=${body.status || 'missing'})`, body)
-  }
-  if ((body.market?.comparableCount || 0) < MIN_COMPARABLES) {
-    fail(`Argentina market benchmark has fewer than ${MIN_COMPARABLES} accepted comparables`, body)
-  }
-  if (!(body.market?.suggestedPriceArs > 0)) {
-    fail('Argentina market benchmark has no positive suggestedPriceArs', body)
-  }
-  if (!body.market?.source) {
-    fail('Argentina market benchmark is missing source traceability', body)
-  }
-  if (!Array.isArray(body.market?.comparables) || body.market.comparables.length < MIN_COMPARABLES) {
-    fail('Argentina market benchmark does not expose enough traceable comparables', body)
+  const policy = evaluateArgentinaMarketSmoke(body, {
+    minComparables: MIN_COMPARABLES,
+    requireGoogle: REQUIRE_GOOGLE,
+  })
+  if (!policy.healthy) {
+    const failed = policy.checks
+      .filter((check) => check.applicable && !check.passed)
+      .map((check) => check.name)
+    throw new Error(`Argentina market production gate failed (${Math.round(policy.successRate * 100)}% checks passed); failed: ${failed.join(', ')}; evidence=${JSON.stringify(body).slice(0, 2200)}`)
   }
 
   const unsafe = JSON.stringify(body).toLowerCase()
   if (unsafe.includes('serpapi_api_key') || unsafe.includes('authorization: bearer')) {
-    fail('Argentina market response appears to leak provider credential metadata', body)
+    throw new Error(`Argentina market response appears to leak provider credential metadata: ${JSON.stringify(body).slice(0, 2200)}`)
   }
 
   console.log(JSON.stringify({
     status: 'ok',
     baseUrl,
+    marketHealth: policy,
     providers: body.providers,
     benchmark: {
       query: body.query,

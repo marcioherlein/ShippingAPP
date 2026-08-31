@@ -187,6 +187,15 @@ jobs:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-argentina-market.mjs
 
+      # User-path gate: prove the actual intake/economics response promotes the
+      # same direct-retailer benchmark and cannot retain stale ML-only evidence.
+      # This runs before the independent Alibaba opportunity-search provider so
+      # its billing/availability incident cannot hide Argentina economics health.
+      - name: Production hybrid economics user-path gate
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+        run: node scripts/smoke-production-hybrid-economics.mjs
+
       - name: Production MercadoLibre provider diagnostic
         continue-on-error: true
         env:

@@ -6,6 +6,7 @@ import { analyzeArgentinaMarketHybrid } from './argentinaMarketOrchestrator'
 import { resolveMercadoLibreAccessToken } from './mercadoLibreAuth'
 import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory'
 import { overlayHybridMarketEconomics } from './hybridMarketEconomics'
+import { handleWatchlist, isWatchlistRoute } from './watchlist'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -116,6 +117,10 @@ export default {
 
       if (isAnalysisHistoryRoute(url.pathname)) {
         return handleAnalysisHistory(gate.request, env as any)
+      }
+
+      if (isWatchlistRoute(url.pathname)) {
+        return handleWatchlist(gate.request, env as any)
       }
 
       if (url.pathname === '/api/argentina-market/benchmark' && gate.request.method === 'POST') {

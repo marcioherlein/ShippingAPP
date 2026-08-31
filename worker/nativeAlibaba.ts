@@ -1,4 +1,5 @@
 import type { BrowserRun } from './alibabaSource'
+import { extractAlibabaDirectFacts, type AlibabaDirectFacts } from './alibabaDirectExtract'
 import type { ParsebotAlibabaFacts } from './parsebotAlibaba'
 
 export type NativeAlibabaResult =
@@ -50,6 +51,11 @@ function dimensionsToCbm(value: unknown) {
 function browserMs(response: Response) {
   const value = Number(response.headers.get('X-Browser-Ms-Used'))
   return Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function combinedBrowserMs(...values: Array<number | null | undefined>) {
+  const usable = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0)
+  return usable.length ? Number(usable.reduce((sum, value) => sum + value, 0).toFixed(3)) : null
 }
 
 function specValue(specs: any[], names: string[]) {
@@ -126,6 +132,71 @@ function normalizeResult(raw: any, url: URL): ParsebotAlibabaFacts {
   }
 }
 
+function directFactsToNative(facts: AlibabaDirectFacts, url: URL): ParsebotAlibabaFacts {
+  return {
+    name: facts.name || productTitleFromUrl(url),
+    category: facts.category || facts.categoryPath.at(-1) || null,
+    categoryPath: facts.categoryPath,
+    unitPriceUsd: facts.unitPriceUsd,
+    moq: facts.moq,
+    packedWeightKg: facts.packedWeightKg,
+    volumeCbm: facts.volumeCbm,
+    unitSize: facts.unitSize,
+    originCountry: facts.originCountry,
+    supplierCountry: null,
+    imageUrl: facts.imageUrl,
+    supplier: facts.supplier,
+    supplierBadges: [],
+    description: facts.description,
+    hsCode: facts.hsCode,
+    productId: facts.productId || productIdFromUrl(url),
+    productCategoryId: null,
+    quantityUnit: null,
+    leadTime: null,
+    packaging: null,
+    tariffInfo: null,
+  }
+}
+
+function mergeFacts(primary: ParsebotAlibabaFacts | null, supplement: ParsebotAlibabaFacts | null): ParsebotAlibabaFacts | null {
+  if (!primary) return supplement
+  if (!supplement) return primary
+  return {
+    name: primary.name || supplement.name,
+    category: primary.category || supplement.category,
+    categoryPath: primary.categoryPath.length ? primary.categoryPath : supplement.categoryPath,
+    unitPriceUsd: primary.unitPriceUsd || supplement.unitPriceUsd,
+    moq: primary.moq || supplement.moq,
+    packedWeightKg: primary.packedWeightKg || supplement.packedWeightKg,
+    volumeCbm: primary.volumeCbm || supplement.volumeCbm,
+    unitSize: primary.unitSize || supplement.unitSize,
+    originCountry: primary.originCountry || supplement.originCountry,
+    supplierCountry: primary.supplierCountry || supplement.supplierCountry,
+    imageUrl: primary.imageUrl || supplement.imageUrl,
+    supplier: primary.supplier || supplement.supplier,
+    supplierBadges: primary.supplierBadges.length ? primary.supplierBadges : supplement.supplierBadges,
+    description: primary.description || supplement.description,
+    hsCode: primary.hsCode || supplement.hsCode,
+    productId: primary.productId || supplement.productId,
+    productCategoryId: primary.productCategoryId || supplement.productCategoryId,
+    quantityUnit: primary.quantityUnit || supplement.quantityUnit,
+    leadTime: primary.leadTime ?? supplement.leadTime,
+    packaging: primary.packaging ?? supplement.packaging,
+    tariffInfo: primary.tariffInfo ?? supplement.tariffInfo,
+    raw: supplement.raw,
+  }
+}
+
+function coreFichaSignals(facts: ParsebotAlibabaFacts | null) {
+  if (!facts) return 0
+  return [facts.name, facts.category, facts.unitPriceUsd, facts.moq, facts.packedWeightKg, facts.volumeCbm, facts.originCountry].filter(Boolean).length
+}
+
+function evidenceSignals(facts: ParsebotAlibabaFacts | null) {
+  if (!facts) return 0
+  return [facts.name, facts.category, facts.unitPriceUsd, facts.moq, facts.packedWeightKg, facts.volumeCbm, facts.hsCode, facts.description].filter(Boolean).length
+}
+
 const responseSchema = {
   type: 'object',
   properties: {
@@ -195,11 +266,77 @@ function browserRequest(url: URL) {
   }
 }
 
+function renderedContentRequest(url: URL) {
+  return {
+    url: url.toString(),
+    gotoOptions: { waitUntil: 'networkidle2', timeout: 20000 },
+    rejectResourceTypes: ['image', 'media', 'font'],
+  }
+}
+
 async function wait(ms: number) {
   await new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
+async function extractRenderedHtml(url: URL, browser: BrowserRun) {
+  try {
+    const response = await browser.quickAction('content', renderedContentRequest(url))
+    const ms = browserMs(response)
+    if (!response.ok) {
+      return {
+        facts: null as ParsebotAlibabaFacts | null,
+        ms,
+        status: response.status,
+        warnings: [`Browser Run rendered HTML returned HTTP ${response.status}; structured extraction will be attempted.`],
+      }
+    }
+    const html = await response.text()
+    if (!html || html.length < 80) {
+      return { facts: null as ParsebotAlibabaFacts | null, ms, status: response.status, warnings: ['Browser Run rendered HTML was empty or too small.'] }
+    }
+    const direct = extractAlibabaDirectFacts(html, url)
+    const facts = directFactsToNative(direct, url)
+    if (evidenceSignals(facts) < 2) {
+      return {
+        facts: null as ParsebotAlibabaFacts | null,
+        ms,
+        status: response.status,
+        warnings: ['Rendered Alibaba HTML did not expose enough trustworthy product facts; structured extraction will be attempted.'],
+      }
+    }
+    return {
+      facts,
+      ms,
+      status: response.status,
+      warnings: [`ShippingAPP recovered ${coreFichaSignals(facts)}/7 required ficha signals from rendered Alibaba HTML before structured extraction.`],
+    }
+  } catch (error) {
+    return {
+      facts: null as ParsebotAlibabaFacts | null,
+      ms: null,
+      status: null,
+      warnings: [`Rendered Alibaba extraction failed: ${error instanceof Error ? error.message : 'unknown error'}`],
+    }
+  }
+}
+
 export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promise<NativeAlibabaResult> {
+  const rendered = await extractRenderedHtml(url, browser)
+  const warnings: string[] = [...rendered.warnings]
+
+  // A complete deterministic ficha from the rendered DOM is preferable to an
+  // AI/JSON extraction and avoids a second Browser Run request entirely.
+  if (rendered.facts && coreFichaSignals(rendered.facts) === 7) {
+    warnings.push('La ficha obligatoria quedó completa desde HTML renderizado; no fue necesario ejecutar Browser Run JSON.')
+    return {
+      status: 'ready',
+      source: 'Cloudflare Browser Run JSON',
+      facts: rendered.facts,
+      warnings,
+      browserMsUsed: rendered.ms,
+    }
+  }
+
   let response: Response
   let retried429 = false
   try {
@@ -210,38 +347,53 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
       response = await browser.quickAction('json', browserRequest(url))
     }
   } catch (error) {
+    if (rendered.facts) {
+      warnings.push(`Structured Browser Run failed, but rendered HTML remains usable: ${error instanceof Error ? error.message : 'unknown error'}`)
+      return { status: 'ready', source: 'Cloudflare Browser Run JSON', facts: rendered.facts, warnings, browserMsUsed: rendered.ms }
+    }
     return {
-      status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: null,
-      warnings: [`Native Alibaba extraction failed: ${error instanceof Error ? error.message : 'unknown error'}`],
+      status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: rendered.ms,
+      warnings: [...warnings, `Native Alibaba extraction failed: ${error instanceof Error ? error.message : 'unknown error'}`],
     }
   }
 
-  const ms = browserMs(response)
+  const jsonMs = browserMs(response)
+  const totalMs = combinedBrowserMs(rendered.ms, jsonMs)
   if (!response.ok) {
+    if (rendered.facts) {
+      warnings.push(`Browser Run JSON returned HTTP ${response.status}${retried429 ? ' after one bounded retry' : ''}; rendered HTML evidence is preserved instead of failing the product.`)
+      return { status: 'ready', source: 'Cloudflare Browser Run JSON', facts: rendered.facts, warnings, browserMsUsed: totalMs }
+    }
     return {
-      status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: ms, httpStatus: response.status,
-      warnings: [`Browser Run JSON returned HTTP ${response.status}${retried429 ? ' after one bounded retry' : ''}.`],
+      status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: totalMs, httpStatus: response.status,
+      warnings: [...warnings, `Browser Run JSON returned HTTP ${response.status}${retried429 ? ' after one bounded retry' : ''}.`],
     }
   }
 
   let body: any
   try { body = await response.json() } catch {
-    return { status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: ms, warnings: ['Browser Run JSON returned a non-JSON payload.'] }
+    if (rendered.facts) {
+      warnings.push('Browser Run JSON returned a non-JSON payload; rendered HTML evidence is preserved.')
+      return { status: 'ready', source: 'Cloudflare Browser Run JSON', facts: rendered.facts, warnings, browserMsUsed: totalMs }
+    }
+    return { status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: totalMs, warnings: [...warnings, 'Browser Run JSON returned a non-JSON payload.'] }
   }
+
   const raw = body?.result ?? body
-  const facts = normalizeResult(raw, url)
-  const signals = [facts.name, facts.category, facts.unitPriceUsd, facts.moq, facts.packedWeightKg, facts.volumeCbm, facts.hsCode, facts.description].filter(Boolean).length
-  if (!facts.name || signals < 2) {
+  const structured = normalizeResult(raw, url)
+  const facts = mergeFacts(rendered.facts, structured)
+  const signals = evidenceSignals(facts)
+  if (!facts?.name || signals < 2) {
     return {
-      status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: ms,
-      warnings: ['Browser Run opened Alibaba but did not expose enough trustworthy product facts.'],
+      status: 'unavailable', source: 'Cloudflare Browser Run JSON', facts: null, browserMsUsed: totalMs,
+      warnings: [...warnings, 'Browser Run opened Alibaba but did not expose enough trustworthy product facts.'],
     }
   }
 
-  const warnings: string[] = []
   if (retried429) warnings.push('Browser Run recibió HTTP 429 en el primer intento y recuperó la publicación en un único retry acotado.')
+  if (rendered.facts) warnings.push('La extracción estructurada se fusionó con evidencia determinística del HTML renderizado; los valores determinísticos tienen prioridad.')
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por Alibaba; debe confirmarlo el usuario.')
   if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por Alibaba; debe confirmarlo el usuario.')
   if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto; supplier_country no se usa como sustituto.')
-  return { status: 'ready', source: 'Cloudflare Browser Run JSON', facts, warnings, browserMsUsed: ms }
+  return { status: 'ready', source: 'Cloudflare Browser Run JSON', facts, warnings, browserMsUsed: totalMs }
 }

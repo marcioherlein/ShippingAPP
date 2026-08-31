@@ -36,6 +36,17 @@ const CARD_COMMERCE_PATTERNS = [
   /\b\d[\d,.]*\s+sold\b/i,
 ]
 
+const TITLE_NOISE_PATTERNS = [
+  /^previous\s+slide\s+next\s+slide$/i,
+  /^previous\s+slide$/i,
+  /^next\s+slide$/i,
+  /^contact\s+supplier$/i,
+  /^chat\s+now$/i,
+  /^view\s+(?:more|details?)$/i,
+  /^learn\s+more$/i,
+  /^image(?:\s+\w+)*$/i,
+]
+
 const SEO_NOISE_TOKENS = new Set([
   'best', 'cheap', 'factory', 'high', 'latest', 'new', 'oem', 'odm', 'price', 'quality',
   'smart', 'supplier', 'suppliers', 'wholesale', 'wifi', 'with', 'for', 'and', 'the',
@@ -77,6 +88,33 @@ function slugTokens(query: string) {
 
 function slugFrom(tokens: string[]) {
   return tokens.join('-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 140)
+}
+
+function isKnownTitleNoise(raw: string | null | undefined) {
+  const title = cleanText(raw || '')
+  return Boolean(title) && TITLE_NOISE_PATTERNS.some((pattern) => pattern.test(title))
+}
+
+export function isAlibabaDiscoveryTitleUseful(raw: string | null | undefined) {
+  const title = cleanText(raw || '')
+  if (title.length < 8 || title.length > 300) return false
+  if (isKnownTitleNoise(title)) return false
+  const alphaWords = title.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9+.-]*/g) || []
+  return alphaWords.length >= 2
+}
+
+export function titleFromAlibabaProductUrl(rawUrl: string) {
+  const canonical = canonicalAlibabaProductUrl(rawUrl)
+  if (!canonical) return null
+  try {
+    const url = new URL(canonical)
+    const rawSlug = url.pathname.replace(/^\/product-detail\//i, '').replace(/\.html?$/i, '')
+    const withoutId = rawSlug.replace(/[_-]\d{8,}$/i, '')
+    const title = cleanText(decodeURIComponent(withoutId).replace(/[-_]+/g, ' ')).slice(0, 300)
+    return isAlibabaDiscoveryTitleUseful(title) ? title : null
+  } catch {
+    return null
+  }
 }
 
 export function buildAlibabaSearchUrl(query: string) {
@@ -144,11 +182,22 @@ export function extractAlibabaProductLinks(html: string, maxResults = 8): Discov
     const url = canonicalAlibabaProductUrl(href)
     if (!url || seen.has(url)) continue
 
-    const titleAttr = attr(tag, 'title') || attr(tag, 'aria-label')
+    const titleAttr = cleanText(attr(tag, 'title') || attr(tag, 'aria-label') || '')
     const bodyText = cleanText(match[3])
     if (!titleAttr && CARD_COMMERCE_PATTERNS.some((pattern) => pattern.test(bodyText))) continue
-    const title = cleanText(titleAttr || bodyText).slice(0, 300)
-    if (title.length < 8) continue
+
+    const preferredObserved = titleAttr || bodyText
+    const observedTitle = isAlibabaDiscoveryTitleUseful(titleAttr)
+      ? titleAttr
+      : isAlibabaDiscoveryTitleUseful(bodyText)
+        ? bodyText
+        : null
+    // Alibaba's SEO cards sometimes put the product URL on a carousel-control
+    // anchor whose visible text is only “Previous slide Next slide”. In that
+    // narrowly recognized case, derive the name from the canonical product URL
+    // slug. Unknown/empty/one-letter labels still fail closed.
+    const title = observedTitle || (isKnownTitleNoise(preferredObserved) ? titleFromAlibabaProductUrl(url) : null)
+    if (!title) continue
 
     seen.add(url)
     results.push({ title, url, evidence: 'live' })
@@ -168,7 +217,7 @@ async function directSearch(searchUrl: string, fetchImpl: FetchLike) {
   try {
     const response = await fetchImpl(searchUrl, {
       headers: {
-        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/2.8; +https://shippingapp.workers.dev)',
+        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/2.9; +https://shippingapp.workers.dev)',
         accept: 'text/html,application/xhtml+xml',
         'accept-language': 'en-US,en;q=0.8',
       },

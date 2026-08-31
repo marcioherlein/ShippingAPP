@@ -133,8 +133,8 @@ describe('Mercado Libre catalog fallback hydration', () => {
     const catalogResults = Array.from({ length: 8 }, (_, index) => ({
       id: catalogId(index + 1),
       status: 'active',
-      domain_id: 'MLA-HEADPHONES',
-      name: `Auriculares Bluetooth Inalambricos ${index + 1}`,
+      domain_id: 'MLA-PADEL_RACKETS',
+      name: `Paleta Padel Carbono EVA Pro ${index + 1}`,
     }))
 
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
@@ -148,28 +148,28 @@ describe('Mercado Libre catalog fallback hydration', () => {
         if (index === 7) {
           return mlJson({
             id: productMatch[1],
-            name: `Auriculares Bluetooth Inalambricos ${index}`,
-            buy_box_winner: { item_id: 'CATALOG-NOT-ITEM', price: 99000, currency_id: 'ARS' },
+            name: `Paleta Padel Carbono EVA Pro ${index}`,
+            buy_box_winner: { item_id: 'CATALOG-NOT-ITEM', price: 129000, currency_id: 'ARS' },
           })
         }
         if (index === 8) {
           return mlJson({
             id: productMatch[1],
-            name: `Auriculares Bluetooth Inalambricos ${index}`,
+            name: `Paleta Padel Carbono EVA Pro ${index}`,
             buy_box_winner: { item_id: itemId(index), price: 99, currency_id: 'USD' },
           })
         }
         return mlJson({
           id: productMatch[1],
           status: 'active',
-          domain_id: 'MLA-HEADPHONES',
-          name: `Auriculares Bluetooth Inalambricos ${index}`,
+          domain_id: 'MLA-PADEL_RACKETS',
+          name: `Paleta Padel Carbono EVA Pro ${index}`,
           attributes: [],
           buy_box_winner: {
             item_id: itemId(index),
-            category_id: 'MLA3697',
+            category_id: 'MLA1276',
             seller_id: 8100 + index,
-            price: 70000 + index * 1000,
+            price: 120000 + index * 1000,
             currency_id: 'ARS',
           },
         })
@@ -177,12 +177,12 @@ describe('Mercado Libre catalog fallback hydration', () => {
       const saleMatch = url.match(/\/items\/(MLA\d+)\/sale_price/)
       if (saleMatch) {
         const index = Number(saleMatch[1].slice(-3))
-        return mlJson({ amount: 68000 + index * 1000, currency_id: 'ARS' })
+        return mlJson({ amount: 118000 + index * 1000, currency_id: 'ARS' })
       }
       return mlJson({ message: 'not found' }, 404)
     })
 
-    const result = await analyzeArgentinaMarket('Auriculares bluetooth', 'Auriculares', {
+    const result = await analyzeArgentinaMarket('Paleta de pádel carbono EVA', 'Padel racket', {
       accessToken: 'test-token',
       fetchImpl,
     })

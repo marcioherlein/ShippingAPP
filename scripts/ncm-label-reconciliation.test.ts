@@ -19,7 +19,7 @@ function fixture() {
   ]
   const labels = new Map(canonicalSentinels)
   for (let i = records.length; i < 10000; i += 1) {
-    const code = `${String(10 + Math.floor(i / 1000000)).padStart(2, '0')}${String(i % 100).padStart(2, '0')}.${String((i * 3) % 99).padStart(2, '0')}.${String((i * 7) % 99).padStart(2, '0')}`
+    const code = `1000.${String(Math.floor(i / 100) % 100).padStart(2, '0')}.${String(i % 100).padStart(2, '0')}`
     records.push([code, `Corrupted source label ${i}`, 10, 10, 3, 0, 21, 20, 6, 2.5, null, 'NO'])
     labels.set(code, `Canonical ARCA label ${i}`)
   }

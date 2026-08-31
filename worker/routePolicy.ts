@@ -87,10 +87,10 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     methods: ['POST'],
     currentAccess: 'public',
     targetAccess: 'authenticated',
-    targetMetered: false,
+    targetMetered: true,
     costRisk: 'high',
     externalProviders: ['Mercado Libre', 'Google Shopping / SerpApi', 'direct Argentine retailers'],
-    notes: 'Manual trusted snapshot refresh. Server performs market lookup; client cannot submit price/cost/margin. Credit/monitoring entitlement policy is deferred to Stage 5/11.',
+    notes: 'Manual trusted snapshot refresh. Server performs market lookup; client cannot submit price/cost/margin. Stage 4 implements the trusted boundary; Stage 5/11 enforce the target entitlement policy.',
   },
   {
     id: 'runtime-smoke',

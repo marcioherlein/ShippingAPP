@@ -57,7 +57,7 @@ describe('Argentina direct VTEX retailer discovery', () => {
       'cetrogar',
       'naldo',
       'oncity',
-      'megatone',
+      'pardo',
     ])
     expect(DEFAULT_ARGENTINA_VTEX_RETAILERS.every((retailer) => retailer.baseUrl.startsWith('https://'))).toBe(true)
     expect(DEFAULT_ARGENTINA_VTEX_RETAILERS.every((retailer) => (retailer.maxCandidates || 0) <= 12)).toBe(true)
@@ -69,7 +69,7 @@ describe('Argentina direct VTEX retailer discovery', () => {
       ['cetrogar.com.ar', ['cet', 'Cetrogar', 152000]],
       ['naldo.com.ar', ['nal', 'Naldo', 151000]],
       ['oncity.com', ['onc', 'OnCity', 153000]],
-      ['megatone.net', ['meg', 'Megatone', 154000]],
+      ['pardo.com.ar', ['par', 'Pardo', 154000]],
     ] as const)
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input)
@@ -91,7 +91,7 @@ describe('Argentina direct VTEX retailer discovery', () => {
     const result = await provider.discover({ query: 'Logitech MX Master 3S', productName: 'Logitech MX Master 3S', category: 'mouse' })
 
     expect(result.candidates).toHaveLength(5)
-    for (const name of ['Frávega', 'Cetrogar', 'Naldo', 'OnCity', 'Megatone']) {
+    for (const name of ['Frávega', 'Cetrogar', 'Naldo', 'OnCity', 'Pardo']) {
       expect(result.sourceLabel).toContain(name)
       expect(result.candidates.some((candidate) => candidate.sellerKey?.startsWith(`${name}:`))).toBe(true)
     }

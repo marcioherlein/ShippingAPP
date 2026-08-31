@@ -228,10 +228,7 @@ function hasVariantModifierConflict(target: string, candidate: string) {
   const expected = variantModifiers(target)
   const actual = variantModifiers(candidate)
   if (setsEqual(expected, actual)) return false
-  // If the target explicitly names a variant, missing/different modifiers are unsafe.
   if (expected.size) return true
-  // Candidate-only "Pro/Max/etc." can be marketing noise in commodity listings.
-  // Treat it as a hard variant mismatch only when the same model/version is otherwise evidenced.
   return actual.size > 0 && modelEvidenceScore(target, candidate) > 0
 }
 
@@ -275,12 +272,11 @@ export function comparableScore(item: MlResult, productName: string, category: s
   let score = 0
   score += lexicalOverlap(target, cleanedTitle) * 52
   score += modelEvidenceScore(target, cleanedTitle)
-  score += Math.min(16, matchedSpecCount(target, cleanedTitle) * 8)
+  score += Math.min(24, matchedSpecCount(target, cleanedTitle) * 12)
   score += comparableAttributeScore(item, context.inferredAttributes)
   if (context.categoryId && item.category_id === context.categoryId) score += 12
   if (item.condition === 'new' || !item.condition) score += 10
 
-  // Domain extension retained as regression support, but no longer forms the base matcher.
   if (target.includes('padel') && cleanedTitle.includes('padel')) score += 22
   if (target.includes('carbon')) score += cleanedTitle.includes('carbon') ? 12 : -18
   for (const token of specTokens(target)) score += cleanedTitle.includes(token) ? 3 : -2

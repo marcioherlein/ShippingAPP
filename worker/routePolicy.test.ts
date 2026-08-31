@@ -46,6 +46,12 @@ describe('SaaS API route inventory', () => {
   it('resolves only declared method/path pairs', () => {
     expect(resolveRoutePolicy('/api/analyze', 'POST')?.id).toBe('analyze')
     expect(resolveRoutePolicy('/api/alibaba-native-probe', 'POST')?.targetAccess).toBe('internal')
+    expect(resolveRoutePolicy('/api/argentina-market/benchmark', 'POST')).toMatchObject({
+      id: 'argentina-market-benchmark',
+      targetAccess: 'authenticated',
+      targetMetered: true,
+      costRisk: 'high',
+    })
     expect(resolveRoutePolicy('/api/analyze', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/history', 'DELETE')).toBeNull()
     expect(resolveRoutePolicy('/api/not-real', 'POST')).toBeNull()

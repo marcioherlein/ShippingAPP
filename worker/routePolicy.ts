@@ -148,6 +148,17 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     notes: 'Market benchmark provider call. Stage 2 auth and Stage 5 metering required.',
   },
   {
+    id: 'argentina-market-benchmark',
+    path: '/api/argentina-market/benchmark',
+    methods: ['POST'],
+    currentAccess: 'public',
+    targetAccess: 'authenticated',
+    targetMetered: true,
+    costRisk: 'high',
+    externalProviders: ['Mercado Libre', 'Google Shopping / SerpApi'],
+    notes: 'Hybrid Argentina price discovery can fan out to paid external providers. Authentication and metering are mandatory production boundaries.',
+  },
+  {
     id: 'chat',
     path: '/api/chat',
     methods: ['POST'],

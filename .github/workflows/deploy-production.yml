@@ -179,15 +179,18 @@ jobs:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-alibaba-self.mjs
 
-      - name: Production opportunity search smoke test
-        env:
-          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
-        run: node scripts/smoke-production-opportunity.mjs
-
+      # Market benchmark is an independent provider gate. Run it before the
+      # opportunity-search provider so a billing/availability failure in that
+      # separate service cannot hide Mercado Libre production evidence.
       - name: Production MercadoLibre benchmark smoke test
         env:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-mercadolibre.mjs
+
+      - name: Production opportunity search smoke test
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+        run: node scripts/smoke-production-opportunity.mjs
 
       - name: Production intake smoke test
         env:

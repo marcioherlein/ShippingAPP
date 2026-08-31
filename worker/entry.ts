@@ -2,7 +2,49 @@ import app from './router'
 import { authorizeRequest } from './auth'
 import { withRequestContext } from './requestContext'
 import { analyzeAlibabaSelfFirst, parseAlibabaSelfFirstUrl } from './alibabaSelfFirst'
+import { analyzeArgentinaMarketHybrid } from './argentinaMarketOrchestrator'
+import { resolveMercadoLibreAccessToken } from './mercadoLibreAuth'
 import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory'
+
+function benchmarkRequest(body: unknown) {
+  const raw = body && typeof body === 'object' ? body as any : {}
+  const productName = typeof raw.productName === 'string'
+    ? raw.productName.trim().replace(/\s+/g, ' ').slice(0, 220)
+    : typeof raw.name === 'string'
+      ? raw.name.trim().replace(/\s+/g, ' ').slice(0, 220)
+      : ''
+  const category = typeof raw.category === 'string'
+    ? raw.category.trim().replace(/\s+/g, ' ').slice(0, 180)
+    : ''
+  if ((productName || category).length < 2) return null
+  return { productName, category }
+}
+
+async function hybridMarketBenchmark(request: Request, env: Record<string, unknown>) {
+  let body: unknown
+  try { body = await request.json() } catch {
+    return Response.json({ error: 'Ingresá un body JSON válido.' }, { status: 400 })
+  }
+  const parsed = benchmarkRequest(body)
+  if (!parsed) return Response.json({ error: 'Ingresá productName/name o category para consultar el mercado argentino.' }, { status: 400 })
+
+  const auth = await resolveMercadoLibreAccessToken(env as any)
+  const googleShoppingApiKey = typeof env.SERPAPI_API_KEY === 'string' ? env.SERPAPI_API_KEY : null
+  const market = await analyzeArgentinaMarketHybrid(parsed.productName, parsed.category, {
+    mercadoLibreAccessToken: auth.accessToken,
+    googleShoppingApiKey,
+  })
+
+  return Response.json({
+    status: market.status,
+    query: market.query,
+    providers: {
+      mercadoLibreAuth: auth.status,
+      googleShoppingConfigured: Boolean(googleShoppingApiKey?.trim()),
+    },
+    market,
+  })
+}
 
 export default {
   async fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
@@ -20,6 +62,10 @@ export default {
 
       if (isAnalysisHistoryRoute(url.pathname)) {
         return handleAnalysisHistory(gate.request, env as any)
+      }
+
+      if (url.pathname === '/api/argentina-market/benchmark' && gate.request.method === 'POST') {
+        return hybridMarketBenchmark(gate.request, env)
       }
 
       // Normal Alibaba analysis is self-scrape first. Parse.bot is now only an

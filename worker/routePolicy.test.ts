@@ -18,6 +18,7 @@ describe('SaaS API route inventory', () => {
     const implemented = new Set([
       ...exactRoutesFromSource('worker/entry.ts'),
       ...exactRoutesFromSource('worker/analysisHistory.ts'),
+      ...exactRoutesFromSource('worker/watchlist.ts'),
       ...exactRoutesFromSource('worker/router.ts'),
       ...exactRoutesFromSource('worker/enrich.ts'),
       ...exactRoutesFromSource('worker/index.ts'),
@@ -43,6 +44,14 @@ describe('SaaS API route inventory', () => {
     expect(resolveRoutePolicy('/api/history-item', 'DELETE')).toMatchObject({ id: 'analysis-history-item', targetAccess: 'authenticated', targetMetered: false })
   })
 
+  it('keeps watchlist ownership actions unmetered but marks provider refresh as a metered target', () => {
+    expect(resolveRoutePolicy('/api/watchlist', 'GET')).toMatchObject({ id: 'watchlist', targetAccess: 'authenticated', targetMetered: false, costRisk: 'low' })
+    expect(resolveRoutePolicy('/api/watchlist', 'POST')).toMatchObject({ id: 'watchlist', targetAccess: 'authenticated', targetMetered: false, costRisk: 'low' })
+    expect(resolveRoutePolicy('/api/watchlist-item', 'GET')).toMatchObject({ id: 'watchlist-item', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/watchlist-item', 'DELETE')).toMatchObject({ id: 'watchlist-item', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/watchlist-refresh', 'POST')).toMatchObject({ id: 'watchlist-refresh', targetAccess: 'authenticated', targetMetered: true, costRisk: 'high' })
+  })
+
   it('resolves only declared method/path pairs', () => {
     expect(resolveRoutePolicy('/api/analyze', 'POST')?.id).toBe('analyze')
     expect(resolveRoutePolicy('/api/alibaba-native-probe', 'POST')?.targetAccess).toBe('internal')
@@ -54,6 +63,7 @@ describe('SaaS API route inventory', () => {
     })
     expect(resolveRoutePolicy('/api/analyze', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/history', 'DELETE')).toBeNull()
+    expect(resolveRoutePolicy('/api/watchlist-refresh', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/not-real', 'POST')).toBeNull()
   })
 })

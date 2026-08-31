@@ -1,5 +1,8 @@
+import { evaluateMarketSmoke } from './market-smoke-policy.mjs'
+
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 20000)
+const STRICT_CONFIGURED = process.env.MARKET_SMOKE_STRICT_CONFIGURED !== '0'
 
 async function postJson(path, payload, label) {
   const controller = new AbortController()
@@ -60,22 +63,44 @@ function textOf(value) {
   return JSON.stringify(value || {})
 }
 
+function publicAuthSummary(status) {
+  return {
+    ready: status.auth?.ready,
+    apiReady: status.auth?.apiReady,
+    tokenSource: status.auth?.tokenSource,
+    apiAccess: status.auth?.apiAccess,
+  }
+}
+
+function enforcePolicy(policy, context) {
+  if (STRICT_CONFIGURED && policy.shouldFailStrictConfigured) {
+    const failed = policy.checks.filter((check) => check.applicable && !check.passed).map((check) => check.name)
+    throw new Error(`${context}: configured market provider failed strict gate (${policy.state}); failed checks: ${failed.join(', ')}`)
+  }
+}
+
 async function main() {
   const status = await getJson('/api/mercadolibre/status', 'meli-status')
+
   if (!status.auth?.ready) {
-    console.log(JSON.stringify({ status: 'skipped', reason: 'MercadoLibre auth is not configured in this environment', auth: status.auth }, null, 2))
+    const policy = evaluateMarketSmoke(status)
+    console.log(JSON.stringify({
+      status: 'unconfigured',
+      reason: 'MercadoLibre auth is not configured in this environment; market capability is explicitly not healthy.',
+      marketHealth: policy,
+      auth: publicAuthSummary(status),
+    }, null, 2))
     return
   }
+
   if (status.auth?.apiReady === false) {
+    const policy = evaluateMarketSmoke(status)
+    enforcePolicy(policy, 'meli-status')
     console.log(JSON.stringify({
-      status: 'skipped',
-      reason: 'MercadoLibre temporary token is loaded but not currently API-ready. This is expected when MERCADOLIBRE_ACCESS_TOKEN expires; production should migrate to refresh_token + KV.',
-      auth: {
-        ready: status.auth.ready,
-        apiReady: status.auth.apiReady,
-        tokenSource: status.auth.tokenSource,
-        apiAccess: status.auth.apiAccess,
-      },
+      status: 'configured_broken',
+      reason: 'MercadoLibre credentials are loaded but authenticated API access is not ready.',
+      marketHealth: policy,
+      auth: publicAuthSummary(status),
     }, null, 2))
     return
   }
@@ -87,28 +112,21 @@ async function main() {
 
   const allText = textOf(benchmark)
   if (allText.includes('Mercado Libre API 403')) {
-    throw new Error(`meli-benchmark: benchmark still reports 403: ${allText.slice(0, 2000)}`)
+    throw new Error(`meli-benchmark: benchmark still reports raw 403 failure: ${allText.slice(0, 2000)}`)
   }
-  if (benchmark.status === 'unavailable' || benchmark.market?.status === 'unavailable') {
-    console.log(JSON.stringify({ status: 'degraded', reason: 'MercadoLibre benchmark unavailable; app must not fabricate comparables.', benchmark: benchmark.market }, null, 2))
-    return
-  }
-  if (!['live', 'insufficient'].includes(benchmark.status)) {
-    throw new Error(`meli-benchmark: unexpected status ${benchmark.status}: ${allText.slice(0, 2000)}`)
-  }
+
+  const policy = evaluateMarketSmoke(status, benchmark)
+  enforcePolicy(policy, 'meli-benchmark')
+
   if (benchmark.status === 'live' && (!benchmark.market?.suggestedPriceArs || benchmark.market.suggestedPriceArs <= 0)) {
     throw new Error(`meli-benchmark: live benchmark without suggestedPriceArs: ${allText.slice(0, 2000)}`)
   }
 
   console.log(JSON.stringify({
-    status: 'ok',
+    status: policy.healthy ? 'ok' : policy.state,
     baseUrl,
-    auth: {
-      ready: status.auth.ready,
-      apiReady: status.auth.apiReady,
-      tokenSource: status.auth.tokenSource,
-      apiAccess: status.auth.apiAccess,
-    },
+    marketHealth: policy,
+    auth: publicAuthSummary(status),
     benchmark: {
       status: benchmark.status,
       query: benchmark.query,

@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createArgentinaDirectRetailerProvider } from './vtexRetailerMarketProvider'
+import {
+  createArgentinaDirectRetailerProvider,
+  DEFAULT_ARGENTINA_VTEX_RETAILERS,
+  type ArgentinaVtexRetailer,
+} from './vtexRetailerMarketProvider'
+
+const BASE_RETAILERS: ArgentinaVtexRetailer[] = [
+  { id: 'fravega', name: 'Frávega', baseUrl: 'https://www.fravega.com' },
+  { id: 'cetrogar', name: 'Cetrogar', baseUrl: 'https://www.cetrogar.com.ar' },
+]
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -42,32 +51,70 @@ function product(input: {
 }
 
 describe('Argentina direct VTEX retailer discovery', () => {
-  it('aggregates Frávega and Cetrogar public catalog candidates without credentials', async () => {
+  it('keeps the default free-retailer registry explicit and bounded', () => {
+    expect(DEFAULT_ARGENTINA_VTEX_RETAILERS.map((retailer) => retailer.id)).toEqual([
+      'fravega',
+      'cetrogar',
+      'naldo',
+      'oncity',
+      'pardo',
+    ])
+    expect(DEFAULT_ARGENTINA_VTEX_RETAILERS.every((retailer) => retailer.baseUrl.startsWith('https://'))).toBe(true)
+    expect(DEFAULT_ARGENTINA_VTEX_RETAILERS.every((retailer) => (retailer.maxCandidates || 0) <= 12)).toBe(true)
+  })
+
+  it('aggregates the five public retailer catalogs without credentials and reports only contributors', async () => {
+    const expected = new Map([
+      ['fravega.com', ['fra', 'Frávega', 149999]],
+      ['cetrogar.com.ar', ['cet', 'Cetrogar', 152000]],
+      ['naldo.com.ar', ['nal', 'Naldo', 151000]],
+      ['oncity.com', ['onc', 'OnCity', 153000]],
+      ['pardo.com.ar', ['par', 'Pardo', 154000]],
+    ] as const)
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input)
-      if (url.includes('fravega.com')) return json({ products: [
-        product({ productName: 'Logitech MX Master 3S', itemId: 'fra-1', sellerName: 'Frávega', price: 149999, model: 'MX Master 3S' }),
-        product({ productName: 'Logitech MX Master 3S', itemId: 'fra-2', sellerId: 'market-2', sellerName: 'Seller Frávega', price: 155000, model: 'MX Master 3S' }),
-        product({ productName: 'Logitech MX Master 3S', itemId: 'fra-3', sellerId: 'market-3', sellerName: 'Seller Frávega 2', price: 160000, model: 'MX Master 3S' }),
-      ] })
-      if (url.includes('cetrogar.com.ar')) return json({ products: [
-        product({ productName: 'Logitech MX Master 3S', itemId: 'cet-1', sellerName: 'Cetrogar', price: 152000, model: 'MX Master 3S' }),
-        product({ productName: 'Logitech MX Master 3S', itemId: 'cet-2', sellerId: 'market-2', sellerName: 'Seller Cetrogar', price: 158000, model: 'MX Master 3S' }),
-        product({ productName: 'Logitech MX Master 3S', itemId: 'cet-3', sellerId: 'market-3', sellerName: 'Seller Cetrogar 2', price: 165000, model: 'MX Master 3S' }),
-      ] })
+      for (const [host, [prefix, name, price]] of expected) {
+        if (url.includes(host)) {
+          return json({ products: [product({
+            productName: 'Logitech MX Master 3S',
+            itemId: `${prefix}-1`,
+            sellerName: name,
+            price,
+            model: 'MX Master 3S',
+          })] })
+        }
+      }
       return json({}, 404)
     })
 
     const provider = createArgentinaDirectRetailerProvider({ fetchImpl })
     const result = await provider.discover({ query: 'Logitech MX Master 3S', productName: 'Logitech MX Master 3S', category: 'mouse' })
 
-    expect(result.candidates).toHaveLength(6)
-    expect(result.sourceLabel).toContain('Frávega')
-    expect(result.sourceLabel).toContain('Cetrogar')
+    expect(result.candidates).toHaveLength(5)
+    for (const name of ['Frávega', 'Cetrogar', 'Naldo', 'OnCity', 'Pardo']) {
+      expect(result.sourceLabel).toContain(name)
+      expect(result.candidates.some((candidate) => candidate.sellerKey?.startsWith(`${name}:`))).toBe(true)
+    }
     expect(result.candidates.every((candidate) => candidate.priceArs > 0)).toBe(true)
-    expect(result.candidates.some((candidate) => candidate.sellerKey?.startsWith('Frávega:'))).toBe(true)
-    expect(result.candidates.some((candidate) => candidate.sellerKey?.startsWith('Cetrogar:'))).toBe(true)
     expect(fetchImpl.mock.calls.every(([, init]) => !(init?.headers as any)?.authorization)).toBe(true)
+  })
+
+  it('does not claim a retailer in the source label when it returned no candidate evidence', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.includes('fravega.com')) return json({ products: [product({ productName: 'Logitech MX Master 3S', itemId: 'fra-1', price: 150000 })] })
+      if (url.includes('/api/io/_v/api/intelligent-search/')) return json({ products: [] })
+      return json([])
+    })
+
+    const result = await createArgentinaDirectRetailerProvider({ fetchImpl }).discover({
+      query: 'Logitech MX Master 3S',
+      productName: 'Logitech MX Master 3S',
+      category: 'mouse',
+    })
+
+    expect(result.sourceLabel).toBe('Retailers argentinos directos · Frávega')
+    expect(result.candidates).toHaveLength(1)
   })
 
   it('rejects zero-price and out-of-stock offers before matching', async () => {
@@ -80,7 +127,7 @@ describe('Argentina direct VTEX retailer discovery', () => {
       ] })
     })
 
-    const result = await createArgentinaDirectRetailerProvider({ fetchImpl }).discover({
+    const result = await createArgentinaDirectRetailerProvider({ fetchImpl, retailers: BASE_RETAILERS }).discover({
       query: 'Bosch GSB 13 RE 650W',
       productName: 'Bosch GSB 13 RE 650W',
       category: 'taladro',
@@ -101,7 +148,7 @@ describe('Argentina direct VTEX retailer discovery', () => {
       return json({}, 404)
     })
 
-    const result = await createArgentinaDirectRetailerProvider({ fetchImpl }).discover({
+    const result = await createArgentinaDirectRetailerProvider({ fetchImpl, retailers: BASE_RETAILERS }).discover({
       query: 'Philips Licuadora 600W',
       productName: 'Philips Licuadora 600W',
       category: 'licuadora',
@@ -122,7 +169,7 @@ describe('Argentina direct VTEX retailer discovery', () => {
       return json({}, 404)
     })
 
-    const result = await createArgentinaDirectRetailerProvider({ fetchImpl, requestTimeoutMs: 1000 }).discover({
+    const result = await createArgentinaDirectRetailerProvider({ fetchImpl, retailers: BASE_RETAILERS, requestTimeoutMs: 1000 }).discover({
       query: 'Daewoo Hidrolavadora 1400W 110 bar',
       productName: 'Daewoo Hidrolavadora 1400W 110 bar',
       category: 'hidrolavadora',
@@ -130,6 +177,7 @@ describe('Argentina direct VTEX retailer discovery', () => {
 
     expect(result.candidates).toHaveLength(1)
     expect(result.sourceLabel).toContain('Cetrogar')
+    expect(result.sourceLabel).not.toContain('Frávega')
     expect(result.warnings.join(' ')).toContain('Frávega')
   })
 

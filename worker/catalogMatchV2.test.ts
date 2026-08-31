@@ -144,9 +144,25 @@ describe('Argentina market matcher V2 adversarial corpus', () => {
       if (predicted === 'accept' && fixture.expected === 'reject') falsePositives += 1
     }
 
+    const expectedAccepted = fixtures.filter((fixture) => fixture.expected === 'accept').length
+    const rejected = fixtures.filter((fixture) => fixture.expected === 'reject').length
     const accuracy = correct / fixtures.length
     const precision = accepted ? trueAccepted / accepted : 1
-    const falsePositiveRate = falsePositives / fixtures.filter((fixture) => fixture.expected === 'reject').length
+    const recall = expectedAccepted ? trueAccepted / expectedAccepted : 1
+    const falsePositiveRate = rejected ? falsePositives / rejected : 0
+
+    console.info('[market-matcher-v2]', JSON.stringify({
+      fixtures: fixtures.length,
+      accuracy,
+      precision,
+      recall,
+      falsePositiveRate,
+      correct,
+      expectedAccepted,
+      trueAccepted,
+      accepted,
+      falsePositives,
+    }))
 
     expect(accuracy).toBeGreaterThanOrEqual(0.95)
     expect(precision).toBeGreaterThanOrEqual(0.95)

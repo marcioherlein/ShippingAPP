@@ -290,19 +290,23 @@ export async function handleWatchlist(request: Request, env: Env, dependencies: 
         sourceUrl: basis.sourceUrl,
         metadata: basis,
       })
-      const observedAt = clock().toISOString()
-      const market = marketFromAnalysis(analysisRow)
-      const landed = landedCostArs(basis)
-      await repo.addSnapshotForUser({
-        id: crypto.randomUUID(),
-        userId,
-        watchlistItemId: item.id,
-        observedAt,
-        marketPriceArs: market.marketPriceArs,
-        landedCostArs: landed,
-        payload: initialSnapshotPayload(analysisRow, basis, observedAt),
-        idempotencyKey: `initial:${item.id}:${analysisRow.id}`,
-      })
+      const initialKey = `initial:${item.id}:${analysisRow.id}`
+      const existingInitial = await repo.getSnapshotByIdempotencyForUser(userId, initialKey)
+      if (!existingInitial) {
+        const observedAt = clock().toISOString()
+        const market = marketFromAnalysis(analysisRow)
+        const landed = landedCostArs(basis)
+        await repo.addSnapshotForUser({
+          id: crypto.randomUUID(),
+          userId,
+          watchlistItemId: item.id,
+          observedAt,
+          marketPriceArs: market.marketPriceArs,
+          landedCostArs: landed,
+          payload: initialSnapshotPayload(analysisRow, basis, observedAt),
+          idempotencyKey: initialKey,
+        })
+      }
       return json({ item: await itemView(repo, item, userId, 2) }, 201)
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
@@ -354,6 +358,12 @@ export async function handleWatchlist(request: Request, env: Env, dependencies: 
       return json({ error: 'This watchlist item has no trusted snapshot basis.', code: 'watchlist_basis_unavailable' }, 409)
     }
 
+    const serverKey = `refresh:${item.id}:${refreshKey}`
+    const replay = await repo.getSnapshotByIdempotencyForUser(userId, serverKey)
+    if (replay) {
+      return json({ item: await itemView(repo, item, userId, 50), replayed: true }, 200)
+    }
+
     const observedAt = clock().toISOString()
     let market: ArgentinaMarketResult | null = null
     let providerError: string | undefined
@@ -374,7 +384,7 @@ export async function handleWatchlist(request: Request, env: Env, dependencies: 
         marketPriceArs,
         landedCostArs: landed,
         payload: refreshSnapshotPayload(market, basis, observedAt, providerError),
-        idempotencyKey: `refresh:${item.id}:${refreshKey}`,
+        idempotencyKey: serverKey,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
@@ -386,7 +396,7 @@ export async function handleWatchlist(request: Request, env: Env, dependencies: 
 
     const refreshed = await repo.getActiveForUser(userId, item.id)
     if (!refreshed) return notFound()
-    return json({ item: await itemView(repo, refreshed, userId, 50) }, 201)
+    return json({ item: await itemView(repo, refreshed, userId, 50), replayed: false }, 201)
   }
 
   return json({ error: 'Method not allowed.', code: 'method_not_allowed' }, 405)

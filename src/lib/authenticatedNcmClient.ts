@@ -7,10 +7,15 @@ import {
 
 export { mergeFullCustomsProfile }
 
-export async function classifyNcmRemote(facts: FullNcmFacts): Promise<FullNcmApiResult> {
+export async function classifyNcmRemote(facts: FullNcmFacts, usageReservationId: string): Promise<FullNcmApiResult> {
+  const reservationId = usageReservationId?.trim()
+  if (!reservationId) throw new Error('La clasificación requiere la reserva del análisis activo.')
   const response = await apiFetch('/api/ncm-classify', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'x-shippingapp-usage-reservation': reservationId,
+    },
     body: JSON.stringify(facts),
   })
   const data = await response.json() as FullNcmApiResult & { error?: string }

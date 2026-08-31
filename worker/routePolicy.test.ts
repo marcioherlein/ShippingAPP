@@ -16,6 +16,7 @@ describe('SaaS API route inventory', () => {
 
   it('classifies every exact API/OAuth route currently implemented', () => {
     const implemented = new Set([
+      ...exactRoutesFromSource('worker/entry.ts'),
       ...exactRoutesFromSource('worker/router.ts'),
       ...exactRoutesFromSource('worker/enrich.ts'),
       ...exactRoutesFromSource('worker/index.ts'),
@@ -37,6 +38,12 @@ describe('SaaS API route inventory', () => {
   it('resolves only declared method/path pairs', () => {
     expect(resolveRoutePolicy('/api/analyze', 'POST')?.id).toBe('analyze')
     expect(resolveRoutePolicy('/api/alibaba-native-probe', 'POST')?.targetAccess).toBe('internal')
+    expect(resolveRoutePolicy('/api/argentina-market/benchmark', 'POST')).toMatchObject({
+      id: 'argentina-market-benchmark',
+      targetAccess: 'authenticated',
+      targetMetered: true,
+      costRisk: 'high',
+    })
     expect(resolveRoutePolicy('/api/analyze', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/not-real', 'POST')).toBeNull()
   })

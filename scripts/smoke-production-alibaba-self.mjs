@@ -1,3 +1,5 @@
+import { collectAlibabaPriceIntegrityFailures, evaluateAlibabaProbePriceIntegrity } from './alibaba-self-smoke-policy.mjs'
+
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 
 const cases = [
@@ -5,11 +7,16 @@ const cases = [
     id: 'mechanical-watch-1601666174891',
     url: 'https://www.alibaba.com/product-detail/Fully-Automatic-Mechanical-Watches-42-5MM_1601666174891.html?spm=a2706.products_search.normal_offer.7.136d67afME8WWH&priceId=ae738f92db4f4b0aba0e6d90353cbf56',
     identity: /watch|wrist|mechanical/i,
+    // Fixture-only regression floor: this known mechanical watch must never
+    // silently accept the prior USD 1 promotion/coupon contamination as FOB.
+    minimumTrustedPriceUsd: 10,
   },
   {
     id: 'wifi-doorbell-1600667679915',
     url: 'https://www.alibaba.com/product-detail/High-Quality-Tuya-Smartlife-Wireless-Wifi_1600667679915.html',
     identity: /door|video|wifi|tuya|smart/i,
+    // Fixture-only regression floor, not a generic Alibaba pricing assumption.
+    minimumTrustedPriceUsd: 10,
   },
 ]
 
@@ -111,12 +118,17 @@ for (const testCase of cases) {
     : native?.ok
       ? 'direct+browser'
       : 'user-confirmation'
+  const priceIntegrity = evaluateAlibabaProbePriceIntegrity({
+    price: summary.price,
+    minimumTrustedPriceUsd: testCase.minimumTrustedPriceUsd,
+  })
 
   results.push({
     id: testCase.id,
     pageAccessPass,
     identityPass,
     completeFicha,
+    priceIntegrity,
     fallback,
     direct: {
       status: direct.status,
@@ -136,6 +148,7 @@ const identitySuccess = results.filter((item) => item.identityPass).length
 const accessSuccess = results.filter((item) => item.pageAccessPass).length
 const completeSuccess = results.filter((item) => item.completeFicha).length
 const catastrophic = results.filter((item) => item.pageAccessPass && !item.identityPass)
+const priceIntegrityFailures = collectAlibabaPriceIntegrityFailures(results)
 
 const report = {
   provider: 'ShippingAPP self-scrape only — Parse.bot is never called by these probe routes',
@@ -144,6 +157,7 @@ const report = {
   identitySuccessRatePct: Number(((identitySuccess / results.length) * 100).toFixed(1)),
   completeFichaRatePct: Number(((completeSuccess / results.length) * 100).toFixed(1)),
   catastrophicIdentityErrors: catastrophic.length,
+  priceIntegrityFailures: priceIntegrityFailures.length,
   fallbackDistribution: results.reduce((acc, item) => {
     acc[item.fallback] = (acc[item.fallback] || 0) + 1
     return acc
@@ -160,4 +174,11 @@ if (catastrophic.length) {
 }
 if (identitySuccess === 0) {
   throw new Error('Alibaba self-scrape could not recover the identity of any live regression product.')
+}
+
+// Missing FOB remains acceptable and routes to user/provider confirmation. A
+// positive implausibly-low price on these two known fixtures is a correctness
+// regression because this exact path previously accepted promotional USD 1.
+if (priceIntegrityFailures.length) {
+  throw new Error(`Alibaba self-scrape price-integrity failure: ${priceIntegrityFailures.map((item) => `${item.id}=${item.combined?.price ?? 'null'} USD`).join(', ')}`)
 }

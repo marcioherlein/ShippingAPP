@@ -154,6 +154,15 @@ export class WatchlistRepository {
     return result.meta?.changes ?? 0
   }
 
+  getSnapshotByIdempotencyForUser(userId: string, idempotencyKey: string) {
+    return first<WatchlistSnapshotRow>(this.db,
+      `SELECT ws.* FROM watchlist_snapshots ws
+       JOIN watchlist_items wi ON wi.id = ws.watchlist_item_id
+       WHERE ws.idempotency_key = ? AND wi.user_id = ?`,
+      [required('idempotencyKey', idempotencyKey, MAX.idempotencyKey), required('userId', userId, MAX.id)],
+    )
+  }
+
   async addSnapshotForUser(input: {
     id: string
     userId: string
@@ -185,12 +194,7 @@ export class WatchlistRepository {
       [id, observedAt, marketPriceArs, landedCostArs, payloadJson, key, now, itemId, userId],
     )
 
-    const row = await first<WatchlistSnapshotRow>(this.db,
-      `SELECT ws.* FROM watchlist_snapshots ws
-       JOIN watchlist_items wi ON wi.id = ws.watchlist_item_id
-       WHERE ws.idempotency_key = ? AND wi.user_id = ?`,
-      [key, userId],
-    )
+    const row = await this.getSnapshotByIdempotencyForUser(userId, key)
     if (!row) throw new Error('Watchlist snapshot creation failed.')
 
     if (

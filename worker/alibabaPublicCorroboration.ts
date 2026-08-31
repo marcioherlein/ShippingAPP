@@ -147,7 +147,10 @@ export function extractExactAlibabaPublicListingFacts(html: string, target: URL 
   const first = targetIndexes[0]
   const last = targetIndexes[targetIndexes.length - 1]
   const nextDifferent = anchors.slice(last.index + 1).find((anchor) => anchor.id !== targetId)
-  const segmentStart = Math.max(0, first.anchor.index - 240)
+  // Never look behind the target anchor: commerce text belonging to the prior
+  // card can live immediately before this anchor and must not contaminate the
+  // selected product. The exact-id anchor is the hard left boundary.
+  const segmentStart = first.anchor.index
   const segmentEnd = Math.min(html.length, nextDifferent?.index ?? (last.anchor.end + 2600))
   const segment = html.slice(segmentStart, segmentEnd)
   const text = cleanText(segment)

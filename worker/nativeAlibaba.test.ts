@@ -59,7 +59,7 @@ const partialRenderedWatchHtml = `<!doctype html><html><body>
 </body></html>`
 
 describe('extractAlibabaNative', () => {
-  it('completes the ficha from rendered HTML and skips structured Browser Run entirely', async () => {
+  it('completes the ficha from trusted rendered product state and skips structured Browser Run entirely', async () => {
     const quickAction = vi.fn(async (action: string) => {
       expect(action).toBe('content')
       return new Response(completeRenderedWatchHtml, {
@@ -83,7 +83,7 @@ describe('extractAlibabaNative', () => {
     expect(result.warnings.join(' ')).toContain('no fue necesario ejecutar Browser Run JSON')
   })
 
-  it('merges deterministic rendered HTML with structured Browser Run facts without overwriting good rendered evidence', async () => {
+  it('merges deterministic rendered HTML with quantity-linked Browser price tiers without overwriting good rendered evidence', async () => {
     const { browser, quickAction } = browserActionSequence([
       { action: 'content', body: partialRenderedWatchHtml, status: 200 },
       {
@@ -95,6 +95,7 @@ describe('extractAlibabaNative', () => {
             product_type: 'Mechanical Watches',
             moq: 5,
             unit_price: 71.5,
+            price_tiers: [{ min_quantity: 5, max_quantity: 49, unit_price: 71.5, price_value: 71.5 }],
             unit_size: '12X10X8 cm',
             hs_code: '910221',
             specifications: [{ name: 'Place of Origin', value: 'Chongqing, China' }],
@@ -114,7 +115,7 @@ describe('extractAlibabaNative', () => {
     expect(result.facts.volumeCbm).toBe(0.00096)
     expect(result.facts.originCountry).toBe('Chongqing, China')
     expect(result.facts.hsCode).toBe('910221')
-    expect(result.warnings.join(' ')).toContain('valores determinísticos tienen prioridad')
+    expect(result.warnings.join(' ')).toContain('gates de evidencia')
   })
 
   it('normalizes the mechanical watch using structured Browser Run facts', async () => {
@@ -163,7 +164,7 @@ describe('extractAlibabaNative', () => {
     expect(result.browserMsUsed).toBe(1634)
   })
 
-  it('uses explicit Product Type and the first price tier when product_type and moq are absent', async () => {
+  it('uses explicit Product Type and a quantity-linked price tier when product_type and moq are absent', async () => {
     const result = await extractAlibabaNative(watchUrl, browserWithJson({
       result: {
         title: 'Automatic Mechanical Wristwatch',
@@ -181,6 +182,41 @@ describe('extractAlibabaNative', () => {
     if (result.status !== 'ready') return
     expect(result.facts.category).toBe('Mechanical Wristwatch')
     expect(result.facts.moq).toBe(5)
+    expect(result.facts.unitPriceUsd).toBe(71.5)
+  })
+
+  it('rejects an isolated Browser JSON price when no tier or independent rendered price corroborates it', async () => {
+    const result = await extractAlibabaNative(watchUrl, browserWithJson({
+      result: {
+        title: 'Automatic Mechanical Wristwatch',
+        product_type: 'Mechanical Wristwatch',
+        unit_price: 1,
+        moq: 5,
+      },
+    }))
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    expect(result.facts.unitPriceUsd).toBeNull()
+    expect(result.warnings.join(' ')).toContain('posible cupón/promoción')
+  })
+
+  it('keeps trusted rendered price when Browser JSON reports a conflicting promotional amount', async () => {
+    const renderedWithPrice = `<!doctype html><html><body><script type="application/json">${JSON.stringify({
+      product_title: 'Automatic Mechanical Wristwatch',
+      category_name: 'Mechanical Wristwatch',
+      unit_price: 71.5,
+      unit_weight: '0.138 kg',
+      product_id: '1601666174891',
+    })}</script></body></html>`
+    const { browser } = browserActionSequence([
+      { action: 'content', body: renderedWithPrice, status: 200 },
+      { action: 'json', body: { result: { title: 'Automatic Mechanical Wristwatch', product_type: 'Mechanical Wristwatch', unit_price: 1, price_tiers: [{ min_quantity: 1, unit_price: 1 }] } }, status: 200 },
+    ])
+    const result = await extractAlibabaNative(watchUrl, browser)
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    expect(result.facts.unitPriceUsd).toBe(71.5)
+    expect(result.warnings.join(' ')).toContain('sin corroboración suficiente')
   })
 
   it('does not substitute supplier country for merchandise origin', async () => {
@@ -200,12 +236,12 @@ describe('extractAlibabaNative', () => {
     expect(result.warnings.some((warning) => warning.includes('Origen'))).toBe(true)
   })
 
-  it('uses the explicit Alibaba URL slug as provisional identity when structured JSON omits title', async () => {
+  it('uses the explicit Alibaba URL slug as provisional identity and does not promote an isolated Browser price', async () => {
     const result = await extractAlibabaNative(watchUrl, browserWithJson({ result: { unit_price: 71.5, moq: 5 } }))
     expect(result.status).toBe('ready')
     if (result.status !== 'ready') return
     expect(result.facts.name).toContain('Fully Automatic Mechanical Watches')
-    expect(result.facts.unitPriceUsd).toBe(71.5)
+    expect(result.facts.unitPriceUsd).toBeNull()
     expect(result.facts.moq).toBe(5)
   })
 

@@ -1,3 +1,5 @@
+import { evaluateHybridEconomicsSmoke } from './hybrid-economics-smoke-policy.mjs'
+
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 const REQUEST_TIMEOUT_MS = Number(process.env.HYBRID_ECONOMICS_SMOKE_TIMEOUT_MS || 40000)
 const MIN_COMPARABLES = Number(process.env.ARGENTINA_MARKET_MIN_COMPARABLES || 5)
@@ -36,42 +38,20 @@ async function main() {
     fail(`non-JSON HTTP ${response.status}: ${String(text).slice(0, 600)}`)
   }
   if (!response.ok) fail(`HTTP ${response.status}`, body)
-  if (body?.status !== 'ready') fail(`expected intake status ready, got ${body?.status ?? 'missing'}`, body)
 
-  const analysis = body?.analysis
-  const market = analysis?.market
-  const details = market?.details
-  const source = String(market?.source || '')
-  const assumptions = Array.isArray(analysis?.assumptions) ? analysis.assumptions.map(String) : []
-
-  if (!analysis?.product) fail('missing analysis.product', body)
-  if (details?.status !== 'live') fail(`expected hybrid market live, got ${details?.status ?? 'missing'}`, body)
-  if (!source.includes('Retailers argentinos directos')) fail(`expected direct-retailer source, got ${source || 'missing'}`, body)
-  if (!(Number(details?.comparableCount || 0) >= MIN_COMPARABLES)) {
-    fail(`expected >=${MIN_COMPARABLES} accepted comparables, got ${details?.comparableCount ?? 'missing'}`, body)
-  }
-  if (!(Number(market?.estimatedPriceArs || 0) > 0)) fail('missing positive estimatedPriceArs', body)
-  if (!String(analysis?.confidence?.market || '').startsWith('live-')) fail('market confidence is not live', body)
-  if (!Array.isArray(details?.comparables) || details.comparables.length < MIN_COMPARABLES) {
-    fail(`expected >=${MIN_COMPARABLES} traceable comparable rows`, body)
+  const policy = evaluateHybridEconomicsSmoke(body, { minComparables: MIN_COMPARABLES })
+  if (!policy.healthy) {
+    const failed = policy.checks.filter((check) => !check.passed).map((check) => check.name)
+    fail(`policy failed (${Math.round(policy.successRate * 100)}% checks passed): ${failed.join(', ')}`, body)
   }
 
-  const staleAssumptions = assumptions.filter((value) => {
-    const normalized = value.toLowerCase()
-    return normalized.includes('mercado local bloqueado')
-      || normalized.includes('mercado local no confirmado')
-      || normalized.includes('comparables activos de mercado libre')
-  })
-  if (staleAssumptions.length) fail(`stale ML-only assumptions leaked: ${staleAssumptions.join(' | ')}`, body)
-
-  const priceDelta = Math.abs(Number(market.estimatedPriceArs) - Number(details.suggestedPriceArs))
-  if (!Number.isFinite(priceDelta) || priceDelta > 1) {
-    fail(`user-facing price diverges from authoritative hybrid suggested price (${market.estimatedPriceArs} vs ${details?.suggestedPriceArs})`, body)
-  }
-
+  const analysis = body.analysis
+  const market = analysis.market
+  const details = market.details
   console.log(JSON.stringify({
     status: 'ok',
     route: '/api/intake',
+    userPathHealth: policy,
     intakeStatus: body.status,
     product: {
       name: analysis.product.name,
@@ -79,7 +59,7 @@ async function main() {
     },
     market: {
       status: details.status,
-      source,
+      source: market.source,
       rawCount: details.rawCount,
       comparableCount: details.comparableCount,
       estimatedPriceArs: market.estimatedPriceArs,
@@ -87,7 +67,6 @@ async function main() {
       confidence: analysis.confidence.market,
       traceableComparables: details.comparables.length,
     },
-    staleMlOnlyAssumptions: staleAssumptions.length,
   }, null, 2))
 }
 

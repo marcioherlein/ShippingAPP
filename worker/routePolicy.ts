@@ -38,6 +38,17 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     notes: 'Authenticated account probe. Identity is derived from verified Clerk session only.',
   },
   {
+    id: 'usage',
+    path: '/api/usage',
+    methods: ['GET'],
+    currentAccess: 'public',
+    targetAccess: 'authenticated',
+    targetMetered: false,
+    costRisk: 'low',
+    externalProviders: [],
+    notes: 'Owner-scoped plan/usage view. Entitlement state is derived only from server-owned plans, subscriptions and usage periods.',
+  },
+  {
     id: 'analysis-history',
     path: '/api/history',
     methods: ['GET', 'POST'],
@@ -90,7 +101,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'high',
     externalProviders: ['Mercado Libre', 'Google Shopping / SerpApi', 'direct Argentine retailers'],
-    notes: 'Manual trusted snapshot refresh. Server performs market lookup; client cannot submit price/cost/margin. Stage 4 implements the trusted boundary; Stage 5/11 enforce the target entitlement policy.',
+    notes: 'Standalone one-credit refresh in Stage 5. Server performs trusted market lookup; unusable provider evidence releases the reservation.',
   },
   {
     id: 'runtime-smoke',
@@ -178,7 +189,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'medium',
     externalProviders: ['Mercado Libre'],
-    notes: 'Market benchmark provider call. Stage 2 auth and Stage 5 metering required.',
+    notes: 'Standalone one-credit Mercado Libre benchmark in Stage 5; insufficient provider evidence releases the reservation.',
   },
   {
     id: 'argentina-market-benchmark',
@@ -189,7 +200,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'high',
     externalProviders: ['Mercado Libre', 'Google Shopping / SerpApi'],
-    notes: 'Hybrid Argentina price discovery can fan out to paid external providers. Authentication and metering are mandatory production boundaries.',
+    notes: 'Standalone one-credit hybrid Argentina benchmark. Reservation occurs before external providers and settles only on live evidence.',
   },
   {
     id: 'chat',
@@ -200,7 +211,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: false,
     costRisk: 'medium',
     externalProviders: ['Cloudflare Workers AI'],
-    notes: 'Conversational Import Analyst. Authentication target; final metering policy intentionally deferred.',
+    notes: 'Conversational Import Analyst. Authenticated but intentionally zero-credit in the current Stage 5 product policy.',
   },
   {
     id: 'intake',
@@ -211,7 +222,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'high',
     externalProviders: ['Cloudflare Workers AI', 'Mercado Libre', 'BCRA'],
-    notes: 'AI intake plus market and FX hydration. Expensive and a primary entitlement boundary.',
+    notes: 'Starts a one-credit full-analysis reservation. The same reservation covers the subsequent NCM continuation; clarification-only responses release it.',
   },
   {
     id: 'opportunity-search',
@@ -222,7 +233,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'high',
     externalProviders: ['Parse.bot / Alibaba'],
-    notes: 'External Alibaba opportunity search. High abuse/cost risk.',
+    notes: 'Standalone one-credit external Alibaba opportunity search.',
   },
   {
     id: 'discover',
@@ -233,7 +244,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'high',
     externalProviders: ['Cloudflare Browser / Alibaba'],
-    notes: 'Live Alibaba browser discovery. High compute/provider cost.',
+    notes: 'Standalone one-credit live Alibaba browser discovery.',
   },
   {
     id: 'ncm-classify',
@@ -244,7 +255,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'medium',
     externalProviders: ['Cloudflare Workers AI'],
-    notes: 'NCM/SIM classification uses local assets plus AI.',
+    notes: 'Zero-additional-credit continuation of a reserved /api/analyze or /api/intake full analysis. The reservation/product identity is verified before provider work.',
   },
   {
     id: 'analyze',
@@ -255,7 +266,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'high',
     externalProviders: ['Parse.bot / Alibaba', 'ShippingAPP direct Alibaba', 'Cloudflare Browser', 'Cloudflare Workers AI', 'Mercado Libre', 'BCRA'],
-    notes: 'Full import analysis. Primary paid-work boundary for Stage 5.',
+    notes: 'Starts a one-credit full-analysis reservation. The same reservation covers the subsequent NCM continuation and settles only after that continuation succeeds.',
   },
 ] as const
 

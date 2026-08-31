@@ -59,6 +59,16 @@ describe('Alibaba deterministic direct extractor', () => {
     expect(extractAlibabaDirectFacts(html).moq).toBe(120)
   })
 
+  it('accepts an explicitly quantity-linked visible product price', () => {
+    const html = page('<div>Unit Price: US $71.50 / piece</div>', '<meta property="og:title" content="Mechanical Wristwatch">')
+    expect(extractAlibabaDirectFacts(html).unitPriceUsd).toBe(71.5)
+  })
+
+  it('does not treat a coupon price or unrelated currency amount as the product FOB', () => {
+    const html = page('<div>New buyer coupon</div><div>Coupon Price: US $1</div><div>Save US $5 today</div>', '<meta property="og:title" content="Mechanical Wristwatch">')
+    expect(extractAlibabaDirectFacts(html).unitPriceUsd).toBeNull()
+  })
+
   it('converts grams to kilograms', () => {
     const html = page(`<script type="application/json">${JSON.stringify({ productId: '12345678', productTitle: 'Wireless Earbuds', unitWeight: '265 g' })}</script>`)
     expect(extractAlibabaDirectFacts(html).packedWeightKg).toBe(0.265)

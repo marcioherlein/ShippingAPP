@@ -98,9 +98,9 @@ export const DEFAULT_ARGENTINA_VTEX_RETAILERS: readonly ArgentinaVtexRetailer[] 
     maxCandidates: 12,
   },
   {
-    id: 'megatone',
-    name: 'Megatone',
-    baseUrl: 'https://www.megatone.net',
+    id: 'pardo',
+    name: 'Pardo',
+    baseUrl: 'https://www.pardo.com.ar',
     tradePolicy: '1',
     maxCandidates: 12,
   },

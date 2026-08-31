@@ -3,8 +3,10 @@ import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { usd } from '../lib/format'
 import {
-  missingProductConfirmationFields,
+  missingClassificationConfirmationFields,
+  missingQuoteConfirmationFields,
   productConfirmationFromAnalysis,
+  resolvedProductVolumeCbm,
   type ProductConfirmationData,
 } from '../lib/productConfirmation'
 
@@ -35,11 +37,11 @@ const interventionCategories = new Set(['food', 'toys', 'cosmetics', 'medicines'
 const pipelineSteps = [
   {
     title: 'Clasificación arancelaria',
-    description: 'Cruzo la ficha confirmada —descripción, material y función— contra el nomenclador NCM completo.',
+    description: 'Cruzo la identidad confirmada —qué es, material, función y detalles técnicos— contra el nomenclador NCM completo.',
   },
   {
     title: 'Aranceles y costos automáticos',
-    description: 'Cargo derecho, tasa estadística, IVA y percepciones. Si el producto cae en un grupo con intervención, sumo USD 200 de trámite automáticamente.',
+    description: 'Cargo derecho, tasa estadística, IVA y percepciones. Si corresponde intervención, sumo USD 200 de trámite automáticamente.',
   },
   {
     title: 'Logística internacional',
@@ -98,63 +100,168 @@ function numberValue(value: string) {
   return Number.isFinite(number) ? number : 0
 }
 
+function sameIdentity(a: ProductConfirmationData, b: ProductConfirmationData) {
+  return a.productName === b.productName
+    && a.category === b.category
+    && a.description === b.description
+    && a.material === b.material
+    && a.functionText === b.functionText
+}
+
+function knownFact(label: string, value: React.ReactNode, key: string) {
+  if (value === '' || value === null || value === undefined || value === 0) return null
+  return <div className="pipeline-known-fact" key={key}><span>{label}</span><b>{value}</b></div>
+}
+
 export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
   const [draft, setDraft] = useState<ProductConfirmationData>(() => productConfirmationFromAnalysis(analysis))
+  const [showCorrections, setShowCorrections] = useState(false)
+  const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
+  const [clarification, setClarification] = useState('')
 
   useEffect(() => {
     setDraft(productConfirmationFromAnalysis(analysis))
+    setShowCorrections(false)
+    setShowAllQuoteFields(false)
+    setClarification('')
   }, [analysis.sourceUrl])
 
-  const missing = useMemo(() => missingProductConfirmationFields(draft), [draft])
-  const canConfirm = missing.length === 0
+  const sourceDraft = useMemo(() => productConfirmationFromAnalysis(analysis), [analysis])
+  const classificationMissing = useMemo(() => missingClassificationConfirmationFields(draft), [draft])
+  const quoteMissing = useMemo(() => missingQuoteConfirmationFields(draft), [draft])
+  const classificationResolved = !!analysis.customs.ncmCandidate
+    && (analysis.customs.classificationConfidence === 'high' || analysis.customs.classificationConfidence === 'medium')
+    && analysis.customs.dutyRatePct !== null
+    && analysis.customs.dutyRatePct !== undefined
+  const identityEdited = !sameIdentity(draft, sourceDraft)
+  const classifierAskedForMore = !classificationResolved && analysis.customs.missingFacts.length > 0
+  const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
+  const canConfirm = classificationResolved
+    ? quoteMissing.length === 0
+    : classificationMissing.length === 0 && clarificationSatisfied
+  const volume = resolvedProductVolumeCbm(draft)
+
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
   }
 
+  const submitConfirmation = () => {
+    const note = clarification.replace(/\s+/g, ' ').trim()
+    const next = note
+      ? { ...draft, description: [draft.description.trim(), `Aclaración del usuario: ${note}`].filter(Boolean).join('. ') }
+      : draft
+    onConfirm(next)
+    setClarification('')
+  }
+
+  const quoteFieldMissing = (id: string) => quoteMissing.some((item) => item.id === id)
+
   return <section className="calculation-pipeline" id="case-confirmation">
     {status === 'confirm' ? <>
-      <div className="pipeline-confirm-head">
-        <span className="eyebrow">Gate obligatorio de producto</span>
-        <h2>Confirmá y completá la ficha antes de clasificar.</h2>
-        <p>Lo que pudo leer Alibaba o Parse.bot aparece precargado. Corregí cualquier dato incorrecto y completá los faltantes. ShippingAPP no inicia NCM, aranceles ni cotización hasta que esta ficha tenga evidencia suficiente.</p>
+      <div className="pipeline-confirm-head progressive-confirm-head">
+        <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : 'Confirmación inteligente'}</span>
+        <h2>{classificationResolved ? 'La NCM ya está resuelta. Sólo me falta cerrar la logística.' : 'Esto es lo que entendí. ¿Está bien?'}</h2>
+        <p>{classificationResolved
+          ? 'No vuelvo a pedirte información técnica que ya usamos. Completá únicamente los datos comerciales o físicos que Alibaba no pudo confirmar.'
+          : 'No hace falta llenar una ficha aduanera. Confirmá la identidad que detecté; si el nomenclador necesita distinguir entre dos posiciones, te voy a preguntar sólo ese dato.'}</p>
       </div>
 
-      <div className="pipeline-product-card">
-        <div className="pipeline-product-title">
-          <div><span>Ficha del producto</span><h3>{draft.productName || 'Producto pendiente de identificar'}</h3><small>{prefill.sourceLabel}</small></div>
-          <span className="pipeline-confidence">{analysis.confidence.overall}% auto</span>
-        </div>
+      <div className="pipeline-product-card progressive-product-card">
+        {!classificationResolved ? <>
+          <div className="pipeline-understood-card">
+            <span className="eyebrow">Lo que entendí</span>
+            <p className="pipeline-understood-sentence">Entendí que el producto es <strong>“{draft.productName || 'todavía no identificado'}”</strong>.</p>
+            <div className="pipeline-known-grid">
+              {knownFact('Tipo / categoría detectada', draft.category, 'category')}
+              {knownFact('Material detectado', draft.material, 'material')}
+              {knownFact('Función detectada', draft.functionText, 'function')}
+              {knownFact('Origen detectado', draft.originCountry, 'origin')}
+              {knownFact('Precio proveedor', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
+              {knownFact('MOQ detectado', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+            </div>
+            {draft.description && draft.description !== draft.productName && <details className="pipeline-source-detail"><summary>Ver detalle técnico leído</summary><p>{draft.description}</p></details>}
+            <div className="pipeline-understood-actions">
+              <button type="button" className="pipeline-secondary" onClick={() => setShowCorrections((value) => !value)}>{showCorrections ? 'Ocultar correcciones' : 'Algo no está bien / quiero corregir'}</button>
+            </div>
+          </div>
 
-        <div className="pipeline-confirm-form">
-          <label className="pipeline-confirm-field wide"><span>Nombre exacto *</span><input value={draft.productName} onChange={(event) => update('productName', event.target.value)} placeholder="Ej. reloj de pulsera mecánico automático 42.5 mm" /></label>
-          <label className="pipeline-confirm-field"><span>Categoría / tipo *</span><input value={draft.category} onChange={(event) => update('category', event.target.value)} placeholder="Ej. Mechanical Watches" /></label>
-          <label className="pipeline-confirm-field"><span>Origen de la mercadería *</span><input value={draft.originCountry} onChange={(event) => update('originCountry', event.target.value)} placeholder="Ej. China" /></label>
-          <label className="pipeline-confirm-field wide"><span>Descripción técnica</span><textarea value={draft.description} onChange={(event) => update('description', event.target.value)} placeholder="Qué es, cómo funciona y características que distinguen el producto." rows={3} /></label>
-          <label className="pipeline-confirm-field"><span>Material / composición</span><input value={draft.material} onChange={(event) => update('material', event.target.value)} placeholder="Ej. acero inoxidable" /></label>
-          <label className="pipeline-confirm-field"><span>Función principal</span><input value={draft.functionText} onChange={(event) => update('functionText', event.target.value)} placeholder="Ej. medición mecánica del tiempo" /></label>
-          <label className="pipeline-confirm-field"><span>FOB unitario (USD) *</span><input type="number" min="0" step="0.01" value={draft.unitPriceUsd || ''} onChange={(event) => update('unitPriceUsd', numberValue(event.target.value))} /></label>
-          <label className="pipeline-confirm-field"><span>MOQ / cantidad mínima *</span><input type="number" min="0" step="1" value={draft.moq || ''} onChange={(event) => update('moq', numberValue(event.target.value))} /></label>
-          <label className="pipeline-confirm-field"><span>Peso unitario embalado (kg) *</span><input type="number" min="0" step="0.001" value={draft.unitWeightKg || ''} onChange={(event) => update('unitWeightKg', numberValue(event.target.value))} /></label>
-          <label className="pipeline-confirm-field"><span>Volumen unitario embalado (m³) *</span><input type="number" min="0" step="0.000001" value={draft.unitVolumeCbm || ''} onChange={(event) => update('unitVolumeCbm', numberValue(event.target.value))} /></label>
-        </div>
+          {(classificationMissing.length > 0 || showCorrections) && <div className="pipeline-progressive-fields">
+            <div className="pipeline-progressive-title"><b>{classificationMissing.length ? 'Necesito identificarlo un poco mejor.' : 'Corregí sólo lo que esté mal.'}</b><small>Estos datos sirven para la posición arancelaria; precio, peso y volumen no son necesarios todavía.</small></div>
+            <label className="pipeline-confirm-field wide"><span>¿Qué producto es?</span><input value={draft.productName} onChange={(event) => update('productName', event.target.value)} placeholder="Ej. reloj de pulsera mecánico automático" /></label>
+            <label className="pipeline-confirm-field"><span>Tipo / categoría, si la sabés</span><input value={draft.category} onChange={(event) => update('category', event.target.value)} placeholder="Ej. reloj mecánico" /></label>
+            <label className="pipeline-confirm-field"><span>Material / composición</span><input value={draft.material} onChange={(event) => update('material', event.target.value)} placeholder="Ej. acero inoxidable" /></label>
+            <label className="pipeline-confirm-field"><span>Función principal</span><input value={draft.functionText} onChange={(event) => update('functionText', event.target.value)} placeholder="Ej. medición mecánica del tiempo" /></label>
+            <label className="pipeline-confirm-field wide"><span>Detalle técnico útil</span><textarea value={draft.description} onChange={(event) => update('description', event.target.value)} placeholder="Modelo, tecnología, composición o cualquier característica que diferencie el producto." rows={3} /></label>
+          </div>}
 
-        <div className="pipeline-confirm-grid compact">
-          <div><span>Trámite de intervención</span><b>{interventionFee ? 'USD 200 · incluido' : prefill.sensitiveCategory === 'unknown' ? 'Pendiente' : 'No aplica'}</b></div>
-          <div><span>Secuencia</span><b>Ficha → NCM → aranceles → flete → costo</b></div>
-        </div>
+          {classifierAskedForMore && <div className="pipeline-clarification-card">
+            <span className="eyebrow">Para cerrar la posición arancelaria</span>
+            <b>Me falta una aclaración concreta.</b>
+            <ul>{analysis.customs.missingFacts.slice(0, 5).map((fact) => <li key={fact}>{fact}</li>)}</ul>
+            <label><span>Respondeme en tus palabras</span><textarea value={clarification} onChange={(event) => setClarification(event.target.value.slice(0, 1000))} rows={3} placeholder="Ej. Sí, es automático mecánico; la caja es de acero inoxidable y no tiene funciones de smartwatch." /></label>
+          </div>}
 
-        {missing.length > 0 ? <div className="pipeline-warning pipeline-missing-fields"><b>No se puede continuar todavía.</b><span>Completá: {missing.map((item) => item.label).join(' · ')}.</span></div> : <div className="pipeline-confirm-ok"><b>Ficha completa.</b><span>Al confirmar, estos datos quedan congelados para la corrida de NCM y costos.</span></div>}
+          {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields"><b>Todavía no puedo nomenclar.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
+          {classifierAskedForMore && !clarificationSatisfied && <div className="pipeline-warning pipeline-missing-fields"><b>Necesito tu respuesta antes de reintentar.</b><span>Así evito repetir la misma clasificación dudosa.</span></div>}
 
-        <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={() => onConfirm(draft)}>Confirmar ficha y clasificar <span>→</span></button>
-          <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
-        </div>
+          <div className="pipeline-confirm-actions progressive-confirm-actions">
+            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Usar esta aclaración y reclasificar' : 'Sí, es este producto · clasificar'} <span>→</span></button>
+            <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Elegir otro producto</button>
+          </div>
+        </> : <>
+          <div className="pipeline-classification-ready">
+            <div><span className="eyebrow">Clasificación lista</span><h3>NCM {analysis.customs.ncmCandidate}</h3><p>Confianza {confidenceLabel(analysis.customs.classificationConfidence)} · derecho {analysis.customs.dutyRatePct}%</p></div>
+            <span>✓</span>
+          </div>
+
+          <div className="pipeline-understood-card quote-known-card">
+            <span className="eyebrow">Datos que ya tengo</span>
+            <div className="pipeline-known-grid">
+              {knownFact('Origen', draft.originCountry, 'origin')}
+              {knownFact('FOB unitario', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
+              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+              {knownFact('Peso embalado', draft.unitWeightKg > 0 ? `${draft.unitWeightKg} kg/u.` : null, 'weight')}
+              {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : null, 'volume')}
+            </div>
+            <button type="button" className="pipeline-secondary" onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Mostrar sólo faltantes' : 'Corregir un dato detectado'}</button>
+          </div>
+
+          <div className="pipeline-progressive-fields quote-missing-fields">
+            <div className="pipeline-progressive-title"><b>{quoteMissing.length ? `Me ${quoteMissing.length === 1 ? 'falta' : 'faltan'} ${quoteMissing.length} ${quoteMissing.length === 1 ? 'dato' : 'datos'} para cotizar.` : 'Ya tengo todo para cotizar.'}</b><small>Pedimos sólo lo que interviene en compra o flete.</small></div>
+            {(showAllQuoteFields || quoteFieldMissing('originCountry')) && <label className="pipeline-confirm-field"><span>País de origen de la mercadería</span><input value={draft.originCountry} onChange={(event) => update('originCountry', event.target.value)} placeholder="Ej. China" /></label>}
+            {(showAllQuoteFields || quoteFieldMissing('unitPriceUsd')) && <label className="pipeline-confirm-field"><span>Precio FOB unitario (USD)</span><input type="number" min="0" step="0.01" value={draft.unitPriceUsd || ''} onChange={(event) => update('unitPriceUsd', numberValue(event.target.value))} /></label>}
+            {(showAllQuoteFields || quoteFieldMissing('moq')) && <label className="pipeline-confirm-field"><span>MOQ / cantidad mínima</span><input type="number" min="0" step="1" value={draft.moq || ''} onChange={(event) => update('moq', numberValue(event.target.value))} /></label>}
+            {(showAllQuoteFields || quoteFieldMissing('unitWeightKg')) && <label className="pipeline-confirm-field"><span>Peso de una unidad embalada (kg)</span><input type="number" min="0" step="0.001" value={draft.unitWeightKg || ''} onChange={(event) => update('unitWeightKg', numberValue(event.target.value))} /></label>}
+            {(showAllQuoteFields || quoteFieldMissing('packageVolume')) && <div className="pipeline-volume-entry wide">
+              <label className="pipeline-confirm-field"><span>Volumen unitario, si lo sabés (m³)</span><input type="number" min="0" step="0.000001" value={draft.unitVolumeCbm || ''} onChange={(event) => update('unitVolumeCbm', numberValue(event.target.value))} /></label>
+              <div className="pipeline-or"><span>o más fácil</span></div>
+              <div className="pipeline-dimensions">
+                <label><span>Largo (cm)</span><input type="number" min="0" step="0.1" value={draft.packageLengthCm || ''} onChange={(event) => update('packageLengthCm', numberValue(event.target.value))} /></label>
+                <label><span>Ancho (cm)</span><input type="number" min="0" step="0.1" value={draft.packageWidthCm || ''} onChange={(event) => update('packageWidthCm', numberValue(event.target.value))} /></label>
+                <label><span>Alto (cm)</span><input type="number" min="0" step="0.1" value={draft.packageHeightCm || ''} onChange={(event) => update('packageHeightCm', numberValue(event.target.value))} /></label>
+              </div>
+              {volume > 0 && !draft.unitVolumeCbm && <small>Volumen calculado automáticamente: {volume.toFixed(6)} m³ por unidad.</small>}
+            </div>}
+          </div>
+
+          {quoteMissing.length > 0 ? <div className="pipeline-warning pipeline-missing-fields"><b>No te voy a pedir nada más de aduana.</b><span>Sólo falta: {quoteMissing.map((item) => item.label).join(' · ')}.</span></div> : <div className="pipeline-confirm-ok"><b>Listo para cotizar.</b><span>La NCM y los datos físicos/comerciales tienen evidencia suficiente.</span></div>}
+
+          <div className="pipeline-confirm-grid compact">
+            <div><span>Trámite de intervención</span><b>{interventionFee ? 'USD 200 · incluido' : prefill.sensitiveCategory === 'unknown' ? 'Pendiente' : 'No aplica'}</b></div>
+            <div><span>Siguiente</span><b>Flete → costo puesto → optimización</b></div>
+          </div>
+
+          <div className="pipeline-confirm-actions progressive-confirm-actions">
+            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>Cotizar con estos datos <span>→</span></button>
+            <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Elegir otro producto</button>
+          </div>
+        </>}
       </div>
     </> : <>
       <div className="pipeline-run-head">
-        <div><span className="eyebrow">Motor de cálculo</span><h2>{status === 'ready' ? 'Caso calculado.' : status === 'blocked' ? 'Necesito un dato antes de poder cotizar.' : 'Construyendo tu costo de importación.'}</h2></div>
+        <div><span className="eyebrow">Motor de cálculo</span><h2>{status === 'ready' ? 'Caso calculado.' : status === 'blocked' ? 'Necesito resolver un dato antes de seguir.' : 'Construyendo tu costo de importación.'}</h2></div>
         <strong>{Math.round(progress)}%</strong>
       </div>
       <div className="pipeline-overall-progress" aria-label={`Progreso ${Math.round(progress)}%`}><span style={{ width: `${progress}%` }} /></div>
@@ -175,12 +282,12 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
       </div>
 
       {status === 'blocked' && <div className="pipeline-blocker">
-        <b>No voy a completar economics con un supuesto inventado.</b>
+        <b>No voy a completar el costo con un supuesto inventado.</b>
         <p>{blocker || 'La clasificación o un dato necesario para el cálculo necesita revisión.'}</p>
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
         <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>Completar / corregir ficha <span>→</span></button>
-          <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
+          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>Responder lo que falta <span>→</span></button>
+          <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Elegir otro producto</button>
         </div>
       </div>}
 

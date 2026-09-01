@@ -161,8 +161,16 @@ describe('provider-independent Argentina market benchmark engine', () => {
 
   it('compacts verbose exact-product intake queries around strong model identity without relaxing matching', async () => {
     let observedQuery = ''
-    const m170Candidates = Array.from({ length: 6 }, (_, index) => ({
-      ...candidate(`M170-${index + 1}`, `Mouse Inalambrico Logitech M170 ${index + 1}`, 25_000 + index * 500),
+    const titles = [
+      'Mouse Inalambrico Logitech M170 Negro',
+      'Mouse Logitech M170 Wireless Negro',
+      'Mouse Inalambrico Logitech M170 Gris',
+      'Logitech M170 Mouse Inalambrico',
+      'Mouse Logitech M170 USB Inalambrico',
+      'Mouse Inalambrico M170 Logitech',
+    ]
+    const m170Candidates = titles.map((title, index) => ({
+      ...candidate(`M170-${index + 1}`, title, 25_000 + index * 500),
       categoryId: undefined,
     }))
     const trackingProvider: ArgentinaMarketDiscoveryProvider = {

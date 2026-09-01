@@ -9,6 +9,9 @@
     "EMAIL_PUBLIC_BASE_URL": "https://shippingapp.marciofabrizio.workers.dev",
     "EMAIL_SENDING_ENABLED": "false"
   },
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

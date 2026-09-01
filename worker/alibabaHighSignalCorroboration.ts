@@ -52,6 +52,18 @@ function discriminatorTokens(tokens: string[]) {
   )
 }
 
+function rankDiscriminators(tokens: string[], noun: string) {
+  const values = discriminatorTokens(tokens)
+  if (noun !== 'watch') return values
+  // For watches, water resistance such as 100m is a materially stronger Alibaba
+  // SEO discriminator than case diameter such as 42.5mm. Keep dimensions as a
+  // later fallback, never as the first public route.
+  return values
+    .map((value, index) => ({ value, index, priority: /^\d+m$/.test(value) ? 0 : /^\d+mm$/.test(value) ? 3 : 1 }))
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .map((entry) => entry.value)
+}
+
 export function highSignalAlibabaPublicQueries(target: URL, hints: { name?: string | null; category?: string | null } = {}) {
   const title = (hints.name || titleFromAlibabaProductUrl(target) || '').trim()
   const tokens = normalizedTokens(title)
@@ -59,7 +71,7 @@ export function highSignalAlibabaPublicQueries(target: URL, hints: { name?: stri
   if (!noun) return []
 
   const queries: string[] = []
-  for (const discriminator of discriminatorTokens(tokens).slice(0, 3)) {
+  for (const discriminator of rankDiscriminators(tokens, noun).slice(0, 3)) {
     queries.push(`${discriminator} ${noun}`)
   }
   if (/\bmechanical\b/i.test(title) && noun === 'watch') queries.push('mechanical watches')

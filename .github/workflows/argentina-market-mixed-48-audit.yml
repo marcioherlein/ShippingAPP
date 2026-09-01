@@ -1,0 +1,28 @@
+name: Argentina Market Mixed 48 Audit
+
+on:
+  push:
+    branches:
+      - audit/argentina-market-mixed-48
+
+permissions:
+  contents: read
+
+jobs:
+  mixed-market:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
+      INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+      MIXED_AUDIT_CONCURRENCY: '2'
+      MIXED_AUDIT_TIMEOUT_MS: '30000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run 48-product mixed exact-vs-functional production audit
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+        run: node scripts/audit-production-argentina-market-mixed-48.mjs

@@ -55,7 +55,7 @@ function branding(env: EmailEnv) {
 }
 
 function fromAddress(env: EmailEnv) {
-  return textEnv(env, 'EMAIL_FROM') ?? 'ShippingAPP <onboarding@resend.dev>'
+  return textEnv(env, 'EMAIL_FROM')
 }
 
 function preferencesAllow(scope: EmailPreferenceScope, row: { digest_enabled: number; alerts_enabled: number; marketing_enabled: number }) {
@@ -155,6 +155,9 @@ export async function sendApplicationEmail(
     return suppressed ? sanitizedResult(suppressed, !reserved.created) : { status: 'suppressed', replayed: !reserved.created, eventId: reserved.event.id }
   }
 
+  const sender = fromAddress(env)
+  if (!sender) return { status: 'not_configured', replayed: Boolean(existing), eventId: existing?.id, code: 'email_sender_not_configured' }
+
   const provider = dependencies.provider ?? createEmailProvider(env)
   if (!provider.configured) return { status: 'not_configured', replayed: Boolean(existing), eventId: existing?.id, code: 'email_provider_not_configured' }
 
@@ -194,7 +197,7 @@ export async function sendApplicationEmail(
 
   try {
     const sent = await provider.send({
-      from: fromAddress(env),
+      from: sender,
       to: recipient,
       subject: rendered.subject,
       html: rendered.html,
@@ -214,11 +217,12 @@ export async function sendApplicationEmail(
 
 export function emailRuntimeStatus(env: EmailEnv) {
   const provider = createEmailProvider(env)
+  const unsubscribeSecret = textEnv(env, 'EMAIL_UNSUBSCRIBE_SECRET', 512)
   return {
     provider: provider.name,
     providerConfigured: provider.configured,
-    senderConfigured: Boolean(textEnv(env, 'EMAIL_FROM')),
-    unsubscribeConfigured: Boolean(textEnv(env, 'EMAIL_UNSUBSCRIBE_SECRET', 512)?.length && appOrigin(env, null)),
+    senderConfigured: Boolean(fromAddress(env)),
+    unsubscribeConfigured: Boolean(unsubscribeSecret && unsubscribeSecret.length >= 32 && appOrigin(env, null)),
     appName: branding(env).appName,
     templates: ['welcome', 'usage', 'weekly_digest', 'alert', 'billing'] as EmailTemplateKey[],
   }

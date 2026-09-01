@@ -56,6 +56,12 @@ const ACCESSORY_TERMS = new Set([
 const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit', 'set'])
 const DISPLAY_SHORTHANDS = new Set(['3k', '4k', '6k', '8k', '12k', '18k', '24k'])
 const VARIANT_MODIFIERS = new Set(['pro', 'max', 'plus', 'ultra', 'mini', 'lite', 'air', 'se'])
+const GENERIC_FAMILY_TOKENS = new Set([
+  'wireless', 'computer', 'computadora', 'mouse', 'smartphone', 'phone', 'headphones', 'bluetooth',
+  'electric', 'electrico', 'electrica', 'carbon', 'inverter', 'speaker', 'parlante', 'racket', 'padel',
+  'drill', 'vacuum', 'blender', 'printer', 'impresora', 'notebook', 'laptop', 'airfryer', 'freidora',
+  'smart', 'tv', 'frontal', 'router', 'wifi', 'camara', 'camera', 'seguridad', 'monitor', 'tablet',
+])
 const SPEC_UNIT_ALIASES: Record<string, string> = {
   tb: 'tb', gb: 'gb', mb: 'mb', mah: 'mah', w: 'w', watt: 'w', watts: 'w', kw: 'kw', v: 'v', volt: 'v', volts: 'v',
   hz: 'hz', kg: 'kg', g: 'g', l: 'l', lt: 'l', litro: 'l', litros: 'l', ml: 'ml', cm: 'cm', mm: 'mm', pa: 'pa',
@@ -328,6 +334,7 @@ function distinctiveFamilyTokens(productName: string, category: string) {
     && token.length >= 6
     && !brandTokens.has(token)
     && !categoryTokens.has(token)
+    && !GENERIC_FAMILY_TOKENS.has(token)
   )))
 }
 

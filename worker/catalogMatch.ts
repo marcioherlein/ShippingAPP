@@ -56,6 +56,9 @@ const ACCESSORY_TERMS = new Set([
 const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit', 'set'])
 const DISPLAY_SHORTHANDS = new Set(['3k', '4k', '6k', '8k', '12k', '18k', '24k'])
 const VARIANT_MODIFIERS = new Set(['pro', 'max', 'plus', 'ultra', 'mini', 'lite', 'air', 'se'])
+const DISCOVERY_CONTEXT_TERMS = new Set([
+  'computadora', 'computador', 'computer', 'pc', 'dispositivo', 'device', 'producto', 'product', 'uso', 'use',
+])
 const SPEC_UNIT_ALIASES: Record<string, string> = {
   tb: 'tb', gb: 'gb', mb: 'mb', mah: 'mah', w: 'w', watt: 'w', watts: 'w', kw: 'kw', v: 'v', volt: 'v', volts: 'v',
   hz: 'hz', kg: 'kg', g: 'g', l: 'l', lt: 'l', litro: 'l', litros: 'l', ml: 'ml', cm: 'cm', mm: 'mm', pa: 'pa',
@@ -348,6 +351,33 @@ function hasEnergyTypeConflict(target: string, candidate: string) {
   return (targetElectric && candidateGas && !candidateElectric) || (targetGas && candidateElectric && !candidateGas)
 }
 
+function compactBrandedModelQuery(productName: string, category: string) {
+  const brand = matchedKnownBrand(productName)
+  const models = [...modelCodes(productName)]
+  if (!brand || models.length === 0) return null
+
+  const brandTokens = tokens(brand)
+  const brandSet = new Set(brandTokens)
+  const modelSet = new Set(models)
+  const translatedCategory = SEARCH_TRANSLATIONS[cleanText(category)] || cleanText(category)
+  const descriptors = [
+    ...tokens(productName),
+    ...tokens(translatedCategory),
+  ].filter((token) => (
+    !brandSet.has(token)
+    && !modelSet.has(token)
+    && !DISCOVERY_CONTEXT_TERMS.has(token)
+  ))
+
+  const uniqueDescriptors: string[] = []
+  for (const token of descriptors) {
+    if (!uniqueDescriptors.includes(token)) uniqueDescriptors.push(token)
+    if (uniqueDescriptors.length >= 3) break
+  }
+
+  return [...brandTokens, ...models, ...uniqueDescriptors].join(' ')
+}
+
 export function buildMarketQuery(productName: string, category: string) {
   const normalized = cleanText(`${productName} ${category}`)
   if (normalized.includes('padel')) {
@@ -355,6 +385,9 @@ export function buildMarketQuery(productName: string, category: string) {
     const specs = specTokens(normalized).slice(0, 2)
     return [base, ...specs].join(' ')
   }
+
+  const compactBranded = compactBrandedModelQuery(productName, category)
+  if (compactBranded) return compactBranded
 
   const translatedCategory = SEARCH_TRANSLATIONS[cleanText(category)] || cleanText(category)
   const source = [...tokens(productName), ...tokens(translatedCategory)]

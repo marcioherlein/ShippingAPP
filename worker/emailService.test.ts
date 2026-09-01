@@ -24,7 +24,10 @@ class NodeDatabase implements D1DatabaseLike {
 class FakeProvider implements EmailProvider {
   readonly name = 'fake-resend'
   readonly configured = true
-  readonly send = vi.fn(async (_message: EmailMessage, _options: { idempotencyKey: string }): Promise<EmailSendResult> => ({ messageId: 'provider-message-1' }))
+  private messageCounter = 0
+  readonly send = vi.fn(async (_message: EmailMessage, _options: { idempotencyKey: string }): Promise<EmailSendResult> => ({
+    messageId: `provider-message-${++this.messageCounter}`,
+  }))
 }
 
 const USER_A = 'user-a-email-service'
@@ -95,13 +98,13 @@ describe('Stage 6 email service economic/privacy boundary', () => {
     expect(eventCount(sqlite, 'billing-user-a-cycle-001')).toBe(1)
   })
 
-  it('suppresses optional marketing by default without calling the provider while transactional mail remains allowed', async () => {
-    const marketing = await sendApplicationEmail(baseEnv(db), {
+  it('honors optional preferences while transactional mail remains independent', async () => {
+    const digest = await sendApplicationEmail(baseEnv(db), {
       userId: USER_A,
       templateKey: 'weekly_digest',
       idempotencyKey: 'digest-user-a-week-001',
     }, { provider, clock, randomId })
-    expect(marketing).toMatchObject({ status: 'sent' })
+    expect(digest).toMatchObject({ status: 'sent' })
     expect(provider.send).toHaveBeenCalledTimes(1)
 
     sqlite.prepare("UPDATE email_preferences SET digest_enabled = 0, alerts_enabled = 0, marketing_enabled = 0 WHERE user_id = ?").run(USER_A)

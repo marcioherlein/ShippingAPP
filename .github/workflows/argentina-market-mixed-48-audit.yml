@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - audit/argentina-market-mixed-48
+      - audit/mixed48-semantics-v2
 
-# Rerun checkpoint: production main 771f3dad95cabb89022c443d093272182ba7ce24
+# Evidence-aware audit semantics v2. The production corpus and request parameters remain unchanged.
 permissions:
   contents: read
 
@@ -23,7 +24,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run 48-product mixed exact-vs-functional production audit
+      - name: Test mixed-48 audit semantics
+        run: node scripts/mixed48-audit-semantics.test.mjs
+      - name: Run 48-product evidence-aware production audit
         env:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
-        run: node scripts/audit-production-argentina-market-mixed-48.mjs
+        run: node scripts/audit-production-argentina-market-mixed-48-v2.mjs

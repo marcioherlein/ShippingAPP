@@ -1,4 +1,5 @@
 import { buildMarketQuery } from './catalogMatch'
+import { withFunctionalTraitEvidenceGuard } from './functionalTraitEvidence'
 import { runArgentinaMarketBenchmark } from './marketBenchmarkEngine'
 import { createMercadoLibreMarketProviders } from './mercadoLibreMarketProvider'
 import type { ArgentinaMarketResult } from './marketTypes'
@@ -48,8 +49,9 @@ export async function analyzeArgentinaMarket(
     accessToken,
     fetchImpl: options.fetchImpl,
   })
+  const guardedDiscoveryProvider = withFunctionalTraitEvidenceGuard(discoveryProvider)
 
-  const result = await runArgentinaMarketBenchmark(productName, category, discoveryProvider, {
+  const result = await runArgentinaMarketBenchmark(productName, category, guardedDiscoveryProvider, {
     priceResolver,
     priceLookupLimit: Math.max(0, Math.min(30, options.salePriceLookupLimit ?? 24)),
   })

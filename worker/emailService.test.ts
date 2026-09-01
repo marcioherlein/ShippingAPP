@@ -24,9 +24,8 @@ class NodeDatabase implements D1DatabaseLike {
 class FakeProvider implements EmailProvider {
   readonly name = 'fake-resend'
   readonly configured = true
-  private messageCounter = 0
-  readonly send = vi.fn(async (_message: EmailMessage, _options: { idempotencyKey: string }): Promise<EmailSendResult> => ({
-    messageId: `provider-message-${++this.messageCounter}`,
+  readonly send = vi.fn(async (_message: EmailMessage, options: { idempotencyKey: string }): Promise<EmailSendResult> => ({
+    messageId: `provider-${options.idempotencyKey.replace(/^shippingapp\//, '')}`,
   }))
 }
 
@@ -51,6 +50,7 @@ function eventCount(sqlite: DatabaseSync, key: string) {
 function baseEnv(db: D1DatabaseLike) {
   return {
     DB: db,
+    EMAIL_SENDING_ENABLED: 'true',
     EMAIL_UNSUBSCRIBE_SECRET: SECRET,
     EMAIL_PUBLIC_BASE_URL: 'https://shippingapp.test',
     EMAIL_FROM: 'ShippingAPP <onboarding@resend.dev>',
@@ -76,6 +76,18 @@ describe('Stage 6 email service economic/privacy boundary', () => {
 
   afterEach(() => sqlite.close())
 
+  it('requires an explicit server-side sending switch before creating events or contacting a provider', async () => {
+    const env = { ...baseEnv(db), EMAIL_SENDING_ENABLED: 'false' }
+    const result = await sendApplicationEmail(env, {
+      userId: USER_A,
+      templateKey: 'billing',
+      idempotencyKey: 'disabled-send-event-001',
+    }, { provider, clock, randomId })
+    expect(result).toEqual({ status: 'not_configured', replayed: false, code: 'email_sending_disabled' })
+    expect(provider.send).not.toHaveBeenCalled()
+    expect(eventCount(sqlite, 'disabled-send-event-001')).toBe(0)
+  })
+
   it('derives recipient from server-owned user data and replays a successful event without a second send', async () => {
     const first = await sendApplicationEmail(baseEnv(db), {
       userId: USER_A,
@@ -90,8 +102,8 @@ describe('Stage 6 email service economic/privacy boundary', () => {
       idempotencyKey: 'billing-user-a-cycle-001',
     }, { provider, clock, randomId })
 
-    expect(first).toMatchObject({ status: 'sent', replayed: false, providerMessageId: 'provider-message-1' })
-    expect(second).toMatchObject({ status: 'sent', replayed: true, providerMessageId: 'provider-message-1' })
+    expect(first).toMatchObject({ status: 'sent', replayed: false, providerMessageId: 'provider-billing-user-a-cycle-001' })
+    expect(second).toMatchObject({ status: 'sent', replayed: true, providerMessageId: 'provider-billing-user-a-cycle-001' })
     expect(provider.send).toHaveBeenCalledTimes(1)
     expect(provider.send.mock.calls[0][0].to).toBe('owner-a@example.com')
     expect(provider.send.mock.calls[0][1]).toEqual({ idempotencyKey: 'shippingapp/billing-user-a-cycle-001' })
@@ -127,7 +139,7 @@ describe('Stage 6 email service economic/privacy boundary', () => {
   })
 
   it('requires unsubscribe infrastructure for optional mail but not for transactional mail', async () => {
-    const env = { DB: db, EMAIL_FROM: 'ShippingAPP <onboarding@resend.dev>' }
+    const env = { DB: db, EMAIL_SENDING_ENABLED: 'true', EMAIL_FROM: 'ShippingAPP <onboarding@resend.dev>' }
     const digest = await sendApplicationEmail(env, {
       userId: USER_A,
       templateKey: 'weekly_digest',

@@ -56,6 +56,10 @@ const ACCESSORY_TERMS = new Set([
 const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit', 'set'])
 const DISPLAY_SHORTHANDS = new Set(['3k', '4k', '6k', '8k', '12k', '18k', '24k'])
 const VARIANT_MODIFIERS = new Set(['pro', 'max', 'plus', 'ultra', 'mini', 'lite', 'air', 'se'])
+const GENERIC_FAMILY_TOKENS = new Set([
+  'wireless', 'bluetooth', 'computer', 'computadora', 'smartphone', 'headphones', 'vacuum', 'aspiradora',
+  'speaker', 'parlante', 'notebook', 'laptop', 'electric', 'electrico', 'electrica', 'digital', 'portable', 'portatil', 'gaming',
+])
 const SPEC_UNIT_ALIASES: Record<string, string> = {
   tb: 'tb', gb: 'gb', mb: 'mb', mah: 'mah', w: 'w', watt: 'w', watts: 'w', kw: 'kw', v: 'v', volt: 'v', volts: 'v',
   hz: 'hz', kg: 'kg', g: 'g', l: 'l', lt: 'l', litro: 'l', litros: 'l', ml: 'ml', cm: 'cm', mm: 'mm', pa: 'pa',
@@ -323,11 +327,16 @@ function distinctiveFamilyTokens(productName: string, category: string) {
   if (!brand) return new Set<string>()
   const brandTokens = tokenSet(brand)
   const categoryTokens = tokenSet(category)
-  return new Set(tokens(productName).filter((token) => (
+  const productTokens = tokens(productName)
+  const codes = modelCodes(productName)
+  const firstCodeIndex = codes.size ? productTokens.findIndex((token) => codes.has(token)) : -1
+  const familyScope = firstCodeIndex >= 0 ? productTokens.slice(0, firstCodeIndex) : productTokens
+  return new Set(familyScope.filter((token) => (
     /^[a-z]+$/.test(token)
     && token.length >= 6
     && !brandTokens.has(token)
     && !categoryTokens.has(token)
+    && !GENERIC_FAMILY_TOKENS.has(token)
   )))
 }
 

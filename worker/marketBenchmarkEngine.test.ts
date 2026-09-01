@@ -158,4 +158,43 @@ describe('provider-independent Argentina market benchmark engine', () => {
     expect(result.priceQuality).toBe('listed_search_price')
     expect(result.comparables.every((item) => item.priceSource === 'search_price')).toBe(true)
   })
+
+  it('compacts verbose exact-product intake queries around strong model identity without relaxing matching', async () => {
+    let observedQuery = ''
+    const titles = [
+      'Mouse Inalambrico Logitech M170 Negro',
+      'Mouse Logitech M170 Wireless Negro',
+      'Mouse Inalambrico Logitech M170 Gris',
+      'Logitech M170 Mouse Inalambrico',
+      'Mouse Logitech M170 USB Inalambrico',
+      'Mouse Inalambrico M170 Logitech',
+    ]
+    const m170Candidates = titles.map((title, index) => ({
+      ...candidate(`M170-${index + 1}`, title, 25_000 + index * 500),
+      categoryId: undefined,
+    }))
+    const trackingProvider: ArgentinaMarketDiscoveryProvider = {
+      id: 'tracking-provider',
+      async discover(input) {
+        observedQuery = input.query
+        return {
+          providerId: 'tracking-provider',
+          sourceLabel: 'Tracking Argentina Discovery',
+          candidates: m170Candidates,
+        }
+      },
+    }
+
+    const result = await runArgentinaMarketBenchmark(
+      'Mouse inalámbrico Logitech M170 para computadora',
+      'Computer mouse',
+      trackingProvider,
+    )
+
+    expect(observedQuery).toBe('logitech m170')
+    expect(result.query).toBe('logitech m170')
+    expect(result.status).toBe('live')
+    expect(result.comparableCount).toBe(6)
+    expect(result.warnings.join(' ')).toContain('deterministic exact matching still gates every accepted comparable')
+  })
 })

@@ -28,6 +28,12 @@ const TOKEN_ALIASES: Record<string, string> = {
   auricular: 'headphones',
   auriculares: 'headphones',
   headphones: 'headphones',
+  inalambrico: 'wireless',
+  inalambricos: 'wireless',
+  inalambrica: 'wireless',
+  inalambricas: 'wireless',
+  cordless: 'wireless',
+  wireless: 'wireless',
 }
 
 const SEARCH_TRANSLATIONS: Record<string, string> = {

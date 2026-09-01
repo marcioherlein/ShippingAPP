@@ -19,6 +19,34 @@ export type ArgentinaMarketBenchmarkOptions = {
   minimumComparables?: number
 }
 
+const EXACT_DISCOVERY_GENERIC_TOKENS = new Set([
+  'a', 'al', 'and', 'con', 'de', 'del', 'el', 'en', 'for', 'la', 'las', 'los', 'of', 'para', 'por', 'the', 'un', 'una', 'with',
+  'mouse', 'wireless', 'inalambrico', 'inalambrica', 'computer', 'computadora',
+  'robot', 'vacuum', 'aspiradora', 'smartphone', 'celular', 'phone', 'telefono',
+  'headphones', 'auriculares', 'speaker', 'parlante', 'drill', 'taladro', 'blender', 'licuadora',
+])
+
+const EXACT_DISCOVERY_SPEC_TOKEN = /^\d+(?:[.,]\d+)?(?:tb|gb|mb|mah|w|kw|v|hz|kg|g|l|ml|cm|mm|pa|bar|mp|inch)$/
+
+function buildExactDiscoveryQuery(productName: string, category: string) {
+  const fallback = buildMarketQuery(productName, category)
+  const productTokens = cleanText(productName).split(' ').filter(Boolean)
+  const modelIndex = productTokens.findIndex((token) => (
+    token.length >= 2
+    && /[a-z]/.test(token)
+    && /\d/.test(token)
+    && !EXACT_DISCOVERY_SPEC_TOKEN.test(token)
+  ))
+  if (modelIndex < 0) return fallback
+
+  const identityPrefix = productTokens
+    .slice(0, modelIndex)
+    .filter((token) => token.length >= 2 && !EXACT_DISCOVERY_GENERIC_TOKENS.has(token))
+    .slice(-2)
+  const compact = [...new Set([...identityPrefix, productTokens[modelIndex]])]
+  return compact.length >= 2 ? compact.join(' ') : fallback
+}
+
 function emptyResult(
   status: ArgentinaMarketResult['status'],
   query: string,
@@ -112,9 +140,10 @@ export async function runArgentinaMarketBenchmark(
   options: ArgentinaMarketBenchmarkOptions = {},
 ): Promise<ArgentinaMarketResult> {
   const matchMode = inferArgentinaMarketMatchMode(productName, category)
+  const defaultExactQuery = buildMarketQuery(productName, category)
   const query = matchMode === 'functional'
     ? buildArgentinaFunctionalMarketQuery(productName, category)
-    : buildMarketQuery(productName, category)
+    : buildExactDiscoveryQuery(productName, category)
   const minimumComparables = Math.max(1, Math.min(20, options.minimumComparables ?? 5))
   const warnings = [
     'Demand is not inferred from public available quantity.',
@@ -123,6 +152,9 @@ export async function runArgentinaMarketBenchmark(
       ? 'Market benchmark uses functional-equivalent matching because the target lacks strong branded/model identity. Price should be interpreted as a comparable-market range, not the same-SKU local price.'
       : 'Market benchmark uses exact-identity matching for branded/model-specific product evidence.',
   ]
+  if (matchMode === 'exact' && query !== defaultExactQuery) {
+    warnings.push(`Exact discovery query was compacted around strong model identity (${query}); deterministic exact matching still gates every accepted comparable.`)
+  }
 
   let discovery
   try {

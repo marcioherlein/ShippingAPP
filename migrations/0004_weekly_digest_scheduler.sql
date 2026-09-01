@@ -10,9 +10,12 @@ CREATE TABLE IF NOT EXISTS digest_runs (
   cursor_user_id TEXT CHECK(cursor_user_id IS NULL OR length(cursor_user_id) <= 64),
   invocation_count INTEGER NOT NULL DEFAULT 0 CHECK(invocation_count >= 0),
   last_error_code TEXT CHECK(last_error_code IS NULL OR length(last_error_code) <= 80),
+  lease_owner TEXT CHECK(lease_owner IS NULL OR length(lease_owner) BETWEEN 8 AND 80),
+  lease_expires_at TEXT CHECK(lease_expires_at IS NULL OR length(lease_expires_at) BETWEEN 20 AND 35),
   started_at TEXT NOT NULL CHECK(length(started_at) BETWEEN 20 AND 35),
   updated_at TEXT NOT NULL CHECK(length(updated_at) BETWEEN 20 AND 35),
-  completed_at TEXT CHECK(completed_at IS NULL OR length(completed_at) BETWEEN 20 AND 35)
+  completed_at TEXT CHECK(completed_at IS NULL OR length(completed_at) BETWEEN 20 AND 35),
+  CHECK((lease_owner IS NULL) = (lease_expires_at IS NULL))
 );
 
 CREATE INDEX IF NOT EXISTS idx_digest_runs_status_updated

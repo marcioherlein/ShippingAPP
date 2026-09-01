@@ -85,8 +85,11 @@ describe('Stage 5 economic-abuse hardening', () => {
     expect(response.status).toBe(409)
     expect(body.code).toBe('usage_operation_period_expired')
     expect(provider).not.toHaveBeenCalled()
-    expect(scalar(sqlite, "SELECT COUNT(*) AS value FROM usage_periods WHERE user_id=? AND period_start='2026-08-01T00:00:00.000Z'", USER)).toBe(1)
-    expect(scalar(sqlite, "SELECT credits_consumed AS value FROM usage_periods WHERE user_id=? AND period_start='2026-08-01T00:00:00.000Z'", USER)).toBe(0)
+    // `withUsageEntitlement` uses the real clock for its current usage view. The
+    // security invariant is independent of the calendar date: it must initialize
+    // exactly one non-July current period and leave that period unconsumed.
+    expect(scalar(sqlite, "SELECT COUNT(*) AS value FROM usage_periods WHERE user_id=? AND id <> 'period-july'", USER)).toBe(1)
+    expect(scalar(sqlite, "SELECT COALESCE(MAX(credits_consumed), 0) AS value FROM usage_periods WHERE user_id=? AND id <> 'period-july'", USER)).toBe(0)
   })
 
   it('does not auto-refund useful full-analysis work while waiting for NCM continuation, even across period rollover', async () => {

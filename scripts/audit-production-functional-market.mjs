@@ -55,6 +55,12 @@ function hasExplicitMismatch(titles, unit, expected) {
   })
 }
 
+function containsStandaloneSpec(value, amount, unit) {
+  const text = normalized(value)
+  const escapedUnit = unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^\\d.])${amount}${escapedUnit}\\b`).test(text)
+}
+
 function inspect(probe, body) {
   const market = body?.market || {}
   const comparables = Array.isArray(market.comparables) ? market.comparables : []
@@ -82,7 +88,7 @@ function inspect(probe, body) {
 
   if (probe.id === 'functional-kettle-17l') {
     if (!String(market.query || '').includes('1.7l')) failures.push(`decimal query regression: ${market.query}`)
-    if (/\b7l\b/.test(String(market.query || ''))) failures.push(`1.7L was truncated to 7L: ${market.query}`)
+    if (containsStandaloneSpec(market.query, 7, 'l')) failures.push(`1.7L was truncated to standalone 7L: ${market.query}`)
     if (hasExplicitMismatch(titles, 'l', 1.7)) failures.push('wrong-capacity kettle leaked into 1.7L benchmark')
     if (hasExplicitMismatch(titles, 'w', 2200)) failures.push('wrong-power kettle leaked into 2200W benchmark')
   }
@@ -99,7 +105,7 @@ function inspect(probe, body) {
 
   if (probe.id === 'functional-washer-65kg') {
     if (!String(market.query || '').includes('6.5kg')) failures.push(`decimal query regression: ${market.query}`)
-    if (/\b5kg\b/.test(String(market.query || ''))) failures.push(`6.5kg was truncated to 5kg: ${market.query}`)
+    if (containsStandaloneSpec(market.query, 5, 'kg')) failures.push(`6.5kg was truncated to standalone 5kg: ${market.query}`)
     if (hasExplicitMismatch(titles, 'kg', 6.5)) failures.push('wrong-capacity washer leaked into 6.5kg benchmark')
     if (titles.some((title) => /carga\s+superior|semiautom|semi\s*automatic/i.test(title))) failures.push('non-frontal washer leaked into frontal benchmark')
   }

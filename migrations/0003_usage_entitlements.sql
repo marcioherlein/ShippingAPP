@@ -10,7 +10,10 @@ VALUES
   ('plan-business-v1', 'business', 'Business', 100, 1, 1, '2026-08-31T00:00:00.000Z', '2026-08-31T00:00:00.000Z')
 ON CONFLICT(code) DO NOTHING;
 
-CREATE TABLE credit_reservations (
+-- `IF NOT EXISTS` is deliberate: Cloudflare's remote migration endpoint can
+-- fail while parsing a trigger after earlier statements have already executed.
+-- A retry must converge rather than fail on partially-created Stage 5 objects.
+CREATE TABLE IF NOT EXISTS credit_reservations (
   id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 64),
   user_id TEXT NOT NULL,
   usage_period_id TEXT NOT NULL,
@@ -38,9 +41,9 @@ CREATE TABLE credit_reservations (
   UNIQUE(id, user_id)
 );
 
-CREATE INDEX idx_credit_reservations_user_status
+CREATE INDEX IF NOT EXISTS idx_credit_reservations_user_status
   ON credit_reservations(user_id, status, updated_at DESC);
-CREATE INDEX idx_credit_reservations_lease
+CREATE INDEX IF NOT EXISTS idx_credit_reservations_lease
   ON credit_reservations(status, lease_expires_at);
 
 -- Quota is claimed in the same SQLite statement that creates the reservation.
@@ -50,10 +53,12 @@ CREATE INDEX idx_credit_reservations_lease
 -- attempted paid work to 4x the period allowance so provider-error/refund loops
 -- cannot become unlimited free external work while genuine provider failures
 -- can still restore the user's normal credit balance.
-CREATE TRIGGER trg_credit_reservations_before_insert
+CREATE TRIGGER IF NOT EXISTS trg_credit_reservations_before_insert
 BEFORE INSERT ON credit_reservations
 BEGIN
-  SELECT CASE
+  -- Parentheses around CASE are required by Cloudflare D1's remote statement
+  -- splitter; unparenthesized `SELECT CASE ... END` can be misread as trigger END.
+  SELECT (CASE
     WHEN NEW.status <> 'running' THEN RAISE(ABORT, 'reservation_must_start_running')
     WHEN NEW.attempt_no <> 1 THEN RAISE(ABORT, 'reservation_initial_attempt_invalid')
     WHEN NOT EXISTS (
@@ -85,10 +90,10 @@ BEGIN
             AND cl.entry_type = 'consume'
         ), 0) + NEW.credits > up.credits_granted * 4
     ) THEN RAISE(ABORT, 'attempt_limit_exhausted')
-  END;
+  END);
 END;
 
-CREATE TRIGGER trg_credit_reservations_after_insert
+CREATE TRIGGER IF NOT EXISTS trg_credit_reservations_after_insert
 AFTER INSERT ON credit_reservations
 BEGIN
   UPDATE usage_periods
@@ -114,7 +119,7 @@ END;
 
 -- Reservation identity and economic amount are immutable. Retrying a released
 -- operation reuses the same logical operation row but increments attempt_no.
-CREATE TRIGGER trg_credit_reservations_before_update_identity
+CREATE TRIGGER IF NOT EXISTS trg_credit_reservations_before_update_identity
 BEFORE UPDATE ON credit_reservations
 WHEN NEW.user_id <> OLD.user_id
   OR NEW.usage_period_id <> OLD.usage_period_id
@@ -126,10 +131,10 @@ BEGIN
   SELECT RAISE(ABORT, 'reservation_identity_immutable');
 END;
 
-CREATE TRIGGER trg_credit_reservations_before_update_transition
+CREATE TRIGGER IF NOT EXISTS trg_credit_reservations_before_update_transition
 BEFORE UPDATE ON credit_reservations
 BEGIN
-  SELECT CASE
+  SELECT (CASE
     WHEN NEW.attempt_no <> OLD.attempt_no
       AND NOT (
         OLD.status = 'released'
@@ -176,13 +181,13 @@ BEGIN
         AND up.user_id = OLD.user_id
         AND up.credits_consumed < OLD.credits
     ) THEN RAISE(ABORT, 'reservation_refund_counter_invalid')
-  END;
+  END);
 END;
 
 -- A released reservation may be retried only inside its original active usage
 -- period and within the non-refundable attempt budget. The new attempt consumes
 -- exactly once and receives a distinct immutable ledger key.
-CREATE TRIGGER trg_credit_reservations_after_retry
+CREATE TRIGGER IF NOT EXISTS trg_credit_reservations_after_retry
 AFTER UPDATE OF status ON credit_reservations
 WHEN OLD.status = 'released' AND NEW.status = 'running'
 BEGIN
@@ -210,7 +215,7 @@ END;
 -- Release is an exactly-once state transition. Only the first transition into
 -- released can decrement usage and append a refund ledger entry; the transition
 -- trigger above aborts instead of allowing ledger/counter divergence.
-CREATE TRIGGER trg_credit_reservations_after_release
+CREATE TRIGGER IF NOT EXISTS trg_credit_reservations_after_release
 AFTER UPDATE OF status ON credit_reservations
 WHEN OLD.status <> 'released' AND NEW.status = 'released'
 BEGIN

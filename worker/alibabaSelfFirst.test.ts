@@ -79,60 +79,80 @@ const nativeOut: NativeAlibabaResult = {
 }
 
 describe('Alibaba self-scrape-first orchestration', () => {
-  it('uses zero-Parse-credit direct extraction first and skips paid providers when complete', async () => {
+  it('uses zero-Parse-credit direct extraction first and skips every supplement when complete', async () => {
     const directReader = vi.fn(async () => direct())
     const parsebotReader = vi.fn(async () => parsebot())
     const nativeReader = vi.fn(async () => native())
     const result = await resolveAlibabaSelfFirst(url, env, { directReader, parsebotReader, nativeReader })
     expect(requiredSelfFirstSignals(result)).toBe(7)
     expect(directReader).toHaveBeenCalledTimes(1)
-    expect(parsebotReader).not.toHaveBeenCalled()
     expect(nativeReader).not.toHaveBeenCalled()
+    expect(parsebotReader).not.toHaveBeenCalled()
     expect(result.confidence.productSource).toContain('direct')
   })
 
-  it('uses Parse.bot only to fill facts missing from the first-party read', async () => {
+  it('uses ShippingAPP Browser Run before Parse.bot when the direct read is incomplete', async () => {
     const partial = direct({ packedWeightKg: null, volumeCbm: null, evidence: ['title', 'category', 'price', 'moq', 'origin'] })
     ;(partial as any).status = 'partial'
     const parsebotReader = vi.fn(async () => parsebot())
     const nativeReader = vi.fn(async () => native())
     const result = await resolveAlibabaSelfFirst(url, env, { directReader: async () => partial, parsebotReader, nativeReader })
+    expect(nativeReader).toHaveBeenCalledTimes(1)
+    expect(parsebotReader).not.toHaveBeenCalled()
+    expect(result.product.packedWeightKg).toBe(0.21)
+    expect(result.product.volumeCbm).toBe(0.0011)
+    expect(requiredSelfFirstSignals(result)).toBe(7)
+    expect(result.confidence.productSource).toContain('browser')
+  })
+
+  it('needs zero Parse.bot credits when direct plus Browser Run complete the watch ficha', async () => {
+    const partial = direct({ packedWeightKg: null, volumeCbm: null, evidence: ['title', 'category', 'price', 'moq', 'origin'] })
+    ;(partial as any).status = 'partial'
+    const parsebotReader = vi.fn(async () => parsebotOut)
+    const nativeReader = vi.fn(async () => native())
+    const result = await resolveAlibabaSelfFirst(url, env, {
+      directReader: async () => partial,
+      parsebotReader,
+      nativeReader,
+    })
+    expect(nativeReader).toHaveBeenCalledTimes(1)
+    expect(parsebotReader).not.toHaveBeenCalled()
+    expect(result.product.packedWeightKg).toBe(0.21)
+    expect(result.product.volumeCbm).toBe(0.0011)
+    expect(requiredSelfFirstSignals(result)).toBe(7)
+  })
+
+  it('uses Parse.bot only as the final optional rescue after both first-party readers remain incomplete', async () => {
+    const partial = direct({ packedWeightKg: null, volumeCbm: null, evidence: ['title', 'category', 'price', 'moq', 'origin'] })
+    ;(partial as any).status = 'partial'
+    const nativeReader = vi.fn(async () => nativeOut)
+    const parsebotReader = vi.fn(async () => parsebot())
+    const result = await resolveAlibabaSelfFirst(url, env, {
+      directReader: async () => partial,
+      nativeReader,
+      parsebotReader,
+    })
+    expect(nativeReader).toHaveBeenCalledTimes(1)
     expect(parsebotReader).toHaveBeenCalledTimes(1)
-    expect(nativeReader).not.toHaveBeenCalled()
     expect(result.product.packedWeightKg).toBe(0.2)
     expect(result.product.volumeCbm).toBe(0.001)
     expect(requiredSelfFirstSignals(result)).toBe(7)
   })
 
-  it('survives exhausted Parse.bot credits by falling through to Browser Run', async () => {
-    const partial = direct({ packedWeightKg: null, volumeCbm: null, evidence: ['title', 'category', 'price', 'moq', 'origin'] })
-    ;(partial as any).status = 'partial'
-    const nativeReader = vi.fn(async () => native())
-    const result = await resolveAlibabaSelfFirst(url, env, {
-      directReader: async () => partial,
-      parsebotReader: async () => parsebotOut,
-      nativeReader,
-    })
-    expect(nativeReader).toHaveBeenCalledTimes(1)
-    expect(result.product.packedWeightKg).toBe(0.21)
-    expect(result.product.volumeCbm).toBe(0.0011)
-    expect(requiredSelfFirstSignals(result)).toBe(7)
-    expect(result.assumptions.join(' ')).toContain('credits exhausted')
-  })
-
-  it('never invents missing logistics when Parse.bot and Browser Run are both unavailable', async () => {
+  it('never invents missing logistics when Browser Run and Parse.bot are both unavailable', async () => {
     const partial = direct({ packedWeightKg: null, volumeCbm: null, originCountry: null, evidence: ['title', 'category', 'price', 'moq'] })
     ;(partial as any).status = 'partial'
     const result = await resolveAlibabaSelfFirst(url, env, {
       directReader: async () => partial,
-      parsebotReader: async () => parsebotOut,
       nativeReader: async () => nativeOut,
+      parsebotReader: async () => parsebotOut,
     })
     expect(result.product.packedWeightKg).toBe(0)
     expect(result.product.volumeCbm).toBe(0)
     expect(result.product.originCountry).toBe('')
     expect(requiredSelfFirstSignals(result)).toBe(4)
     expect(result.assumptions.join(' ')).toContain('ficha obligatoria')
+    expect(result.assumptions.join(' ')).toContain('credits exhausted')
   })
 
   it('preserves the supplied watch identity even when every provider is unavailable', async () => {
@@ -141,8 +161,8 @@ describe('Alibaba self-scrape-first orchestration', () => {
     }
     const result = await resolveAlibabaSelfFirst(url, env, {
       directReader: async () => directOut,
-      parsebotReader: async () => parsebotOut,
       nativeReader: async () => nativeOut,
+      parsebotReader: async () => parsebotOut,
     })
     expect(result.product.name).toMatch(/Fully Automatic Mechanical Watches/i)
     expect(result.product.category).toBe('Sin clasificar')

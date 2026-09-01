@@ -9,6 +9,7 @@ import { overlayHybridMarketEconomics } from './hybridMarketEconomics'
 import { handleWatchlist, isWatchlistRoute } from './watchlist'
 import { withUsageEntitlement } from './usage'
 import { handleApplicationEmail, isApplicationEmailRoute } from './emailPreferences'
+import { emailRuntimeStatus } from './emailService'
 import { syncClerkProfile } from './clerkProfile'
 
 const LEGACY_MARKET_ENV_KEYS = [
@@ -18,6 +19,7 @@ const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_REFRESH_TOKEN',
   'MERCADOLIBRE_TOKEN_STORE',
 ] as const
+const EXPECTED_EMAIL_TEMPLATES = ['alert', 'billing', 'usage', 'weekly_digest', 'welcome']
 
 /**
  * `/api/analyze` and `/api/intake` get their authoritative Argentina benchmark
@@ -81,6 +83,27 @@ function jsonResponseLike(response: Response, body: unknown) {
     status: response.status,
     statusText: response.statusText,
     headers,
+  })
+}
+
+async function overlayRuntimeEmailStatus(response: Response, env: Record<string, unknown>) {
+  if (!response.ok) return response
+  let body: any
+  try { body = await response.clone().json() } catch { return response }
+  const email = emailRuntimeStatus(env as any)
+  const templates = [...email.templates].sort()
+  const architectureReady = email.provider === 'resend'
+    && JSON.stringify(templates) === JSON.stringify(EXPECTED_EMAIL_TEMPLATES)
+  return jsonResponseLike(response, {
+    ...body,
+    status: body?.status === 'ok' && architectureReady ? 'ok' : 'error',
+    checks: {
+      ...(body?.checks ?? {}),
+      emailArchitecture: {
+        ...email,
+        architectureReady,
+      },
+    },
   })
 }
 
@@ -154,6 +177,9 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
 
   const innerEnv = withoutLegacyMarketCredentials(env, url.pathname)
   const response = await app.fetch(request, innerEnv as never)
+  if (request.method === 'GET' && url.pathname === '/api/runtime-smoke') {
+    return overlayRuntimeEmailStatus(response, env)
+  }
   if (request.method === 'POST' && url.pathname === '/api/analyze') {
     return overlayUserAnalysisResponse(response, '/api/analyze', env)
   }

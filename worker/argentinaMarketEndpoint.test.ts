@@ -1,10 +1,32 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import worker from './entry'
+import { INTERNAL_TOKEN_HEADER } from './auth'
+
+const INTERNAL_TOKEN = 'stage5-test-internal-token-0123456789abcdef'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
+  })
+}
+
+function operationalEnv(extra: Record<string, unknown> = {}) {
+  return {
+    AUTH_ENFORCEMENT: 'true',
+    INTERNAL_API_TOKEN: INTERNAL_TOKEN,
+    ...extra,
+  }
+}
+
+function benchmarkRequest(body: string) {
+  return new Request('https://shipping.test/api/argentina-market/benchmark', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      [INTERNAL_TOKEN_HEADER]: INTERNAL_TOKEN,
+    },
+    body,
   })
 }
 
@@ -37,6 +59,10 @@ afterEach(() => {
 })
 
 describe('Argentina market hybrid endpoint', () => {
+  // These tests focus on provider/orchestration semantics. They deliberately use
+  // the server-only operational credential so they cross the real auth boundary
+  // without creating a synthetic Clerk user or usage ledger. User metering and
+  // quota behavior are covered independently by worker/usage.test.ts.
   it('returns a live Google Shopping fallback benchmark without leaking provider secrets', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input)
@@ -54,11 +80,10 @@ describe('Argentina market hybrid endpoint', () => {
     })
     vi.stubGlobal('fetch', fetchImpl)
 
-    const response = await worker.fetch(new Request('https://shipping.test/api/argentina-market/benchmark', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ productName: 'Bosch GSB 13 RE 650W', category: 'drill' }),
-    }), { SERPAPI_API_KEY: 'secret-serp-key' })
+    const response = await worker.fetch(
+      benchmarkRequest(JSON.stringify({ productName: 'Bosch GSB 13 RE 650W', category: 'drill' })),
+      operationalEnv({ SERPAPI_API_KEY: 'secret-serp-key' }),
+    )
     const text = await response.text()
     const body = JSON.parse(text)
 
@@ -69,6 +94,7 @@ describe('Argentina market hybrid endpoint', () => {
     expect(body.market.source).toContain('Google Shopping Argentina')
     expect(body.market.comparableCount).toBe(6)
     expect(text).not.toContain('secret-serp-key')
+    expect(text).not.toContain(INTERNAL_TOKEN)
   })
 
   it('produces a live benchmark from Frávega + Cetrogar without Mercado Libre or paid search credentials', async () => {
@@ -87,11 +113,10 @@ describe('Argentina market hybrid endpoint', () => {
     })
     vi.stubGlobal('fetch', fetchImpl)
 
-    const response = await worker.fetch(new Request('https://shipping.test/api/argentina-market/benchmark', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ productName: 'Logitech MX Master 3S', category: 'mouse' }),
-    }), {})
+    const response = await worker.fetch(
+      benchmarkRequest(JSON.stringify({ productName: 'Logitech MX Master 3S', category: 'mouse' })),
+      operationalEnv(),
+    )
     const body: any = await response.json()
 
     expect(response.status).toBe(200)
@@ -105,11 +130,10 @@ describe('Argentina market hybrid endpoint', () => {
   it('reports free retailer outage truthfully when no authenticated or paid fallback exists', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => json({}, 503))
     vi.stubGlobal('fetch', fetchImpl)
-    const response = await worker.fetch(new Request('https://shipping.test/api/argentina-market/benchmark', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ productName: 'Logitech MX Master 3S', category: 'mouse' }),
-    }), {})
+    const response = await worker.fetch(
+      benchmarkRequest(JSON.stringify({ productName: 'Logitech MX Master 3S', category: 'mouse' })),
+      operationalEnv(),
+    )
     const body: any = await response.json()
 
     expect(response.status).toBe(200)
@@ -121,11 +145,10 @@ describe('Argentina market hybrid endpoint', () => {
   it('rejects malformed JSON before any discovery provider is called', async () => {
     const fetchImpl = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchImpl)
-    const response = await worker.fetch(new Request('https://shipping.test/api/argentina-market/benchmark', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{broken',
-    }), { SERPAPI_API_KEY: 'secret-serp-key' })
+    const response = await worker.fetch(
+      benchmarkRequest('{broken'),
+      operationalEnv({ SERPAPI_API_KEY: 'secret-serp-key' }),
+    )
 
     expect(response.status).toBe(400)
     expect(fetchImpl).not.toHaveBeenCalled()

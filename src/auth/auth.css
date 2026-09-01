@@ -42,6 +42,35 @@
   font-weight: 650;
 }
 
+.auth-usage-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 7px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.58);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.auth-usage-badge.exhausted {
+  border-color: rgba(190, 24, 93, 0.18);
+  background: rgba(253, 242, 248, 0.72);
+  color: #9d174d;
+}
+
+.auth-account-control .auth-usage-retry {
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.58);
+  color: #64748b;
+  font-size: 12px;
+}
+
 @media (max-width: 720px) {
   .auth-account-control {
     top: 10px;
@@ -50,5 +79,11 @@
 
   .auth-saved-label {
     display: none;
+  }
+
+  .auth-usage-badge {
+    max-width: 126px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

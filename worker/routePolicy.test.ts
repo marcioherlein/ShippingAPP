@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { API_ROUTE_POLICIES, resolveRoutePolicy } from './routePolicy'
+import { METERING_RULES, validateMeteringRuleCoverage } from './usage'
 
 function exactRoutesFromSource(path: string) {
   const source = readFileSync(path, 'utf8')
@@ -19,6 +20,7 @@ describe('SaaS API route inventory', () => {
       ...exactRoutesFromSource('worker/entry.ts'),
       ...exactRoutesFromSource('worker/analysisHistory.ts'),
       ...exactRoutesFromSource('worker/watchlist.ts'),
+      ...exactRoutesFromSource('worker/usage.ts'),
       ...exactRoutesFromSource('worker/router.ts'),
       ...exactRoutesFromSource('worker/enrich.ts'),
       ...exactRoutesFromSource('worker/index.ts'),
@@ -44,12 +46,22 @@ describe('SaaS API route inventory', () => {
     expect(resolveRoutePolicy('/api/history-item', 'DELETE')).toMatchObject({ id: 'analysis-history-item', targetAccess: 'authenticated', targetMetered: false })
   })
 
-  it('keeps watchlist ownership actions unmetered but marks provider refresh as a metered target', () => {
+  it('keeps usage/history/watchlist reads zero-credit but meters external watchlist refresh', () => {
+    expect(resolveRoutePolicy('/api/usage', 'GET')).toMatchObject({ id: 'usage', targetAccess: 'authenticated', targetMetered: false, costRisk: 'low' })
     expect(resolveRoutePolicy('/api/watchlist', 'GET')).toMatchObject({ id: 'watchlist', targetAccess: 'authenticated', targetMetered: false, costRisk: 'low' })
     expect(resolveRoutePolicy('/api/watchlist', 'POST')).toMatchObject({ id: 'watchlist', targetAccess: 'authenticated', targetMetered: false, costRisk: 'low' })
     expect(resolveRoutePolicy('/api/watchlist-item', 'GET')).toMatchObject({ id: 'watchlist-item', targetAccess: 'authenticated', targetMetered: false })
     expect(resolveRoutePolicy('/api/watchlist-item', 'DELETE')).toMatchObject({ id: 'watchlist-item', targetAccess: 'authenticated', targetMetered: false })
     expect(resolveRoutePolicy('/api/watchlist-refresh', 'POST')).toMatchObject({ id: 'watchlist-refresh', targetAccess: 'authenticated', targetMetered: true, costRisk: 'high' })
+  })
+
+  it('gives every targetMetered route exactly one explicit Stage 5 economic rule', () => {
+    const coverage = validateMeteringRuleCoverage()
+    expect(coverage.complete).toBe(true)
+    expect(coverage.rules).toEqual(coverage.metered)
+    expect(METERING_RULES['ncm-classify']).toEqual({ mode: 'continuation', routeId: 'ncm-classify', credits: 0 })
+    expect(METERING_RULES.analyze).toEqual({ mode: 'full_start', routeId: 'analyze', credits: 1 })
+    expect(METERING_RULES.intake).toEqual({ mode: 'full_start', routeId: 'intake', credits: 1 })
   })
 
   it('resolves only declared method/path pairs', () => {
@@ -64,6 +76,7 @@ describe('SaaS API route inventory', () => {
     expect(resolveRoutePolicy('/api/analyze', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/history', 'DELETE')).toBeNull()
     expect(resolveRoutePolicy('/api/watchlist-refresh', 'GET')).toBeNull()
+    expect(resolveRoutePolicy('/api/usage', 'POST')).toBeNull()
     expect(resolveRoutePolicy('/api/not-real', 'POST')).toBeNull()
   })
 })

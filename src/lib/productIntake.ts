@@ -49,7 +49,11 @@ export async function runProductIntake(message: string, priorFacts: IntakeFacts)
     return rest
   }
   const { analysis, error: _error, ...rest } = data
-  return { ...rest, analysis: await enrichProductAnalysisV2(analysis) }
+  const usageReservationId = response.headers.get('x-shippingapp-usage-reservation')?.trim()
+  const reservedAnalysis: ProductAnalysis = usageReservationId
+    ? { ...analysis, usageReservationId }
+    : analysis
+  return { ...rest, analysis: await enrichProductAnalysisV2(reservedAnalysis) }
 }
 
 export function isAlibabaUrl(value: string) {

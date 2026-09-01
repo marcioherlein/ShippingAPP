@@ -22,6 +22,12 @@ export type SourceReadEvidence = {
 export type ProductAnalysis = {
   sourceUrl: string
   fetched: boolean
+  /**
+   * Ephemeral server-issued reservation used only to continue a one-credit full
+   * analysis into NCM classification. `enrichProductAnalysisV2` strips it before
+   * the analysis becomes normal application/history data.
+   */
+  usageReservationId?: string
   sourceRead?: SourceReadEvidence
   product: {
     name: string
@@ -60,7 +66,8 @@ export async function analyzeAlibabaUrl(url: string): Promise<ProductAnalysis> {
   })
   const data = await response.json() as ProductAnalysis & { error?: string }
   if (!response.ok) throw new Error(data.error || 'No pudimos analizar el link.')
-  return data
+  const usageReservationId = response.headers.get('x-shippingapp-usage-reservation')?.trim()
+  return usageReservationId ? { ...data, usageReservationId } : data
 }
 
 export function applyAnalysis(current: Inputs, analysis: ProductAnalysis): Inputs {

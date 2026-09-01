@@ -7,6 +7,7 @@ import { resolveMercadoLibreAccessToken } from './mercadoLibreAuth'
 import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory'
 import { overlayHybridMarketEconomics } from './hybridMarketEconomics'
 import { handleWatchlist, isWatchlistRoute } from './watchlist'
+import { withUsageEntitlement } from './usage'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -101,6 +102,61 @@ async function overlayUserAnalysisResponse(
   return jsonResponseLike(response, body)
 }
 
+/**
+ * Dispatch an already-authenticated request into the existing product/SaaS
+ * handlers. Stage 5 wraps this function, so metered routes must reserve quota
+ * before this dispatcher is allowed to invoke any external provider work.
+ */
+async function dispatchAuthorizedRequest(request: Request, env: Record<string, unknown>): Promise<Response> {
+  const url = new URL(request.url)
+
+  if (isAnalysisHistoryRoute(url.pathname)) {
+    return handleAnalysisHistory(request, env as any)
+  }
+
+  if (isWatchlistRoute(url.pathname)) {
+    return handleWatchlist(request, env as any)
+  }
+
+  if (url.pathname === '/api/argentina-market/benchmark' && request.method === 'POST') {
+    return hybridMarketBenchmark(request, env)
+  }
+
+  // Normal Alibaba analysis is self-scrape first. Parse.bot is now only an
+  // optional supplement when first-party HTML/JSON does not complete the
+  // mandatory product ficha. Explicit diagnostic sourceMode requests keep
+  // using the existing router probes unchanged.
+  if (url.pathname === '/api/analyze' && request.method === 'POST') {
+    let body: any = null
+    try { body = await request.clone().json() } catch { body = null }
+    const alibabaUrl = !body?.sourceMode ? parseAlibabaSelfFirstUrl(body?.url) : null
+    if (alibabaUrl) {
+      try {
+        // Self-first still owns Alibaba extraction + FX hydration, but its
+        // legacy ML-only hydration must not see provider credentials. The
+        // authoritative hybrid overlay immediately below gets the original
+        // env and performs the single real Argentina-market lookup.
+        const selfFirstEnv = withoutLegacyMarketCredentials(env, '/api/analyze')
+        const analysis = await analyzeAlibabaSelfFirst(alibabaUrl, selfFirstEnv as any)
+        return Response.json(await overlayHybridMarketEconomics(analysis, env as any))
+      } catch {
+        // Reliability backstop: if the new orchestrator itself fails, keep
+        // the previous router pipeline available rather than dropping the case.
+      }
+    }
+  }
+
+  const innerEnv = withoutLegacyMarketCredentials(env, url.pathname)
+  const response = await app.fetch(request, innerEnv as never)
+  if (request.method === 'POST' && url.pathname === '/api/analyze') {
+    return overlayUserAnalysisResponse(response, '/api/analyze', env)
+  }
+  if (request.method === 'POST' && url.pathname === '/api/intake') {
+    return overlayUserAnalysisResponse(response, '/api/intake', env)
+  }
+  return response
+}
+
 export default {
   async fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
     return withRequestContext(request, env, async () => {
@@ -115,51 +171,12 @@ export default {
         return Response.json({ authenticated: true, accountId: gate.identity.userId })
       }
 
-      if (isAnalysisHistoryRoute(url.pathname)) {
-        return handleAnalysisHistory(gate.request, env as any)
-      }
-
-      if (isWatchlistRoute(url.pathname)) {
-        return handleWatchlist(gate.request, env as any)
-      }
-
-      if (url.pathname === '/api/argentina-market/benchmark' && gate.request.method === 'POST') {
-        return hybridMarketBenchmark(gate.request, env)
-      }
-
-      // Normal Alibaba analysis is self-scrape first. Parse.bot is now only an
-      // optional supplement when first-party HTML/JSON does not complete the
-      // mandatory product ficha. Explicit diagnostic sourceMode requests keep
-      // using the existing router probes unchanged.
-      if (url.pathname === '/api/analyze' && gate.request.method === 'POST') {
-        let body: any = null
-        try { body = await gate.request.clone().json() } catch { body = null }
-        const alibabaUrl = !body?.sourceMode ? parseAlibabaSelfFirstUrl(body?.url) : null
-        if (alibabaUrl) {
-          try {
-            // Self-first still owns Alibaba extraction + FX hydration, but its
-            // legacy ML-only hydration must not see provider credentials. The
-            // authoritative hybrid overlay immediately below gets the original
-            // env and performs the single real Argentina-market lookup.
-            const selfFirstEnv = withoutLegacyMarketCredentials(env, '/api/analyze')
-            const analysis = await analyzeAlibabaSelfFirst(alibabaUrl, selfFirstEnv as any)
-            return Response.json(await overlayHybridMarketEconomics(analysis, env as any))
-          } catch {
-            // Reliability backstop: if the new orchestrator itself fails, keep
-            // the previous router pipeline available rather than dropping the case.
-          }
-        }
-      }
-
-      const innerEnv = withoutLegacyMarketCredentials(env, url.pathname)
-      const response = await app.fetch(gate.request, innerEnv as never)
-      if (gate.request.method === 'POST' && url.pathname === '/api/analyze') {
-        return overlayUserAnalysisResponse(response, '/api/analyze', env)
-      }
-      if (gate.request.method === 'POST' && url.pathname === '/api/intake') {
-        return overlayUserAnalysisResponse(response, '/api/intake', env)
-      }
-      return response
+      return withUsageEntitlement(
+        gate.request,
+        env as any,
+        gate.identity,
+        () => dispatchAuthorizedRequest(gate.request, env),
+      )
     })
   },
 }

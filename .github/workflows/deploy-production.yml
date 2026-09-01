@@ -118,13 +118,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx --yes wrangler@latest d1 execute DB --remote --config "$WRANGLER_PRODUCTION_CONFIG" --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','plans','subscriptions','usage_periods','credit_ledger','analyses','watchlist_items','watchlist_snapshots','email_preferences','email_events','billing_events') ORDER BY name" > /tmp/d1-schema.json
+          npx --yes wrangler@latest d1 execute DB --remote --config "$WRANGLER_PRODUCTION_CONFIG" --json --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','plans','subscriptions','usage_periods','credit_ledger','credit_reservations','analyses','watchlist_items','watchlist_snapshots','email_preferences','email_events','billing_events') ORDER BY name" > /tmp/d1-schema.json
           node - <<'NODE'
           const fs = require('node:fs')
           const parsed = JSON.parse(fs.readFileSync('/tmp/d1-schema.json', 'utf8'))
           const rows = Array.isArray(parsed) ? parsed.flatMap((part) => part.results || []) : (parsed.results || [])
           const names = rows.map((row) => row.name).sort()
-          const expected = ['analyses','billing_events','credit_ledger','email_events','email_preferences','plans','subscriptions','usage_periods','users','watchlist_items','watchlist_snapshots'].sort()
+          const expected = ['analyses','billing_events','credit_ledger','credit_reservations','email_events','email_preferences','plans','subscriptions','usage_periods','users','watchlist_items','watchlist_snapshots'].sort()
           if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Production D1 schema mismatch: ${JSON.stringify(names)}`)
           NODE
 
@@ -165,6 +165,34 @@ jobs:
           }
           NODE
 
+      - name: Verify production usage entitlement schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@latest d1 execute DB --remote --config "$WRANGLER_PRODUCTION_CONFIG" --json --command "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='credit_reservations') AS reservation_table, (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_credit_reservations_user_status') AS reservation_user_index, (SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_credit_reservations_lease') AS reservation_lease_index, (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_credit_reservations_%') AS reservation_triggers, (SELECT COUNT(*) FROM pragma_index_list('credit_reservations') WHERE \"unique\"=1) AS reservation_unique_indexes, (SELECT COUNT(*) FROM pragma_foreign_key_list('credit_reservations') WHERE \"table\"='users' AND \"from\"='user_id' AND \"to\"='id') AS reservation_user_fk, (SELECT COUNT(*) FROM pragma_foreign_key_list('credit_reservations') WHERE \"table\"='usage_periods') AS reservation_period_fk_rows, (SELECT COUNT(*) FROM plans WHERE code='free' AND monthly_credits=3 AND active=1) AS free_plan, (SELECT COUNT(*) FROM plans WHERE code='pro' AND monthly_credits=30 AND active=1) AS pro_plan, (SELECT COUNT(*) FROM plans WHERE code='business' AND monthly_credits=100 AND active=1) AS business_plan, (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_credit_reservations_%' AND sql LIKE '%attempt_limit_exhausted%') AS attempt_limit_guard, (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_credit_reservations_%' AND sql LIKE '%reservation_period_expired%') AS period_guard, (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_credit_reservations_%' AND sql LIKE '%reservation_refund_counter_invalid%') AS refund_guard" > /tmp/d1-usage-schema.json
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const parsed = JSON.parse(fs.readFileSync('/tmp/d1-usage-schema.json', 'utf8'))
+          const rows = Array.isArray(parsed) ? parsed.flatMap((part) => part.results || []) : (parsed.results || [])
+          const row = rows[0]
+          if (!row
+            || Number(row.reservation_table) !== 1
+            || Number(row.reservation_user_index) !== 1
+            || Number(row.reservation_lease_index) !== 1
+            || Number(row.reservation_triggers) !== 6
+            || Number(row.reservation_unique_indexes) < 2
+            || Number(row.reservation_user_fk) !== 1
+            || Number(row.reservation_period_fk_rows) !== 2
+            || Number(row.free_plan) !== 1
+            || Number(row.pro_plan) !== 1
+            || Number(row.business_plan) !== 1
+            || Number(row.attempt_limit_guard) < 1
+            || Number(row.period_guard) < 1
+            || Number(row.refund_guard) < 1) {
+            throw new Error(`Stage 5 production D1 usage schema mismatch: ${JSON.stringify(row)}`)
+          }
+          NODE
+
       - name: Production auth boundary adversarial smoke test
         run: node scripts/smoke-production-auth-boundary.mjs
 
@@ -173,6 +201,9 @@ jobs:
 
       - name: Production watchlist boundary adversarial smoke test
         run: node scripts/smoke-production-watchlist-boundary.mjs
+
+      - name: Production usage boundary adversarial smoke test
+        run: node scripts/smoke-production-usage-boundary.mjs
 
       - name: Production privileged runtime smoke test
         shell: bash

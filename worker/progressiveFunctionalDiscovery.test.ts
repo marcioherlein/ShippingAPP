@@ -52,7 +52,7 @@ describe('progressive functional retailer discovery', () => {
     expect(calls).toHaveLength(1)
   })
 
-  it('widens an over-constrained free storefront query and recovers a live benchmark without changing matching', async () => {
+  it('widens an over-constrained free storefront query to category-only and recovers a live benchmark without changing matching', async () => {
     const calls: string[] = []
     const relaxed = [
       candidate('Freidora de aire 6L 1700W Modelo A', 1),
@@ -71,12 +71,13 @@ describe('progressive functional retailer discovery', () => {
     expect(calls).toHaveLength(2)
     expect(calls[0]).toContain('6l')
     expect(calls[0]).toContain('1700w')
-    expect(calls[1]).toContain('6l')
+    expect(calls[1]).toContain('freidora')
+    expect(calls[1]).not.toContain('6l')
     expect(calls[1]).not.toContain('1700w')
-    expect(result.warnings.join(' ')).toContain('widened only the free retailer storefront query')
+    expect(result.warnings.join(' ')).toContain('category-only')
   })
 
-  it('fails closed when relaxed discovery returns wrong explicit specs', async () => {
+  it('fails closed when category-only discovery returns wrong explicit specs', async () => {
     const calls: string[] = []
     const wrong = [1, 2, 3, 4, 5, 6].map((index) => candidate(`Freidora de aire 5L 1500W Modelo ${index}`, index))
     const provider = withProgressiveFunctionalDiscovery(stagedProvider(calls, [], wrong))
@@ -110,7 +111,7 @@ describe('progressive functional retailer discovery', () => {
     expect(gpsResult.comparableCount).toBeGreaterThanOrEqual(5)
   })
 
-  it('does not allow non-graphite tennis rackets into a relaxed 300g benchmark', async () => {
+  it('does not allow non-graphite tennis rackets into a category-only 300g benchmark', async () => {
     const calls: string[] = []
     const wrongMaterial = [1, 2, 3, 4, 5, 6].map((index) => candidate(`Raqueta de tenis aluminio 300g Modelo ${index}`, index))
     const provider = withProgressiveFunctionalDiscovery(stagedProvider(calls, [], wrongMaterial))

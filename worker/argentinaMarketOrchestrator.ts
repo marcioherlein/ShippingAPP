@@ -1,4 +1,5 @@
 import { analyzeArgentinaMarket } from './catalogProvider'
+import { withFunctionalTraitEvidenceGuard } from './functionalTraitEvidence'
 import { createGoogleShoppingArgentinaProvider } from './googleShoppingMarketProvider'
 import { runArgentinaMarketBenchmark } from './marketBenchmarkEngine'
 import { createMercadoLibreMarketProviders } from './mercadoLibreMarketProvider'
@@ -53,9 +54,10 @@ export async function analyzeArgentinaMarketHybrid(
 
   if (primary.status === 'live') return primary
 
-  const retailerProvider = withProgressiveFunctionalDiscovery(createArgentinaDirectRetailerProvider({
+  const retailerBase = withFunctionalTraitEvidenceGuard(createArgentinaDirectRetailerProvider({
     fetchImpl: options.fetchImpl,
   }))
+  const retailerProvider = withProgressiveFunctionalDiscovery(retailerBase)
   const retailers = await runArgentinaMarketBenchmark(productName, category, retailerProvider)
 
   if (retailers.status === 'live') {
@@ -73,10 +75,10 @@ export async function analyzeArgentinaMarketHybrid(
     return chosen
   }
 
-  const googleProvider = createGoogleShoppingArgentinaProvider({
+  const googleProvider = withFunctionalTraitEvidenceGuard(createGoogleShoppingArgentinaProvider({
     apiKey: googleShoppingApiKey,
     fetchImpl: options.fetchImpl,
-  })
+  }))
 
   let effectivePriceResolver: ArgentinaMarketPriceResolver | null = null
   if (accessToken) {

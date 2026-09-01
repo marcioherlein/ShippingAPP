@@ -4,11 +4,11 @@ import type { MlResult } from './marketTypes'
 
 export type ArgentinaMarketMatchMode = 'exact' | 'functional'
 
-const SPEC_UNITS = 'tb|gb|mb|mah|w|watt|watts|kw|v|volt|volts|hz|kg|g|l|lt|litro|litros|ml|cm|mm|pa|inch|inches|pulgada|pulgadas'
+const SPEC_UNITS = 'tb|gb|mb|mah|w|watt|watts|kw|v|volt|volts|hz|kg|g|l|lt|litro|litros|ml|cm|mm|pa|bar|mp|inch|inches|pulgada|pulgadas'
 const SPEC_UNIT_ALIASES: Record<string, string> = {
   tb: 'tb', gb: 'gb', mb: 'mb', mah: 'mah', w: 'w', watt: 'w', watts: 'w', kw: 'kw', v: 'v', volt: 'v', volts: 'v',
   hz: 'hz', kg: 'kg', g: 'g', l: 'l', lt: 'l', litro: 'l', litros: 'l', ml: 'ml', cm: 'cm', mm: 'mm', pa: 'pa',
-  inch: 'inch', inches: 'inch', pulgada: 'inch', pulgadas: 'inch',
+  bar: 'bar', mp: 'mp', inch: 'inch', inches: 'inch', pulgada: 'inch', pulgadas: 'inch',
 }
 
 const TOKEN_ALIASES: Record<string, string> = {
@@ -22,15 +22,16 @@ const TOKEN_ALIASES: Record<string, string> = {
   inalambrico: 'wireless', inalambrica: 'wireless', wireless: 'wireless', cordless: 'wireless',
   electrico: 'electric', electrica: 'electric', electric: 'electric',
   carbono: 'carbon', carbon: 'carbon',
+  cancelacion: 'anc', cancelling: 'anc', canceling: 'anc', cancellation: 'anc', anc: 'anc',
   caja: 'box', box: 'box',
   organizadora: 'storage', organizador: 'storage', storage: 'storage',
 }
 
 const STOPWORDS = new Set(['a', 'al', 'and', 'con', 'de', 'del', 'el', 'en', 'for', 'la', 'las', 'los', 'of', 'para', 'por', 'the', 'un', 'una', 'with', 'generic', 'generico', 'generica', 'nuevo', 'nueva', 'original', 'premium', 'marca', 'sin'])
 const ACCESSORY_TERMS = new Set([...EXCLUDED_LISTING_TERMS, 'case', 'cover', 'replacement', 'repuesto', 'spare', 'accesorio', 'carcasa', 'filtro', 'cable', 'cargador', 'soporte'])
-const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit'])
+const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit', 'set'])
 const DISPLAY_SHORTHANDS = new Set(['3k', '4k', '6k', '8k', '12k', '18k', '24k'])
-const REQUIRED_TRAITS = new Set(['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter'])
+const REQUIRED_TRAITS = new Set(['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc'])
 
 function normalizedTokens(value: string) {
   return cleanText(value)
@@ -112,6 +113,19 @@ function hasMissingOrConflictingSpecs(target: string, candidate: string) {
   return false
 }
 
+function hasExplicitTitleSpecConflict(target: string, title: string) {
+  const expected = extractSpecs(target)
+  const actual = extractSpecs(title)
+  for (const [unit, expectedValues] of expected) {
+    const titleValues = actual.get(unit)
+    if (expectedValues.size !== 1 || titleValues?.size !== 1) continue
+    const expectedValue = [...expectedValues][0]
+    const titleValue = [...titleValues][0]
+    if (expectedValue !== titleValue) return true
+  }
+  return false
+}
+
 function matchedSpecCount(target: string, candidate: string) {
   const expected = extractSpecs(target)
   const actual = extractSpecs(candidate)
@@ -134,6 +148,21 @@ function extractPackQuantity(value: string) {
   return null
 }
 
+function extractSlotCount(value: string) {
+  const text = cleanText(value)
+  const match = text.match(/\b(\d{1,2})\s*(?:ranuras?|rodajas?|rebanadas?|panes?)\b/)
+  if (!match) return null
+  const amount = Number(match[1])
+  return Number.isInteger(amount) && amount > 0 ? amount : null
+}
+
+function hasSemanticCountConflict(target: string, candidate: string) {
+  const targetSlots = extractSlotCount(target)
+  if (!targetSlots) return false
+  const candidateSlots = extractSlotCount(candidate)
+  return candidateSlots !== targetSlots
+}
+
 function hasAccessoryMismatch(target: string, candidate: string) {
   const targetTokens = tokenSet(target)
   const candidateTokens = tokenSet(candidate)
@@ -147,6 +176,16 @@ function hasBundleMismatch(target: string, candidate: string) {
   const targetTokens = tokenSet(target)
   const candidateTokens = tokenSet(candidate)
   return [...BUNDLE_TERMS].some((term) => candidateTokens.has(term) && !targetTokens.has(term))
+}
+
+function hasPhraseConstraintConflict(target: string, candidate: string) {
+  const expected = cleanText(target)
+  const actual = cleanText(candidate)
+  if (expected.includes('sin bolsa')) {
+    if (actual.includes('con bolsa')) return true
+    if (!actual.includes('sin bolsa')) return true
+  }
+  return false
 }
 
 function hasCriticalTraitConflict(target: string, candidate: string) {
@@ -187,7 +226,7 @@ function traitBonus(target: string, candidate: string) {
   const expected = tokenSet(target)
   const actual = tokenSet(candidate)
   let score = 0
-  for (const trait of ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'eva', 'diamante', 'redonda', 'lagrima']) {
+  for (const trait of ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc', 'eva', 'diamante', 'redonda', 'lagrima']) {
     if (expected.has(trait) && actual.has(trait)) score += 7
   }
   return Math.min(18, score)
@@ -197,8 +236,10 @@ export function buildFunctionalMarketQuery(productName: string, category: string
   const specs = [...extractSpecs(productName).entries()].flatMap(([unit, values]) => [...values].map((value) => `${value}${unit}`))
   const productTokens = normalizedTokens(productName).filter((token) => !containsBrand(token)).filter((token) => token.length >= 3)
   const categoryTokens = normalizedTokens(category)
-  const usefulTraits = productTokens.filter((token) => ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'eva', 'diamante', 'redonda', 'lagrima', 'storage', 'box'].includes(token))
-  const query = [...categoryTokens, ...usefulTraits, ...specs]
+  const usefulTraits = productTokens.filter((token) => ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc', 'eva', 'diamante', 'redonda', 'lagrima', 'storage', 'box'].includes(token))
+  const slotCount = extractSlotCount(productName)
+  const semanticCounts = slotCount ? [`${slotCount} ranuras`] : []
+  const query = [...categoryTokens, ...usefulTraits, ...specs, ...semanticCounts]
   return [...new Set(query)].slice(0, 8).join(' ') || cleanText(category || productName)
 }
 
@@ -211,6 +252,9 @@ export function functionalComparableScore(item: MlResult, productName: string, c
   if (hasAccessoryMismatch(target, title)) return 0
   if (hasBundleMismatch(target, title)) return 0
   if (hasMissingOrConflictingSpecs(target, evidence)) return 0
+  if (hasExplicitTitleSpecConflict(target, title)) return 0
+  if (hasSemanticCountConflict(target, evidence)) return 0
+  if (hasPhraseConstraintConflict(target, evidence)) return 0
   if (hasCriticalTraitConflict(target, evidence)) return 0
 
   const targetPack = extractPackQuantity(target)

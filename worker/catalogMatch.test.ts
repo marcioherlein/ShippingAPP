@@ -28,4 +28,17 @@ describe('market comparable adversarial rules', () => {
   it('keeps uncertain material below the accepted threshold', () => {
     expect(comparableScore(item('Paleta Padel Fibra De Vidrio'), target, category)).toBeLessThan(55)
   })
+
+  it('keeps exact product families separate even when generation matches', () => {
+    expect(comparableScore(
+      item('Mouse Inalambrico Logitech MX Master 3S 8000dpi Bluetooth'),
+      'Logitech MX Master 3S',
+      'mouse inalámbrico',
+    )).toBeGreaterThanOrEqual(55)
+    expect(comparableScore(
+      item('Logitech MX Anywhere 3S Ratón inalámbrico'),
+      'Logitech MX Master 3S',
+      'mouse inalámbrico',
+    )).toBe(0)
+  })
 })

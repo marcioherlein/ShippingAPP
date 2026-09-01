@@ -28,6 +28,12 @@ const TOKEN_ALIASES: Record<string, string> = {
   auricular: 'headphones',
   auriculares: 'headphones',
   headphones: 'headphones',
+  inalambrico: 'wireless',
+  inalambricos: 'wireless',
+  inalambrica: 'wireless',
+  inalambricas: 'wireless',
+  cordless: 'wireless',
+  wireless: 'wireless',
 }
 
 const SEARCH_TRANSLATIONS: Record<string, string> = {
@@ -47,7 +53,7 @@ const ACCESSORY_TERMS = new Set([
   'case', 'cover', 'replacement', 'repuesto', 'spare', 'accesorio', 'carcasa', 'filtro', 'cable', 'cargador', 'soporte',
 ])
 
-const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit'])
+const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit', 'set'])
 const DISPLAY_SHORTHANDS = new Set(['3k', '4k', '6k', '8k', '12k', '18k', '24k'])
 const VARIANT_MODIFIERS = new Set(['pro', 'max', 'plus', 'ultra', 'mini', 'lite', 'air', 'se'])
 const SPEC_UNIT_ALIASES: Record<string, string> = {
@@ -89,6 +95,13 @@ function matchedKnownBrand(value: string) {
 
 function hasKnownBrand(value: string) {
   return Boolean(matchedKnownBrand(value))
+}
+
+function hasKnownBrandConflict(target: string, candidate: string) {
+  const expected = matchedKnownBrand(target)
+  const actual = matchedKnownBrand(candidate)
+  if (!expected || !actual) return false
+  return cleanText(expected) !== cleanText(actual)
 }
 
 function specTokens(value: string) {
@@ -306,7 +319,6 @@ function hasCompactSeriesVersionConflict(productName: string, candidate: string)
 }
 
 function distinctiveFamilyTokens(productName: string, category: string) {
-  if (modelCodes(productName).size) return new Set<string>()
   const brand = matchedKnownBrand(productName)
   if (!brand) return new Set<string>()
   const brandTokens = tokenSet(brand)
@@ -367,6 +379,7 @@ export function comparableScore(item: MlResult, productName: string, category: s
   if (hasAccessoryMismatch(target, cleanedTitle)) return 0
   if (hasBundleMismatch(target, cleanedTitle)) return 0
   if (!hasKnownBrand(productName) && hasKnownBrand(cleanedTitle)) return 0
+  if (hasKnownBrandConflict(productName, cleanedEvidence)) return 0
   if (hasConflictingSpecs(target, cleanedEvidence)) return 0
   if (hasConflictingModelCode(identityTarget, cleanedEvidence)) return 0
   if (hasMissingStrongModelCode(productName, cleanedEvidence)) return 0

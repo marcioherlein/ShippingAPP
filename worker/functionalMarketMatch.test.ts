@@ -5,8 +5,8 @@ import {
   inferArgentinaMarketMatchMode,
 } from './functionalMarketMatch'
 
-function item(title: string, price = 100000, condition = 'new') {
-  return { title, price, currency_id: 'ARS', condition }
+function item(title: string, price = 100000, condition = 'new', attributes: Array<{ id?: string; value_name?: string }> = []) {
+  return { title, price, currency_id: 'ARS', condition, attributes }
 }
 
 describe('Argentina market functional comparable matcher', () => {
@@ -16,12 +16,14 @@ describe('Argentina market functional comparable matcher', () => {
     expect(inferArgentinaMarketMatchMode('Samsung WW65A4000EE 6.5kg', 'lavarropas')).toBe('exact')
   })
 
-  it('routes private-label and generic products to functional mode, including decimal specs', () => {
+  it('routes private-label and generic products to functional mode, including decimal and domain specs', () => {
     expect(inferArgentinaMarketMatchMode('IANONI Super Power Carbon Fiber Padel Racket', 'paleta de padel')).toBe('functional')
     expect(inferArgentinaMarketMatchMode('Generic Cordless Vacuum 500W', 'aspiradora')).toBe('functional')
     expect(inferArgentinaMarketMatchMode('Caja organizadora plastica transparente 60L', 'storage box')).toBe('functional')
     expect(inferArgentinaMarketMatchMode('Pava electrica 1.7L 2200W sin marca', 'pava electrica')).toBe('functional')
     expect(inferArgentinaMarketMatchMode('Lavarropas frontal 6.5kg sin marca', 'lavarropas')).toBe('functional')
+    expect(inferArgentinaMarketMatchMode('Cafetera espresso 15 bar sin marca', 'cafetera espresso')).toBe('functional')
+    expect(inferArgentinaMarketMatchMode('Camara seguridad WiFi exterior 3MP sin marca', 'camara de seguridad')).toBe('functional')
   })
 
   it('accepts equivalent branded products only when category and explicit specs match', () => {
@@ -47,6 +49,11 @@ describe('Argentina market functional comparable matcher', () => {
       item('Pava Electrica 1,7L 2000W'),
       'Pava electrica 1.7L 2200W sin marca',
       'pava electrica',
+    )).toBe(0)
+    expect(functionalComparableScore(
+      item('Amoladora Lusqtoff Angular 115mm 850W', 100000, 'new', [{ id: 'POWER', value_name: '800W' }]),
+      'Amoladora angular 115mm 800W sin marca',
+      'amoladora',
     )).toBe(0)
   })
 
@@ -113,6 +120,38 @@ describe('Argentina market functional comparable matcher', () => {
     )).toBe(0)
   })
 
+  it('requires ANC when it is explicitly requested', () => {
+    expect(functionalComparableScore(
+      item('Auriculares TWS Bluetooth F9'),
+      'Auriculares TWS Bluetooth con ANC sin marca',
+      'auriculares bluetooth',
+    )).toBe(0)
+    expect(functionalComparableScore(
+      item('Auriculares TWS Bluetooth Noise Cancelling ANC'),
+      'Auriculares TWS Bluetooth con ANC sin marca',
+      'auriculares bluetooth',
+    )).toBeGreaterThanOrEqual(55)
+  })
+
+  it('keeps bagless targets separate from bagged vacuums', () => {
+    expect(functionalComparableScore(
+      item('Aspiradora Smartlife con bolsa 1800W'),
+      'Aspiradora sin bolsa 1800W sin marca',
+      'aspiradora',
+    )).toBe(0)
+    expect(functionalComparableScore(
+      item('Aspiradora Smartlife sin bolsa 1800W'),
+      'Aspiradora sin bolsa 1800W sin marca',
+      'aspiradora',
+    )).toBeGreaterThanOrEqual(55)
+  })
+
+  it('requires explicit slot-count evidence when a toaster specifies two slots', () => {
+    expect(functionalComparableScore(item('Tostadora 800W'), 'Tostadora 2 ranuras 800W sin marca', 'tostadora')).toBe(0)
+    expect(functionalComparableScore(item('Tostadora 2 rodajas 800W'), 'Tostadora 2 ranuras 800W sin marca', 'tostadora')).toBeGreaterThanOrEqual(55)
+    expect(functionalComparableScore(item('Tostadora 4 ranuras 800W'), 'Tostadora 2 ranuras 800W sin marca', 'tostadora')).toBe(0)
+  })
+
   it('requires all category evidence for multi-token functional categories', () => {
     expect(functionalComparableScore(
       item('TV LED 55\" 4K'),
@@ -126,9 +165,10 @@ describe('Argentina market functional comparable matcher', () => {
     )).toBeGreaterThanOrEqual(55)
   })
 
-  it('rejects accessories, unsolicited bundles and used items', () => {
+  it('rejects accessories, unsolicited bundles, sets and used items', () => {
     expect(functionalComparableScore(item('Filtro Repuesto Aspiradora Inalambrica 500W'), 'Generic Cordless Vacuum 500W', 'aspiradora')).toBe(0)
     expect(functionalComparableScore(item('Combo Aspiradora Inalambrica 500W + Accesorios'), 'Generic Cordless Vacuum 500W', 'aspiradora')).toBe(0)
+    expect(functionalComparableScore(item('Set Planchita de Ceramica y Secador de Pelo 2200W'), 'Secador de pelo 2200W sin marca', 'secador de pelo')).toBe(0)
     expect(functionalComparableScore(item('Aspiradora Inalambrica 500W', 100000, 'used'), 'Generic Cordless Vacuum 500W', 'aspiradora')).toBe(0)
   })
 

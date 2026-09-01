@@ -23,6 +23,7 @@ class NodeDatabase implements D1DatabaseLike {
 const USER_A = 'user-clerk-profile-a'
 const USER_B = 'user-clerk-profile-b'
 const NOW = '2026-09-01T12:00:00.000Z'
+const verified = { status: 'verified' }
 
 function seed(sqlite: DatabaseSync) {
   sqlite.exec(readFileSync('migrations/0001_saas_foundation.sql', 'utf8'))
@@ -43,23 +44,37 @@ describe('Stage 6 Clerk server-owned email profile sync', () => {
 
   afterEach(() => sqlite.close())
 
-  it('selects the declared primary Clerk email rather than a secondary address', () => {
+  it('selects only the declared verified primary Clerk email rather than a secondary address', () => {
     expect(selectClerkProfile({
       primaryEmailAddressId: 'primary',
       emailAddresses: [
-        { id: 'secondary', emailAddress: 'secondary@example.com' },
-        { id: 'primary', emailAddress: 'primary@example.com' },
+        { id: 'secondary', emailAddress: 'secondary@example.com', verification: verified },
+        { id: 'primary', emailAddress: 'primary@example.com', verification: verified },
       ],
       firstName: 'María',
       lastName: 'Pérez',
     })).toEqual({ email: 'primary@example.com', displayName: 'María Pérez' })
   })
 
+  it('fails closed when the primary email is absent, mismatched or unverified', () => {
+    expect(selectClerkProfile({
+      emailAddresses: [{ id: 'secondary', emailAddress: 'secondary@example.com', verification: verified }],
+    }).email).toBeNull()
+    expect(selectClerkProfile({
+      primaryEmailAddressId: 'missing',
+      emailAddresses: [{ id: 'secondary', emailAddress: 'secondary@example.com', verification: verified }],
+    }).email).toBeNull()
+    expect(selectClerkProfile({
+      primaryEmailAddressId: 'primary',
+      emailAddresses: [{ id: 'primary', emailAddress: 'unverified@example.com', verification: { status: 'unverified' } }],
+    }).email).toBeNull()
+  })
+
   it('updates only the D1 user that matches both internal id and Clerk subject', async () => {
     const result = await syncClerkProfile({ DB: db }, { userId: USER_A, subject: 'clerk-a' }, {
       getUser: async () => ({
         primaryEmailAddressId: 'mail-a',
-        emailAddresses: [{ id: 'mail-a', emailAddress: 'new-a@example.com' }],
+        emailAddresses: [{ id: 'mail-a', emailAddress: 'new-a@example.com', verification: verified }],
         firstName: 'New',
         lastName: 'Owner A',
       }),
@@ -72,7 +87,10 @@ describe('Stage 6 Clerk server-owned email profile sync', () => {
 
   it('does not cross-map a profile when internal id and Clerk subject belong to different users', async () => {
     const result = await syncClerkProfile({ DB: db }, { userId: USER_A, subject: 'clerk-b' }, {
-      getUser: async () => ({ emailAddresses: [{ id: 'mail-b', emailAddress: 'attacker@example.com' }] }),
+      getUser: async () => ({
+        primaryEmailAddressId: 'mail-b',
+        emailAddresses: [{ id: 'mail-b', emailAddress: 'attacker@example.com', verification: verified }],
+      }),
     })
     expect(result).toEqual({ synced: false, emailReady: true })
     expect(sqlite.prepare('SELECT email FROM users WHERE id = ?').get(USER_A)).toEqual({ email: 'old-a@example.com' })
@@ -89,7 +107,10 @@ describe('Stage 6 Clerk server-owned email profile sync', () => {
 
   it('does not persist malformed Clerk email values', async () => {
     const result = await syncClerkProfile({ DB: db }, { userId: USER_A, subject: 'clerk-a' }, {
-      getUser: async () => ({ emailAddresses: [{ id: 'mail-a', emailAddress: 'owner@example.com\r\nBcc: victim@example.com' }] }),
+      getUser: async () => ({
+        primaryEmailAddressId: 'mail-a',
+        emailAddresses: [{ id: 'mail-a', emailAddress: 'owner@example.com\r\nBcc: victim@example.com', verification: verified }],
+      }),
     })
     expect(result).toEqual({ synced: false, emailReady: false })
     expect(sqlite.prepare('SELECT email FROM users WHERE id = ?').get(USER_A)).toEqual({ email: 'old-a@example.com' })

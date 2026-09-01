@@ -23,6 +23,10 @@ const TOKEN_ALIASES: Record<string, string> = {
   electrico: 'electric', electrica: 'electric', electric: 'electric',
   carbono: 'carbon', carbon: 'carbon',
   cancelacion: 'anc', cancelling: 'anc', canceling: 'anc', cancellation: 'anc', anc: 'anc',
+  exterior: 'outdoor', exteriores: 'outdoor', outdoor: 'outdoor',
+  interior: 'indoor', interiores: 'indoor', indoor: 'indoor',
+  ajustable: 'adjustable', ajustables: 'adjustable', adjustable: 'adjustable', regulable: 'adjustable', regulables: 'adjustable',
+  fijo: 'fixed', fija: 'fixed', fijos: 'fixed', fijas: 'fixed', fixed: 'fixed',
   caja: 'box', box: 'box',
   organizadora: 'storage', organizador: 'storage', storage: 'storage',
 }
@@ -31,7 +35,7 @@ const STOPWORDS = new Set(['a', 'al', 'and', 'con', 'de', 'del', 'el', 'en', 'fo
 const ACCESSORY_TERMS = new Set([...EXCLUDED_LISTING_TERMS, 'case', 'cover', 'replacement', 'repuesto', 'spare', 'accesorio', 'carcasa', 'filtro', 'cable', 'cargador', 'soporte'])
 const BUNDLE_TERMS = new Set(['combo', 'bundle', 'kit', 'set'])
 const DISPLAY_SHORTHANDS = new Set(['3k', '4k', '6k', '8k', '12k', '18k', '24k'])
-const REQUIRED_TRAITS = new Set(['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc'])
+const REQUIRED_TRAITS = new Set(['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc', 'outdoor', 'adjustable'])
 
 function normalizedTokens(value: string) {
   return cleanText(value)
@@ -203,6 +207,8 @@ function hasCriticalTraitConflict(target: string, candidate: string) {
   if (expected.has('gas') && actual.has('electric')) return true
   if (expected.has('frontal') && (actual.has('superior') || actual.has('semiautomatico') || actual.has('semi'))) return true
   if (expected.has('wireless') && (actual.has('cableado') || actual.has('wired'))) return true
+  if (expected.has('outdoor') && actual.has('indoor')) return true
+  if (expected.has('adjustable') && actual.has('fixed')) return true
   return false
 }
 
@@ -226,7 +232,7 @@ function traitBonus(target: string, candidate: string) {
   const expected = tokenSet(target)
   const actual = tokenSet(candidate)
   let score = 0
-  for (const trait of ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc', 'eva', 'diamante', 'redonda', 'lagrima']) {
+  for (const trait of ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc', 'outdoor', 'adjustable', 'eva', 'diamante', 'redonda', 'lagrima']) {
     if (expected.has(trait) && actual.has(trait)) score += 7
   }
   return Math.min(18, score)
@@ -236,7 +242,7 @@ export function buildFunctionalMarketQuery(productName: string, category: string
   const specs = [...extractSpecs(productName).entries()].flatMap(([unit, values]) => [...values].map((value) => `${value}${unit}`))
   const productTokens = normalizedTokens(productName).filter((token) => !containsBrand(token)).filter((token) => token.length >= 3)
   const categoryTokens = normalizedTokens(category)
-  const usefulTraits = productTokens.filter((token) => ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc', 'eva', 'diamante', 'redonda', 'lagrima', 'storage', 'box'].includes(token))
+  const usefulTraits = productTokens.filter((token) => ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc', 'outdoor', 'adjustable', 'eva', 'diamante', 'redonda', 'lagrima', 'storage', 'box'].includes(token))
   const slotCount = extractSlotCount(productName)
   const semanticCounts = slotCount ? [`${slotCount} ranuras`] : []
   const query = [...categoryTokens, ...usefulTraits, ...specs, ...semanticCounts]

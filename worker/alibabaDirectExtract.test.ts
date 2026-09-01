@@ -110,4 +110,62 @@ describe('Alibaba deterministic direct extractor', () => {
     expect(facts.packedWeightKg).toBeNull()
     expect(facts.volumeCbm).toBeNull()
   })
+
+  it('recovers an explicit MOQ-linked price tier and packaging from a JSON.parse state blob', () => {
+    const state = JSON.stringify({
+      product: {
+        product_id: '1601666174891',
+        product_title: 'Automatic Mechanical Stainless Steel Wristwatch',
+        category_path: ['Watches', 'Mechanical Watches'],
+        price_tiers: [
+          { min_quantity: 5, max_quantity: 49, unit_price: '71.50' },
+          { min_quantity: 50, unit_price: '66.00' },
+        ],
+        packaging: {
+          package_weight: '180 g',
+          package_dimensions: '12 x 10 x 8 cm',
+        },
+        attributes: [
+          { name: 'Place of Origin', value: 'China' },
+          { name: 'Product Type', value: 'Wristwatch' },
+        ],
+      },
+    })
+    const html = page(`<script>window.__STATE__ = JSON.parse(${JSON.stringify(state)});</script>`)
+    const facts = extractAlibabaDirectFacts(html, watchUrl)
+    expect(facts.unitPriceUsd).toBe(71.5)
+    expect(facts.moq).toBe(5)
+    expect(facts.packedWeightKg).toBe(0.18)
+    expect(facts.volumeCbm).toBe(0.00096)
+    expect(facts.category).toBe('Mechanical Watches')
+    expect(facts.originCountry).toBe('China')
+    expect(facts.evidence).toContain('price_tier')
+  })
+
+  it('recovers product data serialized as JSON inside another Alibaba state object', () => {
+    const nested = JSON.stringify({
+      productId: '12345684',
+      productTitle: 'Bluetooth Speaker 10W',
+      productType: 'Portable Bluetooth Speaker',
+      moq: 20,
+      unitWeight: '0.75 kg',
+      packageDimensions: '20 x 14 x 12 cm',
+      specifications: [{ name: 'Place of Origin', value: 'Guangdong, China' }],
+    })
+    const html = page(`<script type="application/json">${JSON.stringify({ bootstrap: nested })}</script>`)
+    const facts = extractAlibabaDirectFacts(html)
+    expect(facts.name).toBe('Bluetooth Speaker 10W')
+    expect(facts.category).toBe('Portable Bluetooth Speaker')
+    expect(facts.moq).toBe(20)
+    expect(facts.packedWeightKg).toBe(0.75)
+    expect(facts.volumeCbm).toBe(0.00336)
+    expect(facts.originCountry).toBe('Guangdong, China')
+  })
+
+  it('uses visible breadcrumb text as category evidence when Alibaba omits category JSON', () => {
+    const html = page('<nav class="product-breadcrumb"><a>Home</a><a>Consumer Electronics</a><a>Portable Audio</a><a>Bluetooth Speakers</a></nav>', '<meta property="og:title" content="Portable Bluetooth Speaker">')
+    const facts = extractAlibabaDirectFacts(html)
+    expect(facts.categoryPath).toEqual(['Consumer Electronics', 'Portable Audio', 'Bluetooth Speakers'])
+    expect(facts.category).toBe('Bluetooth Speakers')
+  })
 })

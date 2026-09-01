@@ -5,6 +5,7 @@ on:
     branches:
       - audit/argentina-market-mixed-48
 
+# Rerun checkpoint: production main 771f3dad95cabb89022c443d093272182ba7ce24
 permissions:
   contents: read
 

@@ -133,6 +133,24 @@ describe('Stage 6 email preference and unsubscribe boundary', () => {
     expect(scalar(sqlite, 'SELECT digest_enabled AS value FROM email_preferences WHERE user_id = ?', USER_B)).toBe(1)
   })
 
+  it('treats a valid stale unsubscribe token as idempotent after the account was deleted', async () => {
+    const token = await createUnsubscribeToken({
+      userId: USER_A,
+      scope: 'marketing',
+      secret: SECRET,
+      expiresAt: new Date('2027-09-01T00:00:00Z'),
+    })
+    sqlite.prepare('DELETE FROM users WHERE id = ?').run(USER_A)
+    const response = await handleApplicationEmail(new Request('https://shippingapp.test/api/email-unsubscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ token }),
+    }), { DB: db, EMAIL_UNSUBSCRIBE_SECRET: SECRET }, { clock: () => new Date(NOW) })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ unsubscribed: true, scope: 'marketing' })
+    expect(scalar(sqlite, 'SELECT COUNT(*) AS value FROM email_preferences WHERE user_id = ?', USER_A)).toBe(0)
+  })
+
   it('rejects forged unsubscribe token without changing any user', async () => {
     await handleApplicationEmail(trusted('/api/email-preferences', USER_A), { DB: db })
     const token = await createUnsubscribeToken({
@@ -166,7 +184,7 @@ describe('Stage 6 email preference and unsubscribe boundary', () => {
     expect(text).not.toContain('a@example.com')
     expect(JSON.parse(text)).toMatchObject({
       status: 'ok',
-      email: { provider: 'resend', providerConfigured: true, senderConfigured: true, unsubscribeConfigured: true },
+      email: { provider: 'resend', sendingEnabled: false, providerConfigured: true, senderConfigured: true, unsubscribeConfigured: true },
     })
   })
 })

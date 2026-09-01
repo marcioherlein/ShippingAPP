@@ -57,6 +57,9 @@ const runtimeText = await runtimeResponse.text()
 let runtime
 try { runtime = JSON.parse(runtimeText) } catch { throw new Error(`email runtime returned non-JSON: ${runtimeText.slice(0, 300)}`) }
 if (runtime?.status !== 'ok' || !runtime?.email) throw new Error(`email runtime unhealthy: ${runtimeText.slice(0, 500)}`)
+if (runtime.email.sendingEnabled !== false) {
+  throw new Error('Stage 6 production email sending must remain explicitly disabled until Stage 8 domain/sender readiness')
+}
 const templates = Array.isArray(runtime.email.templates) ? runtime.email.templates : []
 for (const required of ['welcome', 'usage', 'weekly_digest', 'alert', 'billing']) {
   if (!templates.includes(required)) throw new Error(`email runtime missing template ${required}`)
@@ -77,4 +80,4 @@ const forgedUnsubscribe = await expectStatus(
 const forgedText = await forgedUnsubscribe.text()
 if (/victim-user-id|recipient|@/.test(forgedText)) throw new Error('unsubscribe failure leaked user or recipient information')
 
-console.log(`Stage 6 production email boundary smoke: PASS providerConfigured=${Boolean(runtime.email.providerConfigured)} senderConfigured=${Boolean(runtime.email.senderConfigured)} unsubscribeConfigured=${Boolean(runtime.email.unsubscribeConfigured)}`)
+console.log(`Stage 6 production email boundary smoke: PASS sendingEnabled=${Boolean(runtime.email.sendingEnabled)} providerConfigured=${Boolean(runtime.email.providerConfigured)} senderConfigured=${Boolean(runtime.email.senderConfigured)} unsubscribeConfigured=${Boolean(runtime.email.unsubscribeConfigured)}`)

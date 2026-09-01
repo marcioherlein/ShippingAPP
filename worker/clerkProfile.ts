@@ -3,7 +3,11 @@ import type { D1DatabaseLike } from './persistence/d1'
 
 type Env = Record<string, unknown> & { DB?: D1DatabaseLike }
 
-type ClerkEmail = { id?: string | null; emailAddress?: string | null }
+type ClerkEmail = {
+  id?: string | null
+  emailAddress?: string | null
+  verification?: { status?: string | null } | null
+}
 type ClerkUserLike = {
   primaryEmailAddressId?: string | null
   emailAddresses?: ClerkEmail[] | null
@@ -38,9 +42,11 @@ function displayName(user: ClerkUserLike) {
 
 export function selectClerkProfile(user: ClerkUserLike) {
   const emails = Array.isArray(user.emailAddresses) ? user.emailAddresses : []
-  const primary = emails.find((entry) => entry?.id && entry.id === user.primaryEmailAddressId) ?? emails[0]
+  const primaryId = typeof user.primaryEmailAddressId === 'string' ? user.primaryEmailAddressId : ''
+  const primary = primaryId ? emails.find((entry) => entry?.id === primaryId) : null
+  const verifiedPrimary = primary?.verification?.status === 'verified' ? primary : null
   return {
-    email: validEmail(primary?.emailAddress),
+    email: validEmail(verifiedPrimary?.emailAddress),
     displayName: displayName(user),
   }
 }

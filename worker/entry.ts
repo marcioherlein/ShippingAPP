@@ -8,6 +8,8 @@ import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory
 import { overlayHybridMarketEconomics } from './hybridMarketEconomics'
 import { handleWatchlist, isWatchlistRoute } from './watchlist'
 import { withUsageEntitlement } from './usage'
+import { handleApplicationEmail, isApplicationEmailRoute } from './emailPreferences'
+import { syncClerkProfile } from './clerkProfile'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -110,6 +112,10 @@ async function overlayUserAnalysisResponse(
 async function dispatchAuthorizedRequest(request: Request, env: Record<string, unknown>): Promise<Response> {
   const url = new URL(request.url)
 
+  if (isApplicationEmailRoute(url.pathname)) {
+    return handleApplicationEmail(request, env as any)
+  }
+
   if (isAnalysisHistoryRoute(url.pathname)) {
     return handleAnalysisHistory(request, env as any)
   }
@@ -168,7 +174,15 @@ export default {
         if (gate.identity?.kind !== 'user') {
           return Response.json({ error: 'Authentication rollout is not enabled.', code: 'auth_disabled' }, { status: 404 })
         }
-        return Response.json({ authenticated: true, accountId: gate.identity.userId })
+        const profile = await syncClerkProfile(env as any, {
+          userId: gate.identity.userId,
+          subject: gate.identity.subject,
+        })
+        return Response.json({
+          authenticated: true,
+          accountId: gate.identity.userId,
+          emailReady: profile.emailReady,
+        })
       }
 
       return withUsageEntitlement(

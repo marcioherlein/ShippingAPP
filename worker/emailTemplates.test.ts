@@ -31,7 +31,8 @@ describe('Stage 6 application email templates', () => {
     expect(alert.html).not.toContain('<script>')
     expect(alert.html).not.toContain('<img src=x')
     expect(alert.html).toContain('&lt;script&gt;')
-    expect(digest.html).not.toContain('onerror=')
+    expect(digest.html).not.toContain('<script>')
+    expect(digest.html).not.toContain('<img src=x')
     expect(digest.html).toContain('&lt;img')
   })
 

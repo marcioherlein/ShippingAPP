@@ -58,6 +58,10 @@ function fromAddress(env: EmailEnv) {
   return textEnv(env, 'EMAIL_FROM')
 }
 
+function emailSendingEnabled(env: EmailEnv) {
+  return textEnv(env, 'EMAIL_SENDING_ENABLED', 5) === 'true'
+}
+
 function preferencesAllow(scope: EmailPreferenceScope, row: { digest_enabled: number; alerts_enabled: number; marketing_enabled: number }) {
   if (scope === 'transactional') return true
   if (scope === 'digest') return row.digest_enabled === 1
@@ -122,6 +126,9 @@ export async function sendApplicationEmail(
   }
   const key = validIdempotencyKey(input.idempotencyKey)
   if (!key) return { status: 'failed', replayed: false, code: 'invalid_idempotency_key' }
+  if (!emailSendingEnabled(env)) {
+    return { status: 'not_configured', replayed: false, code: 'email_sending_disabled' }
+  }
 
   const clock = dependencies.clock ?? (() => new Date())
   const repo = new EmailRepository(env.DB, clock)
@@ -220,6 +227,7 @@ export function emailRuntimeStatus(env: EmailEnv) {
   const unsubscribeSecret = textEnv(env, 'EMAIL_UNSUBSCRIBE_SECRET', 512)
   return {
     provider: provider.name,
+    sendingEnabled: emailSendingEnabled(env),
     providerConfigured: provider.configured,
     senderConfigured: Boolean(fromAddress(env)),
     unsubscribeConfigured: Boolean(unsubscribeSecret && unsubscribeSecret.length >= 32 && appOrigin(env, null)),

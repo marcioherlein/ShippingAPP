@@ -11,8 +11,8 @@ for (const name of migrationFiles) {
 }
 
 const expectedTables = [
-  'analyses', 'billing_events', 'credit_ledger', 'credit_reservations', 'email_events', 'email_preferences',
-  'plans', 'subscriptions', 'usage_periods', 'users', 'watchlist_items', 'watchlist_snapshots',
+  'analyses', 'billing_events', 'credit_ledger', 'credit_reservations', 'digest_run_recipients', 'digest_runs',
+  'email_events', 'email_preferences', 'plans', 'subscriptions', 'usage_periods', 'users', 'watchlist_items', 'watchlist_snapshots',
 ]
 const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name)
 if (JSON.stringify(tables) !== JSON.stringify(expectedTables)) throw new Error(`D1 schema table mismatch: ${JSON.stringify(tables)}`)
@@ -20,6 +20,7 @@ if (JSON.stringify(tables) !== JSON.stringify(expectedTables)) throw new Error(`
 const expectedIndexes = [
   'idx_analyses_user_created', 'idx_analyses_user_visible_created', 'idx_billing_events_status_created', 'idx_billing_events_user_created',
   'idx_credit_ledger_usage_period', 'idx_credit_ledger_user_created', 'idx_credit_reservations_lease', 'idx_credit_reservations_user_status',
+  'idx_digest_recipients_run_status', 'idx_digest_recipients_user_created', 'idx_digest_runs_status_updated',
   'idx_email_events_provider_message', 'idx_email_events_user_created', 'idx_subscriptions_provider_id', 'idx_subscriptions_user',
   'idx_usage_periods_user_period', 'idx_users_email', 'idx_watchlist_items_user_active',
   'idx_watchlist_snapshots_item_observed',
@@ -103,6 +104,40 @@ const expectedTriggers = [
 const triggers = db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_credit_reservations_%' ORDER BY name").all().map((row) => row.name)
 if (JSON.stringify(triggers) !== JSON.stringify(expectedTriggers)) throw new Error(`Stage 5 reservation trigger mismatch: ${JSON.stringify(triggers)}`)
 
+// Stage 6 email ownership and idempotency invariants.
+const emailPreferenceFks = db.prepare("PRAGMA foreign_key_list('email_preferences')").all()
+if (!emailPreferenceFks.some((row) => row.table === 'users' && row.from === 'user_id' && row.to === 'id')) {
+  throw new Error('Stage 6 email preference owner FK is missing')
+}
+const emailEventFks = db.prepare("PRAGMA foreign_key_list('email_events')").all()
+if (!emailEventFks.some((row) => row.table === 'users' && row.from === 'user_id' && row.to === 'id')) {
+  throw new Error('Stage 6 email event user FK is missing')
+}
+const emailEventUnique = db.prepare("PRAGMA index_list('email_events')").all().filter((row) => Number(row.unique) === 1)
+if (!emailEventUnique.some((index) => JSON.stringify(uniqueColumns(index)) === JSON.stringify(['idempotency_key']))) {
+  throw new Error('Stage 6 email event idempotency uniqueness is missing')
+}
+
+// Stage 7 scheduler state must be idempotent, owner-linked, and contain no
+// duplicate recipient address/message body columns.
+const digestRunUnique = db.prepare("PRAGMA index_list('digest_runs')").all().filter((row) => Number(row.unique) === 1)
+if (!digestRunUnique.some((index) => JSON.stringify(uniqueColumns(index)) === JSON.stringify(['run_key']))) {
+  throw new Error('Stage 7 digest run-key uniqueness is missing')
+}
+const digestRecipientIndexes = db.prepare("PRAGMA index_list('digest_run_recipients')").all()
+const digestPrimary = digestRecipientIndexes.find((row) => String(row.origin) === 'pk')
+if (!digestPrimary || JSON.stringify(uniqueColumns(digestPrimary)) !== JSON.stringify(['run_id', 'user_id'])) {
+  throw new Error('Stage 7 digest recipient composite primary key is missing')
+}
+const digestFks = db.prepare("PRAGMA foreign_key_list('digest_run_recipients')").all()
+if (!digestFks.some((row) => row.table === 'digest_runs' && row.from === 'run_id' && row.to === 'id')) throw new Error('Stage 7 digest run FK is missing')
+if (!digestFks.some((row) => row.table === 'users' && row.from === 'user_id' && row.to === 'id')) throw new Error('Stage 7 digest user FK is missing')
+if (!digestFks.some((row) => row.table === 'email_events' && row.from === 'email_event_id' && row.to === 'id')) throw new Error('Stage 7 digest email-event FK is missing')
+const digestColumns = db.prepare("PRAGMA table_info('digest_run_recipients')").all().map((row) => String(row.name))
+for (const forbidden of ['email', 'recipient', 'subject', 'html', 'text', 'message_body', 'product_title']) {
+  if (digestColumns.some((column) => column.toLowerCase().includes(forbidden))) throw new Error(`Stage 7 scheduler persists forbidden content column: ${forbidden}`)
+}
+
 // Prove the DB invariant itself: with one granted credit, the first reservation
 // consumes it, the second distinct operation is rejected, release refunds once,
 // and the released logical operation can be retried exactly once per attempt.
@@ -135,6 +170,24 @@ const consumeEntries = Number(db.prepare("SELECT COUNT(*) AS count FROM credit_l
 const refundEntries = Number(db.prepare("SELECT COUNT(*) AS count FROM credit_ledger WHERE user_id='stage5-user' AND entry_type='refund'").get().count)
 if (consumeEntries !== 2 || refundEntries !== 1) throw new Error(`Stage 5 ledger attempt invariant failed: consume=${consumeEntries} refund=${refundEntries}`)
 
+// Stage 7 run-level idempotency probe.
+db.prepare("INSERT INTO digest_runs (id, run_key, period_start, period_end, due_at, status, cursor_user_id, invocation_count, last_error_code, started_at, updated_at, completed_at) VALUES ('digest-run-a', 'weekly:2026-08-31', '2026-08-31T00:00:00.000Z', '2026-09-07T00:00:00.000Z', '2026-08-31T11:00:00.000Z', 'running', NULL, 1, NULL, ?, ?, NULL)").run(now, now)
+let duplicateRunBlocked = false
+try {
+  db.prepare("INSERT INTO digest_runs (id, run_key, period_start, period_end, due_at, status, cursor_user_id, invocation_count, last_error_code, started_at, updated_at, completed_at) VALUES ('digest-run-b', 'weekly:2026-08-31', '2026-08-31T00:00:00.000Z', '2026-09-07T00:00:00.000Z', '2026-08-31T11:00:00.000Z', 'running', NULL, 1, NULL, ?, ?, NULL)").run(now, now)
+} catch {
+  duplicateRunBlocked = true
+}
+if (!duplicateRunBlocked) throw new Error('Stage 7 duplicate weekly run key was not blocked')
+db.prepare("INSERT INTO digest_run_recipients (run_id, user_id, status, attempt_count, created_at, updated_at) VALUES ('digest-run-a', 'stage5-user', 'pending', 0, ?, ?)").run(now, now)
+let duplicateRecipientBlocked = false
+try {
+  db.prepare("INSERT INTO digest_run_recipients (run_id, user_id, status, attempt_count, created_at, updated_at) VALUES ('digest-run-a', 'stage5-user', 'pending', 0, ?, ?)").run(now, now)
+} catch {
+  duplicateRecipientBlocked = true
+}
+if (!duplicateRecipientBlocked) throw new Error('Stage 7 duplicate run/user recipient was not blocked')
+
 if (db.prepare('PRAGMA foreign_keys').get().foreign_keys !== 1) throw new Error('Foreign keys are not enabled')
 
 let failed = false
@@ -149,4 +202,4 @@ if (db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' A
 if (db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='users'").get().count !== 1) throw new Error('Failed migration damaged prior schema')
 
 db.close()
-console.log(`D1 schema validation passed: ${expectedTables.length} tables, ${expectedIndexes.length} required indexes, ${migrationFiles.length} migrations, Stage 4 ownership/dedupe PASS, Stage 5 atomic reservation/ledger constraints PASS, rollback probe PASS`)
+console.log(`D1 schema validation passed: ${expectedTables.length} tables, ${expectedIndexes.length} required indexes, ${migrationFiles.length} migrations, Stage 4 ownership/dedupe PASS, Stage 5 atomic reservation/ledger constraints PASS, Stage 6 email ownership/idempotency PASS, Stage 7 weekly-run/recipient idempotency+privacy PASS, rollback probe PASS`)

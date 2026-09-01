@@ -198,7 +198,7 @@ function mergeDirect(data: any, direct: Exclude<DirectAlibabaResult, { status: '
       directStatus: direct.httpStatus,
       browserAttempted: false,
       browserMsUsed: null,
-      reason: 'ShippingAPP intentó primero su extractor propio de Alibaba. Parse.bot todavía no fue consultado.',
+      reason: 'ShippingAPP intentó primero su extractor propio de Alibaba. No se consumieron créditos de Parse.bot.',
     },
     suggestedQuantities: quantitiesFromMoq(finalMoq),
     confidence: {
@@ -225,14 +225,14 @@ function mergeDirect(data: any, direct: Exclude<DirectAlibabaResult, { status: '
 function mergeParsebot(data: any, parsebot: Extract<ParsebotAlibabaResult, { status: 'ready' }>) {
   const merged = mergeCommonFacts(data, parsebot.facts, {
     source: 'parsebot',
-    reason: 'El extractor propio dejó datos faltantes; Parse.bot se usó sólo como suplemento estructurado.',
-    browserAttempted: false,
-    browserMsUsed: null,
+    reason: 'La lectura directa y Browser Run propio dejaron datos faltantes; Parse.bot se usó sólo como último suplemento opcional.',
+    browserAttempted: Boolean(data.sourceRead?.browserAttempted),
+    browserMsUsed: data.sourceRead?.browserMsUsed ?? null,
   })
   return {
     ...merged,
     assumptions: [
-      `Parse.bot se consultó porque la lectura propia tenía ${requiredSelfFirstSignals(data)}/7 señales obligatorias.`,
+      `Parse.bot se consultó como último rescate porque los scrapers propios todavía tenían ${requiredSelfFirstSignals(data)}/7 señales obligatorias.`,
       ...parsebot.warnings,
       ...(merged.assumptions || []),
     ],
@@ -253,7 +253,7 @@ function mergeParsebot(data: any, parsebot: Extract<ParsebotAlibabaResult, { sta
 function mergeNative(data: any, native: Extract<NativeAlibabaResult, { status: 'ready' }>) {
   const merged = mergeCommonFacts(data, native.facts, {
     source: 'browser',
-    reason: 'La lectura propia y el suplemento estructurado no completaron la ficha; ShippingAPP usó un único Browser Run JSON.',
+    reason: 'La lectura HTTPS propia no completó la ficha; ShippingAPP usó Browser Run propio antes de considerar Parse.bot.',
     browserAttempted: true,
     browserMsUsed: native.browserMsUsed,
   })
@@ -289,13 +289,8 @@ export async function resolveAlibabaSelfFirst(
   if (direct.status !== 'unavailable') data = mergeDirect(data, direct)
   else data.assumptions = [...direct.warnings, ...(data.assumptions || [])]
 
-  // Parse.bot is now an optional supplement, never the first provider.
-  if (requiredSelfFirstSignals(data) < 7) {
-    const parsebot = await parsebotReader(url, env)
-    if (parsebot.status === 'ready') data = mergeParsebot(data, parsebot)
-    else data.assumptions = [...parsebot.warnings, ...(data.assumptions || [])]
-  }
-
+  // First-party path: direct HTTPS/embedded JSON first, then our own rendered
+  // browser extraction. A complete product ficha must consume zero Parse.bot credits.
   if (requiredSelfFirstSignals(data) < 7) {
     const native = await nativeReader(url, env.BROWSER)
     if (native.status === 'ready') data = mergeNative(data, native)
@@ -304,14 +299,29 @@ export async function resolveAlibabaSelfFirst(
         ...data.sourceRead,
         browserAttempted: true,
         browserMsUsed: native.browserMsUsed,
-        reason: 'Los proveedores automáticos no completaron la ficha; ShippingAPP solicita al usuario sólo los datos faltantes.',
+        reason: 'La lectura directa y Browser Run propio no completaron la ficha; se evaluará el suplemento opcional de Parse.bot.',
       }
-      data.assumptions = [
-        ...native.warnings,
-        'No se inventan precio, MOQ, peso, volumen ni origen. La ficha obligatoria queda abierta hasta que el usuario complete los faltantes.',
-        ...(data.assumptions || []),
-      ]
+      data.assumptions = [...native.warnings, ...(data.assumptions || [])]
     }
+  }
+
+  // Parse.bot is a last-resort supplement only. ShippingAPP remains operational
+  // without a key, without credits, or while Parse.bot is unavailable.
+  if (requiredSelfFirstSignals(data) < 7) {
+    const parsebot = await parsebotReader(url, env)
+    if (parsebot.status === 'ready') data = mergeParsebot(data, parsebot)
+    else data.assumptions = [...parsebot.warnings, ...(data.assumptions || [])]
+  }
+
+  if (requiredSelfFirstSignals(data) < 7) {
+    data.sourceRead = {
+      ...data.sourceRead,
+      reason: 'Los scrapers propios y cualquier suplemento opcional no completaron la ficha; ShippingAPP solicita al usuario sólo los datos faltantes.',
+    }
+    data.assumptions = [
+      'No se inventan precio, MOQ, peso, volumen ni origen. La ficha obligatoria queda abierta hasta que el usuario complete los faltantes.',
+      ...(data.assumptions || []),
+    ]
   }
 
   const signals = requiredSelfFirstSignals(data)

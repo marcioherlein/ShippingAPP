@@ -13,6 +13,121 @@ type CorroborationReader = (
   fetchImpl: FetchLike,
 ) => Promise<AlibabaPublicCorroborationResult>
 
+const VISIBLE_SPEC_LABELS = [
+  'Country of Origin',
+  'Place of Origin',
+  'Movement Brand',
+  'Product Type',
+  'Case Material',
+  'Main Material',
+  'Model Number',
+  'Material',
+  'Movement',
+  'Function',
+  'Power',
+  'Type',
+] as const
+
+const VISIBLE_SPEC_LABEL_PATTERN = VISIBLE_SPEC_LABELS
+  .map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  .join('|')
+
+function normalizeSpecKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function decodeVisibleHtml(value: string) {
+  return value
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&#x27;|&apos;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&nbsp;/gi, ' ')
+}
+
+function stripNextVisibleLabel(value: string | null) {
+  if (!value) return value
+  const nextLabel = new RegExp(`\\s+(?:${VISIBLE_SPEC_LABEL_PATTERN})\\s*[:：]`, 'i')
+  const cut = value.search(nextLabel)
+  return (cut >= 0 ? value.slice(0, cut) : value).replace(/\s+/g, ' ').trim() || null
+}
+
+/**
+ * Alibaba often renders specs as neighbouring DOM rows. Flattening the whole
+ * page to one line can make `Place of Origin: China Material: ABS ...` look like
+ * a single value. Recover row boundaries from the HTML before those tags are
+ * removed, and use them only to repair/complete explicit product attributes.
+ */
+function visibleSpecRows(html: string) {
+  const withoutScripts = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  const segmented = decodeVisibleHtml(withoutScripts)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:div|li|p|tr|td|th|dd|dt|span|section|article)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+  const rows = new Map<string, { name: string; value: string }>()
+  const labelled = new RegExp(`^\\s*(${VISIBLE_SPEC_LABEL_PATTERN})\\s*[:：]\\s*(.+?)\\s*$`, 'i')
+  const bareLabel = new RegExp(`^\\s*(${VISIBLE_SPEC_LABEL_PATTERN})\\s*[:：]?\\s*$`, 'i')
+  const lines = segmented.split(/\n+/).map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean)
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]
+    const direct = line.match(labelled)
+    if (direct) {
+      const value = stripNextVisibleLabel(direct[2])
+      if (value) rows.set(normalizeSpecKey(direct[1]), { name: direct[1], value })
+      continue
+    }
+    const labelOnly = line.match(bareLabel)
+    if (!labelOnly || !lines[i + 1]) continue
+    const next = stripNextVisibleLabel(lines[i + 1])
+    if (next && !bareLabel.test(next)) rows.set(normalizeSpecKey(labelOnly[1]), { name: labelOnly[1], value: next })
+  }
+  return rows
+}
+
+function repairVisibleSpecSpill(facts: AlibabaDirectFacts, html: string): AlibabaDirectFacts {
+  const rows = visibleSpecRows(html)
+  const specifications: Array<{ name: string; value: string }> = []
+  const seen = new Set<string>()
+  const push = (name: string, value: string | null) => {
+    const cleaned = stripNextVisibleLabel(value)
+    if (!cleaned) return
+    const key = normalizeSpecKey(name)
+    const id = `${key}=${cleaned.toLowerCase()}`
+    if (seen.has(id)) return
+    seen.add(id)
+    specifications.push({ name, value: cleaned })
+  }
+
+  for (const spec of facts.specifications) push(spec.name, spec.value)
+  for (const row of rows.values()) push(row.name, row.value)
+
+  const rowValue = (...names: string[]) => {
+    for (const name of names) {
+      const row = rows.get(normalizeSpecKey(name))
+      if (row?.value) return row.value
+      const spec = specifications.find((item) => normalizeSpecKey(item.name) === normalizeSpecKey(name))
+      if (spec?.value) return spec.value
+    }
+    return null
+  }
+
+  const repairedOrigin = rowValue('Place of Origin', 'Country of Origin') || stripNextVisibleLabel(facts.originCountry)
+  const repairedMaterial = rowValue('Material', 'Case Material', 'Main Material') || stripNextVisibleLabel(facts.material)
+  const repairedFunction = rowValue('Product Type', 'Function', 'Type', 'Movement') || stripNextVisibleLabel(facts.functionText)
+
+  return {
+    ...facts,
+    originCountry: repairedOrigin,
+    material: repairedMaterial,
+    functionText: repairedFunction,
+    specifications,
+  }
+}
+
 function coreSignals(facts: AlibabaDirectFacts) {
   return [
     facts.name,
@@ -118,7 +233,7 @@ export async function extractAlibabaDirectHttp(
   }
 
   const extracted = extractAlibabaDirectFacts(html, url)
-  let facts = preserveUrlIdentity(extracted, url)
+  let facts = preserveUrlIdentity(repairVisibleSpecSpill(extracted, html), url)
   const corroborationWarnings: string[] = []
   const hints = { name: facts.name, category: facts.category }
 

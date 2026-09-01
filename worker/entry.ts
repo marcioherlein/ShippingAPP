@@ -8,6 +8,9 @@ import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory
 import { overlayHybridMarketEconomics } from './hybridMarketEconomics'
 import { handleWatchlist, isWatchlistRoute } from './watchlist'
 import { withUsageEntitlement } from './usage'
+import { handleApplicationEmail, isApplicationEmailRoute } from './emailPreferences'
+import { emailRuntimeStatus } from './emailService'
+import { syncClerkProfile } from './clerkProfile'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -16,6 +19,7 @@ const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_REFRESH_TOKEN',
   'MERCADOLIBRE_TOKEN_STORE',
 ] as const
+const EXPECTED_EMAIL_TEMPLATES = ['alert', 'billing', 'usage', 'weekly_digest', 'welcome']
 
 /**
  * `/api/analyze` and `/api/intake` get their authoritative Argentina benchmark
@@ -82,6 +86,27 @@ function jsonResponseLike(response: Response, body: unknown) {
   })
 }
 
+async function overlayRuntimeEmailStatus(response: Response, env: Record<string, unknown>) {
+  if (!response.ok) return response
+  let body: any
+  try { body = await response.clone().json() } catch { return response }
+  const email = emailRuntimeStatus(env as any)
+  const templates = [...email.templates].sort()
+  const architectureReady = email.provider === 'resend'
+    && JSON.stringify(templates) === JSON.stringify(EXPECTED_EMAIL_TEMPLATES)
+  return jsonResponseLike(response, {
+    ...body,
+    status: body?.status === 'ok' && architectureReady ? 'ok' : 'error',
+    checks: {
+      ...(body?.checks ?? {}),
+      emailArchitecture: {
+        ...email,
+        architectureReady,
+      },
+    },
+  })
+}
+
 async function overlayUserAnalysisResponse(
   response: Response,
   route: '/api/analyze' | '/api/intake',
@@ -109,6 +134,10 @@ async function overlayUserAnalysisResponse(
  */
 async function dispatchAuthorizedRequest(request: Request, env: Record<string, unknown>): Promise<Response> {
   const url = new URL(request.url)
+
+  if (isApplicationEmailRoute(url.pathname)) {
+    return handleApplicationEmail(request, env as any)
+  }
 
   if (isAnalysisHistoryRoute(url.pathname)) {
     return handleAnalysisHistory(request, env as any)
@@ -148,6 +177,9 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
 
   const innerEnv = withoutLegacyMarketCredentials(env, url.pathname)
   const response = await app.fetch(request, innerEnv as never)
+  if (request.method === 'GET' && url.pathname === '/api/runtime-smoke') {
+    return overlayRuntimeEmailStatus(response, env)
+  }
   if (request.method === 'POST' && url.pathname === '/api/analyze') {
     return overlayUserAnalysisResponse(response, '/api/analyze', env)
   }
@@ -168,7 +200,15 @@ export default {
         if (gate.identity?.kind !== 'user') {
           return Response.json({ error: 'Authentication rollout is not enabled.', code: 'auth_disabled' }, { status: 404 })
         }
-        return Response.json({ authenticated: true, accountId: gate.identity.userId })
+        const profile = await syncClerkProfile(env as any, {
+          userId: gate.identity.userId,
+          subject: gate.identity.subject,
+        })
+        return Response.json({
+          authenticated: true,
+          accountId: gate.identity.userId,
+          emailReady: profile.emailReady,
+        })
       }
 
       return withUsageEntitlement(

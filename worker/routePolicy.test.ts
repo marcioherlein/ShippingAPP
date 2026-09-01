@@ -21,6 +21,7 @@ describe('SaaS API route inventory', () => {
       ...exactRoutesFromSource('worker/analysisHistory.ts'),
       ...exactRoutesFromSource('worker/watchlist.ts'),
       ...exactRoutesFromSource('worker/usage.ts'),
+      ...exactRoutesFromSource('worker/emailPreferences.ts'),
       ...exactRoutesFromSource('worker/router.ts'),
       ...exactRoutesFromSource('worker/enrich.ts'),
       ...exactRoutesFromSource('worker/index.ts'),
@@ -44,6 +45,14 @@ describe('SaaS API route inventory', () => {
     expect(resolveRoutePolicy('/api/history', 'POST')).toMatchObject({ id: 'analysis-history', targetAccess: 'authenticated', targetMetered: false })
     expect(resolveRoutePolicy('/api/history-item', 'GET')).toMatchObject({ id: 'analysis-history-item', targetAccess: 'authenticated', targetMetered: false })
     expect(resolveRoutePolicy('/api/history-item', 'DELETE')).toMatchObject({ id: 'analysis-history-item', targetAccess: 'authenticated', targetMetered: false })
+  })
+
+  it('keeps email preferences tenant-authenticated while unsubscribe is signed-token public', () => {
+    expect(resolveRoutePolicy('/api/email-preferences', 'GET')).toMatchObject({ id: 'email-preferences', targetAccess: 'authenticated', targetMetered: false, costRisk: 'low' })
+    expect(resolveRoutePolicy('/api/email-preferences', 'PATCH')).toMatchObject({ id: 'email-preferences', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/email-unsubscribe', 'GET')).toMatchObject({ id: 'email-unsubscribe', targetAccess: 'public', targetMetered: false })
+    expect(resolveRoutePolicy('/api/email-unsubscribe', 'POST')).toMatchObject({ id: 'email-unsubscribe', targetAccess: 'public', targetMetered: false })
+    expect(resolveRoutePolicy('/api/email-runtime', 'GET')).toMatchObject({ id: 'email-runtime', targetAccess: 'internal', targetMetered: false })
   })
 
   it('keeps usage/history/watchlist reads zero-credit but meters external watchlist refresh', () => {
@@ -77,6 +86,8 @@ describe('SaaS API route inventory', () => {
     expect(resolveRoutePolicy('/api/history', 'DELETE')).toBeNull()
     expect(resolveRoutePolicy('/api/watchlist-refresh', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/usage', 'POST')).toBeNull()
+    expect(resolveRoutePolicy('/api/email-preferences', 'POST')).toBeNull()
+    expect(resolveRoutePolicy('/api/email-runtime', 'POST')).toBeNull()
     expect(resolveRoutePolicy('/api/not-real', 'POST')).toBeNull()
   })
 })

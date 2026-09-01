@@ -41,4 +41,12 @@ describe('market comparable adversarial rules', () => {
       'mouse inalámbrico',
     )).toBe(0)
   })
+
+  it('does not treat descriptive intake wording as an exact model family', () => {
+    expect(comparableScore(
+      item('Mouse Inalambrico Logitech M170'),
+      'Mouse inalámbrico Logitech M170 para computadora',
+      'Computer mouse',
+    )).toBeGreaterThanOrEqual(55)
+  })
 })

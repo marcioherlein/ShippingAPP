@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
+import { validateDigestRecipientColumns } from './digest-schema-privacy.mjs'
 
 const db = new DatabaseSync(':memory:')
 const migrationFiles = readdirSync('migrations')
@@ -118,8 +119,11 @@ if (!emailEventUnique.some((index) => JSON.stringify(uniqueColumns(index)) === J
   throw new Error('Stage 6 email event idempotency uniqueness is missing')
 }
 
-// Stage 7 scheduler state must be idempotent, owner-linked, and contain no
-// duplicate recipient address/message body columns.
+// Stage 7 scheduler state must be idempotent, owner-linked, and persist only
+// opaque scheduler/audit identifiers. email_event_id is an FK to Stage 6's
+// delivery ledger; the exact allowlist rejects any recipient address or rendered
+// message/product content column, including future names the old substring scan
+// could miss.
 const digestRunUnique = db.prepare("PRAGMA index_list('digest_runs')").all().filter((row) => Number(row.unique) === 1)
 if (!digestRunUnique.some((index) => JSON.stringify(uniqueColumns(index)) === JSON.stringify(['run_key']))) {
   throw new Error('Stage 7 digest run-key uniqueness is missing')
@@ -134,9 +138,7 @@ if (!digestFks.some((row) => row.table === 'digest_runs' && row.from === 'run_id
 if (!digestFks.some((row) => row.table === 'users' && row.from === 'user_id' && row.to === 'id')) throw new Error('Stage 7 digest user FK is missing')
 if (!digestFks.some((row) => row.table === 'email_events' && row.from === 'email_event_id' && row.to === 'id')) throw new Error('Stage 7 digest email-event FK is missing')
 const digestColumns = db.prepare("PRAGMA table_info('digest_run_recipients')").all().map((row) => String(row.name))
-for (const forbidden of ['email', 'recipient', 'subject', 'html', 'text', 'message_body', 'product_title']) {
-  if (digestColumns.some((column) => column.toLowerCase().includes(forbidden))) throw new Error(`Stage 7 scheduler persists forbidden content column: ${forbidden}`)
-}
+validateDigestRecipientColumns(digestColumns)
 
 // Prove the DB invariant itself: with one granted credit, the first reservation
 // consumes it, the second distinct operation is rejected, release refunds once,

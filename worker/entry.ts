@@ -11,7 +11,8 @@ import { withUsageEntitlement } from './usage'
 import { handleApplicationEmail, isApplicationEmailRoute } from './emailPreferences'
 import { emailRuntimeStatus } from './emailService'
 import { syncClerkProfile } from './clerkProfile'
-import { digestRuntimeStatus, digestSchedulerDryRun, runWeeklyDigestScheduler } from './weeklyDigest'
+import { digestRuntimeStatus, digestSchedulerDryRun } from './weeklyDigest'
+import { runWeeklyDigestSchedulerWithLease } from './weeklyDigestLease'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -230,6 +231,6 @@ export default {
   },
 
   async scheduled(_controller: unknown, env: Record<string, unknown>, ctx: { waitUntil(promise: Promise<unknown>): void }) {
-    ctx.waitUntil(runWeeklyDigestScheduler(env as any))
+    ctx.waitUntil(runWeeklyDigestSchedulerWithLease(env as any))
   },
 }

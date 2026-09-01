@@ -11,6 +11,7 @@ import { withUsageEntitlement } from './usage'
 import { handleApplicationEmail, isApplicationEmailRoute } from './emailPreferences'
 import { emailRuntimeStatus } from './emailService'
 import { syncClerkProfile } from './clerkProfile'
+import { digestRuntimeStatus, digestSchedulerDryRun, runWeeklyDigestScheduler } from './weeklyDigest'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -147,6 +148,14 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
     return handleWatchlist(request, env as any)
   }
 
+  if (url.pathname === '/api/digest-runtime' && request.method === 'GET') {
+    return Response.json(await digestRuntimeStatus(env as any))
+  }
+
+  if (url.pathname === '/api/digest-dry-run' && request.method === 'POST') {
+    return Response.json(await digestSchedulerDryRun(env as any))
+  }
+
   if (url.pathname === '/api/argentina-market/benchmark' && request.method === 'POST') {
     return hybridMarketBenchmark(request, env)
   }
@@ -218,5 +227,9 @@ export default {
         () => dispatchAuthorizedRequest(gate.request, env),
       )
     })
+  },
+
+  async scheduled(_controller: unknown, env: Record<string, unknown>, ctx: { waitUntil(promise: Promise<unknown>): void }) {
+    ctx.waitUntil(runWeeklyDigestScheduler(env as any))
   },
 }

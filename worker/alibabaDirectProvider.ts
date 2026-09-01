@@ -1,5 +1,6 @@
 import { extractAlibabaDirectFacts, type AlibabaDirectFacts } from './alibabaDirectExtract'
 import { corroborateAlibabaPublicListing, type AlibabaPublicCorroborationResult } from './alibabaPublicCorroboration'
+import { corroborateAlibabaHighSignalRoutes } from './alibabaHighSignalCorroboration'
 
 export type DirectAlibabaResult =
   | { status: 'ready' | 'partial'; source: 'ShippingAPP direct Alibaba'; facts: AlibabaDirectFacts; httpStatus: number; warnings: string[] }
@@ -74,12 +75,13 @@ export async function extractAlibabaDirectHttp(
   url: URL,
   fetchImpl: FetchLike = fetch,
   corroborationReader: CorroborationReader = corroborateAlibabaPublicListing,
+  highSignalReader: CorroborationReader = corroborateAlibabaHighSignalRoutes,
 ): Promise<DirectAlibabaResult> {
   let response: Response
   try {
     response = await fetchImpl(url.toString(), {
       headers: {
-        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/3.0; +https://shippingapp.marciofabrizio.workers.dev)',
+        'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/3.1; +https://shippingapp.marciofabrizio.workers.dev)',
         accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
         'accept-language': 'en-US,en;q=0.9',
         'cache-control': 'no-cache',
@@ -118,18 +120,30 @@ export async function extractAlibabaDirectHttp(
   const extracted = extractAlibabaDirectFacts(html, url)
   let facts = preserveUrlIdentity(extracted, url)
   const corroborationWarnings: string[] = []
+  const hints = { name: facts.name, category: facts.category }
 
-  // Alibaba product-detail HTML is frequently sparse while its public
-  // category/showroom/wholesale cards still expose the exact product id, price
-  // range and MOQ. Before spending Parse.bot or Browser Run credits, try those
-  // public surfaces. Only an exact product_id match can contribute facts.
+  // First free pass: broad public Alibaba category/showroom/search surfaces.
+  // An exact product_id match is mandatory before any commerce fact is merged.
   if (coreSignals(facts) < 7) {
     try {
-      const publicResult = await corroborationReader(url, { name: facts.name, category: facts.category }, fetchImpl)
+      const publicResult = await corroborationReader(url, hints, fetchImpl)
       corroborationWarnings.push(...publicResult.warnings)
       if (publicResult.status === 'ready') facts = mergePublicCorroboration(facts, publicResult)
     } catch (error) {
       corroborationWarnings.push(`Alibaba public listing corroboration failed safely: ${error instanceof Error ? error.message : 'unknown error'}.`)
+    }
+  }
+
+  // Second free pass: compact technical routes such as `100m-watch`, `65w-charger`
+  // or `128gb-phone`. These are derived only from explicit title tokens, and the
+  // same exact product_id gate prevents facts leaking from neighbouring SKUs.
+  if (coreSignals(facts) < 7) {
+    try {
+      const highSignalResult = await highSignalReader(url, hints, fetchImpl)
+      corroborationWarnings.push(...highSignalResult.warnings)
+      if (highSignalResult.status === 'ready') facts = mergePublicCorroboration(facts, highSignalResult)
+    } catch (error) {
+      corroborationWarnings.push(`Alibaba high-signal public corroboration failed safely: ${error instanceof Error ? error.message : 'unknown error'}.`)
     }
   }
 

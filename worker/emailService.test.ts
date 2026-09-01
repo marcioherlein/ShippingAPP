@@ -157,6 +157,20 @@ describe('Stage 6 email service economic/privacy boundary', () => {
     expect(provider.send).toHaveBeenCalledTimes(1)
   })
 
+  it('never accepts a caller-controlled origin as the unsubscribe-link host', async () => {
+    const env = { ...baseEnv(db) } as Record<string, unknown> & { DB: D1DatabaseLike }
+    delete env.EMAIL_PUBLIC_BASE_URL
+    const result = await sendApplicationEmail(env, {
+      userId: USER_A,
+      templateKey: 'weekly_digest',
+      idempotencyKey: 'caller-origin-phishing-001',
+      origin: 'https://attacker.example',
+    } as any, { provider, clock, randomId })
+    expect(result).toEqual({ status: 'not_configured', replayed: false, code: 'unsubscribe_not_configured' })
+    expect(provider.send).not.toHaveBeenCalled()
+    expect(eventCount(sqlite, 'caller-origin-phishing-001')).toBe(0)
+  })
+
   it('does not let another user reuse an idempotency key to redirect or duplicate an email', async () => {
     await sendApplicationEmail(baseEnv(db), {
       userId: USER_A,

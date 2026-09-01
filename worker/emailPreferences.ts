@@ -145,12 +145,18 @@ export async function handleApplicationEmail(request: Request, env: Env, depende
     if (request.method !== 'POST') return json({ error: 'Method not allowed.', code: 'method_not_allowed' }, 405)
 
     const repo = new EmailRepository(env.DB, clock)
-    const patch = payload.scope === 'digest'
-      ? { digestEnabled: false }
-      : payload.scope === 'alerts'
-        ? { alertsEnabled: false }
-        : { marketingEnabled: false }
-    await repo.updatePreferences(payload.userId, patch)
+    // A previously-issued valid token may outlive an account deletion. Treat it
+    // as an idempotent success instead of recreating preferences or surfacing an
+    // FK error. The response stays identical so it reveals no account-existence bit.
+    const account = await repo.getUserEmail(payload.userId)
+    if (account) {
+      const patch = payload.scope === 'digest'
+        ? { digestEnabled: false }
+        : payload.scope === 'alerts'
+          ? { alertsEnabled: false }
+          : { marketingEnabled: false }
+      await repo.updatePreferences(payload.userId, patch)
+    }
     if ((request.headers.get('accept') ?? '').includes('application/json')) {
       return json({ unsubscribed: true, scope: payload.scope })
     }

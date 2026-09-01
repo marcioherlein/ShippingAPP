@@ -52,6 +52,7 @@ export type MarketComparable = {
 export type ArgentinaMarketResult = {
   status: 'live' | 'unavailable' | 'insufficient' | 'configuration_required'
   query: string
+  matchMode?: 'exact' | 'functional'
   categoryId: string | null
   categoryName: string | null
   rawCount: number

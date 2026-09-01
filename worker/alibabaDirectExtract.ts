@@ -24,15 +24,21 @@ type ScoredObject = { object: JsonObject; score: number }
 
 const PRODUCT_KEYS = new Set([
   'productid', 'product_id', 'subject', 'producttitle', 'product_title', 'productname', 'product_name',
+  'categoryname', 'category_name', 'categorypath', 'category_path', 'productcategory', 'product_category',
+  'productcategoryid', 'product_category_id', 'producttype', 'product_type',
   'moq', 'minimumorderquantity', 'minimum_order_quantity', 'minorderquantity', 'min_order_quantity',
-  'categorypath', 'category_path', 'productcategoryid', 'product_category_id', 'hscode', 'hs_code',
-  'unitweight', 'unit_weight', 'unitvolume', 'unit_volume', 'packagesize', 'package_size',
+  'minquantity', 'min_quantity', 'minqty', 'min_qty', 'pricetiers', 'price_tiers', 'ladderprice', 'ladder_price',
+  'pricevalue', 'price_value', 'minprice', 'min_price', 'lowprice', 'saleprice', 'unitprice', 'unit_price',
+  'unitweight', 'unit_weight', 'packageweight', 'package_weight', 'grossweight', 'gross_weight',
+  'packingweight', 'packing_weight', 'unitvolume', 'unit_volume', 'packagevolume', 'package_volume',
+  'packagesize', 'package_size', 'packagedimensions', 'package_dimensions', 'packingsize', 'packing_size',
+  'unitsize', 'unit_size', 'hscode', 'hs_code', 'specifications', 'attributes', 'productattributes',
 ])
 
 function decodeHtml(value: string) {
   return value
     .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&#x27;/gi, "'")
+    .replace(/&#39;|&#x27;|&apos;/gi, "'")
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
@@ -52,7 +58,7 @@ function cleanString(value: unknown, max = 800) {
 
 function positiveNumber(value: unknown) {
   if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : null
-  const text = cleanString(value, 160)
+  const text = cleanString(value, 180)
   if (!text) return null
   const match = text.replace(/,/g, '').match(/\d+(?:\.\d+)?/)
   const n = match ? Number(match[0]) : NaN
@@ -75,7 +81,7 @@ function metaValue(html: string, key: string) {
   ]
   for (const pattern of patterns) {
     const match = html.match(pattern)
-    if (match?.[1]) return cleanString(match[1], 1200)
+    if (match?.[1]) return cleanString(match[1], 1400)
   }
   return null
 }
@@ -87,7 +93,7 @@ function visibleText(html: string) {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' '))
     .trim()
-    .slice(0, 30000)
+    .slice(0, 50000)
 }
 
 function parseJsonSafe(value: string) {
@@ -101,7 +107,7 @@ function findBalancedJson(source: string, start: number) {
   let depth = 0
   let quote: string | null = null
   let escaped = false
-  for (let i = start; i < source.length && i < start + 1_500_000; i += 1) {
+  for (let i = start; i < source.length && i < start + 2_000_000; i += 1) {
     const ch = source[i]
     if (quote) {
       if (escaped) escaped = false
@@ -122,25 +128,76 @@ function findBalancedJson(source: string, start: number) {
   return null
 }
 
-function extractJsonRoots(html: string) {
+function parseJsonParseCalls(body: string) {
   const roots: unknown[] = []
-  for (const script of [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)].slice(0, 160)) {
-    const attrs = script[1] || ''
-    const body = (script[2] || '').trim()
-    if (!body || body.length > 1_500_000) continue
-    if (/type=["'](?:application\/ld\+json|application\/json)["']/i.test(attrs)) {
-      const parsed = parseJsonSafe(body)
-      if (parsed) roots.push(parsed)
-      continue
-    }
-    const assignment = body.match(/(?:window\.)?[A-Za-z_$][\w$.[\]"']*\s*=\s*([{[])/)
-    if (assignment?.index === undefined) continue
-    const jsonStart = body.indexOf(assignment[1], assignment.index)
-    const candidate = findBalancedJson(body, jsonStart)
-    const parsed = candidate ? parseJsonSafe(candidate) : null
+  const pattern = /JSON\.parse\(\s*("(?:\\.|[^"\\])*")\s*\)/g
+  for (const match of body.matchAll(pattern)) {
+    const decoded = parseJsonSafe(match[1])
+    if (typeof decoded !== 'string') continue
+    const parsed = parseJsonSafe(decoded)
     if (parsed) roots.push(parsed)
   }
   return roots
+}
+
+function parseAssignmentObjects(body: string) {
+  const roots: unknown[] = []
+  const pattern = /=\s*([{[])/g
+  for (const match of body.matchAll(pattern)) {
+    if (match.index === undefined) continue
+    const start = body.indexOf(match[1], match.index)
+    const candidate = findBalancedJson(body, start)
+    const parsed = candidate ? parseJsonSafe(candidate) : null
+    if (parsed) roots.push(parsed)
+    if (roots.length >= 20) break
+  }
+  return roots
+}
+
+function expandEmbeddedJsonStrings(initial: unknown[]) {
+  const roots = [...initial]
+  const queue = [...initial]
+  const seenStrings = new Set<string>()
+  let visited = 0
+  while (queue.length && visited < 5000 && roots.length < 120) {
+    const current = queue.shift()
+    visited += 1
+    if (!current || typeof current !== 'object') continue
+    const values = Array.isArray(current) ? current.slice(0, 250) : Object.values(current as JsonObject)
+    for (const value of values) {
+      if (value && typeof value === 'object') {
+        queue.push(value)
+        continue
+      }
+      if (typeof value !== 'string' || value.length < 20 || value.length > 1_000_000) continue
+      const trimmed = decodeHtml(value).trim()
+      if (seenStrings.has(trimmed)) continue
+      seenStrings.add(trimmed)
+      if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) continue
+      const parsed = parseJsonSafe(trimmed)
+      if (parsed) {
+        roots.push(parsed)
+        queue.push(parsed)
+      }
+    }
+  }
+  return roots
+}
+
+function extractJsonRoots(html: string) {
+  const roots: unknown[] = []
+  for (const script of [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)].slice(0, 220)) {
+    const attrs = script[1] || ''
+    const body = (script[2] || '').trim()
+    if (!body || body.length > 2_000_000) continue
+    if (/type=["'](?:application\/ld\+json|application\/json)["']/i.test(attrs) || body[0] === '{' || body[0] === '[') {
+      const parsed = parseJsonSafe(body)
+      if (parsed) roots.push(parsed)
+    }
+    roots.push(...parseJsonParseCalls(body))
+    roots.push(...parseAssignmentObjects(body))
+  }
+  return expandEmbeddedJsonStrings(roots)
 }
 
 function collectObjects(root: unknown, include: (object: JsonObject) => number | null) {
@@ -148,14 +205,14 @@ function collectObjects(root: unknown, include: (object: JsonObject) => number |
   const queue: unknown[] = [root]
   const seen = new Set<object>()
   let visited = 0
-  while (queue.length && visited < 6000) {
+  while (queue.length && visited < 9000) {
     const current = queue.shift()
     visited += 1
     if (!current || typeof current !== 'object') continue
     if (seen.has(current as object)) continue
     seen.add(current as object)
     if (Array.isArray(current)) {
-      queue.push(...current.slice(0, 300))
+      queue.push(...current.slice(0, 400))
       continue
     }
     const object = current as JsonObject
@@ -175,15 +232,14 @@ function collectProductObjects(root: unknown) {
 }
 
 function collectJsonLdProductObjects(root: unknown) {
-  const productRoots = collectObjects(root, (object) => {
+  const products = collectObjects(root, (object) => {
     const values = Array.isArray(object['@type']) ? object['@type'] : [object['@type']]
     return values.some((value) => String(value || '').toLowerCase() === 'product') ? 100 : null
   })
   const result: ScoredObject[] = []
-  for (const product of productRoots) {
+  for (const product of products) {
     result.push(product)
-    const descendants = collectObjects(product.object, (object) => object === product.object ? null : 90)
-    result.push(...descendants)
+    result.push(...collectObjects(product.object, (object) => object === product.object ? null : 90))
   }
   return result.sort((a, b) => b.score - a.score)
 }
@@ -199,6 +255,9 @@ function firstValue(objects: ScoredObject[], keys: string[]) {
 }
 
 function stringArray(value: unknown) {
+  if (typeof value === 'string') {
+    return value.split(/\s*(?:>|›|\/|\|)\s*/).map((item) => cleanString(item, 180)).filter((item): item is string => Boolean(item)).slice(0, 20)
+  }
   if (!Array.isArray(value)) return []
   return value
     .map((item) => cleanString(typeof item === 'object' && item ? (item as any).name ?? (item as any).title ?? (item as any).value : item, 180))
@@ -209,14 +268,14 @@ function stringArray(value: unknown) {
 function normalizeWeightKg(value: unknown) {
   const amount = positiveNumber(value)
   if (!amount) return null
-  const text = cleanString(value, 120) || ''
+  const text = cleanString(value, 140) || ''
   if (/\b(?:g|gram|grams)\b/i.test(text) && !/\bkg\b|kilogram/i.test(text)) return Number((amount / 1000).toFixed(6))
   if (/\b(?:lb|lbs|pound|pounds)\b/i.test(text)) return Number((amount * 0.45359237).toFixed(6))
   return amount
 }
 
 function dimensionsToCbm(value: unknown) {
-  let text = cleanString(value, 220)
+  let text = cleanString(value, 260)
   if (!text && value && typeof value === 'object') {
     const object = value as any
     const length = positiveNumber(object.length ?? object.l)
@@ -235,7 +294,7 @@ function dimensionsToCbm(value: unknown) {
 function normalizeVolumeCbm(value: unknown) {
   const amount = positiveNumber(value)
   if (!amount) return null
-  const text = cleanString(value, 140) || ''
+  const text = cleanString(value, 160) || ''
   if (/\b(?:cm3|cm\^3|cubic centimet)/i.test(text)) return Number((amount / 1_000_000).toFixed(6))
   if (/\b(?:l|liter|liters|litre|litres)\b/i.test(text) && !/\bml\b/i.test(text)) return Number((amount / 1000).toFixed(6))
   return amount
@@ -245,8 +304,8 @@ function extractSpecs(html: string, objects: ScoredObject[]) {
   const specs: Array<{ name: string; value: string }> = []
   const dedupe = new Set<string>()
   const push = (nameValue: unknown, valueValue: unknown) => {
-    const name = cleanString(nameValue, 100)
-    const value = cleanString(valueValue, 260)
+    const name = cleanString(nameValue, 120)
+    const value = cleanString(valueValue, 300)
     if (!name || !value) return
     const id = `${normalizeSpecName(name)}=${value.toLowerCase()}`
     if (dedupe.has(id)) return
@@ -254,11 +313,11 @@ function extractSpecs(html: string, objects: ScoredObject[]) {
     specs.push({ name, value })
   }
 
-  for (const { object } of objects.slice(0, 160)) {
+  for (const { object } of objects.slice(0, 240)) {
     for (const [key, value] of Object.entries(object)) {
-      if (!['specifications', 'specification', 'specs', 'attributes', 'productattributes'].includes(normalizeKey(key))) continue
+      if (!['specifications', 'specification', 'specs', 'attributes', 'productattributes', 'product_attributes'].includes(normalizeKey(key))) continue
       if (Array.isArray(value)) {
-        for (const item of value.slice(0, 80)) {
+        for (const item of value.slice(0, 100)) {
           if (!item || typeof item !== 'object') continue
           const spec = item as any
           push(spec.name ?? spec.attrName ?? spec.attributeName ?? spec.key ?? spec.label, spec.value ?? spec.attrValue ?? spec.attributeValue ?? spec.val ?? spec.text)
@@ -269,12 +328,10 @@ function extractSpecs(html: string, objects: ScoredObject[]) {
     }
   }
 
-  if (!specs.length) {
-    const text = visibleText(html)
-    const pattern = /(Place of Origin|Country of Origin|Material|Movement Brand|Movement|Product Type|Type|Function)\s*[:：]\s*([^|;]{2,120})/gi
-    for (const match of text.matchAll(pattern)) push(match[1], match[2])
-  }
-  return specs.slice(0, 80)
+  const text = visibleText(html)
+  const pattern = /(Place of Origin|Country of Origin|Material|Case Material|Main Material|Movement Brand|Movement|Product Type|Type|Function|Model Number|Power)\s*[:：]\s*([^|;]{2,160})/gi
+  for (const match of text.matchAll(pattern)) push(match[1], match[2])
+  return specs.slice(0, 100)
 }
 
 function specValue(specs: Array<{ name: string; value: string }>, names: string[]) {
@@ -294,18 +351,40 @@ function labelledNumber(text: string, patterns: RegExp[]) {
   return null
 }
 
-/**
- * Visible Alibaba pages contain many currency amounts that are not the product
- * offer (new-buyer coupons, samples, freight, etc). Treat visible text as price
- * evidence only when the merchandise relationship is explicit. Generic
- * `Price: USD 1` is deliberately not trusted because it can be preceded by a
- * promotional modifier after HTML has been flattened into text.
- */
 function labelledProductPrice(text: string) {
   return labelledNumber(text, [
     /(?:FOB Price|Unit Price|Reference Price|Product Price)\s*[:：-]?\s*(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)/i,
     /(?:US\s*\$|USD\s*|\$)\s*(\d{1,7}(?:\.\d{1,4})?)\s*(?:\/\s*(?:piece|pieces|pc|pcs|unit|units|set|sets)|per\s+(?:piece|pc|unit|set))/i,
   ])
+}
+
+function extractExplicitPriceTier(objects: ScoredObject[]) {
+  const tiers: Array<{ minQuantity: number; price: number }> = []
+  const pushTier = (item: any) => {
+    if (!item || typeof item !== 'object') return
+    const minQuantity = positiveNumber(item.min_quantity ?? item.minQuantity ?? item.min_qty ?? item.minQty ?? item.beginAmount ?? item.startQuantity)
+    const price = positiveNumber(item.price_value ?? item.priceValue ?? item.unit_price ?? item.unitPrice ?? item.price)
+    if (minQuantity && price) tiers.push({ minQuantity, price })
+  }
+
+  for (const { object } of objects.slice(0, 300)) {
+    pushTier(object)
+    for (const [key, value] of Object.entries(object)) {
+      if (!['pricetiers', 'price_tiers', 'ladderprice', 'ladder_price', 'rangeprices', 'range_prices'].includes(normalizeKey(key))) continue
+      if (Array.isArray(value)) value.slice(0, 40).forEach(pushTier)
+    }
+  }
+  tiers.sort((a, b) => a.minQuantity - b.minQuantity)
+  return tiers[0] || null
+}
+
+function breadcrumbFromHtml(html: string) {
+  const block = html.match(/<(?:nav|div|ol)[^>]+(?:class|id)=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]{0,12000}?)<\/(?:nav|div|ol)>/i)?.[1]
+  if (!block) return []
+  const items = [...block.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)]
+    .map((match) => cleanString(match[1].replace(/<[^>]+>/g, ' '), 180))
+    .filter((item): item is string => Boolean(item) && !/^home$/i.test(item))
+  return [...new Set(items)].slice(0, 16)
 }
 
 export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirectFacts {
@@ -323,27 +402,25 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
   if (name && /^Alibaba\.com/i.test(name)) name = null
   if (name) evidence.push('title')
 
-  const categoryPath = stringArray(firstValue(allObjects, ['categoryPath', 'category_path', 'breadcrumbs', 'breadcrumb']))
+  let categoryPath = stringArray(firstValue(allObjects, ['categoryPath', 'category_path', 'breadcrumbs', 'breadcrumb']))
+  if (!categoryPath.length) categoryPath = breadcrumbFromHtml(html)
   const category = cleanString(firstValue(allObjects, ['categoryName', 'category_name', 'productCategory', 'product_category', 'category', 'productType', 'product_type']), 300)
     || categoryPath[categoryPath.length - 1]
     || specValue(specs, ['product type', 'type'])
   if (category || categoryPath.length) evidence.push('category')
 
-  // Product-state prices must come from product-specific keys. A generic `price`
-  // key is accepted only inside a JSON-LD Product/Offer subtree. This prevents an
-  // unrelated promotion/coupon object elsewhere in Alibaba state from becoming FOB.
+  const tier = extractExplicitPriceTier(allObjects)
   const productStatePrice = positiveNumber(firstValue(productObjects, [
     'priceValue', 'price_value', 'minPrice', 'min_price', 'lowPrice', 'salePrice', 'unitPrice', 'unit_price',
   ]))
-  const jsonLdPrice = positiveNumber(firstValue(jsonLdObjects, [
-    'price', 'lowPrice', 'highPrice', 'priceValue', 'price_value', 'unitPrice', 'unit_price',
-  ]))
-  const unitPriceUsd = productStatePrice || jsonLdPrice || labelledProductPrice(text)
-  if (unitPriceUsd) evidence.push('price')
+  const jsonLdPrice = positiveNumber(firstValue(jsonLdObjects, ['price', 'lowPrice', 'highPrice', 'priceValue', 'price_value', 'unitPrice', 'unit_price']))
+  const unitPriceUsd = tier?.price || productStatePrice || jsonLdPrice || labelledProductPrice(text)
+  if (unitPriceUsd) evidence.push(tier ? 'price_tier' : 'price')
 
   let moq = positiveNumber(firstValue(allObjects, ['moq', 'minimumOrderQuantity', 'minimum_order_quantity', 'minOrderQuantity', 'min_order_quantity', 'minOrder', 'min_order']))
+  if (!moq && tier) moq = tier.minQuantity
   if (!moq) moq = labelledNumber(text, [/(?:MOQ|Minimum Order Quantity|Min\. Order)\s*[:：-]?\s*(\d{1,7})/i, /(\d{1,7})\s*(?:pieces|pcs|units|sets)\s*(?:minimum|min\. order)/i])
-  if (moq) evidence.push('moq')
+  if (moq) evidence.push(tier && moq === tier.minQuantity ? 'moq_price_tier' : 'moq')
 
   const weightValue = firstValue(allObjects, ['unitWeight', 'unit_weight', 'packageWeight', 'package_weight', 'grossWeight', 'gross_weight', 'packingWeight', 'packing_weight', 'weight'])
   let packedWeightKg = normalizeWeightKg(weightValue)
@@ -354,12 +431,15 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
   if (packedWeightKg) evidence.push('weight')
 
   const unitSizeValue = firstValue(allObjects, ['unitSize', 'unit_size', 'packageDimensions', 'package_dimensions', 'packageSize', 'package_size', 'packingSize', 'packing_size', 'dimensions'])
-  const unitSize = cleanString(unitSizeValue, 220)
+  let unitSize = cleanString(unitSizeValue, 240)
   const volumeValue = firstValue(allObjects, ['unitVolume', 'unit_volume', 'volumeCbm', 'volume_cbm', 'packageVolume', 'package_volume'])
   let volumeCbm = normalizeVolumeCbm(volumeValue) ?? dimensionsToCbm(unitSizeValue)
   if (!volumeCbm) {
     const sizeMatch = text.match(/(?:Package Size|Package Dimensions|Unit Size|Packing Size)\s*[:：]?\s*(\d+(?:\.\d+)?\s*[x×*]\s*\d+(?:\.\d+)?\s*[x×*]\s*\d+(?:\.\d+)?\s*(?:mm|cm|m)?)/i)
-    volumeCbm = sizeMatch ? dimensionsToCbm(sizeMatch[1]) : null
+    if (sizeMatch) {
+      unitSize = unitSize || cleanString(sizeMatch[1], 240)
+      volumeCbm = dimensionsToCbm(sizeMatch[1])
+    }
   }
   if (volumeCbm) evidence.push('volume')
 
@@ -382,17 +462,17 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
   const hsCode = cleanString(firstValue(allObjects, ['hsCode', 'hs_code', 'hscode', 'tariffCode', 'tariff_code']), 120)
   if (hsCode) evidence.push('hs')
 
-  const productId = cleanString(firstValue(allObjects, ['productId', 'product_id', 'id']), 100)
+  const productId = cleanString(firstValue(allObjects, ['productId', 'product_id']), 100)
     || url?.pathname.match(/_(\d{8,})\.html/i)?.[1]
     || null
   if (productId) evidence.push('product_id')
 
   const descriptionMeta = metaValue(html, 'og:description') || metaValue(html, 'description')
-  const specsText = specs.length ? `Specifications: ${specs.slice(0, 18).map((spec) => `${spec.name}: ${spec.value}`).join('; ')}` : null
+  const specsText = specs.length ? `Specifications: ${specs.slice(0, 20).map((spec) => `${spec.name}: ${spec.value}`).join('; ')}` : null
   const description = [descriptionMeta, categoryPath.length ? `Category path: ${categoryPath.join(' > ')}` : null, specsText]
     .filter(Boolean)
     .join(' · ')
-    .slice(0, 2400) || null
+    .slice(0, 2800) || null
 
   return {
     name,

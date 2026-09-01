@@ -17,7 +17,6 @@ export type SendApplicationEmailInput = {
   templateKey: EmailTemplateKey
   templateInput?: EmailTemplateInput
   idempotencyKey: string
-  origin?: string | null
 }
 
 export type SendApplicationEmailResult = {
@@ -69,23 +68,21 @@ function preferencesAllow(scope: EmailPreferenceScope, row: { digest_enabled: nu
   return row.marketing_enabled === 1
 }
 
-function appOrigin(env: EmailEnv, requested: string | null | undefined) {
+function appOrigin(env: EmailEnv) {
   const configured = textEnv(env, 'EMAIL_PUBLIC_BASE_URL', 2048)
-  for (const candidate of [configured, requested]) {
-    if (!candidate) continue
-    try {
-      const parsed = new URL(candidate)
-      if (parsed.protocol === 'https:' || parsed.hostname === 'localhost') return parsed.origin
-    } catch {
-      // ignore invalid candidate
-    }
+  if (!configured) return null
+  try {
+    const parsed = new URL(configured)
+    if (parsed.protocol === 'https:' || parsed.hostname === 'localhost') return parsed.origin
+  } catch {
+    // Invalid server-owned configuration fails closed.
   }
   return null
 }
 
-async function unsubscribeUrl(env: EmailEnv, userId: string, scope: Exclude<EmailPreferenceScope, 'transactional'>, origin: string | null | undefined, clock: () => Date) {
+async function unsubscribeUrl(env: EmailEnv, userId: string, scope: Exclude<EmailPreferenceScope, 'transactional'>, clock: () => Date) {
   const secret = textEnv(env, 'EMAIL_UNSUBSCRIBE_SECRET', 512)
-  const base = appOrigin(env, origin)
+  const base = appOrigin(env)
   if (!secret || secret.length < 32 || !base) return null
   const expiresAt = new Date(clock().getTime() + 365 * 24 * 60 * 60 * 1000)
   const token = await createUnsubscribeToken({ userId, scope: scope as UnsubscribeScope, secret, expiresAt })
@@ -170,7 +167,7 @@ export async function sendApplicationEmail(
 
   let unsubscribe: string | null = null
   if (scope !== 'transactional') {
-    unsubscribe = await unsubscribeUrl(env, input.userId, scope, input.origin, clock)
+    unsubscribe = await unsubscribeUrl(env, input.userId, scope, clock)
     if (!unsubscribe) return { status: 'not_configured', replayed: Boolean(existing), eventId: existing?.id, code: 'unsubscribe_not_configured' }
   }
 
@@ -230,7 +227,7 @@ export function emailRuntimeStatus(env: EmailEnv) {
     sendingEnabled: emailSendingEnabled(env),
     providerConfigured: provider.configured,
     senderConfigured: Boolean(fromAddress(env)),
-    unsubscribeConfigured: Boolean(unsubscribeSecret && unsubscribeSecret.length >= 32 && appOrigin(env, null)),
+    unsubscribeConfigured: Boolean(unsubscribeSecret && unsubscribeSecret.length >= 32 && appOrigin(env)),
     appName: branding(env).appName,
     templates: ['welcome', 'usage', 'weekly_digest', 'alert', 'billing'] as EmailTemplateKey[],
   }

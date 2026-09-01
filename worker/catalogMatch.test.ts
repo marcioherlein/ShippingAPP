@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { comparableScore } from './catalogMatch'
+import { buildMarketQuery, comparableScore } from './catalogMatch'
 
 const target = 'IANONI Super Power Carbon Fiber Padel Racket'
 const category = 'Padel racket'
@@ -40,5 +40,16 @@ describe('market comparable adversarial rules', () => {
       'Logitech MX Master 3S',
       'mouse inalámbrico',
     )).toBe(0)
+  })
+
+  it('compacts verbose branded-model discovery queries without weakening identity checks', () => {
+    const product = 'Mouse inalámbrico Logitech M170 para computadora'
+    expect(buildMarketQuery(product, 'Computer mouse')).toBe('logitech m170 mouse wireless')
+    expect(comparableScore(item('Mouse Inalambrico Logitech M170 USB'), product, 'Computer mouse')).toBeGreaterThanOrEqual(55)
+    expect(comparableScore(item('Mouse Inalambrico Logitech M185 USB'), product, 'Computer mouse')).toBe(0)
+  })
+
+  it('keeps meaningful memory specs in compact branded queries', () => {
+    expect(buildMarketQuery('Samsung Galaxy A16 128GB 4GB', 'smartphone')).toBe('samsung a16 galaxy 128gb 4gb')
   })
 })

@@ -199,8 +199,9 @@ export async function sendApplicationEmail(
     }
   }
 
+  let sent: Awaited<ReturnType<EmailProvider['send']>>
   try {
-    const sent = await provider.send({
+    sent = await provider.send({
       from: sender,
       to: recipient,
       subject: rendered.subject,
@@ -208,14 +209,32 @@ export async function sendApplicationEmail(
       text: rendered.text,
       replyTo: validEmail(textEnv(env, 'EMAIL_REPLY_TO') ?? ''),
     }, { idempotencyKey: `shippingapp/${key}` })
-    const updated = await repo.markSent(reserved.event.id, provider.name, sent.messageId, metadata)
-    return updated
-      ? sanitizedResult(updated, !reserved.created)
-      : { status: 'sent', replayed: !reserved.created, eventId: reserved.event.id, providerMessageId: sent.messageId }
   } catch (error) {
     const code = error instanceof EmailProviderError ? error.code : 'email_provider_unavailable'
-    await repo.markFailed(reserved.event.id, provider.name, { ...metadata, failureCode: code })
+    try {
+      await repo.markFailed(reserved.event.id, provider.name, { ...metadata, failureCode: code })
+    } catch {
+      // Provider failure is authoritative. A secondary persistence failure must
+      // not leak raw D1 errors or change the delivery outcome reported upstream.
+    }
     return { status: 'failed', replayed: !reserved.created, eventId: reserved.event.id, code }
+  }
+
+  try {
+    const updated = await repo.markSent(reserved.event.id, provider.name, sent.messageId, metadata)
+    if (updated) return sanitizedResult(updated, !reserved.created)
+  } catch {
+    // The provider already accepted this idempotent send. Never mark the event
+    // failed solely because D1 could not persist the acknowledgement: that would
+    // invite an unsafe duplicate retry. Keep the reservation queued/ambiguous;
+    // later retries reuse the exact same provider idempotency key.
+  }
+
+  return {
+    status: 'queued',
+    replayed: !reserved.created,
+    eventId: reserved.event.id,
+    code: 'email_delivery_state_unconfirmed',
   }
 }
 

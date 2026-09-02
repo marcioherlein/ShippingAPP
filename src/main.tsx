@@ -24,7 +24,6 @@ if (!root) {
 }
 
 installJourneySemantics()
-installJourneyPersistence()
 
 const application = clerkPublishableKey
   ? <ClerkProvider publishableKey={clerkPublishableKey} localization={esES}>
@@ -37,3 +36,5 @@ createRoot(root).render(
     {application}
   </React.StrictMode>,
 )
+
+installJourneyPersistence()

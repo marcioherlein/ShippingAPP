@@ -18,11 +18,54 @@ function evidenceText(candidate: ArgentinaMarketCandidate) {
   ].join(' '))
 }
 
+function explicitNegativeGpsText(value: string) {
+  const text = normalize(value)
+  return /\b(?:sin|without)\s+gps\b/.test(text)
+    || /\b(?:no|not)\s+(?:tiene\s+|posee\s+|incluye\s+|includes?\s+|has\s+)?gps\b/.test(text)
+    || /\bgps\s+(?:no|false|none|ausente|absent)\b/.test(text)
+}
+
+function negativeBooleanValue(value: string) {
+  const text = normalize(value)
+  return /^(?:no|false|0|none|ninguno|ninguna|sin|n a|na)$/.test(text)
+}
+
+function affirmativeGpsAttributeValue(value: string) {
+  const text = normalize(value)
+  if (!text || negativeBooleanValue(text) || explicitNegativeGpsText(text)) return false
+  return /^(?:si|yes|true|1)$/.test(text)
+    || /\b(?:integrado|integrada|integrated|incluido|incluida|included|disponible|available|posee|tiene|con)\b/.test(text)
+    || /\bgps\b/.test(text)
+}
+
+function gpsEvidenceState(candidate: ArgentinaMarketCandidate): 'positive' | 'negative' | 'unknown' {
+  const title = candidate.title || ''
+  if (explicitNegativeGpsText(title)) return 'negative'
+
+  let positive = /\bgps\b/.test(normalize(title))
+  for (const attribute of candidate.attributes || []) {
+    const name = normalize(attribute.name || '')
+    const value = attribute.value_name || ''
+    const normalizedValue = normalize(value)
+
+    if (/\bgps\b/.test(name)) {
+      if (negativeBooleanValue(normalizedValue) || explicitNegativeGpsText(value)) return 'negative'
+      if (affirmativeGpsAttributeValue(value)) positive = true
+      continue
+    }
+
+    if (explicitNegativeGpsText(value)) return 'negative'
+    if (/\bgps\b/.test(normalizedValue)) positive = true
+  }
+
+  return positive ? 'positive' : 'unknown'
+}
+
 export function passesFunctionalTraitEvidence(candidate: ArgentinaMarketCandidate, productName: string) {
   const target = normalize(productName)
   const evidence = evidenceText(candidate)
 
-  if (/\bgps\b/.test(target) && !/\bgps\b/.test(evidence)) return false
+  if (/\bgps\b/.test(target) && gpsEvidenceState(candidate) !== 'positive') return false
   if (/\b(?:grafito|graphite)\b/.test(target) && !/\b(?:grafito|graphite)\b/.test(evidence)) return false
   return true
 }
@@ -50,7 +93,7 @@ export function withFunctionalTraitEvidenceGuard(
         warnings: rejected > 0
           ? [
               ...(result.warnings || []),
-              `Functional trait evidence guard rejected ${rejected} candidate(s) that lacked explicit GPS or graphite evidence required by the target.`,
+              `Functional trait evidence guard rejected ${rejected} candidate(s) that lacked or contradicted explicit GPS/graphite evidence required by the target.`,
             ]
           : result.warnings,
       }

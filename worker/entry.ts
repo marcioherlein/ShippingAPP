@@ -14,6 +14,7 @@ import { syncClerkProfile } from './clerkProfile'
 import { digestRuntimeStatus, digestSchedulerDryRun } from './weeklyDigest'
 import { runWeeklyDigestSchedulerWithLease } from './weeklyDigestLease'
 import { productionIdentityStatus } from './productionIdentity'
+import { handleBilling, isBillingRoute } from './billing'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -138,6 +139,10 @@ async function overlayUserAnalysisResponse(
 async function dispatchAuthorizedRequest(request: Request, env: Record<string, unknown>): Promise<Response> {
   const url = new URL(request.url)
 
+  if (isBillingRoute(url.pathname)) {
+    return handleBilling(request, env as any)
+  }
+
   if (isApplicationEmailRoute(url.pathname)) {
     return handleApplicationEmail(request, env as any)
   }
@@ -166,26 +171,17 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
     return hybridMarketBenchmark(request, env)
   }
 
-  // Normal Alibaba analysis is self-scrape first. Parse.bot is now only an
-  // optional supplement when first-party HTML/JSON does not complete the
-  // mandatory product ficha. Explicit diagnostic sourceMode requests keep
-  // using the existing router probes unchanged.
   if (url.pathname === '/api/analyze' && request.method === 'POST') {
     let body: any = null
     try { body = await request.clone().json() } catch { body = null }
     const alibabaUrl = !body?.sourceMode ? parseAlibabaSelfFirstUrl(body?.url) : null
     if (alibabaUrl) {
       try {
-        // Self-first still owns Alibaba extraction + FX hydration, but its
-        // legacy ML-only hydration must not see provider credentials. The
-        // authoritative hybrid overlay immediately below gets the original
-        // env and performs the single real Argentina-market lookup.
         const selfFirstEnv = withoutLegacyMarketCredentials(env, '/api/analyze')
         const analysis = await analyzeAlibabaSelfFirst(alibabaUrl, selfFirstEnv as any)
         return Response.json(await overlayHybridMarketEconomics(analysis, env as any))
       } catch {
-        // Reliability backstop: if the new orchestrator itself fails, keep
-        // the previous router pipeline available rather than dropping the case.
+        // Reliability backstop: keep the previous router pipeline available.
       }
     }
   }

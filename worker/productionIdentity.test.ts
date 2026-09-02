@@ -77,8 +77,24 @@ describe('Stage 8 production identity readiness', () => {
     expect(status.configurationReady).toBe(false)
   })
 
-  it('does not claim external DNS/delivery readiness merely because the kill switch is on', () => {
-    const status = productionIdentityStatus({ ...READY, EMAIL_SENDING_ENABLED: 'true' })
+  it('keeps canary delivery from being reported as broad sending permission', () => {
+    const status = productionIdentityStatus({
+      ...READY,
+      EMAIL_SENDING_ENABLED: 'true',
+      EMAIL_DELIVERY_MODE: 'canary',
+      EMAIL_CANARY_USER_IDS: 'user-canary-1',
+    })
+    expect(status.configurationReady).toBe(true)
+    expect(status.sendingEnabled).toBe(false)
+    expect(status.activationBlocked).toBe(true)
+  })
+
+  it('does not claim external DNS/delivery readiness merely because broad delivery is explicitly enabled', () => {
+    const status = productionIdentityStatus({
+      ...READY,
+      EMAIL_SENDING_ENABLED: 'true',
+      EMAIL_DELIVERY_MODE: 'all',
+    })
     expect(status.configurationReady).toBe(true)
     expect(status.sendingEnabled).toBe(true)
     expect(status.activationBlocked).toBe(false)

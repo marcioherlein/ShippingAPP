@@ -1,0 +1,21 @@
+name: Public Catalog Smartwatch Audit
+
+on:
+  push:
+    branches:
+      - audit/smartwatch-gps-attributes
+
+permissions:
+  contents: read
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run public catalog audit
+        run: node scripts/audit-smartwatch-gps-attributes.mjs

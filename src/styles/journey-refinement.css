@@ -78,7 +78,7 @@
 /* Current work gets the strongest hierarchy. */
 .journey-question-card.active {
   border-color: rgba(86, 102, 245, 0.48);
-  box-shadow: 0 0 0 4px var(--journey-current-ring), var(--shadow-2, 0 18px 46px rgba(70, 84, 150, 0.08));
+  box-shadow: 0 0 0 4px var(--journey-current-ring), var(--ds-shadow-2, 0 18px 46px rgba(70, 84, 150, 0.08));
 }
 
 .journey-question-card.active .journey-question-head {
@@ -87,12 +87,12 @@
 
 .journey-question-card.active .journey-question-head > span {
   color: #fff;
-  background: var(--color-action, #5666f5);
+  background: var(--ds-brand, #5666f5);
 }
 
 /* Product work becomes the focal surface in step 3. */
 .journey-product-surface {
-  transition: opacity var(--motion-fast, 160ms) ease, transform var(--motion-fast, 160ms) ease;
+  transition: opacity var(--ds-motion-fast, 160ms) ease, transform var(--ds-motion-fast, 160ms) ease;
 }
 
 .journey-app:has(.journey-product-surface) .journey-product-surface {
@@ -107,7 +107,7 @@
    competing with the active form or calculation. */
 .journey-summary-sticky {
   border-color: rgba(203, 213, 225, 0.7);
-  box-shadow: var(--shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
+  box-shadow: var(--ds-shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
 }
 
 .journey-summary-list > div:last-child {
@@ -121,14 +121,14 @@
 /* The explainer is onboarding support, not a competing end-of-page dashboard. */
 .journey-app:has(.journey-bubble.user) .journey-output-explainer {
   opacity: 0.78;
-  box-shadow: var(--shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
+  box-shadow: var(--ds-shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
 }
 
 /* Preserve reversibility: Edit stays easy to hit even on compact receipts. */
 .journey-question-card:not(.active) .journey-question-head > button {
   min-height: 36px;
   padding: 7px 10px;
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--ds-radius-pill, 999px);
   background: rgba(255, 255, 255, 0.9);
 }
 
@@ -169,6 +169,6 @@
   }
 
   .journey-question-card.active {
-    box-shadow: 0 0 0 3px var(--journey-current-ring), var(--shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
+    box-shadow: 0 0 0 3px var(--journey-current-ring), var(--ds-shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
   }
 }

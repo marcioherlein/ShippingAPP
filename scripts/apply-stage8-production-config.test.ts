@@ -13,7 +13,7 @@ const base = {
 }
 
 describe('Stage 8 production config override', () => {
-  it('applies server-owned production identity values while forcing sending off', () => {
+  it('applies server-owned production identity values while repository variables cannot enable sending', () => {
     const next = applyStage8ProductionConfig(base, {
       STAGE8_PUBLIC_BASE_URL: 'https://app.shippingapp.com.ar/path',
       STAGE8_EMAIL_APP_NAME: 'ShippingAPP Argentina',
@@ -28,6 +28,14 @@ describe('Stage 8 production config override', () => {
     expect(next.vars.CLERK_AUTHORIZED_PARTIES).toContain('https://app.shippingapp.com.ar')
     expect(next.vars.EMAIL_FROM).toContain('noreply@shippingapp.com.ar')
     expect(next.vars.EMAIL_SENDING_ENABLED).toBe('false')
+  })
+
+  it('preserves a future reviewed version-controlled activation', () => {
+    const next = applyStage8ProductionConfig({
+      ...base,
+      vars: { ...base.vars, EMAIL_SENDING_ENABLED: 'true' },
+    }, { EMAIL_SENDING_ENABLED: 'false' })
+    expect(next.vars.EMAIL_SENDING_ENABLED).toBe('true')
   })
 
   it('preserves safe development fallbacks when Stage 8 variables are absent', () => {

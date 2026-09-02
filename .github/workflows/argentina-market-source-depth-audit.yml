@@ -1,0 +1,21 @@
+name: Argentina Market Source Depth Audit
+
+on:
+  push:
+    branches:
+      - audit/argentina-market-source-depth
+
+permissions:
+  contents: read
+
+jobs:
+  source-depth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe current retailer depth and specialty public catalogs
+        run: node scripts/audit-argentina-market-source-depth.mjs

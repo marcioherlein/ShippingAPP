@@ -4,10 +4,7 @@ import {
   inferArgentinaMarketMatchMode,
   type ArgentinaMarketMatchMode,
 } from './functionalMarketMatch'
-import {
-  buildArgentinaFunctionalDiscoveryQueries,
-  buildArgentinaFunctionalMarketQuery,
-} from './functionalMarketQuery'
+import { buildArgentinaFunctionalMarketQuery } from './functionalMarketQuery'
 import { percentile, trimPriceOutliers } from './catalogStats'
 import type { ArgentinaMarketResult, MarketComparable, MlResult } from './marketTypes'
 import type {
@@ -173,56 +170,28 @@ export async function runArgentinaMarketBenchmark(
   }
 
   warnings.push(...(discovery.warnings || []))
-  let categoryHint = discovery.categoryHint
-  const sourceLabel = discovery.sourceLabel
-  const rawByKey = new Map<string, ArgentinaMarketCandidate>()
+  const raw = Array.isArray(discovery.candidates) ? discovery.candidates : []
+  const seen = new Set<string>()
   const matched: Array<{ candidate: ArgentinaMarketCandidate; comparable: MarketComparable }> = []
+  const categoryHint = discovery.categoryHint
 
-  const absorbCandidates = (candidates: ArgentinaMarketCandidate[]) => {
-    for (const candidate of candidates) {
-      if (!candidate) continue
-      const key = dedupeKey(candidate)
-      if (rawByKey.has(key)) continue
-      rawByKey.set(key, candidate)
-      if (!candidate.title || !Number.isFinite(candidate.priceArs) || candidate.priceArs <= 0) continue
+  for (const candidate of raw) {
+    if (!candidate || !candidate.title || !Number.isFinite(candidate.priceArs) || candidate.priceArs <= 0) continue
+    const key = dedupeKey(candidate)
+    if (seen.has(key)) continue
+    seen.add(key)
 
-      const matcherItem = asMatcherItem(candidate)
-      const score = matchMode === 'functional'
-        ? functionalComparableScore(matcherItem, productName, category)
-        : comparableScore(matcherItem, productName, category, {
-            categoryId: categoryHint?.categoryId,
-            inferredAttributes: categoryHint?.attributes,
-          })
-      if (score < 55) continue
-      matched.push({ candidate, comparable: toComparable(candidate, score, matchMode) })
-    }
+    const matcherItem = asMatcherItem(candidate)
+    const score = matchMode === 'functional'
+      ? functionalComparableScore(matcherItem, productName, category)
+      : comparableScore(matcherItem, productName, category, {
+          categoryId: categoryHint?.categoryId,
+          inferredAttributes: categoryHint?.attributes,
+        })
+    if (score < 55) continue
+    matched.push({ candidate, comparable: toComparable(candidate, score, matchMode) })
   }
 
-  absorbCandidates(Array.isArray(discovery.candidates) ? discovery.candidates : [])
-
-  if (matchMode === 'functional' && matched.length < minimumComparables) {
-    const stagedQueries = buildArgentinaFunctionalDiscoveryQueries(productName, category)
-    for (const fallbackQuery of stagedQueries.slice(1)) {
-      if (fallbackQuery === query) continue
-      let fallbackDiscovery
-      try {
-        fallbackDiscovery = await discoveryProvider.discover({ query: fallbackQuery, productName, category })
-      } catch (error) {
-        warnings.push(`Functional discovery fallback (${fallbackQuery}) failed: ${error instanceof Error ? error.message : 'provider error'}`)
-        continue
-      }
-      if (!categoryHint && fallbackDiscovery.categoryHint) categoryHint = fallbackDiscovery.categoryHint
-      warnings.push(...(fallbackDiscovery.warnings || []).map((warning) => `Functional discovery fallback (${fallbackQuery}): ${warning}`))
-      const before = matched.length
-      absorbCandidates(Array.isArray(fallbackDiscovery.candidates) ? fallbackDiscovery.candidates : [])
-      warnings.push(
-        `Functional discovery widened to "${fallbackQuery}" because the stricter query had ${before} accepted matcher candidate(s); deterministic matcher thresholds remained unchanged.`,
-      )
-      if (matched.length >= minimumComparables) break
-    }
-  }
-
-  const raw = [...rawByKey.values()]
   const strict = matched.filter(({ comparable }) => comparable.score >= 65)
   const selected = strict.length >= minimumComparables ? strict : matched
   const resolver = options.priceResolver || null
@@ -282,7 +251,7 @@ export async function runArgentinaMarketBenchmark(
     p75Ars,
     suggestedPriceArs,
     confidence,
-    source: `${sourceLabel}${resolverSuffix}`,
+    source: `${discovery.sourceLabel}${resolverSuffix}`,
     priceQuality,
     comparables: accepted.sort((a, b) => b.score - a.score).slice(0, 8),
     warnings,

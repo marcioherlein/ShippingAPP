@@ -45,9 +45,9 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   await page.keyboard.press('Enter')
   await expect(page.getByText('Perfil de la operación', { exact: true })).toBeVisible()
 
-  await chooseByKeyboard(page, page.getByRole('button', { name: 'Reventa', exact: true }))
-  await chooseByKeyboard(page, page.getByRole('button', { name: 'Empresa', exact: true }))
-  await chooseByKeyboard(page, page.getByRole('button', { name: 'Sí', exact: true }))
+  await chooseByKeyboard(page, page.getByRole('radio', { name: 'Reventa', exact: true }))
+  await chooseByKeyboard(page, page.getByRole('radio', { name: 'Empresa', exact: true }))
+  await chooseByKeyboard(page, page.getByRole('radio', { name: 'Sí', exact: true }))
 
   const sensitiveCategory = page.getByRole('combobox')
   await tabUntil(page, sensitiveCategory)
@@ -57,7 +57,7 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   await chooseByKeyboard(page, page.getByRole('button', { name: /Seguir con presupuesto/i }))
   await expect(page.getByText('Presupuesto o rango', { exact: true })).toBeVisible()
 
-  await chooseByKeyboard(page, page.getByRole('button', { name: /Todavía no sé/i }))
+  await chooseByKeyboard(page, page.getByRole('radio', { name: /Todavía no sé/i }))
   await chooseByKeyboard(page, page.getByRole('button', { name: /Seguir con el producto/i }))
 
   await expect(page.getByRole('heading', { name: 'Elegí la forma más fácil.' })).toBeVisible()

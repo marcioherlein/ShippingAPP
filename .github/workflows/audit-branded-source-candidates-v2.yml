@@ -1,0 +1,22 @@
+name: Argentina Branded Source Candidates V2
+
+on:
+  push:
+    branches:
+      - audit/branded-source-candidates-v2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probe structured branded source candidates
+        run: node scripts/audit-branded-source-candidates-v2.mjs

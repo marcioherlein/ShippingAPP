@@ -19,10 +19,13 @@ for (const query of queries) {
   const url = `${base}/catalogsearch/result/?q=${encodeURIComponent(query)}`
   const response = await fetch(url, { headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': UA } })
   const html = await response.text()
-  const linkPattern = /<a[^>]*class=["'][^"']*product-item-link[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi
   const rows = []
   let match
-  while ((match = linkPattern.exec(html)) && rows.length < 8) {
+  while ((match = anchorPattern.exec(html)) && rows.length < 8) {
+    const attrs = match[1]
+    if (!/class=["'][^"']*product-item-link[^"']*["']/i.test(attrs)) continue
+    const href = attrs.match(/href=["']([^"']+)["']/i)?.[1] || ''
     const start = Math.max(0, match.index - 500)
     const end = Math.min(html.length, match.index + match[0].length + 1800)
     const block = html.slice(start, end)
@@ -31,7 +34,7 @@ for (const query of queries) {
       || block.match(/data-price-amount=["']([0-9.,]+)["'][\s\S]{0,300}?data-price-type=["']finalPrice["']/i)?.[1]
       || null
     rows.push({
-      href: match[1],
+      href,
       title: decode(match[2]),
       finalAmount,
       amounts: amounts.slice(0, 6),

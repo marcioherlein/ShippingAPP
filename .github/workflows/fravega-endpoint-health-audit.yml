@@ -20,3 +20,5 @@ jobs:
           node-version: 22
       - name: Probe Fravega and control VTEX endpoints
         run: node scripts/audit-fravega-endpoint-health.mjs
+      - name: Inspect Fravega category HTML / Next data
+        run: node scripts/audit-fravega-category-pages.mjs

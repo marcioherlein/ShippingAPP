@@ -36,17 +36,50 @@ function vtexPriced(products) {
   return priced
 }
 
+function sonySample(products) {
+  return (Array.isArray(products) ? products : []).slice(0, 6).map((product) => ({
+    productId: product?.productId,
+    productName: product?.productName,
+    brand: product?.brand,
+    productReference: product?.productReference,
+    properties: (product?.properties || []).slice(0, 8),
+    items: (product?.items || []).slice(0, 6).map((item) => ({
+      itemId: item?.itemId,
+      name: item?.name,
+      nameComplete: item?.nameComplete,
+      sellerPrices: (item?.sellers || []).slice(0, 4).map((seller) => ({
+        sellerId: seller?.sellerId,
+        sellerName: seller?.sellerName,
+        price: Number((seller?.commertialOffer || seller?.commercialOffer)?.Price) || null,
+        available: (seller?.commertialOffer || seller?.commercialOffer)?.AvailableQuantity,
+      })),
+    })),
+  }))
+}
+
 async function probeSony(query) {
   const intelligentUrl = `https://store.sony.com.ar/api/io/_v/api/intelligent-search/product_search/trade-policy/1?${new URLSearchParams({ query, count: '12', page: '1' })}`
   const intelligent = await fetchJson(intelligentUrl)
   const products = Array.isArray(intelligent.body?.products) ? intelligent.body.products : []
   if (vtexPriced(products) > 0) return {
-    query, mode: 'vtex-intelligent', httpStatus: intelligent.response?.status, products: products.length, priced: vtexPriced(products), durationMs: intelligent.durationMs,
+    query,
+    mode: 'vtex-intelligent',
+    httpStatus: intelligent.response?.status,
+    products: products.length,
+    priced: vtexPriced(products),
+    durationMs: intelligent.durationMs,
+    sample: sonySample(products),
   }
   const legacy = await fetchJson(`https://store.sony.com.ar/api/catalog_system/pub/products/search/${encodeURIComponent(query)}`)
   const legacyProducts = Array.isArray(legacy.body) ? legacy.body : []
   return {
-    query, mode: 'vtex-legacy', httpStatus: legacy.response?.status, products: legacyProducts.length, priced: vtexPriced(legacyProducts), durationMs: legacy.durationMs,
+    query,
+    mode: 'vtex-legacy',
+    httpStatus: legacy.response?.status,
+    products: legacyProducts.length,
+    priced: vtexPriced(legacyProducts),
+    durationMs: legacy.durationMs,
+    sample: sonySample(legacyProducts),
   }
 }
 

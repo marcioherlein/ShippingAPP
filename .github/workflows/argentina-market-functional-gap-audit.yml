@@ -1,0 +1,27 @@
+name: Argentina Market Functional Gap Audit
+
+on:
+  push:
+    branches:
+      - audit/argentina-market-functional-gaps
+
+permissions:
+  contents: read
+
+jobs:
+  gap-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
+      INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+      GAP_AUDIT_TIMEOUT_MS: '30000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe six persistent functional gaps
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+        run: node scripts/audit-production-argentina-market-functional-gaps.mjs

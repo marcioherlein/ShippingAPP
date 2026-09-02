@@ -1,3 +1,4 @@
+// One-shot structured source audit. Keep this branch isolated from production.
 const candidates = [
   { id: 'samsung-official', host: 'https://shop.samsung.com.ar', queries: ['samsung galaxy a16', 'samsung s24 fe'] },
   { id: 'motorola-official', host: 'https://tienda.motorola.com.ar', queries: ['motorola g15', 'motorola g85'] },

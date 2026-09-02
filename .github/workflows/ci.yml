@@ -18,8 +18,12 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
+      - name: Install Chromium for browser quality gates
+        run: npx playwright install --with-deps chromium
       - name: Unit and integration tests
         run: npx --yes vitest@3.2.4 run
+      - name: Browser accessibility and UX gates
+        run: npm run test:e2e
       - name: Validate D1 migrations and schema
         shell: bash
         run: |

@@ -49,6 +49,7 @@ function env(db: NodeDatabase) {
   return {
     DB: db,
     EMAIL_SENDING_ENABLED: 'true',
+    EMAIL_DELIVERY_MODE: 'all',
     RESEND_API_KEY: 're_test_scheduler',
     EMAIL_FROM: 'ShippingAPP <mail@example.com>',
     EMAIL_UNSUBSCRIBE_SECRET: 'scheduler-secret-abcdefghijklmnopqrstuvwxyz-123456',

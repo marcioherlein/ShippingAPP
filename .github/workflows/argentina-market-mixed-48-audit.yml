@@ -7,7 +7,7 @@ on:
       - audit/mixed48-semantics-v2
 
 # Evidence-aware audit semantics v2. The production corpus and request parameters remain unchanged.
-# Rerun marker: 2026-09-02 deeper relaxed pool production experiment.
+# Rerun marker: 2026-09-02 Fravega structured landing fallback production validation.
 permissions:
   contents: read
 

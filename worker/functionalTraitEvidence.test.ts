@@ -39,6 +39,25 @@ describe('shared functional trait evidence guard', () => {
       candidate('Smartwatch 1.4 pulgadas Bluetooth', [{ name: 'Posicionamiento', value_name: 'GPS integrado' }]),
       'Smartwatch GPS 1.4 pulgadas sin marca',
     )).toBe(true)
+    expect(passesFunctionalTraitEvidence(
+      candidate('Smartwatch 1.4 pulgadas Bluetooth', [{ name: 'GPS', value_name: 'Sí' }]),
+      'Smartwatch GPS 1.4 pulgadas sin marca',
+    )).toBe(true)
+  })
+
+  it('rejects explicit negative GPS attributes instead of treating the attribute name as proof', () => {
+    expect(passesFunctionalTraitEvidence(
+      candidate('Smartwatch Foxbox Helix 1.43 pulgadas', [{ name: 'GPS', value_name: 'NO' }]),
+      'Smartwatch GPS 1.43 pulgadas sin marca',
+    )).toBe(false)
+    expect(passesFunctionalTraitEvidence(
+      candidate('Smartwatch 1.4 pulgadas sin GPS'),
+      'Smartwatch GPS 1.4 pulgadas sin marca',
+    )).toBe(false)
+    expect(passesFunctionalTraitEvidence(
+      candidate('Smartwatch 1.4 pulgadas', [{ name: 'GPS', value_name: 'False' }, { name: 'Batería', value_name: 'Modo GPS hasta 10 horas' }]),
+      'Smartwatch GPS 1.4 pulgadas sin marca',
+    )).toBe(false)
   })
 
   it('accepts grafito/graphite evidence and rejects aluminum-only rackets', () => {
@@ -67,11 +86,12 @@ describe('shared functional trait evidence guard', () => {
     expect(result.candidates).toEqual(rows)
   })
 
-  it('filters missing critical evidence in any functional provider and reports the rejection count', async () => {
+  it('filters missing and contradictory critical evidence and reports the rejection count', async () => {
     const guarded = withFunctionalTraitEvidenceGuard(provider([
       candidate('Smartwatch 1.4 pulgadas Bluetooth'),
       candidate('Smartwatch GPS 1.4 pulgadas Bluetooth'),
       candidate('Smartwatch 1.4 pulgadas', [{ name: 'GPS', value_name: 'Sí' }]),
+      candidate('Smartwatch 1.4 pulgadas', [{ name: 'GPS', value_name: 'NO' }]),
     ]))
     const result = await guarded.discover({
       query: 'smartwatch',
@@ -80,6 +100,6 @@ describe('shared functional trait evidence guard', () => {
     })
 
     expect(result.candidates).toHaveLength(2)
-    expect(result.warnings?.join(' ')).toContain('rejected 1 candidate')
+    expect(result.warnings?.join(' ')).toContain('rejected 2 candidate')
   })
 })

@@ -22,6 +22,7 @@ describe('SaaS API route inventory', () => {
       ...exactRoutesFromSource('worker/watchlist.ts'),
       ...exactRoutesFromSource('worker/usage.ts'),
       ...exactRoutesFromSource('worker/emailPreferences.ts'),
+      ...exactRoutesFromSource('worker/billing.ts'),
       ...exactRoutesFromSource('worker/router.ts'),
       ...exactRoutesFromSource('worker/enrich.ts'),
       ...exactRoutesFromSource('worker/index.ts'),
@@ -53,6 +54,19 @@ describe('SaaS API route inventory', () => {
     expect(resolveRoutePolicy('/api/email-unsubscribe', 'GET')).toMatchObject({ id: 'email-unsubscribe', targetAccess: 'public', targetMetered: false })
     expect(resolveRoutePolicy('/api/email-unsubscribe', 'POST')).toMatchObject({ id: 'email-unsubscribe', targetAccess: 'public', targetMetered: false })
     expect(resolveRoutePolicy('/api/email-runtime', 'GET')).toMatchObject({ id: 'email-runtime', targetAccess: 'internal', targetMetered: false })
+  })
+
+  it('keeps billing user actions authenticated and the Mercado Pago webhook provider-scoped', () => {
+    expect(resolveRoutePolicy('/api/billing', 'GET')).toMatchObject({ id: 'billing-status', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/billing/checkout', 'POST')).toMatchObject({ id: 'billing-checkout', targetAccess: 'authenticated', targetMetered: false, costRisk: 'medium' })
+    expect(resolveRoutePolicy('/api/billing/reconcile', 'POST')).toMatchObject({ id: 'billing-reconcile', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/billing/cancel', 'POST')).toMatchObject({ id: 'billing-cancel', targetAccess: 'authenticated', targetMetered: false })
+    expect(resolveRoutePolicy('/api/billing/webhook/mercadopago', 'POST')).toMatchObject({
+      id: 'billing-mercadopago-webhook',
+      targetAccess: 'provider_webhook',
+      currentAccess: 'provider_webhook',
+      targetMetered: false,
+    })
   })
 
   it('keeps usage/history/watchlist reads zero-credit but meters external watchlist refresh', () => {
@@ -88,6 +102,8 @@ describe('SaaS API route inventory', () => {
     expect(resolveRoutePolicy('/api/usage', 'POST')).toBeNull()
     expect(resolveRoutePolicy('/api/email-preferences', 'POST')).toBeNull()
     expect(resolveRoutePolicy('/api/email-runtime', 'POST')).toBeNull()
+    expect(resolveRoutePolicy('/api/billing', 'POST')).toBeNull()
+    expect(resolveRoutePolicy('/api/billing/webhook/mercadopago', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/not-real', 'POST')).toBeNull()
   })
 })

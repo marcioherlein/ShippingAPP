@@ -27,18 +27,34 @@ const purposeByCopy: Record<string, PersistedJourneyState['purpose']> = {
   Reventa: 'resale',
   'Uso propio': 'own_use',
   'No sé': 'unknown',
+  'Todavía no sé': 'unknown',
 }
 
 const entityByCopy: Record<string, PersistedJourneyState['entityType']> = {
   Empresa: 'company',
   Persona: 'individual',
+  'Persona humana': 'individual',
   'No sé': 'unknown',
+  'Todavía no sé': 'unknown',
 }
 
 const signatureByCopy: Record<string, PersistedJourneyState['signature']> = {
   Sí: 'yes',
   No: 'no',
   'No sé': 'unknown',
+  'Sí, tengo firma/importador': 'yes',
+  'No tengo firma/importador': 'no',
+  'Todavía no sé': 'unknown',
+}
+
+const sensitiveByCopy: Record<string, PersistedJourneyState['sensitiveCategory']> = {
+  'No es categoría sensible': 'none',
+  Alimentos: 'food',
+  Juguetes: 'toys',
+  Cosméticos: 'cosmetics',
+  Medicamentos: 'medicines',
+  Suplementos: 'supplements',
+  'Todavía no sé': 'unknown',
 }
 
 const budgetByCopy: Record<string, PersistedJourneyState['budgetMode']> = {
@@ -71,10 +87,21 @@ function textOf(element: Element | null) {
   return element?.textContent?.trim() || ''
 }
 
+function mapByPrefix<T>(copy: string, mapping: Record<string, T>) {
+  const entry = Object.entries(mapping).find(([label]) => copy === label || copy.startsWith(label))
+  return entry?.[1]
+}
+
 function selectedRadioCopy(label: string) {
   const group = Array.from(document.querySelectorAll<HTMLElement>('[role="radiogroup"]'))
     .find((candidate) => candidate.getAttribute('aria-label') === label)
   return textOf(group?.querySelector('[role="radio"][aria-checked="true"]'))
+}
+
+function completedCardValues(number: '01' | '02') {
+  const card = Array.from(document.querySelectorAll<HTMLElement>('.journey-question-card'))
+    .find((candidate) => textOf(candidate.querySelector('.journey-question-head > span')) === number)
+  return Array.from(card?.querySelectorAll<HTMLElement>('.journey-complete-row > span') || []).map(textOf)
 }
 
 function captureIntent() {
@@ -98,25 +125,76 @@ function finitePositive(value: string | undefined) {
   return Number.isFinite(number) && number > 0 ? number : undefined
 }
 
+function captureOperation() {
+  const completed = completedCardValues('01')
+  const purposeCopy = selectedRadioCopy('¿Para qué lo traés?') || completed[0] || ''
+  const entityCopy = selectedRadioCopy('¿Quién importa?') || completed[1] || ''
+  const signatureCopy = selectedRadioCopy('¿Tenés firma/importador para operar?') || completed[2] || ''
+  const sensitiveCopy = completed[3] || ''
+  const selectValue = document.querySelector<HTMLSelectElement>('#journey-sensitive-category')?.value
+
+  return {
+    purpose: mapByPrefix(purposeCopy, purposeByCopy),
+    entityType: mapByPrefix(entityCopy, entityByCopy),
+    signature: mapByPrefix(signatureCopy, signatureByCopy),
+    sensitiveCategory: (selectValue || mapByPrefix(sensitiveCopy, sensitiveByCopy)) as PersistedJourneyState['sensitiveCategory'],
+  }
+}
+
+function captureBudget() {
+  const selectedCopy = selectedRadioCopy('Presupuesto o rango')
+  const completedCopy = completedCardValues('02')[0] || ''
+  const activeMode = mapByPrefix(selectedCopy, budgetByCopy)
+
+  if (activeMode === 'budget') {
+    return {
+      budgetMode: activeMode,
+      budgetUsd: finitePositive(document.querySelector<HTMLInputElement>('.journey-number-field input')?.value),
+    }
+  }
+
+  if (activeMode === 'units') {
+    const inputs = document.querySelectorAll<HTMLInputElement>('.journey-range-fields input')
+    return {
+      budgetMode: activeMode,
+      unitsMin: finitePositive(inputs[0]?.value),
+      unitsMax: finitePositive(inputs[1]?.value),
+    }
+  }
+
+  if (activeMode === 'unknown') return { budgetMode: activeMode }
+
+  const units = completedCopy.match(/([\d.]+)\s*[–-]\s*([\d.]+)\s*unidades/i)
+  if (units) {
+    return {
+      budgetMode: 'units' as const,
+      unitsMin: finitePositive(units[1].replace(/\./g, '')),
+      unitsMax: finitePositive(units[2].replace(/\./g, '')),
+    }
+  }
+
+  const budget = completedCopy.match(/Hasta USD\s*([\d.]+)/i)
+  if (budget) {
+    return {
+      budgetMode: 'budget' as const,
+      budgetUsd: finitePositive(budget[1].replace(/\./g, '')),
+    }
+  }
+
+  if (completedCopy.includes('por definir')) return { budgetMode: 'unknown' as const }
+  return {}
+}
+
 export function captureJourneyState(): PersistedJourneyState | null {
   const intent = captureIntent()
   if (!intent) return null
-
-  const state: PersistedJourneyState = {
+  return {
     v: 1,
     intent,
-    purpose: purposeByCopy[selectedRadioCopy('¿Para qué lo traés?')],
-    entityType: entityByCopy[selectedRadioCopy('¿Quién importa?')],
-    signature: signatureByCopy[selectedRadioCopy('¿Tenés firma/importador para operar?')],
-    sensitiveCategory: (document.querySelector<HTMLSelectElement>('#journey-sensitive-category')?.value || undefined) as PersistedJourneyState['sensitiveCategory'],
-    budgetMode: budgetByCopy[selectedRadioCopy('Presupuesto o rango')],
-    budgetUsd: finitePositive(document.querySelector<HTMLInputElement>('.journey-number-field input')?.value),
-    unitsMin: finitePositive(document.querySelectorAll<HTMLInputElement>('.journey-range-fields input')[0]?.value),
-    unitsMax: finitePositive(document.querySelectorAll<HTMLInputElement>('.journey-range-fields input')[1]?.value),
+    ...captureOperation(),
+    ...captureBudget(),
     step: captureStep(),
   }
-
-  return state
 }
 
 function urlForState(state: PersistedJourneyState | null) {
@@ -158,7 +236,6 @@ function waitFor<T extends Element>(resolver: () => T | null, timeoutMs = 1800) 
       resolve(immediate)
       return
     }
-
     const started = Date.now()
     const timer = window.setInterval(() => {
       const value = resolver()
@@ -187,7 +264,6 @@ async function chooseIntent(intent: PersistedJourneyState['intent']) {
     buttonContaining('Nuevo caso')?.click()
     await waitFor(() => buttonContaining('Ya tengo un producto'))
   }
-
   const copy = intentByCopy.find(([, value]) => value === intent)?.[0]
   if (!copy) return
   ;(await waitFor(() => buttonContaining(copy))).click()
@@ -199,7 +275,7 @@ function radioFor(groupLabel: string, value: string | undefined) {
     .find((candidate) => candidate.getAttribute('aria-label') === groupLabel)
   if (!group) return null
   return Array.from(group.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
-    .find((button) => textOf(button) === value) || null
+    .find((button) => textOf(button) === value || textOf(button).startsWith(value)) || null
 }
 
 async function selectRadio(groupLabel: string, copy: string | undefined) {
@@ -217,13 +293,14 @@ function dispatchControlledChange(element: HTMLInputElement | HTMLSelectElement,
 }
 
 async function restoreOperation(state: PersistedJourneyState) {
-  const purposeCopy = Object.entries(purposeByCopy).find(([, value]) => value === state.purpose)?.[0]
-  const entityCopy = Object.entries(entityByCopy).find(([, value]) => value === state.entityType)?.[0]
-  const signatureCopy = Object.entries(signatureByCopy).find(([, value]) => value === state.signature)?.[0]
+  const purposeCopy = Object.entries(purposeByCopy).find(([, value]) => value === state.purpose && !value?.includes?.('Todavía'))?.[0]
+    || Object.entries(purposeByCopy).find(([, value]) => value === state.purpose)?.[0]
+  const entityCopy = Object.entries(entityByCopy).find(([label, value]) => value === state.entityType && ['Empresa', 'Persona', 'No sé'].includes(label))?.[0]
+  const signatureCopy = Object.entries(signatureByCopy).find(([label, value]) => value === state.signature && ['Sí', 'No', 'No sé'].includes(label))?.[0]
 
-  await selectRadio('¿Para qué lo traés?', purposeCopy)
-  await selectRadio('¿Quién importa?', entityCopy)
-  await selectRadio('¿Tenés firma/importador para operar?', signatureCopy)
+  await selectRadio('¿Para qué lo traés?', state.purpose === 'unknown' ? 'No sé' : purposeCopy)
+  await selectRadio('¿Quién importa?', state.entityType === 'unknown' ? 'No sé' : entityCopy)
+  await selectRadio('¿Tenés firma/importador para operar?', state.signature === 'unknown' ? 'No sé' : signatureCopy)
 
   if (state.sensitiveCategory) {
     const select = await waitFor(() => document.querySelector<HTMLSelectElement>('#journey-sensitive-category'))
@@ -344,11 +421,15 @@ export function installJourneyPersistence() {
   }
 
   const restore = async (state: PersistedJourneyState | null) => {
-    if (!state) return
     restoring = true
     try {
+      if (!state) {
+        buttonContaining('Nuevo caso')?.click()
+        localStorage.removeItem(STORAGE_KEY)
+        return
+      }
       await restoreJourneyState(state)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      writeState(state, 'replace')
     } finally {
       restoring = false
     }
@@ -356,7 +437,6 @@ export function installJourneyPersistence() {
 
   const onPopState = () => {
     const fromUrl = decodeState(new URL(window.location.href).searchParams.get(URL_KEY))
-    if (!fromUrl) return
     void restore(fromUrl)
   }
 

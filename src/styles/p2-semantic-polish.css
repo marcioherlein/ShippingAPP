@@ -1,0 +1,57 @@
+:root {
+  --ds-type-body-lg: 1.125rem;
+  --ds-type-body: 1rem;
+  --ds-type-label: 0.875rem;
+  --ds-type-meta: 0.75rem;
+}
+
+/* Explanatory copy should read like body text, not metadata. */
+.journey-bubble p,
+.journey-section-heading p,
+.journey-choice-grid > button small,
+.pipeline-confirm-head p,
+.pipeline-step-copy p,
+.journey-summary-note p {
+  font-size: var(--ds-type-body);
+  line-height: var(--ds-leading-body);
+}
+
+.journey-question-fields > div > label,
+.journey-number-field > span,
+.journey-range-fields label > span {
+  font-size: var(--ds-type-label);
+}
+
+/* Keep the reason visible instead of making users infer why progression is blocked. */
+.journey-primary-action:disabled[data-disabled-reason] {
+  position: relative;
+  overflow: visible;
+  margin-bottom: 3.25rem;
+}
+
+.journey-primary-action:disabled[data-disabled-reason]::after {
+  content: attr(data-disabled-reason);
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  width: 100%;
+  color: var(--ds-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+
+/* The existing chip visuals now sit on top of explicit radio semantics. */
+.journey-chip-row[role='radiogroup'],
+.journey-choice-grid.budget[role='radiogroup'] {
+  outline: none;
+}
+
+.journey-chip-row [role='radio']:focus-visible,
+.journey-choice-grid.budget [role='radio']:focus-visible {
+  outline: 3px solid var(--a11y-focus, #1d4ed8);
+  outline-offset: 3px;
+}

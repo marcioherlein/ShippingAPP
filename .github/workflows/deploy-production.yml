@@ -25,6 +25,14 @@ jobs:
       CLERK_JWT_KEY: ${{ secrets.CLERK_JWT_KEY }}
       CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      EMAIL_UNSUBSCRIBE_SECRET: ${{ secrets.EMAIL_UNSUBSCRIBE_SECRET }}
+      STAGE8_PUBLIC_BASE_URL: ${{ vars.APP_PRODUCTION_URL }}
+      STAGE8_EMAIL_APP_NAME: ${{ vars.EMAIL_APP_NAME }}
+      STAGE8_CLERK_AUTHORIZED_PARTIES: ${{ vars.CLERK_AUTHORIZED_PARTIES }}
+      STAGE8_EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+      STAGE8_EMAIL_REPLY_TO: ${{ vars.EMAIL_REPLY_TO }}
+      STAGE8_EMAIL_SUPPORT_EMAIL: ${{ vars.EMAIL_SUPPORT_EMAIL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -90,9 +98,10 @@ jobs:
           set -euo pipefail
           npx --yes wrangler@latest d1 info "$D1_DATABASE_NAME" --json > /tmp/d1-info.json
           node scripts/resolve-production-d1-config.mjs /tmp/d1-info.json wrangler.jsonc .wrangler.production.json "$D1_DATABASE_NAME"
+          node scripts/apply-stage8-production-config.mjs .wrangler.production.json .wrangler.production.json
           echo "WRANGLER_PRODUCTION_CONFIG=.wrangler.production.json" >> "$GITHUB_ENV"
 
-      - name: Sync optional auth secrets to Cloudflare
+      - name: Sync optional auth and email secrets to Cloudflare
         shell: bash
         run: |
           set -euo pipefail
@@ -107,6 +116,8 @@ jobs:
           put_secret CLERK_SECRET_KEY "${CLERK_SECRET_KEY:-}"
           put_secret CLERK_JWT_KEY "${CLERK_JWT_KEY:-}"
           put_secret CLERK_PUBLISHABLE_KEY "${CLERK_PUBLISHABLE_KEY:-}"
+          put_secret RESEND_API_KEY "${RESEND_API_KEY:-}"
+          put_secret EMAIL_UNSUBSCRIBE_SECRET "${EMAIL_UNSUBSCRIBE_SECRET:-}"
 
       - name: Deploy to Cloudflare Workers
         run: npx --yes wrangler@latest deploy --config "$WRANGLER_PRODUCTION_CONFIG"
@@ -204,6 +215,9 @@ jobs:
 
       - name: Production usage boundary adversarial smoke test
         run: node scripts/smoke-production-usage-boundary.mjs
+
+      - name: Production Stage 8 readiness boundary smoke test
+        run: node scripts/smoke-production-stage8-readiness.mjs
 
       - name: Production privileged runtime smoke test
         shell: bash

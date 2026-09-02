@@ -1,0 +1,67 @@
+name: Stage 8 Production Readiness Gate
+
+on:
+  workflow_run:
+    workflows: ["Deploy Production"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      require_ready:
+        description: "Require final domain/email/DNS readiness (does not enable sending)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shippingapp-stage8-production-readiness
+  cancel-in-progress: true
+
+jobs:
+  readiness:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    env:
+      PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
+      INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+      STAGE8_REQUIRE_READY: ${{ github.event_name == 'workflow_dispatch' && inputs.require_ready && '1' || '0' }}
+      STAGE8_PUBLIC_BASE_URL: ${{ vars.APP_PRODUCTION_URL }}
+      STAGE8_EMAIL_DOMAIN: ${{ vars.EMAIL_DOMAIN }}
+      STAGE8_SPF_RECORD_NAME: ${{ vars.EMAIL_SPF_RECORD_NAME }}
+      STAGE8_SPF_EXPECTED_FRAGMENT: ${{ vars.EMAIL_SPF_EXPECTED_FRAGMENT }}
+      STAGE8_DKIM_RECORD_NAME: ${{ vars.EMAIL_DKIM_RECORD_NAME }}
+      STAGE8_DKIM_EXPECTED_FRAGMENT: ${{ vars.EMAIL_DKIM_EXPECTED_FRAGMENT }}
+      STAGE8_DMARC_RECORD_NAME: ${{ vars.EMAIL_DMARC_RECORD_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify Stage 8 operational credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${#INTERNAL_API_TOKEN}" -ge 32 ] || { echo "::error::INTERNAL_API_TOKEN must be at least 32 characters"; exit 1; }
+
+      - name: Production Stage 8 identity boundary smoke
+        run: node scripts/smoke-production-stage8-readiness.mjs
+
+      - name: Verify final public host and SPF/DKIM/DMARC
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.require_ready }}
+        run: node scripts/verify-stage8-dns.mjs
+
+      - name: Verify final public application shell
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.require_ready }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "${STAGE8_PUBLIC_BASE_URL:-}" ] || { echo "::error::APP_PRODUCTION_URL repository variable is required"; exit 1; }
+          curl -fsSIL --max-time 20 "$STAGE8_PUBLIC_BASE_URL" >/tmp/stage8-public-shell.txt
+          echo "Stage 8 final public shell: PASS"

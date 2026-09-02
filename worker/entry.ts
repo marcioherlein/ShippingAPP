@@ -13,6 +13,7 @@ import { emailRuntimeStatus } from './emailService'
 import { syncClerkProfile } from './clerkProfile'
 import { digestRuntimeStatus, digestSchedulerDryRun } from './weeklyDigest'
 import { runWeeklyDigestSchedulerWithLease } from './weeklyDigestLease'
+import { productionIdentityStatus } from './productionIdentity'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -147,6 +148,10 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
 
   if (isWatchlistRoute(url.pathname)) {
     return handleWatchlist(request, env as any)
+  }
+
+  if (url.pathname === '/api/production-readiness' && request.method === 'GET') {
+    return Response.json(productionIdentityStatus(env))
   }
 
   if (url.pathname === '/api/digest-runtime' && request.method === 'GET') {

@@ -82,6 +82,17 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     notes: 'Secret-free operational status for Stage 6 email configuration and template availability.',
   },
   {
+    id: 'production-readiness',
+    path: '/api/production-readiness',
+    methods: ['GET'],
+    currentAccess: 'operational',
+    targetAccess: 'internal',
+    targetMetered: false,
+    costRisk: 'low',
+    externalProviders: ['Clerk', 'Resend'],
+    notes: 'Stage 8 secret-free production identity/readiness status. It never authorizes sending and is service-token only.',
+  },
+  {
     id: 'digest-runtime',
     path: '/api/digest-runtime',
     methods: ['GET'],

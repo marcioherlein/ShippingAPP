@@ -108,7 +108,7 @@ function decodeState(value: string | null): PersistedJourneyState | null {
   }
 }
 
-function textOf(element: Element | null) {
+function textOf(element: Element | null | undefined) {
   return element?.textContent?.trim() || ''
 }
 

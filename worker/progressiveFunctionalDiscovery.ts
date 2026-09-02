@@ -82,11 +82,13 @@ function withWarning(result: ArgentinaMarketDiscoveryResult, warning: string): A
  * Wrap only the free Argentine retailer provider. Exact-mode requests remain
  * single-shot. Functional requests get one category-only storefront query when
  * strict discovery cannot produce the five deterministic matches required for
- * a live benchmark. Candidate acceptance remains fail-closed in the unchanged
- * deterministic matcher plus the shared critical-trait evidence gate.
+ * a live benchmark. The optional relaxedProvider may expose a deeper catalog
+ * window for that second round only. Candidate acceptance remains fail-closed
+ * in the unchanged deterministic matcher plus the shared critical-trait gate.
  */
 export function withProgressiveFunctionalDiscovery(
   baseProvider: ArgentinaMarketDiscoveryProvider,
+  relaxedProvider: ArgentinaMarketDiscoveryProvider = baseProvider,
 ): ArgentinaMarketDiscoveryProvider {
   return {
     id: baseProvider.id,
@@ -107,7 +109,7 @@ export function withProgressiveFunctionalDiscovery(
 
       let relaxed: ArgentinaMarketDiscoveryResult
       try {
-        relaxed = await baseProvider.discover({ ...context, query: relaxedQuery })
+        relaxed = await relaxedProvider.discover({ ...context, query: relaxedQuery })
       } catch (error) {
         const reason = error instanceof Error ? error.message : 'relaxed retailer discovery failed'
         return withWarning(
@@ -125,7 +127,7 @@ export function withProgressiveFunctionalDiscovery(
         warnings: [
           ...(strict.warnings || []),
           ...(relaxed.warnings || []),
-          `Progressive functional discovery widened only the free retailer storefront query from "${context.query}" to category-only "${relaxedQuery}" because strict discovery produced ${strictMatches}/${LIVE_FLOOR} deterministic match(es). Every candidate still requires the original specs/category matcher plus shared critical-trait evidence before economics.`,
+          `Progressive functional discovery widened only the free retailer storefront query from "${context.query}" to category-only "${relaxedQuery}" because strict discovery produced ${strictMatches}/${LIVE_FLOOR} deterministic match(es). The relaxed round may inspect a deeper bounded catalog window, but every candidate still requires the original specs/category matcher plus shared critical-trait evidence before economics.`,
         ],
       }
     },

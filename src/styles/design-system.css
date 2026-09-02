@@ -1,0 +1,238 @@
+:root {
+  /* Typography */
+  --ds-font-sans: var(--app-font, "72 Brand", "72", Arial, Helvetica, sans-serif);
+  --ds-type-display: clamp(2.65rem, 7vw, 4.75rem);
+  --ds-type-title: clamp(1.75rem, 4vw, 2.75rem);
+  --ds-type-heading: 1.375rem;
+  --ds-type-body-lg: 1.0625rem;
+  --ds-type-body: 0.875rem;
+  --ds-type-label: 0.75rem;
+  --ds-type-meta: 0.6875rem;
+  --ds-leading-tight: 1.05;
+  --ds-leading-body: 1.55;
+
+  /* Space: 4px base grid */
+  --ds-space-1: 0.25rem;
+  --ds-space-2: 0.5rem;
+  --ds-space-3: 0.75rem;
+  --ds-space-4: 1rem;
+  --ds-space-5: 1.25rem;
+  --ds-space-6: 1.5rem;
+  --ds-space-8: 2rem;
+  --ds-space-10: 2.5rem;
+  --ds-space-12: 3rem;
+
+  /* Shape */
+  --ds-radius-sm: 0.625rem;
+  --ds-radius-md: 0.875rem;
+  --ds-radius-lg: 1.125rem;
+  --ds-radius-xl: 1.375rem;
+  --ds-radius-2xl: 1.875rem;
+  --ds-radius-pill: 999px;
+
+  /* Color */
+  --ds-text-strong: #0f172a;
+  --ds-text: #334155;
+  --ds-text-secondary: #475569;
+  --ds-text-muted: #64748b;
+  --ds-brand: #4f5de4;
+  --ds-brand-strong: #4454dc;
+  --ds-brand-soft: #eef1ff;
+  --ds-success: #15803d;
+  --ds-warning: #92400e;
+  --ds-border: rgba(203, 213, 225, 0.72);
+  --ds-border-soft: rgba(226, 232, 240, 0.80);
+  --ds-surface: #ffffff;
+  --ds-surface-subtle: #f8fafc;
+  --ds-surface-glass: rgba(255, 255, 255, 0.72);
+  --ds-surface-glass-strong: rgba(255, 255, 255, 0.82);
+
+  /* Elevation: only three product levels. */
+  --ds-shadow-1: 0 10px 28px rgba(48, 59, 91, 0.07);
+  --ds-shadow-2: 0 18px 46px rgba(48, 59, 91, 0.09);
+  --ds-shadow-3: 0 28px 80px rgba(48, 59, 91, 0.11);
+  --ds-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+
+  /* Motion */
+  --ds-motion-fast: 160ms;
+  --ds-motion-standard: 220ms;
+  --ds-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Foundation: product typography and semantic text colours. */
+.journey-app,
+.calculation-pipeline {
+  font-family: var(--ds-font-sans);
+  color: var(--ds-text-strong);
+}
+
+.journey-hero h1 {
+  font-size: var(--ds-type-display);
+  line-height: var(--ds-leading-tight);
+}
+
+.journey-section-heading h2,
+.pipeline-confirm-head h2,
+.pipeline-run-head h2 {
+  font-size: var(--ds-type-title);
+  line-height: var(--ds-leading-tight);
+}
+
+.journey-hero > p {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-type-body-lg);
+  line-height: var(--ds-leading-body);
+}
+
+.journey-bubble p,
+.journey-section-heading p,
+.pipeline-confirm-head p,
+.pipeline-step-copy p {
+  color: var(--ds-text-muted);
+  line-height: var(--ds-leading-body);
+}
+
+/* Surface hierarchy: one glass language and three elevation levels. */
+.journey-conversation,
+.journey-summary-sticky,
+.journey-calculator-section,
+.journey-output-explainer,
+.calculation-pipeline {
+  border-color: var(--ds-border-soft);
+  background: var(--ds-surface-glass);
+  box-shadow: var(--ds-shadow-3), var(--ds-glass-inset);
+}
+
+.journey-conversation,
+.journey-calculator-section,
+.calculation-pipeline {
+  border-radius: var(--ds-radius-2xl);
+}
+
+.journey-summary-sticky,
+.journey-output-explainer {
+  border-radius: var(--ds-radius-xl);
+}
+
+.journey-question-card,
+.pipeline-product-card,
+.pipeline-understood-card,
+.pipeline-clarification-card,
+.pipeline-progressive-fields {
+  border-color: var(--ds-border);
+  border-radius: var(--ds-radius-xl);
+  box-shadow: none;
+}
+
+.journey-question-card.active {
+  box-shadow: var(--ds-shadow-2);
+}
+
+.journey-bubble.assistant > div {
+  border-color: var(--ds-border);
+  background: rgba(248, 250, 252, 0.86);
+  box-shadow: var(--ds-shadow-1);
+}
+
+/* Interactive primitives. */
+.journey-choice-grid > button,
+.journey-chip-row button,
+.journey-primary-action,
+.pipeline-secondary,
+.journey-top-actions button {
+  transition:
+    transform var(--ds-motion-fast) var(--ds-ease),
+    border-color var(--ds-motion-fast) var(--ds-ease),
+    background var(--ds-motion-fast) var(--ds-ease),
+    box-shadow var(--ds-motion-fast) var(--ds-ease);
+}
+
+.journey-choice-grid > button {
+  border-color: var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface-glass-strong);
+}
+
+.journey-choice-grid > button:hover,
+.journey-choice-grid > button.selected {
+  border-color: rgba(79, 93, 228, 0.48);
+  box-shadow: var(--ds-shadow-2);
+}
+
+.journey-chip-row button {
+  min-height: 40px;
+  border-color: var(--ds-border);
+  border-radius: var(--ds-radius-pill);
+  color: var(--ds-text-muted);
+}
+
+.journey-chip-row button.selected {
+  color: var(--ds-brand-strong);
+  border-color: rgba(79, 93, 228, 0.42);
+  background: var(--ds-brand-soft);
+}
+
+.journey-primary-action {
+  min-height: 44px;
+  border-radius: var(--ds-radius-md);
+  box-shadow: var(--ds-shadow-1);
+}
+
+.pipeline-secondary,
+.journey-top-actions button {
+  min-height: 40px;
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-text-secondary);
+}
+
+/* Reusable metadata treatment. */
+.journey-thread-label small,
+.journey-question-head small,
+.journey-summary-list span,
+.pipeline-confirm-grid span,
+.pipeline-ready-strip span,
+.pipeline-step-copy small,
+.quote-customs-facts small,
+.unit-context-grid span {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-type-meta);
+}
+
+/* Standard icon containers. Existing glyphs are visually normalized while
+   JSX migration to the shared SVG icon primitive happens incrementally. */
+.journey-choice-grid > button > span,
+.journey-step span,
+.pipeline-step-icon,
+.journey-brand-mark,
+.journey-avatar {
+  border-radius: var(--ds-radius-sm);
+}
+
+.journey-choice-grid > button > span,
+.pipeline-step-icon {
+  width: 2rem;
+  height: 2rem;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+
+/* Keep glass meaningful: secondary cards should not all carry elevation. */
+.journey-summary-note,
+.pipeline-known-fact,
+.unit-context-grid > div {
+  box-shadow: none;
+  border-radius: var(--ds-radius-md);
+}
+
+@media (max-width: 640px) {
+  .journey-conversation,
+  .journey-calculator-section,
+  .calculation-pipeline {
+    border-radius: var(--ds-radius-xl);
+  }
+
+  .journey-hero h1 {
+    font-size: clamp(2.5rem, 12vw, 3.25rem);
+  }
+}

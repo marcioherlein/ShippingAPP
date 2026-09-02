@@ -24,5 +24,7 @@ jobs:
         run: node scripts/audit-structured-brand-platforms.mjs
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Diagnose Sony exact-match score
+        run: npx tsx scripts/audit-sony-match-score.ts
       - name: Run same-time branded source-set A-B benchmark
         run: npx tsx scripts/audit-branded-source-ab.ts

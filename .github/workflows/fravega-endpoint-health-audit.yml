@@ -20,5 +20,8 @@ jobs:
           node-version: 22
       - name: Probe Fravega and control VTEX endpoints
         run: node scripts/audit-fravega-endpoint-health.mjs
-      - name: Inspect Fravega category HTML / Next data
+      - name: Inspect Fravega Next data structure
+        run: node scripts/audit-fravega-next-data.mjs
+      - name: Record stale Fravega category routes
+        continue-on-error: true
         run: node scripts/audit-fravega-category-pages.mjs

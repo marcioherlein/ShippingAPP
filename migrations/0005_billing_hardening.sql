@@ -21,6 +21,13 @@ ALTER TABLE subscriptions ADD COLUMN checkout_url TEXT
 ALTER TABLE subscriptions ADD COLUMN checkout_error_code TEXT
   CHECK(checkout_error_code IS NULL OR length(checkout_error_code) <= 80);
 
+-- Billing webhook processing uses a lease on the existing append/audit row.
+-- A duplicate delivery while the first attempt is active cannot cross the
+-- provider boundary twice, while a crash/failed attempt remains retryable.
+ALTER TABLE billing_events ADD COLUMN processing_lease_expires_at TEXT;
+ALTER TABLE billing_events ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0
+  CHECK(attempt_count >= 0);
+
 CREATE INDEX idx_subscriptions_provider_plan
   ON subscriptions(provider, provider_plan_id, status)
   WHERE provider_plan_id IS NOT NULL;
@@ -30,3 +37,6 @@ CREATE UNIQUE INDEX idx_subscriptions_checkout_user_key
 CREATE INDEX idx_subscriptions_checkout_lease
   ON subscriptions(checkout_state, checkout_lease_expires_at)
   WHERE checkout_state = 'running';
+CREATE INDEX idx_billing_events_processing_lease
+  ON billing_events(status, processing_lease_expires_at)
+  WHERE status = 'received';

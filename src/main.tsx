@@ -9,6 +9,7 @@ import './styles/regulatory.css'
 import './styles/entry-simplification.css'
 import './styles/visual-consistency.css'
 import './styles/progressive-product-confirmation.css'
+import './styles/design-system.css'
 import './styles/accessibility.css'
 
 const root = document.getElementById('root')

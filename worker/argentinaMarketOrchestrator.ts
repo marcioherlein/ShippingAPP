@@ -6,6 +6,7 @@ import { createMercadoLibreMarketProviders } from './mercadoLibreMarketProvider'
 import type { ArgentinaMarketPriceResolver } from './marketProviderContracts'
 import type { ArgentinaMarketResult } from './marketTypes'
 import { withProgressiveFunctionalDiscovery } from './progressiveFunctionalDiscovery'
+import { withArgentinaSpecialtyStructuredFallback } from './specialtyStructuredMarketProvider'
 import { createArgentinaDirectRetailerProvider } from './vtexRetailerMarketProvider'
 
 export type ArgentinaMarketHybridOptions = {
@@ -57,7 +58,10 @@ export async function analyzeArgentinaMarketHybrid(
   const retailerBase = withFunctionalTraitEvidenceGuard(createArgentinaDirectRetailerProvider({
     fetchImpl: options.fetchImpl,
   }))
-  const retailerProvider = withProgressiveFunctionalDiscovery(retailerBase)
+  const retailerWithSpecialty = withArgentinaSpecialtyStructuredFallback(retailerBase, {
+    fetchImpl: options.fetchImpl,
+  })
+  const retailerProvider = withProgressiveFunctionalDiscovery(retailerWithSpecialty)
   const retailers = await runArgentinaMarketBenchmark(productName, category, retailerProvider)
 
   if (retailers.status === 'live') {

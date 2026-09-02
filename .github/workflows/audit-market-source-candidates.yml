@@ -1,0 +1,21 @@
+name: Argentina Market Source Candidate Audit
+
+on:
+  push:
+    branches:
+      - audit/market-source-candidates
+  workflow_dispatch:
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe public catalog candidates
+        env:
+          SOURCE_AUDIT_TIMEOUT_MS: '7000'
+        run: node scripts/audit-argentina-vtex-source-candidates.mjs

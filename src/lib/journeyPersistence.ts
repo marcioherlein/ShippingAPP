@@ -16,6 +16,7 @@ export type PersistedJourneyState = {
 }
 
 type HistoryMode = 'replace' | 'push'
+type InitialSource = 'url' | 'storage'
 
 const intentByCopy: Array<[string, PersistedJourneyState['intent']]> = [
   ['Ya tengo un producto', 'have_product'],
@@ -63,6 +64,30 @@ const budgetByCopy: Record<string, PersistedJourneyState['budgetMode']> = {
   'Todavía no sé': 'unknown',
 }
 
+const purposeCopy: Record<NonNullable<PersistedJourneyState['purpose']>, string> = {
+  resale: 'Reventa',
+  own_use: 'Uso propio',
+  unknown: 'No sé',
+}
+
+const entityCopy: Record<NonNullable<PersistedJourneyState['entityType']>, string> = {
+  company: 'Empresa',
+  individual: 'Persona',
+  unknown: 'No sé',
+}
+
+const signatureCopy: Record<NonNullable<PersistedJourneyState['signature']>, string> = {
+  yes: 'Sí',
+  no: 'No',
+  unknown: 'No sé',
+}
+
+const budgetCopy: Record<NonNullable<PersistedJourneyState['budgetMode']>, string> = {
+  budget: 'Tengo presupuesto',
+  units: 'Tengo rango de unidades',
+  unknown: 'Todavía no sé',
+}
+
 function encodeState(state: PersistedJourneyState) {
   const encoded = btoa(JSON.stringify(state))
   return encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
@@ -88,8 +113,7 @@ function textOf(element: Element | null) {
 }
 
 function mapByPrefix<T>(copy: string, mapping: Record<string, T>) {
-  const entry = Object.entries(mapping).find(([label]) => copy === label || copy.startsWith(label))
-  return entry?.[1]
+  return Object.entries(mapping).find(([label]) => copy === label || copy.startsWith(label))?.[1]
 }
 
 function selectedRadioCopy(label: string) {
@@ -113,7 +137,7 @@ function captureIntent() {
 }
 
 function captureStep(): 1 | 2 | 3 {
-  const active = document.querySelector('.journey-question-card.active .journey-question-head > span')?.textContent?.trim()
+  const active = textOf(document.querySelector('.journey-question-card.active .journey-question-head > span'))
   if (active === '01') return 1
   if (active === '02') return 2
   return 3
@@ -127,32 +151,28 @@ function finitePositive(value: string | undefined) {
 
 function captureOperation() {
   const completed = completedCardValues('01')
-  const purposeCopy = selectedRadioCopy('¿Para qué lo traés?') || completed[0] || ''
-  const entityCopy = selectedRadioCopy('¿Quién importa?') || completed[1] || ''
-  const signatureCopy = selectedRadioCopy('¿Tenés firma/importador para operar?') || completed[2] || ''
-  const sensitiveCopy = completed[3] || ''
-  const selectValue = document.querySelector<HTMLSelectElement>('#journey-sensitive-category')?.value
+  const purpose = selectedRadioCopy('¿Para qué lo traés?') || completed[0] || ''
+  const entity = selectedRadioCopy('¿Quién importa?') || completed[1] || ''
+  const signature = selectedRadioCopy('¿Tenés firma/importador para operar?') || completed[2] || ''
+  const sensitive = completed[3] || ''
+  const selectedSensitive = document.querySelector<HTMLSelectElement>('#journey-sensitive-category')?.value
 
   return {
-    purpose: mapByPrefix(purposeCopy, purposeByCopy),
-    entityType: mapByPrefix(entityCopy, entityByCopy),
-    signature: mapByPrefix(signatureCopy, signatureByCopy),
-    sensitiveCategory: (selectValue || mapByPrefix(sensitiveCopy, sensitiveByCopy)) as PersistedJourneyState['sensitiveCategory'],
+    purpose: mapByPrefix(purpose, purposeByCopy),
+    entityType: mapByPrefix(entity, entityByCopy),
+    signature: mapByPrefix(signature, signatureByCopy),
+    sensitiveCategory: (selectedSensitive || mapByPrefix(sensitive, sensitiveByCopy)) as PersistedJourneyState['sensitiveCategory'],
   }
 }
 
 function captureBudget() {
-  const selectedCopy = selectedRadioCopy('Presupuesto o rango')
-  const completedCopy = completedCardValues('02')[0] || ''
-  const activeMode = mapByPrefix(selectedCopy, budgetByCopy)
-
+  const activeMode = mapByPrefix(selectedRadioCopy('Presupuesto o rango'), budgetByCopy)
   if (activeMode === 'budget') {
     return {
       budgetMode: activeMode,
       budgetUsd: finitePositive(document.querySelector<HTMLInputElement>('.journey-number-field input')?.value),
     }
   }
-
   if (activeMode === 'units') {
     const inputs = document.querySelectorAll<HTMLInputElement>('.journey-range-fields input')
     return {
@@ -161,10 +181,10 @@ function captureBudget() {
       unitsMax: finitePositive(inputs[1]?.value),
     }
   }
-
   if (activeMode === 'unknown') return { budgetMode: activeMode }
 
-  const units = completedCopy.match(/([\d.]+)\s*[–-]\s*([\d.]+)\s*unidades/i)
+  const completed = completedCardValues('02')[0] || ''
+  const units = completed.match(/([\d.]+)\s*[–-]\s*([\d.]+)\s*unidades/i)
   if (units) {
     return {
       budgetMode: 'units' as const,
@@ -172,16 +192,14 @@ function captureBudget() {
       unitsMax: finitePositive(units[2].replace(/\./g, '')),
     }
   }
-
-  const budget = completedCopy.match(/Hasta USD\s*([\d.]+)/i)
+  const budget = completed.match(/Hasta USD\s*([\d.]+)/i)
   if (budget) {
     return {
       budgetMode: 'budget' as const,
       budgetUsd: finitePositive(budget[1].replace(/\./g, '')),
     }
   }
-
-  if (completedCopy.includes('por definir')) return { budgetMode: 'unknown' as const }
+  if (completed.includes('por definir')) return { budgetMode: 'unknown' as const }
   return {}
 }
 
@@ -197,6 +215,14 @@ export function captureJourneyState(): PersistedJourneyState | null {
   }
 }
 
+function navigationKey(state: PersistedJourneyState | null) {
+  return state ? `${state.intent}:${state.step}` : null
+}
+
+function currentUrl() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`
+}
+
 function urlForState(state: PersistedJourneyState | null) {
   const url = new URL(window.location.href)
   if (state) url.searchParams.set(URL_KEY, encodeState(state))
@@ -209,27 +235,29 @@ function writeState(state: PersistedJourneyState | null, mode: HistoryMode) {
   else localStorage.removeItem(STORAGE_KEY)
 
   const nextUrl = urlForState(state)
-  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`
-  if (nextUrl === currentUrl) return
+  if (nextUrl === currentUrl()) return
   if (mode === 'push') window.history.pushState({ shippingAppJourney: true }, '', nextUrl)
   else window.history.replaceState({ shippingAppJourney: true }, '', nextUrl)
 }
 
-function readStoredState() {
+function readInitialState(): { state: PersistedJourneyState; source: InitialSource } | null {
   const fromUrl = decodeState(new URL(window.location.href).searchParams.get(URL_KEY))
-  if (fromUrl) return fromUrl
+  if (fromUrl) return { state: fromUrl, source: 'url' }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as PersistedJourneyState
     if (parsed.v !== 1 || !parsed.intent) return null
-    return { ...parsed, step: parsed.step >= 3 ? 3 : parsed.step === 2 ? 2 : 1 } as PersistedJourneyState
+    return {
+      state: { ...parsed, step: parsed.step >= 3 ? 3 : parsed.step === 2 ? 2 : 1 },
+      source: 'storage',
+    }
   } catch {
     return null
   }
 }
 
-function waitFor<T extends Element>(resolver: () => T | null, timeoutMs = 1800) {
+function waitFor<T extends Element>(resolver: () => T | null, timeoutMs = 3000) {
   return new Promise<T>((resolve, reject) => {
     const immediate = resolver()
     if (immediate) {
@@ -242,9 +270,7 @@ function waitFor<T extends Element>(resolver: () => T | null, timeoutMs = 1800) 
       if (value) {
         window.clearInterval(timer)
         resolve(value)
-        return
-      }
-      if (Date.now() - started > timeoutMs) {
+      } else if (Date.now() - started > timeoutMs) {
         window.clearInterval(timer)
         reject(new Error('Journey restoration target did not appear'))
       }
@@ -265,17 +291,15 @@ async function chooseIntent(intent: PersistedJourneyState['intent']) {
     await waitFor(() => buttonContaining('Ya tengo un producto'))
   }
   const copy = intentByCopy.find(([, value]) => value === intent)?.[0]
-  if (!copy) return
-  ;(await waitFor(() => buttonContaining(copy))).click()
+  if (copy) (await waitFor(() => buttonContaining(copy))).click()
 }
 
-function radioFor(groupLabel: string, value: string | undefined) {
-  if (!value) return null
+function radioFor(groupLabel: string, copy: string | undefined) {
+  if (!copy) return null
   const group = Array.from(document.querySelectorAll<HTMLElement>('[role="radiogroup"]'))
     .find((candidate) => candidate.getAttribute('aria-label') === groupLabel)
-  if (!group) return null
-  return Array.from(group.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
-    .find((button) => textOf(button) === value || textOf(button).startsWith(value)) || null
+  return Array.from(group?.querySelectorAll<HTMLButtonElement>('[role="radio"]') || [])
+    .find((button) => textOf(button) === copy || textOf(button).startsWith(copy)) || null
 }
 
 async function selectRadio(groupLabel: string, copy: string | undefined) {
@@ -286,22 +310,15 @@ async function selectRadio(groupLabel: string, copy: string | undefined) {
 
 function dispatchControlledChange(element: HTMLInputElement | HTMLSelectElement, value: string) {
   const prototype = element instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLSelectElement.prototype
-  const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set
-  setter?.call(element, value)
+  Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(element, value)
   element.dispatchEvent(new Event('input', { bubbles: true }))
   element.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
 async function restoreOperation(state: PersistedJourneyState) {
-  const purposeCopy = Object.entries(purposeByCopy).find(([, value]) => value === state.purpose && !value?.includes?.('Todavía'))?.[0]
-    || Object.entries(purposeByCopy).find(([, value]) => value === state.purpose)?.[0]
-  const entityCopy = Object.entries(entityByCopy).find(([label, value]) => value === state.entityType && ['Empresa', 'Persona', 'No sé'].includes(label))?.[0]
-  const signatureCopy = Object.entries(signatureByCopy).find(([label, value]) => value === state.signature && ['Sí', 'No', 'No sé'].includes(label))?.[0]
-
-  await selectRadio('¿Para qué lo traés?', state.purpose === 'unknown' ? 'No sé' : purposeCopy)
-  await selectRadio('¿Quién importa?', state.entityType === 'unknown' ? 'No sé' : entityCopy)
-  await selectRadio('¿Tenés firma/importador para operar?', state.signature === 'unknown' ? 'No sé' : signatureCopy)
-
+  await selectRadio('¿Para qué lo traés?', state.purpose ? purposeCopy[state.purpose] : undefined)
+  await selectRadio('¿Quién importa?', state.entityType ? entityCopy[state.entityType] : undefined)
+  await selectRadio('¿Tenés firma/importador para operar?', state.signature ? signatureCopy[state.signature] : undefined)
   if (state.sensitiveCategory) {
     const select = await waitFor(() => document.querySelector<HTMLSelectElement>('#journey-sensitive-category'))
     if (select.value !== state.sensitiveCategory) dispatchControlledChange(select, state.sensitiveCategory)
@@ -309,14 +326,11 @@ async function restoreOperation(state: PersistedJourneyState) {
 }
 
 async function restoreBudget(state: PersistedJourneyState) {
-  const budgetCopy = Object.entries(budgetByCopy).find(([, value]) => value === state.budgetMode)?.[0]
-  await selectRadio('Presupuesto o rango', budgetCopy)
-
+  await selectRadio('Presupuesto o rango', state.budgetMode ? budgetCopy[state.budgetMode] : undefined)
   if (state.budgetMode === 'budget' && state.budgetUsd) {
     const input = await waitFor(() => document.querySelector<HTMLInputElement>('.journey-number-field input'))
     dispatchControlledChange(input, String(state.budgetUsd))
   }
-
   if (state.budgetMode === 'units') {
     const first = await waitFor(() => document.querySelectorAll<HTMLInputElement>('.journey-range-fields input')[0] || null)
     const second = await waitFor(() => document.querySelectorAll<HTMLInputElement>('.journey-range-fields input')[1] || null)
@@ -326,8 +340,7 @@ async function restoreBudget(state: PersistedJourneyState) {
 }
 
 function currentStep() {
-  if (!captureIntent()) return 0
-  return captureStep()
+  return captureIntent() ? captureStep() : 0
 }
 
 async function moveBackward(target: 1 | 2 | 3) {
@@ -335,13 +348,15 @@ async function moveBackward(target: 1 | 2 | 3) {
     const budgetCard = Array.from(document.querySelectorAll<HTMLElement>('.journey-question-card'))
       .find((card) => textOf(card.querySelector('.journey-question-head > span')) === '02')
     budgetCard?.querySelector<HTMLButtonElement>('.journey-question-head button')?.click()
-    await waitFor(() => document.querySelector('.journey-question-card.active .journey-question-head > span')?.textContent?.trim() === '02' ? document.querySelector('.journey-question-card.active') : null)
+    await waitFor(() => textOf(document.querySelector('.journey-question-card.active .journey-question-head > span')) === '02'
+      ? document.querySelector('.journey-question-card.active') : null)
   }
   if (currentStep() >= 2 && target === 1) {
     const operationCard = Array.from(document.querySelectorAll<HTMLElement>('.journey-question-card'))
       .find((card) => textOf(card.querySelector('.journey-question-head > span')) === '01')
     operationCard?.querySelector<HTMLButtonElement>('.journey-question-head button')?.click()
-    await waitFor(() => document.querySelector('.journey-question-card.active .journey-question-head > span')?.textContent?.trim() === '01' ? document.querySelector('.journey-question-card.active') : null)
+    await waitFor(() => textOf(document.querySelector('.journey-question-card.active .journey-question-head > span')) === '01'
+      ? document.querySelector('.journey-question-card.active') : null)
   }
 }
 
@@ -353,16 +368,18 @@ export async function restoreJourneyState(state: PersistedJourneyState) {
   if (state.step === 1) return
 
   if (currentStep() === 1) {
-    const continueOperation = await waitFor(() => buttonContaining('Seguir con presupuesto'))
-    if (!continueOperation.disabled) continueOperation.click()
+    const next = await waitFor(() => buttonContaining('Seguir con presupuesto'))
+    if (!next.disabled) next.click()
   }
 
-  await waitFor(() => document.querySelector('.journey-question-card.active .journey-question-head > span')?.textContent?.trim() === '02' ? document.querySelector('.journey-question-card.active') : null)
+  await waitFor(() => textOf(document.querySelector('.journey-question-card.active .journey-question-head > span')) === '02'
+    ? document.querySelector('.journey-question-card.active') : null)
   await restoreBudget(state)
   if (state.step === 2) return
 
-  const continueBudget = await waitFor(() => buttonContaining('Seguir con el producto'))
-  if (!continueBudget.disabled) continueBudget.click()
+  const next = await waitFor(() => buttonContaining('Seguir con el producto'))
+  if (!next.disabled) next.click()
+  await waitFor(() => document.querySelector('.journey-product-surface'))
 }
 
 export function installJourneyPersistence() {
@@ -370,19 +387,43 @@ export function installJourneyPersistence() {
 
   let restoring = false
   let scheduled = false
-  let historyMode: HistoryMode = 'replace'
+  let lastNavigationKey: string | null = null
 
-  const schedulePersist = (mode: HistoryMode = 'replace') => {
+  const syncState = () => {
     if (restoring) return
-    if (mode === 'push') historyMode = 'push'
-    if (scheduled) return
+    const state = captureJourneyState()
+    const key = navigationKey(state)
+
+    if (!state) {
+      localStorage.removeItem(STORAGE_KEY)
+      lastNavigationKey = null
+      return
+    }
+
+    const hasJourneyUrl = new URL(window.location.href).searchParams.has(URL_KEY)
+    const mode: HistoryMode = lastNavigationKey === null
+      ? (hasJourneyUrl ? 'replace' : 'push')
+      : key !== lastNavigationKey ? 'push' : 'replace'
+
+    writeState(state, mode)
+    lastNavigationKey = key
+  }
+
+  const scheduleSync = () => {
+    if (restoring || scheduled) return
     scheduled = true
     window.setTimeout(() => {
       scheduled = false
-      const state = captureJourneyState()
-      writeState(state, historyMode)
-      historyMode = 'replace'
-    }, 25)
+      syncState()
+    }, 30)
+  }
+
+  const clearToNewCase = () => {
+    localStorage.removeItem(STORAGE_KEY)
+    lastNavigationKey = null
+    if (!restoring && new URL(window.location.href).searchParams.has(URL_KEY)) {
+      window.history.pushState({ shippingAppJourney: true }, '', urlForState(null))
+    }
   }
 
   const onClick = (event: MouseEvent) => {
@@ -393,69 +434,66 @@ export function installJourneyPersistence() {
     if (copy === 'Cambiar') {
       event.preventDefault()
       event.stopPropagation()
-      localStorage.removeItem(STORAGE_KEY)
-      const url = new URL(window.location.href)
-      url.searchParams.delete(URL_KEY)
-      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
       buttonContaining('Nuevo caso')?.click()
       return
     }
 
     if (copy.includes('Nuevo caso')) {
-      localStorage.removeItem(STORAGE_KEY)
-      schedulePersist('replace')
+      clearToNewCase()
       return
     }
 
-    if (intentByCopy.some(([label]) => copy.includes(label)) || copy.includes('Seguir con presupuesto') || copy.includes('Seguir con el producto') || copy === 'Editar') {
-      schedulePersist('push')
-      return
-    }
-
-    if (button.getAttribute('role') === 'radio') schedulePersist('replace')
+    scheduleSync()
   }
 
-  const onChange = (event: Event) => {
-    const target = event.target
-    if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement) schedulePersist('replace')
-  }
+  const onFieldChange = () => scheduleSync()
 
-  const restore = async (state: PersistedJourneyState | null) => {
+  const restore = async (state: PersistedJourneyState | null, source: InitialSource | 'history' = 'history') => {
     restoring = true
     try {
+      await waitFor(() => document.querySelector('.journey-app'))
       if (!state) {
         buttonContaining('Nuevo caso')?.click()
         localStorage.removeItem(STORAGE_KEY)
+        lastNavigationKey = null
         return
       }
+
       await restoreJourneyState(state)
-      writeState(state, 'replace')
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      if (source === 'storage') writeState(state, 'replace')
+      lastNavigationKey = navigationKey(state)
     } finally {
       restoring = false
     }
   }
 
   const onPopState = () => {
-    const fromUrl = decodeState(new URL(window.location.href).searchParams.get(URL_KEY))
-    void restore(fromUrl)
+    const state = decodeState(new URL(window.location.href).searchParams.get(URL_KEY))
+    void restore(state)
   }
 
   document.addEventListener('click', onClick, true)
-  document.addEventListener('change', onChange, true)
-  document.addEventListener('input', onChange, true)
+  document.addEventListener('change', onFieldChange, true)
+  document.addEventListener('input', onFieldChange, true)
   window.addEventListener('popstate', onPopState)
 
-  const observer = new MutationObserver(() => schedulePersist('replace'))
-  observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'aria-checked'] })
+  const observer = new MutationObserver(scheduleSync)
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['class', 'aria-checked'],
+  })
 
-  const initial = readStoredState()
-  if (initial) queueMicrotask(() => void restore(initial))
+  const initial = readInitialState()
+  if (initial) void restore(initial.state, initial.source)
 
   return () => {
     observer.disconnect()
     document.removeEventListener('click', onClick, true)
-    document.removeEventListener('change', onChange, true)
-    document.removeEventListener('input', onChange, true)
+    document.removeEventListener('change', onFieldChange, true)
+    document.removeEventListener('input', onFieldChange, true)
     window.removeEventListener('popstate', onPopState)
   }
 }

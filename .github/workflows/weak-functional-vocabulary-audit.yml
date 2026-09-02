@@ -1,0 +1,21 @@
+name: Weak Functional Vocabulary Audit
+
+on:
+  push:
+    branches:
+      - audit/weak-functional-vocabulary
+
+permissions:
+  contents: read
+
+jobs:
+  vocabulary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe weak functional storefront vocabulary
+        run: node scripts/audit-weak-functional-vocabulary.mjs

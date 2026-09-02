@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import UrlAnalyzer from './components/UrlAnalyzer'
 import HotProductsSection from './components/HotProductsSection'
 import OwnedProductIntake from './components/OwnedProductIntake'
@@ -8,6 +8,7 @@ import { getCachedHotProducts, hotProductToQuotePrefill, type QuotePrefill } fro
 import type { HotProduct } from './data/hotProducts'
 import { enrichProductAnalysisV2, ingestAlibabaUrlV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
+import { getJourneyBudgetError } from './lib/journeyValidation'
 import {
   applyProductConfirmation,
   createManualProductAnalysis,
@@ -128,10 +129,29 @@ export default function App() {
   const [pipelineStage, setPipelineStage] = useState(0)
   const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
+  const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
 
   const hotProducts = useMemo(() => getCachedHotProducts(8), [])
   const operationAnswered = purpose !== null && entityType !== null && signature !== null && sensitiveCategory !== null
-  const budgetAnswered = budgetMode !== null
+  const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
+  const budgetAnswered = budgetMode !== null && budgetError === null
+
+  const currentCalculationInputKey = useMemo(() => JSON.stringify([
+    purpose,
+    entityType,
+    signature,
+    sensitiveCategory,
+    budgetMode,
+    budgetUsd,
+    unitsMin,
+    unitsMax,
+  ]), [purpose, entityType, signature, sensitiveCategory, budgetMode, budgetUsd, unitsMin, unitsMax])
+  const currentCalculationInputKeyRef = useRef(currentCalculationInputKey)
+  currentCalculationInputKeyRef.current = currentCalculationInputKey
+
+  const effectiveCalculationStatus: CalculationPipelineStatus = calculationInputKey && calculationInputKey !== currentCalculationInputKey
+    ? 'confirm'
+    : calculationStatus
 
   const analysisPrefill = useMemo<QuotePrefill | null>(() => {
     if (!analysis) return null
@@ -156,13 +176,14 @@ export default function App() {
     sensitiveCategory: sensitiveCategory || 'unknown',
   }), [budgetMode, budgetUsd, unitsMin, unitsMax, purpose, entityType, signature, sensitiveCategory])
 
-  const progressStep = calculationStatus === 'ready' ? 4 : step
+  const progressStep = effectiveCalculationStatus === 'ready' ? 4 : step
 
   const resetPipeline = () => {
     setCalculationStatus('confirm')
     setPipelineStage(0)
     setPipelineSummary(null)
     setPipelineBlocker(null)
+    setCalculationInputKey(null)
     setSelectionError('')
   }
 
@@ -230,6 +251,7 @@ export default function App() {
     setPipelineStage(0)
     setPipelineSummary(null)
     setPipelineBlocker(null)
+    setCalculationInputKey(null)
     window.setTimeout(() => document.getElementById('case-confirmation')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
   }
 
@@ -244,8 +266,10 @@ export default function App() {
       return
     }
 
+    const runInputKey = currentCalculationInputKey
     const confirmedAnalysis = applyProductConfirmation(analysis, confirmedProduct)
     setAnalysis(confirmedAnalysis)
+    setCalculationInputKey(runInputKey)
     setCalculationStatus('processing')
     setPipelineStage(0)
     setPipelineSummary(null)
@@ -337,6 +361,15 @@ export default function App() {
         totalCostUsd: winner.totalCostUsd,
         freightCostUsd: winner.freightCostUsd,
       }
+
+      if (currentCalculationInputKeyRef.current !== runInputKey) {
+        setCalculationStatus('confirm')
+        setPipelineStage(0)
+        setPipelineSummary(null)
+        setPipelineBlocker(null)
+        return
+      }
+
       setPipelineSummary(completedSummary)
       window.dispatchEvent(new CustomEvent('shippingapp:analysis-completed', {
         detail: {
@@ -394,7 +427,7 @@ export default function App() {
   }
 
   const productStatusLabel = analysis
-    ? calculationStatus === 'ready' ? 'Calculado' : calculationStatus === 'processing' ? 'Procesando' : calculationStatus === 'blocked' ? 'Falta una respuesta' : 'Esperando confirmación'
+    ? effectiveCalculationStatus === 'ready' ? 'Calculado' : effectiveCalculationStatus === 'processing' ? 'Procesando' : effectiveCalculationStatus === 'blocked' ? 'Falta una respuesta' : 'Esperando confirmación'
     : selectionLoading ? 'Leyendo publicación' : intent === 'have_product' && step >= 3 ? 'Esperando producto' : 'Pendiente'
 
   return <main className="journey-app" id="home">
@@ -461,8 +494,9 @@ export default function App() {
                   <button className={budgetMode === 'units' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('units')}><b>Tengo rango de unidades</b><small>Sé más o menos cuántas quiero probar.</small></button>
                   <button className={budgetMode === 'unknown' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('unknown')}><b>Todavía no sé</b><small>Calculame escenarios para entender el orden de magnitud.</small></button>
                 </div>
-                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" min="0" step="500" value={budgetUsd} onChange={(event) => setBudgetUsd(Number(event.target.value))} /></div><em>Usamos costo final estimado, no sólo compra FOB.</em></label>}
-                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Desde</span><input type="number" min="1" value={unitsMin} onChange={(event) => setUnitsMin(Number(event.target.value))} /></label><label><span>Hasta</span><input type="number" min="1" value={unitsMax} onChange={(event) => setUnitsMax(Number(event.target.value))} /></label></div>}
+                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" min="1" step="500" value={budgetUsd} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setBudgetUsd(Number(event.target.value))} /></div><em>Usamos costo final estimado, no sólo compra FOB.</em></label>}
+                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Desde</span><input type="number" min="1" step="1" value={unitsMin} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setUnitsMin(Number(event.target.value))} /></label><label><span>Hasta</span><input type="number" min="1" step="1" value={unitsMax} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setUnitsMax(Number(event.target.value))} /></label></div>}
+                {budgetError && <div className="pipeline-warning" id="journey-budget-error" role="alert"><b>Revisá presupuesto o rango.</b><span>{budgetError}</span></div>}
                 <button className="journey-primary-action" type="button" disabled={!budgetAnswered} onClick={continueBudget}>Seguir con el producto <span>→</span></button>
               </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : 'Cantidad/presupuesto por definir'}</span></div>}
             </section>
@@ -519,7 +553,7 @@ export default function App() {
       <CalculationPipeline
         analysis={analysis}
         prefill={analysisPrefill}
-        status={calculationStatus}
+        status={effectiveCalculationStatus}
         activeStage={pipelineStage}
         summary={pipelineSummary}
         blocker={pipelineBlocker}
@@ -529,9 +563,9 @@ export default function App() {
       />
     </section>}
 
-    {analysisPrefill && calculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
+    {analysisPrefill && effectiveCalculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
       <div className="journey-section-heading"><span className="eyebrow">Resultado del caso</span><h2>Primero entendé el costo de una unidad. Después optimizamos.</h2><p>El costo unitario se calcula dentro de la cantidad base/MOQ seleccionada, distribuyendo flete y gastos fijos. Debajo podés ver cómo cambia al traer más o menos unidades.</p></div>
-      <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}`} prefill={analysisPrefill} setup={quoteSetup} />
+      <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={quoteSetup} />
     </section>}
 
     <section className="journey-output-explainer">

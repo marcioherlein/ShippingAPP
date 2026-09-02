@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import UiIcon from './UiIcon'
 import { isAlibabaUrl } from '../lib/productIntake'
 
 type Props = {
@@ -56,13 +57,13 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
 
     {mode === null && <div className="owned-product-options">
       <button type="button" onClick={() => setMode('link')}>
-        <span className="owned-product-option-icon">↗</span>
+        <span className="owned-product-option-icon"><UiIcon name="external-link" size={19} /></span>
         <b>Pegar link de Alibaba</b>
         <small>Intento traer título, tipo, specs, precio, MOQ, peso, volumen y origen. Después sólo confirmás o completás faltantes.</small>
         <em>Más rápido</em>
       </button>
       <button type="button" onClick={() => setMode('describe')}>
-        <span className="owned-product-option-icon">✎</span>
+        <span className="owned-product-option-icon"><UiIcon name="edit" size={19} /></span>
         <b>Describir el producto</b>
         <small>Decime qué es en una frase. Primero resuelvo la clasificación; los datos de logística se piden después sólo si hacen falta.</small>
       </button>
@@ -82,9 +83,9 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
           autoComplete="off"
           disabled={loading}
         />
-        <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : 'Leer producto'} <span>→</span></button>
+        <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : 'Leer producto'} <UiIcon name="arrow-right" size={16} /></button>
       </div>
-      {loading && <p className="owned-product-progress">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
+      {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
     </form>}
 
     {mode === 'describe' && <form className="owned-product-entry" onSubmit={submitDescription}>
@@ -101,10 +102,10 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
       />
       <div className="owned-product-entry-actions">
         <small>Después te voy a pedir sólo las características que el nomenclador necesite para distinguir la posición correcta.</small>
-        <button className="journey-primary-action" type="submit" disabled={description.trim().length < 8}>Continuar <span>→</span></button>
+        <button className="journey-primary-action" type="submit" disabled={description.trim().length < 8}>Continuar <UiIcon name="arrow-right" size={16} /></button>
       </div>
     </form>}
 
-    {error && <div className="pipeline-warning owned-product-error"><b>No pude continuar todavía.</b><span>{error}</span></div>}
+    {error && <div className="pipeline-warning owned-product-error" role="alert"><b>No pude continuar todavía.</b><span>{error}</span></div>}
   </section>
 }

@@ -48,10 +48,12 @@ export function emailDeliveryAllowed(env: EnvLike, userId: string) {
 export function emailDeliveryPolicyStatus(env: EnvLike) {
   const mode = emailDeliveryMode(env)
   const canaryUserCount = mode === 'canary' ? emailCanaryUserIds(env).length : 0
+  const canaryConfigured = mode !== 'canary' || canaryUserCount > 0
   return {
     mode,
-    sendingEnabled: mode !== 'off',
-    canaryConfigured: mode !== 'canary' || canaryUserCount > 0,
+    generalSendingEnabled: mode === 'all',
+    canaryDeliveryEnabled: mode === 'canary' && canaryConfigured,
+    canaryConfigured,
     canaryUserCount,
   }
 }

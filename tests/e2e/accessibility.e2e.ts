@@ -74,7 +74,7 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   await expectNoSeriousAxeViolations(page)
 })
 
-test('reduced motion preference suppresses product transitions', async ({ page }) => {
+test('reduced motion preference suppresses transitions and JS smooth scrolling', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
 
@@ -89,9 +89,23 @@ test('reduced motion preference suppresses product transitions', async ({ page }
   const seconds = (value: string) => value.split(',').map((part) => Number.parseFloat(part)).filter(Number.isFinite)
   expect(seconds(durations.transitionDuration).every((duration) => duration <= 0.01)).toBe(true)
   expect(seconds(durations.animationDuration).every((duration) => duration <= 0.01)).toBe(true)
+
+  await page.evaluate(() => {
+    const calls: ScrollToOptions[] = []
+    Object.assign(window, { __shippingAppScrollCalls: calls })
+    window.scrollTo = ((options: ScrollToOptions) => {
+      calls.push(options)
+    }) as typeof window.scrollTo
+  })
+  await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
+  const behavior = await page.evaluate(() => {
+    const calls = (window as Window & { __shippingAppScrollCalls?: ScrollToOptions[] }).__shippingAppScrollCalls || []
+    return calls.at(-1)?.behavior
+  })
+  expect(behavior).toBe('auto')
 })
 
-test('mobile journey prioritizes current work after intent selection', async ({ page }) => {
+test('mobile journey prioritizes current work and keeps compact controls touch-friendly', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
   await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
@@ -99,5 +113,11 @@ test('mobile journey prioritizes current work after intent selection', async ({ 
   await expect(page.getByText('Perfil de la operación', { exact: true })).toBeVisible()
   await expect(page.locator('.journey-hero > p')).toBeHidden()
   await expect(page.locator('.journey-question-card.active')).toBeVisible()
+
+  const chipBox = await page.getByRole('radio', { name: 'Reventa', exact: true }).boundingBox()
+  const newCaseBox = await page.getByRole('button', { name: 'Nuevo caso', exact: true }).boundingBox()
+  expect(chipBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+  expect(newCaseBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+
   await expectNoSeriousAxeViolations(page)
 })

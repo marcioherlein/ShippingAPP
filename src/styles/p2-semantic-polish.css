@@ -55,3 +55,30 @@
   outline: 3px solid var(--a11y-focus, #1d4ed8);
   outline-offset: 3px;
 }
+
+/* Compact controls still need a comfortable touch target. */
+.journey-chip-row > button,
+.journey-question-head > button,
+.journey-bubble.user button,
+.journey-top-actions > button,
+.journey-question-fields select {
+  min-height: 44px;
+}
+
+.journey-question-head > button,
+.journey-bubble.user button,
+.journey-top-actions > button {
+  min-width: 44px;
+}
+
+/* Shared SVG primitives should inherit surrounding button/text geometry cleanly. */
+.journey-choice-grid > button > svg,
+.journey-primary-action > svg,
+.journey-step > span > svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.journey-primary-action > svg {
+  margin-left: 0.15rem;
+}

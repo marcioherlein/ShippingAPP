@@ -1,0 +1,21 @@
+name: Argentina Market Strict Depth Audit
+
+on:
+  push:
+    branches:
+      - audit/argentina-market-strict-depth
+
+permissions:
+  contents: read
+
+jobs:
+  strict-depth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe strict VTEX queries at depth 30
+        run: node scripts/audit-argentina-market-strict-depth.mjs

@@ -7,7 +7,8 @@
     "CLERK_AUTHORIZED_PARTIES": "http://localhost:5173,https://shippingapp.marciofabrizio.workers.dev",
     "EMAIL_APP_NAME": "ShippingAPP",
     "EMAIL_PUBLIC_BASE_URL": "https://shippingapp.marciofabrizio.workers.dev",
-    "EMAIL_SENDING_ENABLED": "false"
+    "EMAIL_SENDING_ENABLED": "false",
+    "EMAIL_DELIVERY_MODE": "off"
   },
   "triggers": {
     "crons": ["0 * * * *"]

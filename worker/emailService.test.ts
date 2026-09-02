@@ -51,6 +51,7 @@ function baseEnv(db: D1DatabaseLike) {
   return {
     DB: db,
     EMAIL_SENDING_ENABLED: 'true',
+    EMAIL_DELIVERY_MODE: 'all',
     EMAIL_UNSUBSCRIBE_SECRET: SECRET,
     EMAIL_PUBLIC_BASE_URL: 'https://shippingapp.test',
     EMAIL_FROM: 'ShippingAPP <onboarding@resend.dev>',
@@ -139,7 +140,7 @@ describe('Stage 6 email service economic/privacy boundary', () => {
   })
 
   it('requires unsubscribe infrastructure for optional mail but not for transactional mail', async () => {
-    const env = { DB: db, EMAIL_SENDING_ENABLED: 'true', EMAIL_FROM: 'ShippingAPP <onboarding@resend.dev>' }
+    const env = { DB: db, EMAIL_SENDING_ENABLED: 'true', EMAIL_DELIVERY_MODE: 'all', EMAIL_FROM: 'ShippingAPP <onboarding@resend.dev>' }
     const digest = await sendApplicationEmail(env, {
       userId: USER_A,
       templateKey: 'weekly_digest',

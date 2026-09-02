@@ -1,0 +1,174 @@
+:root {
+  --journey-current-ring: rgba(86, 102, 245, 0.26);
+  --journey-complete-bg: rgba(248, 250, 252, 0.82);
+  --journey-complete-border: rgba(203, 213, 225, 0.72);
+}
+
+/* Once the user has chosen an entry path, the hero stops competing with the task. */
+.journey-app:has(.journey-bubble.user) .journey-hero {
+  width: min(1180px, calc(100% - 32px));
+  margin: 18px auto 20px;
+  text-align: left;
+}
+
+.journey-app:has(.journey-bubble.user) .journey-hero h1 {
+  max-width: 760px;
+  margin: 6px 0 8px;
+  font-size: clamp(30px, 4vw, 46px);
+  line-height: 1.02;
+}
+
+.journey-app:has(.journey-bubble.user) .journey-hero > p {
+  display: none;
+}
+
+.journey-app:has(.journey-bubble.user) .journey-stepper {
+  max-width: 760px;
+  margin: 18px 0 0;
+}
+
+/* The conversation teaches only when needed. Once the following stage is complete,
+   its explanatory assistant bubble leaves the visual flow while the receipt remains. */
+.journey-conversation > .journey-bubble.assistant:has(+ .journey-bubble.user),
+.journey-conversation > .journey-bubble.assistant:has(+ .journey-question-card:not(.active)) {
+  display: none;
+}
+
+/* Once a product has reached the confirmation/calculation pipeline, the earlier product
+   instruction has served its purpose. Keep the actual product surface available for edits. */
+.journey-app:has(.calculation-pipeline) .journey-conversation > .journey-bubble.assistant:has(+ .journey-product-surface) {
+  display: none;
+}
+
+/* Completed stages become compact receipts rather than full cards. */
+.journey-question-card:not(.active) {
+  margin-top: 10px;
+  margin-bottom: 12px;
+  border-color: var(--journey-complete-border);
+  background: var(--journey-complete-bg);
+  box-shadow: none;
+}
+
+.journey-question-card:not(.active) .journey-question-head {
+  min-height: 48px;
+  padding: 10px 12px;
+  background: transparent;
+}
+
+.journey-question-card:not(.active) .journey-question-head > span {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+}
+
+.journey-question-card:not(.active) .journey-question-head small {
+  display: none;
+}
+
+.journey-question-card:not(.active) .journey-complete-row {
+  padding: 0 12px 12px;
+  gap: 6px;
+}
+
+.journey-question-card:not(.active) .journey-complete-row span {
+  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+/* Current work gets the strongest hierarchy. */
+.journey-question-card.active {
+  border-color: rgba(86, 102, 245, 0.48);
+  box-shadow: 0 0 0 4px var(--journey-current-ring), var(--ds-shadow-2, 0 18px 46px rgba(70, 84, 150, 0.08));
+}
+
+.journey-question-card.active .journey-question-head {
+  background: linear-gradient(180deg, rgba(245, 247, 255, 0.96), rgba(248, 250, 252, 0.76));
+}
+
+.journey-question-card.active .journey-question-head > span {
+  color: #fff;
+  background: var(--ds-brand, #5666f5);
+}
+
+/* Product work becomes the focal surface in step 3. */
+.journey-product-surface {
+  transition: opacity var(--ds-motion-fast, 160ms) ease, transform var(--ds-motion-fast, 160ms) ease;
+}
+
+.journey-app:has(.journey-product-surface) .journey-product-surface {
+  position: relative;
+}
+
+.journey-app:has(.calculation-pipeline) .journey-workspace {
+  margin-bottom: 14px;
+}
+
+/* The case summary behaves like a quiet receipt; current state remains readable without
+   competing with the active form or calculation. */
+.journey-summary-sticky {
+  border-color: rgba(203, 213, 225, 0.7);
+  box-shadow: var(--ds-shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
+}
+
+.journey-summary-list > div:last-child {
+  border-bottom: 0;
+}
+
+.journey-summary-list > div:has(b:is(:not(:empty))) {
+  min-height: 42px;
+}
+
+/* The explainer is onboarding support, not a competing end-of-page dashboard. */
+.journey-app:has(.journey-bubble.user) .journey-output-explainer {
+  opacity: 0.78;
+  box-shadow: var(--ds-shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
+}
+
+/* Preserve reversibility: Edit stays easy to hit even on compact receipts. */
+.journey-question-card:not(.active) .journey-question-head > button {
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: var(--ds-radius-pill, 999px);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+@media (max-width: 640px) {
+  .journey-app:has(.journey-bubble.user) .journey-hero {
+    width: min(100% - 22px, 960px);
+    margin: 10px auto 14px;
+  }
+
+  .journey-app:has(.journey-bubble.user) .journey-hero h1 {
+    font-size: 30px;
+    line-height: 1.04;
+  }
+
+  .journey-app:has(.journey-bubble.user) .journey-stepper {
+    margin-top: 12px;
+  }
+
+  .journey-question-card:not(.active) {
+    margin-top: 8px;
+    margin-bottom: 9px;
+  }
+
+  .journey-question-card:not(.active) .journey-complete-row {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 10px;
+    scrollbar-width: none;
+  }
+
+  .journey-question-card:not(.active) .journey-complete-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .journey-question-card:not(.active) .journey-complete-row span {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .journey-question-card.active {
+    box-shadow: 0 0 0 3px var(--journey-current-ring), var(--ds-shadow-1, 0 10px 28px rgba(48, 59, 91, 0.07));
+  }
+}

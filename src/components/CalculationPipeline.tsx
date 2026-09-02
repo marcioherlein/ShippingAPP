@@ -134,11 +134,14 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const [clarification, setClarification] = useState('')
 
   useEffect(() => {
+    // A refinement returns a new analysis with the same sourceUrl. Sync from the
+    // complete analysis object so a previous clarification is never silently
+    // dropped on the next round.
     setDraft(productConfirmationFromAnalysis(analysis))
     setShowCorrections(false)
     setShowAllQuoteFields(false)
     setClarification('')
-  }, [analysis.sourceUrl])
+  }, [analysis])
 
   const sourceDraft = useMemo(() => productConfirmationFromAnalysis(analysis), [analysis])
   const classificationMissing = useMemo(() => missingClassificationConfirmationFields(draft), [draft])
@@ -147,12 +150,17 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     && (analysis.customs.classificationConfidence === 'high' || analysis.customs.classificationConfidence === 'medium')
     && analysis.customs.dutyRatePct !== null
     && analysis.customs.dutyRatePct !== undefined
+  const refinement = analysis.classificationRefinement
+  const refinementExhausted = !classificationResolved
+    && refinement?.allowed === false
+    && refinement.maxAttempts > 0
+    && refinement.attempt >= refinement.maxAttempts
   const identityEdited = !sameIdentity(draft, sourceDraft)
   const classifierAskedForMore = !classificationResolved && analysis.customs.missingFacts.length > 0
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
   const canConfirm = classificationResolved
     ? quoteMissing.length === 0
-    : classificationMissing.length === 0 && clarificationSatisfied
+    : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied
   const volume = resolvedProductVolumeCbm(draft)
 
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
@@ -209,7 +217,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <label className="pipeline-confirm-field wide"><span>Detalle técnico útil</span><textarea value={draft.description} onChange={(event) => update('description', event.target.value)} placeholder="Modelo, tecnología, composición o cualquier característica que diferencie el producto." rows={3} /></label>
           </div>}
 
-          {classifierAskedForMore && <div className="pipeline-clarification-card">
+          {classifierAskedForMore && !refinementExhausted && <div className="pipeline-clarification-card">
             <span className="eyebrow">Para cerrar la posición arancelaria</span>
             <b>Me falta una aclaración concreta.</b>
             <ul>{analysis.customs.missingFacts.slice(0, 5).map((fact) => <li key={fact}>{fact}</li>)}</ul>
@@ -217,11 +225,12 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>}
 
           {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Todavía no puedo nomenclar.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
-          {classifierAskedForMore && !clarificationSatisfied && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Necesito tu respuesta antes de reintentar.</b><span>Así evito repetir la misma clasificación dudosa.</span></div>}
+          {classifierAskedForMore && !clarificationSatisfied && !refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Necesito tu respuesta antes de reintentar.</b><span>Así evito repetir la misma clasificación dudosa.</span></div>}
+          {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No voy a repetir la misma clasificación indefinidamente.</b><span>Se usaron {refinement?.attempt} de {refinement?.maxAttempts} intentos de aclaración sin cerrar una NCM confiable. Revisá la identidad del producto o iniciá un caso nuevo; no se consumieron créditos extra por estos intentos.</span></div>}
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Usar esta aclaración y reclasificar' : 'Sí, es este producto · clasificar'} <span>→</span></button>
-            <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Elegir otro producto</button>
+            {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Usar esta aclaración y reclasificar' : 'Sí, es este producto · clasificar'} <span>→</span></button>}
+            <button type="button" className="pipeline-secondary" onClick={onEditProduct}>{refinementExhausted ? 'Revisar / elegir producto' : 'Elegir otro producto'}</button>
           </div>
         </> : <>
           <div className="pipeline-classification-ready">
@@ -307,7 +316,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <p>{blocker || 'La clasificación o un dato necesario para el cálculo necesita revisión.'}</p>
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
         <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>Responder lo que falta <span>→</span></button>
+          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <span>→</span></button>
           <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Elegir otro producto</button>
         </div>
       </div>}

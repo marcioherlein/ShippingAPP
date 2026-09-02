@@ -10,6 +10,7 @@ const MAX = {
 } as const
 
 const DEFAULT_LEASE_MS = 15 * 60 * 1000
+export const MAX_NCM_CONTINUATION_ATTEMPTS = 3
 
 export type EntitlementPlanRow = {
   id: string
@@ -44,6 +45,7 @@ export type CreditReservationRow = {
   operation_kind: 'standalone' | 'full_analysis'
   credits: number
   attempt_no: number
+  continuation_attempt_no: number
   status: CreditReservationStatus
   lease_expires_at: string
   initial_response_status: number | null
@@ -191,8 +193,6 @@ export class UsageRepository {
     )
     if (!period) throw new Error('usage_period_initialization_failed')
 
-    // Server-owned upgrades can increase the entitlement in-place without
-    // resetting already-consumed work. Never lower a live period implicitly.
     if (period.plan_id !== plan.id && plan.monthly_credits > period.credits_granted) {
       await run(this.db,
         `UPDATE usage_periods
@@ -311,8 +311,6 @@ export class UsageRepository {
     if (row.id === id) return { kind: 'started', reservation: row, usage: await this.usageView(userId) }
 
     if (row.status === 'released') {
-      // Operation keys are period-bound. A retry from a prior period must never
-      // consume the old allowance while leaving the current quota untouched.
       if (row.usage_period_id !== period.id) {
         return { kind: 'period_expired', usage: await this.usageView(userId) }
       }
@@ -322,6 +320,7 @@ export class UsageRepository {
         const result = await run(this.db,
           `UPDATE credit_reservations
            SET status = 'running', attempt_no = attempt_no + 1,
+               continuation_attempt_no = 0,
                lease_expires_at = ?, initial_response_status = NULL,
                initial_response_content_type = NULL, initial_response_body = NULL,
                continuation_response_status = NULL, continuation_response_content_type = NULL,
@@ -389,22 +388,48 @@ export class UsageRepository {
     }
     if (row.status === 'settled') return { kind: 'settled' as const, reservation: row }
     if (row.status !== 'continuation_ready') return { kind: row.status === 'released' ? 'released' as const : 'in_progress' as const, reservation: row }
+    if (row.continuation_attempt_no >= MAX_NCM_CONTINUATION_ATTEMPTS) {
+      return { kind: 'limit_reached' as const, reservation: row }
+    }
 
     const now = this.now()
     const result = await run(this.db,
       `UPDATE credit_reservations
-       SET status = 'continuation_running', lease_expires_at = ?, updated_at = ?
-       WHERE id = ? AND user_id = ? AND status = 'continuation_ready'`,
-      [this.lease(), now, id, owner],
+       SET status = 'continuation_running',
+           continuation_attempt_no = continuation_attempt_no + 1,
+           lease_expires_at = ?, updated_at = ?
+       WHERE id = ? AND user_id = ? AND status = 'continuation_ready'
+         AND continuation_attempt_no < ?`,
+      [this.lease(), now, id, owner, MAX_NCM_CONTINUATION_ATTEMPTS],
     )
     if ((result.meta?.changes ?? 0) !== 1) {
       row = await this.getReservationForUser(owner, id)
       if (!row) return { kind: 'not_found' as const }
-      return { kind: row.status === 'settled' ? 'settled' as const : 'in_progress' as const, reservation: row }
+      if (row.status === 'settled') return { kind: 'settled' as const, reservation: row }
+      if (row.status === 'continuation_ready' && row.continuation_attempt_no >= MAX_NCM_CONTINUATION_ATTEMPTS) {
+        return { kind: 'limit_reached' as const, reservation: row }
+      }
+      return { kind: 'in_progress' as const, reservation: row }
     }
     row = await this.getReservationForUser(owner, id)
     if (!row) return { kind: 'not_found' as const }
     return { kind: 'started' as const, reservation: row }
+  }
+
+  async reopenContinuation(userId: string, reservationId: string, response: StoredResponse) {
+    const body = required('response.body', response.body, MAX.responseBody)
+    const contentType = required('response.contentType', response.contentType || 'application/json; charset=utf-8', MAX.responseContentType)
+    const now = this.now()
+    const result = await run(this.db,
+      `UPDATE credit_reservations
+       SET status = 'continuation_ready', lease_expires_at = ?,
+           continuation_response_status = ?, continuation_response_content_type = ?, continuation_response_body = ?,
+           updated_at = ?
+       WHERE id = ? AND user_id = ? AND status = 'continuation_running'
+         AND continuation_attempt_no < ?`,
+      [this.lease(), response.status, contentType, body, now, required('reservationId', reservationId, MAX.id), required('userId', userId, MAX.id), MAX_NCM_CONTINUATION_ATTEMPTS],
+    )
+    return result.meta?.changes ?? 0
   }
 
   async settleContinuation(userId: string, reservationId: string, response: StoredResponse) {

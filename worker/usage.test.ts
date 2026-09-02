@@ -30,7 +30,7 @@ const userB: AuthIdentity = { kind: 'user', provider: 'clerk', subject: 'clerk-b
 const service: AuthIdentity = { kind: 'service' }
 
 function seed(sqlite: DatabaseSync) {
-  for (const migration of ['0001_saas_foundation.sql', '0002_analysis_history.sql', '0003_usage_entitlements.sql']) {
+  for (const migration of ['0001_saas_foundation.sql', '0002_analysis_history.sql', '0003_usage_entitlements.sql', '0005_ncm_iterative_clarifications.sql']) {
     sqlite.exec(readFileSync(`migrations/${migration}`, 'utf8'))
   }
   const insert = sqlite.prepare("INSERT INTO users (id, auth_provider, auth_subject, created_at, updated_at) VALUES (?, 'test', ?, ?, ?)")
@@ -201,7 +201,7 @@ describe('Stage 5 atomic usage and entitlement boundary', () => {
     expect(scalar(sqlite, "SELECT COUNT(*) AS value FROM credit_ledger WHERE user_id = ? AND entry_type = 'consume'", USER_A)).toBe(1)
   })
 
-  it('rejects a manipulated NCM continuation before provider work and does not manufacture an immediate refund', async () => {
+  it('rejects a core-product pivot before provider work and does not manufacture an immediate refund', async () => {
     const analyze = await withUsageEntitlement(
       meteredPost('/api/analyze', 'continuation-binding-1'), { DB: db }, userA,
       async () => jsonResponse({ product: fullProduct() }),
@@ -209,7 +209,7 @@ describe('Stage 5 atomic usage and entitlement boundary', () => {
     const reservationId = String(analyze.headers.get(USAGE_RESERVATION_HEADER))
     const provider = vi.fn(async () => jsonResponse({ ncm: 'attacker' }))
     const manipulated = await withUsageEntitlement(
-      continuationRequest(reservationId, { ...fullProduct(), material: 'material intentionally changed' }),
+      continuationRequest(reservationId, { ...fullProduct(), name: 'Smartwatch AMOLED', category: 'electronics', material: 'material intentionally changed' }),
       { DB: db }, userA, provider,
     )
     expect(manipulated.status).toBe(409)

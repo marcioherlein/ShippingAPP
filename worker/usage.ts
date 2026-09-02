@@ -1,6 +1,12 @@
 import type { AuthIdentity } from './auth'
 import type { D1DatabaseLike } from './persistence/d1'
-import { UsageRepository, type CreditReservationRow, type StoredResponse, type UsageView } from './persistence/usageRepository'
+import {
+  MAX_NCM_CONTINUATION_ATTEMPTS,
+  UsageRepository,
+  type CreditReservationRow,
+  type StoredResponse,
+  type UsageView,
+} from './persistence/usageRepository'
 import { API_ROUTE_POLICIES, resolveRoutePolicy } from './routePolicy'
 
 export const USAGE_RESERVATION_HEADER = 'x-shippingapp-usage-reservation'
@@ -109,8 +115,21 @@ async function fullStartHasAnalysis(routeId: string, response: Response) {
 
 function normalizeText(value: unknown) {
   if (typeof value !== 'string') return null
-  const normalized = value.trim().replace(/\s+/g, ' ')
+  const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase()
   return normalized || null
+}
+
+function weakIdentity(value: string | null) {
+  return !value || ['sin clasificar', 'producto alibaba', 'unknown', 'desconocido', 'pendiente'].includes(value)
+}
+
+function compatibleStableIdentity(actualValue: unknown, expectedValue: unknown) {
+  const actual = normalizeText(actualValue)
+  const expected = normalizeText(expectedValue)
+  if (weakIdentity(expected)) return Boolean(actual)
+  if (!actual || !expected) return false
+  if (actual === expected) return true
+  return actual.includes(expected) || expected.includes(actual)
 }
 
 function initialProductFromReservation(row: CreditReservationRow) {
@@ -129,14 +148,14 @@ async function continuationMatchesInitial(request: Request, row: CreditReservati
   if (!product) return false
   let facts: any
   try { facts = await request.clone().json() } catch { return false }
-  const fields: Array<[string, unknown, unknown]> = [
-    ['name', facts?.name, product?.name],
-    ['category', facts?.category, product?.category],
-    ['material', facts?.material, product?.material],
-    ['functionText', facts?.functionText, product?.functionText],
-    ['description', facts?.description, product?.description],
-  ]
-  return fields.every(([, actual, expected]) => normalizeText(actual) === normalizeText(expected))
+  if (!facts || typeof facts !== 'object') return false
+
+  // The reservation stays bound to the same core product, while technical
+  // clarifications are intentionally allowed to evolve. This fixes the old
+  // deadlock where the UI asked for material/function/description and the
+  // backend then rejected those exact edits as a reservation mismatch.
+  return compatibleStableIdentity(facts.name, product.name)
+    && compatibleStableIdentity(facts.category, product.category)
 }
 
 function safeErrorCode(response: Response, fallback: string) {
@@ -148,6 +167,30 @@ function safeErrorCode(response: Response, fallback: string) {
 async function releasedUsage(repo: UsageRepository, userId: string, reservationId: string, code: string) {
   await repo.release(userId, reservationId, code)
   return repo.usageView(userId)
+}
+
+function classificationNeedsRefinement(body: any) {
+  if (!body || typeof body !== 'object') return false
+  return body.status === 'missing' || body.confidence === 'low' || body.confidence === 'missing'
+}
+
+async function annotateRefinementResponse(response: Response, attempt: number, allowed: boolean) {
+  const body = await parseJson(response)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return response
+  const headers = new Headers(response.headers)
+  headers.set('content-type', 'application/json; charset=utf-8')
+  return new Response(JSON.stringify({
+    ...body,
+    refinement: {
+      allowed,
+      attempt,
+      maxAttempts: MAX_NCM_CONTINUATION_ATTEMPTS,
+    },
+  }), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
 }
 
 async function handleInitial(
@@ -287,6 +330,13 @@ async function handleContinuation(
   if (claim.kind === 'not_found') return json({ error: 'Usage reservation not found.', code: 'usage_reservation_not_found' }, 404)
   if (claim.kind === 'invalid') return json({ error: 'Usage reservation cannot authorize this continuation.', code: 'usage_reservation_invalid' }, 409)
   if (claim.kind === 'released') return json({ error: 'This usage reservation was released.', code: 'usage_reservation_released' }, 409)
+  if (claim.kind === 'limit_reached') {
+    return json({
+      error: 'Se alcanzó el máximo de aclaraciones automáticas para este producto. Revisá la identidad o iniciá un caso nuevo.',
+      code: 'usage_continuation_limit_reached',
+      refinement: { allowed: false, attempt: claim.reservation.continuation_attempt_no, maxAttempts: MAX_NCM_CONTINUATION_ATTEMPTS },
+    }, 409, { [USAGE_RESERVATION_HEADER]: claim.reservation.id })
+  }
   if (claim.kind === 'in_progress') return json({ error: 'This continuation is already in progress.', code: 'operation_in_progress' }, 409)
   if (claim.kind === 'settled') {
     const stored = repo.continuationResponse(claim.reservation)
@@ -295,13 +345,24 @@ async function handleContinuation(
     return responseFromStored(stored, claim.reservation, usage.period.creditsRemaining)
   }
 
-  let response: Response
+  let rawResponse: Response
   try {
-    response = await dispatch()
+    rawResponse = await dispatch()
   } catch (error) {
     await repo.release(userId, reservationId, 'continuation_exception')
     throw error
   }
+
+  if (!rawResponse.ok) {
+    const usage = await releasedUsage(repo, userId, reservationId, safeErrorCode(rawResponse, 'continuation_failed'))
+    return withUsageHeaders(rawResponse, claim.reservation, usage)
+  }
+
+  const body = await parseJson(rawResponse)
+  const needsRefinement = classificationNeedsRefinement(body)
+  const attempt = claim.reservation.continuation_attempt_no
+  const refinementAllowed = needsRefinement && attempt < MAX_NCM_CONTINUATION_ATTEMPTS
+  const response = await annotateRefinementResponse(rawResponse, attempt, refinementAllowed)
   const stored = await captureResponse(response)
   if (!stored) {
     const usage = await releasedUsage(repo, userId, reservationId, 'continuation_response_too_large')
@@ -310,12 +371,13 @@ async function handleContinuation(
       [USAGE_CHANGED_HEADER]: '1',
     })
   }
-  if (!response.ok) {
-    const usage = await releasedUsage(repo, userId, reservationId, safeErrorCode(response, 'continuation_failed'))
-    return withUsageHeaders(response, claim.reservation, usage)
-  }
+
   try {
-    if (await repo.settleContinuation(userId, reservationId, stored) !== 1) throw new Error('continuation_settlement_lost')
+    if (refinementAllowed) {
+      if (await repo.reopenContinuation(userId, reservationId, stored) !== 1) throw new Error('continuation_reopen_lost')
+    } else if (await repo.settleContinuation(userId, reservationId, stored) !== 1) {
+      throw new Error('continuation_settlement_lost')
+    }
   } catch {
     const usage = await releasedUsage(repo, userId, reservationId, 'continuation_settlement_failed')
     return json({ error: 'Usage settlement is temporarily unavailable.', code: 'usage_settlement_failed' }, 503, {
@@ -323,7 +385,9 @@ async function handleContinuation(
       [USAGE_CHANGED_HEADER]: '1',
     })
   }
-  return withUsageHeaders(response, claim.reservation, await repo.usageView(userId))
+
+  const current = await repo.getReservationForUser(userId, reservationId)
+  return withUsageHeaders(response, current ?? claim.reservation, await repo.usageView(userId))
 }
 
 export function validateMeteringRuleCoverage() {
@@ -353,8 +417,6 @@ export async function withUsageEntitlement(
   const rule = METERING_RULES[policy.id]
   if (!rule) return json({ error: 'Usage policy is not configured for this operation.', code: 'usage_policy_missing' }, 503)
 
-  // Operational smoke/probe credentials keep exercising real production code,
-  // but they are not an end-user account and never create user usage/ledger rows.
   if (identity?.kind === 'service') return dispatch()
   if (identity?.kind !== 'user') return json({ error: 'Unauthorized.', code: 'unauthorized' }, 401)
   if (!env.DB) return json({ error: 'Usage storage is not configured.', code: 'usage_store_unavailable' }, 503)

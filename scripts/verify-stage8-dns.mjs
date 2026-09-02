@@ -17,11 +17,11 @@ function flattenTxt(rows) {
   return rows.map((parts) => parts.join('')).filter(Boolean)
 }
 
-async function txt(name) {
+async function defaultTxt(name) {
   try { return flattenTxt(await dns.resolveTxt(name)) } catch { return [] }
 }
 
-async function hostResolves(host) {
+async function defaultHostResolves(host) {
   try {
     const rows = await dns.lookup(host, { all: true })
     return rows.length > 0
@@ -40,9 +40,13 @@ function hasFragment(records, fragment) {
   return records.some((record) => record.toLowerCase().includes(needle))
 }
 
-export async function verifyStage8Dns(env = process.env) {
+export async function verifyStage8Dns(env = process.env, dependencies = {}) {
+  const resolveTxt = dependencies.resolveTxt ?? defaultTxt
+  const hostResolves = dependencies.hostResolves ?? defaultHostResolves
   const publicOrigin = new URL(required(env, 'STAGE8_PUBLIC_BASE_URL'))
-  if (publicOrigin.protocol !== 'https:') throw new Error('stage8_public_base_url_https_required')
+  if (publicOrigin.protocol !== 'https:' || publicOrigin.username || publicOrigin.password || publicOrigin.search || publicOrigin.hash) {
+    throw new Error('stage8_public_base_url_https_required')
+  }
   const publicHost = domain(publicOrigin.hostname)
   if (!(await hostResolves(publicHost))) throw new Error(`stage8_public_host_unresolved:${publicHost}`)
 
@@ -53,7 +57,7 @@ export async function verifyStage8Dns(env = process.env) {
   const dkimFragment = required(env, 'STAGE8_DKIM_EXPECTED_FRAGMENT')
   const dmarcName = domain(env.STAGE8_DMARC_RECORD_NAME?.trim() || `_dmarc.${emailDomain}`)
 
-  const [spf, dkim, dmarc] = await Promise.all([txt(spfName), txt(dkimName), txt(dmarcName)])
+  const [spf, dkim, dmarc] = await Promise.all([resolveTxt(spfName), resolveTxt(dkimName), resolveTxt(dmarcName)])
   if (!hasFragment(spf, spfFragment)) throw new Error(`stage8_spf_not_verified:${spfName}`)
   if (!hasFragment(dkim, dkimFragment)) throw new Error(`stage8_dkim_not_verified:${dkimName}`)
   if (!hasFragment(dmarc, 'v=DMARC1')) throw new Error(`stage8_dmarc_not_verified:${dmarcName}`)

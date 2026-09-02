@@ -19,6 +19,12 @@ describe('journey persistence contract', () => {
     expect(storageRead).toBeGreaterThan(urlRead)
   })
 
+  it('creates navigation entries from semantic stage transitions instead of click timing', () => {
+    expect(persistence).toContain("return state ? `${state.intent}:${state.step}` : null")
+    expect(persistence).toContain("key !== lastNavigationKey ? 'push' : 'replace'")
+    expect(persistence).toContain('lastNavigationKey = navigationKey(state)')
+  })
+
   it('restores setup through existing controlled journey interactions', () => {
     expect(persistence).toContain('restoreJourneyState')
     expect(persistence).toContain('restoreOperation')
@@ -36,8 +42,11 @@ describe('journey persistence contract', () => {
     expect(stateDeclaration).not.toContain('ncm')
   })
 
-  it('is installed in the application shell', () => {
+  it('installs persistence only after the React application render call', () => {
     expect(main).toContain("import { installJourneyPersistence } from './lib/journeyPersistence'")
-    expect(main).toContain('installJourneyPersistence()')
+    const renderIndex = main.indexOf('createRoot(root).render(')
+    const persistenceIndex = main.indexOf('installJourneyPersistence()')
+    expect(renderIndex).toBeGreaterThan(-1)
+    expect(persistenceIndex).toBeGreaterThan(renderIndex)
   })
 })

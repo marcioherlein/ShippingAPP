@@ -4,11 +4,12 @@ import {
   inferArgentinaMarketMatchMode,
   type ArgentinaMarketMatchMode,
 } from './functionalMarketMatch'
-import { buildArgentinaFunctionalMarketQuery } from './functionalMarketQuery'
+import { buildArgentinaFunctionalMarketQueries } from './functionalMarketQuery'
 import { percentile, trimPriceOutliers } from './catalogStats'
 import type { ArgentinaMarketResult, MarketComparable, MlResult } from './marketTypes'
 import type {
   ArgentinaMarketCandidate,
+  ArgentinaMarketCategoryHint,
   ArgentinaMarketDiscoveryProvider,
   ArgentinaMarketPriceResolver,
 } from './marketProviderContracts'
@@ -115,6 +116,15 @@ function dedupeKey(candidate: ArgentinaMarketCandidate) {
   return `title:${cleanText(candidate.title)}:${candidate.sellerKey || 'x'}`
 }
 
+function validCandidate(candidate: ArgentinaMarketCandidate) {
+  return Boolean(candidate?.title && Number.isFinite(candidate.priceArs) && candidate.priceArs > 0)
+}
+
+function functionalScore(candidate: ArgentinaMarketCandidate, productName: string, category: string) {
+  if (!validCandidate(candidate)) return 0
+  return functionalComparableScore(asMatcherItem(candidate), productName, category)
+}
+
 async function resolveComparablePrice(
   comparable: MarketComparable,
   candidate: ArgentinaMarketCandidate,
@@ -141,9 +151,10 @@ export async function runArgentinaMarketBenchmark(
 ): Promise<ArgentinaMarketResult> {
   const matchMode = inferArgentinaMarketMatchMode(productName, category)
   const defaultExactQuery = buildMarketQuery(productName, category)
-  const query = matchMode === 'functional'
-    ? buildArgentinaFunctionalMarketQuery(productName, category)
-    : buildExactDiscoveryQuery(productName, category)
+  const queryPlan = matchMode === 'functional'
+    ? buildArgentinaFunctionalMarketQueries(productName, category)
+    : [buildExactDiscoveryQuery(productName, category)]
+  const query = queryPlan[0] || defaultExactQuery
   const minimumComparables = Math.max(1, Math.min(20, options.minimumComparables ?? 5))
   const warnings = [
     'Demand is not inferred from public available quantity.',
@@ -156,27 +167,62 @@ export async function runArgentinaMarketBenchmark(
     warnings.push(`Exact discovery query was compacted around strong model identity (${query}); deterministic exact matching still gates every accepted comparable.`)
   }
 
-  let discovery
-  try {
-    discovery = await discoveryProvider.discover({ query, productName, category })
-  } catch (error) {
-    return emptyResult(
-      'unavailable',
-      query,
-      matchMode,
-      discoveryProvider.id,
-      [...warnings, error instanceof Error ? error.message : 'Argentina market discovery provider failed'],
-    )
+  const raw: ArgentinaMarketCandidate[] = []
+  const rawSeen = new Set<string>()
+  let categoryHint: ArgentinaMarketCategoryHint | null | undefined = null
+  let sourceLabel = discoveryProvider.id
+  let successfulDiscovery = false
+
+  for (let stage = 0; stage < queryPlan.length; stage += 1) {
+    const stageQuery = queryPlan[stage]
+    try {
+      const discovery = await discoveryProvider.discover({ query: stageQuery, productName, category })
+      successfulDiscovery = true
+      sourceLabel = discovery.sourceLabel || sourceLabel
+      if (!categoryHint && discovery.categoryHint) categoryHint = discovery.categoryHint
+      warnings.push(...(discovery.warnings || []))
+
+      for (const candidate of Array.isArray(discovery.candidates) ? discovery.candidates : []) {
+        if (matchMode !== 'functional') {
+          raw.push(candidate)
+          continue
+        }
+        const key = dedupeKey(candidate)
+        if (rawSeen.has(key)) continue
+        rawSeen.add(key)
+        raw.push(candidate)
+      }
+    } catch (error) {
+      if (stage === 0) {
+        return emptyResult(
+          'unavailable',
+          query,
+          matchMode,
+          discoveryProvider.id,
+          [...warnings, error instanceof Error ? error.message : 'Argentina market discovery provider failed'],
+        )
+      }
+      warnings.push(`Progressive functional discovery query (${stageQuery}) failed; prior evidence was retained.`)
+    }
+
+    if (matchMode !== 'functional') break
+    const provisionalAccepted = raw.filter((candidate) => functionalScore(candidate, productName, category) >= 55).length
+    if (provisionalAccepted >= minimumComparables) break
+    const nextQuery = queryPlan[stage + 1]
+    if (nextQuery) {
+      warnings.push(`Progressive functional discovery found ${provisionalAccepted} matcher-approved comparable(s) with query (${stageQuery}); relaxing discovery to (${nextQuery}) while keeping the same deterministic matcher and ${minimumComparables}-comparable live floor.`)
+    }
   }
 
-  warnings.push(...(discovery.warnings || []))
-  const raw = Array.isArray(discovery.candidates) ? discovery.candidates : []
+  if (!successfulDiscovery) {
+    return emptyResult('unavailable', query, matchMode, discoveryProvider.id, warnings)
+  }
+
   const seen = new Set<string>()
   const matched: Array<{ candidate: ArgentinaMarketCandidate; comparable: MarketComparable }> = []
-  const categoryHint = discovery.categoryHint
 
   for (const candidate of raw) {
-    if (!candidate || !candidate.title || !Number.isFinite(candidate.priceArs) || candidate.priceArs <= 0) continue
+    if (!validCandidate(candidate)) continue
     const key = dedupeKey(candidate)
     if (seen.has(key)) continue
     seen.add(key)
@@ -251,9 +297,9 @@ export async function runArgentinaMarketBenchmark(
     p75Ars,
     suggestedPriceArs,
     confidence,
-    source: `${discovery.sourceLabel}${resolverSuffix}`,
+    source: `${sourceLabel}${resolverSuffix}`,
     priceQuality,
     comparables: accepted.sort((a, b) => b.score - a.score).slice(0, 8),
-    warnings,
+    warnings: [...new Set(warnings)],
   }
 }

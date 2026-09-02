@@ -12,7 +12,7 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,3 +20,7 @@ jobs:
           node-version: '22'
       - name: Probe structured branded source candidates
         run: node scripts/audit-branded-source-candidates-v2.mjs
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run same-time branded source-set A-B benchmark
+        run: npx tsx scripts/audit-branded-source-ab.ts

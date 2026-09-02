@@ -27,7 +27,7 @@ const NOW = '2026-08-31T20:30:00.000Z'
 const user: AuthIdentity = { kind: 'user', provider: 'clerk', subject: 'usage-abuse-subject', userId: USER }
 
 function seed(sqlite: DatabaseSync) {
-  for (const migration of ['0001_saas_foundation.sql', '0002_analysis_history.sql', '0003_usage_entitlements.sql']) {
+  for (const migration of ['0001_saas_foundation.sql', '0002_analysis_history.sql', '0003_usage_entitlements.sql', '0005_ncm_iterative_clarifications.sql']) {
     sqlite.exec(readFileSync(`migrations/${migration}`, 'utf8'))
   }
   sqlite.prepare("INSERT INTO users (id, auth_provider, auth_subject, created_at, updated_at) VALUES (?, 'test', 'usage-abuse-subject', ?, ?)")

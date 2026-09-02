@@ -121,6 +121,6 @@ describe('Stage 8 canary delivery boundary', () => {
   it('requires an explicit second transition to all before the global scheduler is enabled', () => {
     expect(emailRuntimeStatus(env(db, 'off')).sendingEnabled).toBe(false)
     expect(emailRuntimeStatus(env(db, 'canary', USER_A)).sendingEnabled).toBe(false)
-    expect(emailRuntimeStatus(env(db, 'all')).toMatchObject({ sendingEnabled: true, deliveryMode: 'all', canaryDeliveryEnabled: false }))
+    expect(emailRuntimeStatus(env(db, 'all'))).toMatchObject({ sendingEnabled: true, deliveryMode: 'all', canaryDeliveryEnabled: false })
   })
 })

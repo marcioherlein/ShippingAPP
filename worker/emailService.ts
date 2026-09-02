@@ -247,8 +247,11 @@ export function emailRuntimeStatus(env: EmailEnv) {
   const delivery = emailDeliveryPolicyStatus(env)
   return {
     provider: provider.name,
-    sendingEnabled: delivery.sendingEnabled,
+    // Existing schedulers intentionally interpret this as permission for
+    // broad delivery. Canary mode therefore keeps this false and pauses cron.
+    sendingEnabled: delivery.generalSendingEnabled,
     deliveryMode: delivery.mode,
+    canaryDeliveryEnabled: delivery.canaryDeliveryEnabled,
     canaryConfigured: delivery.canaryConfigured,
     canaryUserCount: delivery.canaryUserCount,
     providerConfigured: provider.configured,

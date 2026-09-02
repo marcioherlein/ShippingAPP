@@ -3,7 +3,16 @@ import { customsProfileFor, type CustomsProfile } from './customsClassification'
 import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
 import type { Inputs } from './types'
 
-export type ProductAnalysisV2 = Omit<ProductAnalysis, 'usageReservationId'> & { customs: CustomsProfile }
+export type ProductAnalysisV2 = Omit<ProductAnalysis, 'usageReservationId'> & {
+  customs: CustomsProfile
+  /** Ephemeral only while the same paid case is still allowed to refine NCM. */
+  usageReservationId?: string
+  classificationRefinement?: {
+    allowed: boolean
+    attempt: number
+    maxAttempts: number
+  }
+}
 
 function unclassifiedCustoms(originCountry?: string | null): CustomsProfile {
   // Ingestion and nomenclature are intentionally separate. Before the user
@@ -20,6 +29,7 @@ export async function ingestAlibabaUrlV2(url: string): Promise<ProductAnalysis &
 export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<ProductAnalysisV2> {
   const localCustoms = customsProfileFor(base.product.category, base.product.originCountry, base.product.name)
   let customs = localCustoms
+  let refinement: ProductAnalysisV2['classificationRefinement']
 
   try {
     const full = await classifyNcmRemote({
@@ -28,8 +38,17 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
       material: base.product.material ?? null,
       functionText: base.product.functionText ?? null,
       description: base.product.description ?? null,
-    }, base.usageReservationId || '')
+    }, base.usageReservationId || '') as typeof import('./fullNcmClient').FullNcmApiResult & {
+      refinement?: { allowed?: boolean; attempt?: number; maxAttempts?: number }
+    }
     customs = mergeFullCustomsProfile(localCustoms, full)
+    if (full.refinement) {
+      refinement = {
+        allowed: full.refinement.allowed === true,
+        attempt: Number(full.refinement.attempt) || 0,
+        maxAttempts: Number(full.refinement.maxAttempts) || 0,
+      }
+    }
   } catch {
     customs = {
       ...localCustoms,
@@ -38,14 +57,24 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
     }
   }
 
-  // The reservation is a transport credential for the one-credit continuation,
-  // not product/history data. Strip it regardless of classification outcome.
-  const { usageReservationId: _usageReservationId, ...cleanBase } = base
+  const { usageReservationId, ...cleanBase } = base
+  const classificationResolved = !!customs.ncmCandidate
+    && (customs.classificationConfidence === 'high' || customs.classificationConfidence === 'medium')
+    && customs.dutyRatePct !== null
+    && customs.dutyRatePct !== undefined
+  const keepReservation = !classificationResolved
+    && refinement?.allowed === true
+    && Boolean(usageReservationId)
 
   // Market evidence and customs evidence are independent. A missing/LOW duty
   // blocks landed-cost economics through decisionReadiness, but must not erase
   // a valid local-market observation that is still useful to the user.
-  return { ...cleanBase, customs }
+  return {
+    ...cleanBase,
+    ...(keepReservation ? { usageReservationId } : {}),
+    ...(refinement ? { classificationRefinement: refinement } : {}),
+    customs,
+  }
 }
 
 export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {

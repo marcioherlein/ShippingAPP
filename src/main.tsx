@@ -5,6 +5,7 @@ import { esES } from '@clerk/localizations/es-ES'
 import App from './App'
 import ClerkShell from './auth/ClerkShell'
 import { installJourneySemantics } from './lib/journeySemantics'
+import { installJourneyPersistence } from './lib/journeyPersistence'
 import './styles.css'
 import './styles/regulatory.css'
 import './styles/entry-simplification.css'
@@ -23,6 +24,7 @@ if (!root) {
 }
 
 installJourneySemantics()
+installJourneyPersistence()
 
 const application = clerkPublishableKey
   ? <ClerkProvider publishableKey={clerkPublishableKey} localization={esES}>

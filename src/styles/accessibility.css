@@ -1,0 +1,77 @@
+:root {
+  --a11y-focus: #1d4ed8;
+  --a11y-functional-muted: #64748b;
+}
+
+/* One focus contract for the whole product. Existing component shadows remain intact;
+   the outline is intentionally independent so it cannot disappear on glass surfaces. */
+body :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--a11y-focus) !important;
+  outline-offset: 3px !important;
+}
+
+body :is(input, select, textarea):focus-visible {
+  border-color: var(--a11y-focus) !important;
+}
+
+.mobile-bottom-nav a:focus-visible {
+  background: #eef5ff;
+  color: #0a2a68;
+}
+
+/* Functional metadata must meet WCAG AA on the light surfaces used by ShippingAPP. */
+.journey-step,
+.journey-thread-label small,
+.journey-question-head small,
+.journey-number-field > div small,
+.journey-number-field em,
+.journey-summary-list span,
+.pipeline-product-title span:first-child,
+.pipeline-confirm-grid span,
+.pipeline-ready-strip span,
+.unit-context-grid span,
+.pipeline-step-icon,
+.pipeline-step-copy small,
+.quote-customs-facts small,
+.entry-card small,
+.mobile-section-title small,
+.hot-products-note,
+.hot-product-topline,
+.hot-product-card p,
+.hot-product-metrics span,
+.field small,
+.mobile-bottom-nav a {
+  color: var(--a11y-functional-muted);
+}
+
+/* Utility for screen-reader-only status text. */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .journey-spinner,
+  .pipeline-inline-progress span {
+    animation: none !important;
+  }
+}

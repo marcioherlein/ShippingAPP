@@ -1,3 +1,4 @@
+import { emailDeliveryAllowed, emailDeliveryPolicyStatus } from './emailDeliveryPolicy'
 import { createEmailProvider, EmailProviderError, type EmailProvider } from './emailProvider'
 import { emailPreferenceScopeForTemplate, renderApplicationEmail, type EmailPreferenceScope, type EmailTemplateInput, type EmailTemplateKey } from './emailTemplates'
 import { EmailRepository, parseEmailEventMetadata } from './persistence/emailRepository'
@@ -55,10 +56,6 @@ function branding(env: EmailEnv) {
 
 function fromAddress(env: EmailEnv) {
   return textEnv(env, 'EMAIL_FROM')
-}
-
-function emailSendingEnabled(env: EmailEnv) {
-  return textEnv(env, 'EMAIL_SENDING_ENABLED', 5) === 'true'
 }
 
 function preferencesAllow(scope: EmailPreferenceScope, row: { digest_enabled: number; alerts_enabled: number; marketing_enabled: number }) {
@@ -123,8 +120,14 @@ export async function sendApplicationEmail(
   }
   const key = validIdempotencyKey(input.idempotencyKey)
   if (!key) return { status: 'failed', replayed: false, code: 'invalid_idempotency_key' }
-  if (!emailSendingEnabled(env)) {
-    return { status: 'not_configured', replayed: false, code: 'email_sending_disabled' }
+
+  // Stage 8 owns a version-controlled blast barrier. The master switch must be
+  // enabled AND the delivery mode must explicitly allow this server-owned user.
+  // This check happens before preferences/event reservation/provider work so a
+  // canary trial cannot consume idempotency state for normal users.
+  const delivery = emailDeliveryAllowed(env, input.userId)
+  if (!delivery.allowed) {
+    return { status: 'not_configured', replayed: false, code: delivery.code ?? 'email_sending_disabled' }
   }
 
   const clock = dependencies.clock ?? (() => new Date())
@@ -241,9 +244,13 @@ export async function sendApplicationEmail(
 export function emailRuntimeStatus(env: EmailEnv) {
   const provider = createEmailProvider(env)
   const unsubscribeSecret = textEnv(env, 'EMAIL_UNSUBSCRIBE_SECRET', 512)
+  const delivery = emailDeliveryPolicyStatus(env)
   return {
     provider: provider.name,
-    sendingEnabled: emailSendingEnabled(env),
+    sendingEnabled: delivery.sendingEnabled,
+    deliveryMode: delivery.mode,
+    canaryConfigured: delivery.canaryConfigured,
+    canaryUserCount: delivery.canaryUserCount,
     providerConfigured: provider.configured,
     senderConfigured: Boolean(fromAddress(env)),
     unsubscribeConfigured: Boolean(unsubscribeSecret && unsubscribeSecret.length >= 32 && appOrigin(env)),

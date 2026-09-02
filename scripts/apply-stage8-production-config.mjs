@@ -50,10 +50,10 @@ export function applyStage8ProductionConfig(baseConfig, env = process.env) {
     if (value) vars[target] = value
   }
 
-  // The deploy workflow intentionally does not consume a variable that can turn
-  // sending on. EMAIL_SENDING_ENABLED stays in versioned config until the final
-  // Stage 8 activation PR is explicitly reviewed and merged.
-  vars.EMAIL_SENDING_ENABLED = 'false'
+  // No environment/repository variable is allowed to control the send switch.
+  // Preserve the version-controlled value from wrangler.jsonc so activation can
+  // happen only through a reviewed code change. Today that value is `false`.
+  if (vars.EMAIL_SENDING_ENABLED !== 'true') vars.EMAIL_SENDING_ENABLED = 'false'
 
   return { ...baseConfig, vars }
 }

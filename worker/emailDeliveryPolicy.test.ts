@@ -18,6 +18,13 @@ describe('Stage 8 email delivery blast barrier', () => {
     expect(emailCanaryUserIds(env)).toEqual(['user-a', 'user-b'])
     expect(emailDeliveryAllowed(env, 'user-a')).toMatchObject({ allowed: true, mode: 'canary' })
     expect(emailDeliveryAllowed(env, 'user-z')).toMatchObject({ allowed: false, mode: 'canary', code: 'email_canary_recipient_required' })
+    expect(emailDeliveryPolicyStatus(env)).toMatchObject({
+      mode: 'canary',
+      generalSendingEnabled: false,
+      canaryDeliveryEnabled: true,
+      canaryConfigured: true,
+      canaryUserCount: 2,
+    })
   })
 
   it('fails closed on malformed or oversized canary configuration', () => {
@@ -28,17 +35,23 @@ describe('Stage 8 email delivery blast barrier', () => {
     }
     expect(emailCanaryUserIds(malformed)).toEqual([])
     expect(emailDeliveryAllowed(malformed, 'user-a').allowed).toBe(false)
+    expect(emailDeliveryPolicyStatus(malformed)).toMatchObject({
+      generalSendingEnabled: false,
+      canaryDeliveryEnabled: false,
+      canaryConfigured: false,
+    })
 
     const tooMany = Array.from({ length: 21 }, (_, index) => `u${index}`).join(',')
     expect(emailCanaryUserIds({ ...malformed, EMAIL_CANARY_USER_IDS: tooMany })).toEqual([])
   })
 
-  it('allows all server-owned users only in explicit all mode', () => {
+  it('allows all server-owned users and the scheduler only in explicit all mode', () => {
     const env = { EMAIL_SENDING_ENABLED: 'true', EMAIL_DELIVERY_MODE: 'all' }
     expect(emailDeliveryAllowed(env, 'any-valid-server-user').allowed).toBe(true)
     expect(emailDeliveryPolicyStatus(env)).toEqual({
       mode: 'all',
-      sendingEnabled: true,
+      generalSendingEnabled: true,
+      canaryDeliveryEnabled: false,
       canaryConfigured: true,
       canaryUserCount: 0,
     })

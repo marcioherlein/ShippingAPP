@@ -1,0 +1,74 @@
+import type { D1DatabaseLike, D1Value } from './d1'
+
+export type BillingPlanRow = { id: string; code: string; name: string; monthly_credits: number; monitoring_enabled: number }
+export type BillingUserRow = { id: string; email: string | null; display_name: string | null }
+export type BillingSubscriptionStatus = 'pending' | 'trialing' | 'active' | 'past_due' | 'paused' | 'canceled' | 'expired'
+export type BillingSubscriptionRow = {
+  id: string; user_id: string; plan_id: string; provider: string; provider_customer_id: string | null;
+  provider_subscription_id: string | null; provider_plan_id: string | null; provider_status: string | null;
+  provider_version: number | null; status: BillingSubscriptionStatus; current_period_start: string | null;
+  current_period_end: string | null; cancel_at_period_end: number; last_provider_sync_at: string | null;
+  created_at: string; updated_at: string
+}
+export type BillingCheckoutAttemptRow = {
+  id: string; user_id: string; plan_id: string; subscription_id: string; provider: string; provider_plan_id: string;
+  idempotency_key: string; status: 'running' | 'created' | 'failed'; lease_expires_at: string;
+  checkout_url: string | null; error_code: string | null; created_at: string; updated_at: string
+}
+export type BillingEventRow = {
+  id: string; provider: string; provider_event_id: string; event_type: string; user_id: string | null;
+  subscription_id: string | null; payload_sha256: string; status: 'received' | 'processed' | 'ignored' | 'failed';
+  error_code: string | null; created_at: string; processed_at: string | null
+}
+
+function safe(label: string, value: string, max: number, min = 1) {
+  if (typeof value !== 'string' || value.length < min || value.length > max || /[\r\n]/.test(value)) throw new Error(`${label}_invalid`)
+  return value
+}
+async function first<T>(db: D1DatabaseLike, sql: string, values: D1Value[]) { return db.prepare(sql).bind(...values).first<T>() }
+async function run(db: D1DatabaseLike, sql: string, values: D1Value[]) { return db.prepare(sql).bind(...values).run() }
+
+export class BillingRepository {
+  constructor(private readonly db: D1DatabaseLike, private readonly clock: () => Date = () => new Date()) {}
+  private now() { return this.clock().toISOString() }
+  private lease() { return new Date(this.clock().getTime() + 10 * 60 * 1000).toISOString() }
+
+  getPlanByCode(code: string) { return first<BillingPlanRow>(this.db, 'SELECT id, code, name, monthly_credits, monitoring_enabled FROM plans WHERE code = ? AND active = 1 LIMIT 1', [safe('plan_code', code, 40)]) }
+  getUser(userId: string) { return first<BillingUserRow>(this.db, 'SELECT id, email, display_name FROM users WHERE id = ?', [safe('user_id', userId, 64)]) }
+  getSubscriptionForUser(userId: string, subscriptionId: string) { return first<BillingSubscriptionRow>(this.db, 'SELECT * FROM subscriptions WHERE id = ? AND user_id = ?', [safe('subscription_id', subscriptionId, 64), safe('user_id', userId, 64)]) }
+  getSubscriptionById(subscriptionId: string) { return first<BillingSubscriptionRow>(this.db, 'SELECT * FROM subscriptions WHERE id = ?', [safe('subscription_id', subscriptionId, 64)]) }
+  getSubscriptionByProviderId(provider: string, providerSubscriptionId: string) { return first<BillingSubscriptionRow>(this.db, 'SELECT * FROM subscriptions WHERE provider = ? AND provider_subscription_id = ?', [safe('provider', provider, 40), safe('provider_subscription_id', providerSubscriptionId, 191)]) }
+  async listUserSubscriptions(userId: string) { return (await this.db.prepare('SELECT * FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC, id DESC LIMIT 20').bind(safe('user_id', userId, 64)).all<BillingSubscriptionRow>()).results }
+  getCheckoutAttempt(userId: string, key: string) { return first<BillingCheckoutAttemptRow>(this.db, 'SELECT * FROM billing_checkout_attempts WHERE user_id = ? AND idempotency_key = ?', [safe('user_id', userId, 64), safe('idempotency_key', key, 120, 8)]) }
+
+  async reserveCheckout(input: { attemptId: string; subscriptionId: string; userId: string; planId: string; provider: string; providerPlanId: string; idempotencyKey: string }) {
+    const now = this.now(); const userId = safe('user_id', input.userId, 64); const planId = safe('plan_id', input.planId, 64)
+    const subscriptionId = safe('subscription_id', input.subscriptionId, 64); const provider = safe('provider', input.provider, 40)
+    const providerPlanId = safe('provider_plan_id', input.providerPlanId, 191); const key = safe('idempotency_key', input.idempotencyKey, 120, 8)
+    await run(this.db, `INSERT INTO subscriptions (id,user_id,plan_id,provider,provider_customer_id,provider_subscription_id,status,current_period_start,current_period_end,cancel_at_period_end,created_at,updated_at,provider_plan_id,provider_status,provider_version,last_provider_sync_at) VALUES (?,?,?,?,NULL,NULL,'pending',NULL,NULL,0,?,?,?,NULL,NULL,NULL) ON CONFLICT(id) DO NOTHING`, [subscriptionId,userId,planId,provider,now,now,providerPlanId])
+    const subscription = await this.getSubscriptionForUser(userId, subscriptionId)
+    if (!subscription || subscription.plan_id !== planId || subscription.provider !== provider || subscription.provider_plan_id !== providerPlanId) throw new Error('billing_subscription_reservation_collision')
+    await run(this.db, `INSERT INTO billing_checkout_attempts (id,user_id,plan_id,subscription_id,provider,provider_plan_id,idempotency_key,status,lease_expires_at,checkout_url,error_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'running',?,NULL,NULL,?,?) ON CONFLICT(user_id,idempotency_key) DO NOTHING`, [safe('attempt_id',input.attemptId,64),userId,planId,subscriptionId,provider,providerPlanId,key,this.lease(),now,now])
+    let attempt = await this.getCheckoutAttempt(userId,key); if (!attempt) throw new Error('billing_checkout_reservation_failed')
+    if (attempt.plan_id !== planId || attempt.subscription_id !== subscriptionId || attempt.provider !== provider || attempt.provider_plan_id !== providerPlanId) return { kind:'collision' as const, attempt }
+    if (attempt.status === 'created' || (attempt.status === 'running' && attempt.id !== input.attemptId && attempt.lease_expires_at > now)) return { kind:'existing' as const, attempt, subscription }
+    if (attempt.id !== input.attemptId && (attempt.status === 'failed' || attempt.lease_expires_at <= now)) {
+      await run(this.db, `UPDATE billing_checkout_attempts SET status='running',lease_expires_at=?,error_code=NULL,updated_at=? WHERE id=? AND user_id=? AND (status='failed' OR lease_expires_at<=?)`, [this.lease(),now,attempt.id,userId,now])
+      attempt = await this.getCheckoutAttempt(userId,key); if (!attempt) throw new Error('billing_checkout_retry_failed')
+      return attempt.status === 'running' ? { kind:'started' as const, attempt, subscription } : { kind:'existing' as const, attempt, subscription }
+    }
+    return attempt.id === input.attemptId ? { kind:'started' as const, attempt, subscription } : { kind:'existing' as const, attempt, subscription }
+  }
+
+  async markCheckoutCreated(input: { userId:string; subscriptionId:string; providerSubscriptionId:string; providerCustomerId:string|null; providerStatus:string; providerVersion:number|null; internalStatus:BillingSubscriptionStatus; checkoutUrl:string|null }) {
+    const now=this.now(); await run(this.db, `UPDATE subscriptions SET provider_subscription_id=?,provider_customer_id=?,provider_status=?,provider_version=?,status=?,last_provider_sync_at=?,updated_at=? WHERE id=? AND user_id=?`, [safe('provider_subscription_id',input.providerSubscriptionId,191),input.providerCustomerId,safe('provider_status',input.providerStatus,80),input.providerVersion,input.internalStatus,now,now,safe('subscription_id',input.subscriptionId,64),safe('user_id',input.userId,64)])
+    await run(this.db, `UPDATE billing_checkout_attempts SET status='created',checkout_url=?,error_code=NULL,updated_at=? WHERE subscription_id=? AND user_id=?`, [input.checkoutUrl,now,input.subscriptionId,input.userId])
+    return this.getSubscriptionForUser(input.userId,input.subscriptionId)
+  }
+  async markCheckoutFailed(userId:string, subscriptionId:string, code:string) { const now=this.now(); await run(this.db, `UPDATE billing_checkout_attempts SET status='failed',error_code=?,updated_at=? WHERE subscription_id=? AND user_id=?`, [safe('error_code',code,80),now,safe('subscription_id',subscriptionId,64),safe('user_id',userId,64)]) }
+  async applyProviderState(input:{ subscriptionId:string; userId:string; providerSubscriptionId:string; providerCustomerId:string|null; providerStatus:string; providerVersion:number|null; internalStatus:BillingSubscriptionStatus }) { const now=this.now(); const r=await run(this.db, `UPDATE subscriptions SET provider_subscription_id=?,provider_customer_id=?,provider_status=?,provider_version=?,status=?,last_provider_sync_at=?,updated_at=? WHERE id=? AND user_id=?`, [safe('provider_subscription_id',input.providerSubscriptionId,191),input.providerCustomerId,safe('provider_status',input.providerStatus,80),input.providerVersion,input.internalStatus,now,now,safe('subscription_id',input.subscriptionId,64),safe('user_id',input.userId,64)]); if(Number(r.meta?.changes??0)!==1) throw new Error('billing_subscription_update_failed'); return this.getSubscriptionForUser(input.userId,input.subscriptionId) }
+
+  getBillingEvent(provider:string, providerEventId:string) { return first<BillingEventRow>(this.db, 'SELECT * FROM billing_events WHERE provider=? AND provider_event_id=?', [safe('provider',provider,40),safe('provider_event_id',providerEventId,191)]) }
+  async reserveBillingEvent(input:{ id:string; provider:string; providerEventId:string; eventType:string; payloadSha256:string }) { const now=this.now(); await run(this.db, `INSERT INTO billing_events (id,provider,provider_event_id,event_type,user_id,subscription_id,payload_sha256,status,error_code,created_at,processed_at) VALUES (?,?,?,?,NULL,NULL,?,'received',NULL,?,NULL) ON CONFLICT(provider,provider_event_id) DO NOTHING`, [safe('event_id',input.id,64),safe('provider',input.provider,40),safe('provider_event_id',input.providerEventId,191),safe('event_type',input.eventType,120),safe('payload_sha256',input.payloadSha256,64,64),now]); const event=await this.getBillingEvent(input.provider,input.providerEventId); if(!event) throw new Error('billing_event_reservation_failed'); if(event.payload_sha256!==input.payloadSha256||event.event_type!==input.eventType) return {kind:'collision' as const,event}; return {kind:event.status==='received'?'ready' as const:'replay' as const,event} }
+  async completeBillingEvent(input:{ eventId:string; status:'processed'|'ignored'|'failed'; userId?:string|null; subscriptionId?:string|null; errorCode?:string|null }) { const now=this.now(); await run(this.db, `UPDATE billing_events SET status=?,user_id=?,subscription_id=?,error_code=?,processed_at=? WHERE id=? AND status='received'`, [input.status,input.userId??null,input.subscriptionId??null,input.errorCode??null,now,safe('event_id',input.eventId,64)]); return first<BillingEventRow>(this.db,'SELECT * FROM billing_events WHERE id=?',[input.eventId]) }
+}

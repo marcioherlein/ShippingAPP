@@ -74,6 +74,11 @@ for (const expected of expectedPlans) {
   }
 }
 
+const reservationColumns = db.prepare("PRAGMA table_info('credit_reservations')").all().map((row) => row.name)
+if (!reservationColumns.includes('continuation_attempt_no')) {
+  throw new Error('Iterative NCM reservation continuation_attempt_no column is missing')
+}
+
 const reservationIndexes = db.prepare("PRAGMA index_list('credit_reservations')").all()
 const reservationUniqueIndexes = reservationIndexes.filter((row) => Number(row.unique) === 1)
 const uniqueColumns = (index) => db.prepare(`PRAGMA index_info('${String(index.name).replaceAll("'", "''")}')`).all()
@@ -165,7 +170,7 @@ db.prepare("UPDATE credit_reservations SET last_error_code='validator_probe_agai
 const refundCountAfter = Number(db.prepare("SELECT COUNT(*) AS count FROM credit_ledger WHERE idempotency_key='refund:stage5-res-a:1'").get().count)
 if (refundCountBefore !== 1 || refundCountAfter !== 1) throw new Error('Stage 5 release refund was not exactly once')
 
-db.prepare("UPDATE credit_reservations SET status='running', attempt_no=2, last_error_code=NULL, released_at=NULL, lease_expires_at='2026-08-31T20:20:00.000Z', updated_at=? WHERE id='stage5-res-a'").run(now)
+db.prepare("UPDATE credit_reservations SET status='running', attempt_no=2, continuation_attempt_no=0, last_error_code=NULL, released_at=NULL, lease_expires_at='2026-08-31T20:20:00.000Z', updated_at=? WHERE id='stage5-res-a'").run(now)
 usage = db.prepare("SELECT credits_consumed FROM usage_periods WHERE id='stage5-period'").get()
 if (Number(usage.credits_consumed) !== 1) throw new Error('Stage 5 retry did not reserve credit exactly once')
 const consumeEntries = Number(db.prepare("SELECT COUNT(*) AS count FROM credit_ledger WHERE user_id='stage5-user' AND entry_type='consume'").get().count)
@@ -204,4 +209,4 @@ if (db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' A
 if (db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='users'").get().count !== 1) throw new Error('Failed migration damaged prior schema')
 
 db.close()
-console.log(`D1 schema validation passed: ${expectedTables.length} tables, ${expectedIndexes.length} required indexes, ${migrationFiles.length} migrations, Stage 4 ownership/dedupe PASS, Stage 5 atomic reservation/ledger constraints PASS, Stage 6 email ownership/idempotency PASS, Stage 7 weekly-run/recipient idempotency+privacy PASS, rollback probe PASS`)
+console.log(`D1 schema validation passed: ${expectedTables.length} tables, ${expectedIndexes.length} required indexes, ${migrationFiles.length} migrations, Stage 4 ownership/dedupe PASS, Stage 5 atomic reservation/ledger constraints PASS, iterative NCM continuation column PASS, Stage 6 email ownership/idempotency PASS, Stage 7 weekly-run/recipient idempotency+privacy PASS, rollback probe PASS`)

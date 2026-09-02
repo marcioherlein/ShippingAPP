@@ -14,9 +14,9 @@ const additions: ArgentinaVtexRetailer[] = [
     maxCandidates: 12,
   },
   {
-    id: 'motorola-official',
-    name: 'Motorola Oficial',
-    baseUrl: 'https://tienda.motorola.com.ar',
+    id: 'sony-official',
+    name: 'Sony Store Oficial',
+    baseUrl: 'https://store.sony.com.ar',
     tradePolicy: '1',
     maxCandidates: 12,
   },
@@ -65,7 +65,7 @@ const [current, expanded] = await Promise.all([run(currentRetailers), run(expand
 const comparisons = probes.map(([productName]) => {
   const a = current.find((row) => row.productName === productName)!
   const b = expanded.find((row) => row.productName === productName)!
-  const newIds = b.comparableIds.filter((id) => id.startsWith('samsung-official:') || id.startsWith('motorola-official:'))
+  const newIds = b.comparableIds.filter((id) => id.startsWith('samsung-official:') || id.startsWith('sony-official:'))
   return {
     productName,
     currentStatus: a.status,

@@ -134,7 +134,12 @@ describe('Stage 6 email service economic/privacy boundary', () => {
       templateKey: 'billing',
       idempotencyKey: 'billing-user-a-002',
     }, { provider, clock, randomId })
-    expect(billing).toMatchObject({ status: 'sent' })
+    expect(billing).toEqual({
+      status: 'sent',
+      replayed: false,
+      eventId: 'email-event-3',
+      providerMessageId: 'provider-billing-user-a-002',
+    })
     expect(provider.send).toHaveBeenCalledTimes(2)
   })
 

@@ -1,5 +1,6 @@
 import type { ArgentinaMarketCandidate, ArgentinaMarketDiscoveryProvider } from './marketProviderContracts'
 import type { MlAttribute } from './marketTypes'
+import { discoverFravegaLanding } from './fravegaLandingMarketProvider'
 
 export type ArgentinaVtexRetailer = {
   id: string
@@ -63,75 +64,21 @@ type VtexProduct = {
 
 type RetailerDiscovery = {
   retailer: ArgentinaVtexRetailer
-  mode: 'intelligent-search' | 'legacy-search' | 'unavailable'
+  mode: 'intelligent-search' | 'legacy-search' | 'structured-landing' | 'unavailable'
   candidates: ArgentinaMarketCandidate[]
   warnings: string[]
 }
 
 export const DEFAULT_ARGENTINA_VTEX_RETAILERS: readonly ArgentinaVtexRetailer[] = [
-  {
-    id: 'fravega',
-    name: 'Frávega',
-    baseUrl: 'https://www.fravega.com',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
-  {
-    id: 'cetrogar',
-    name: 'Cetrogar',
-    baseUrl: 'https://www.cetrogar.com.ar',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
-  {
-    id: 'naldo',
-    name: 'Naldo',
-    baseUrl: 'https://www.naldo.com.ar',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
-  {
-    id: 'oncity',
-    name: 'OnCity',
-    baseUrl: 'https://www.oncity.com',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
-  {
-    id: 'pardo',
-    name: 'Pardo',
-    baseUrl: 'https://www.pardo.com.ar',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
-  {
-    id: 'easy',
-    name: 'Easy',
-    baseUrl: 'https://www.easy.com.ar',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
-  {
-    id: 'coppel',
-    name: 'Coppel',
-    baseUrl: 'https://www.coppel.com.ar',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
-  {
-    id: 'carrefour',
-    name: 'Carrefour',
-    baseUrl: 'https://www.carrefour.com.ar',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
-  {
-    id: 'sportline',
-    name: 'Sportline',
-    baseUrl: 'https://www.sportline.com.ar',
-    tradePolicy: '1',
-    maxCandidates: 12,
-  },
+  { id: 'fravega', name: 'Frávega', baseUrl: 'https://www.fravega.com', tradePolicy: '1', maxCandidates: 12 },
+  { id: 'cetrogar', name: 'Cetrogar', baseUrl: 'https://www.cetrogar.com.ar', tradePolicy: '1', maxCandidates: 12 },
+  { id: 'naldo', name: 'Naldo', baseUrl: 'https://www.naldo.com.ar', tradePolicy: '1', maxCandidates: 12 },
+  { id: 'oncity', name: 'OnCity', baseUrl: 'https://www.oncity.com', tradePolicy: '1', maxCandidates: 12 },
+  { id: 'pardo', name: 'Pardo', baseUrl: 'https://www.pardo.com.ar', tradePolicy: '1', maxCandidates: 12 },
+  { id: 'easy', name: 'Easy', baseUrl: 'https://www.easy.com.ar', tradePolicy: '1', maxCandidates: 12 },
+  { id: 'coppel', name: 'Coppel', baseUrl: 'https://www.coppel.com.ar', tradePolicy: '1', maxCandidates: 12 },
+  { id: 'carrefour', name: 'Carrefour', baseUrl: 'https://www.carrefour.com.ar', tradePolicy: '1', maxCandidates: 12 },
+  { id: 'sportline', name: 'Sportline', baseUrl: 'https://www.sportline.com.ar', tradePolicy: '1', maxCandidates: 12 },
 ]
 
 function positiveNumber(value: unknown): number | null {
@@ -263,6 +210,22 @@ function legacySearchUrl(retailer: ArgentinaVtexRetailer, query: string) {
   return `${retailer.baseUrl}/api/catalog_system/pub/products/search/${normalized}`
 }
 
+async function fravegaLandingFallback(
+  retailer: ArgentinaVtexRetailer,
+  fetchImpl: typeof fetch,
+  requestTimeoutMs: number,
+  warnings: string[],
+): Promise<RetailerDiscovery> {
+  const landing = await discoverFravegaLanding(fetchImpl, { timeoutMs: requestTimeoutMs })
+  const mergedWarnings = [...warnings, ...landing.warnings]
+  return {
+    retailer,
+    mode: landing.candidates.length ? 'structured-landing' : 'unavailable',
+    candidates: landing.candidates,
+    warnings: mergedWarnings,
+  }
+}
+
 async function discoverRetailer(
   retailer: ArgentinaVtexRetailer,
   query: string,
@@ -275,9 +238,7 @@ async function discoverRetailer(
     if (intelligent.ok) {
       const products = productsOf(intelligent.data)
       const candidates = candidatesFromProducts(retailer, products)
-      if (products.length || candidates.length) {
-        return { retailer, mode: 'intelligent-search', candidates, warnings }
-      }
+      if (products.length || candidates.length) return { retailer, mode: 'intelligent-search', candidates, warnings }
       warnings.push(`${retailer.name} Intelligent Search returned no products; legacy public search was attempted.`)
     } else {
       warnings.push(`${retailer.name} Intelligent Search returned HTTP ${intelligent.status}; legacy public search was attempted.`)
@@ -289,22 +250,21 @@ async function discoverRetailer(
 
   try {
     const legacy = await fetchJsonWithTimeout(fetchImpl, legacySearchUrl(retailer, query), requestTimeoutMs)
-    if (!legacy.ok) {
+    if (legacy.ok) {
+      const products = productsOf(legacy.data)
+      const candidates = candidatesFromProducts(retailer, products)
+      if (products.length || candidates.length) return { retailer, mode: 'legacy-search', candidates, warnings }
+      warnings.push(`${retailer.name} legacy public search returned no products.`)
+    } else {
       warnings.push(`${retailer.name} legacy public search returned HTTP ${legacy.status}.`)
-      return { retailer, mode: 'unavailable', candidates: [], warnings }
-    }
-    const products = productsOf(legacy.data)
-    return {
-      retailer,
-      mode: 'legacy-search',
-      candidates: candidatesFromProducts(retailer, products),
-      warnings,
     }
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'request failed'
     warnings.push(`${retailer.name} legacy public search failed (${reason}).`)
-    return { retailer, mode: 'unavailable', candidates: [], warnings }
   }
+
+  if (retailer.id === 'fravega') return fravegaLandingFallback(retailer, fetchImpl, requestTimeoutMs, warnings)
+  return { retailer, mode: 'unavailable', candidates: [], warnings }
 }
 
 export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarketProviderOptions = {}): ArgentinaMarketDiscoveryProvider {
@@ -318,12 +278,7 @@ export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarke
   return {
     id: 'argentina-direct-retailers',
     async discover(context) {
-      const results = await Promise.all(retailers.map((retailer) => discoverRetailer(
-        retailer,
-        context.query,
-        fetchImpl,
-        requestTimeoutMs,
-      )))
+      const results = await Promise.all(retailers.map((retailer) => discoverRetailer(retailer, context.query, fetchImpl, requestTimeoutMs)))
       const candidates = results.flatMap((result) => result.candidates)
       const available = results.filter((result) => result.mode !== 'unavailable')
       if (!available.length) {
@@ -338,7 +293,7 @@ export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarke
         candidates,
         categoryHint: null,
         warnings: [
-          'Discovery uses public VTEX storefront catalog endpoints only; no browser scraping, checkout automation, account login, or private API credentials are used.',
+          'Discovery uses public retailer storefront evidence only; no checkout automation, account login, or private API credentials are used.',
           'Retailer prices are treated as ARS because the configured storefronts are Argentine storefronts; every candidate still passes ShippingAPP deterministic product matching before economics.',
           ...results.flatMap((result) => result.warnings),
         ],

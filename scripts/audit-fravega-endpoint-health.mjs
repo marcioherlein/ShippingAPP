@@ -28,7 +28,7 @@ function sellableCount(products) {
   return count
 }
 
-async function probe(target, query, mode) {
+async function probeApi(target, query, mode) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 8000)
   const url = mode === 'intelligent'
@@ -65,19 +65,74 @@ async function probe(target, query, mode) {
   }
 }
 
-const probes = []
-for (const target of targets) {
-  for (const query of queries) {
-    probes.push(probe(target, query, 'intelligent'))
-    probes.push(probe(target, query, 'legacy'))
+function htmlSignals(html) {
+  const lower = html.toLowerCase()
+  const titles = ['logitech m170', 'iphone 16', 'smart tank 580']
+  return {
+    bytes: html.length,
+    hasNextData: lower.includes('__next_data__'),
+    hasLdJson: lower.includes('application/ld+json'),
+    hasProductSchema: lower.includes('schema.org/product') || lower.includes('"@type":"product"') || lower.includes('"@type": "product"'),
+    productHits: Object.fromEntries(titles.map((title) => [title, lower.includes(title)])),
+    priceLikeCount: (html.match(/\$\s*[\d.]+(?:,\d{1,2})?/g) || []).length,
   }
 }
 
-const results = await Promise.all(probes)
-console.log(JSON.stringify({ status: 'retailer_health_complete', at: new Date().toISOString(), results }, null, 2))
+async function probeHtml(path) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10000)
+  const url = `https://tyc.fravega.com${path}`
+  try {
+    const response = await fetch(url, {
+      headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': 'Mozilla/5.0 ShippingAPP-retailer-health-audit' },
+      signal: controller.signal,
+      redirect: 'follow',
+    })
+    const text = await response.text()
+    return {
+      path,
+      status: response.status,
+      ok: response.ok,
+      finalUrl: response.url,
+      contentType: response.headers.get('content-type') || '',
+      ...htmlSignals(text),
+    }
+  } catch (error) {
+    return { path, status: null, ok: false, error: error?.name === 'AbortError' ? 'timeout' : (error?.message || String(error)) }
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
-const controlHealthy = results.some((r) => r.target === 'cetrogar-control' && r.ok && r.sellableOffers > 0)
-const fravegaWwwHealthy = results.some((r) => r.target === 'fravega-www' && r.ok && r.sellableOffers > 0)
-const fravegaTycHealthy = results.some((r) => r.target === 'fravega-tyc' && r.ok && r.sellableOffers > 0)
+const apiProbes = []
+for (const target of targets) {
+  for (const query of queries) {
+    apiProbes.push(probeApi(target, query, 'intelligent'))
+    apiProbes.push(probeApi(target, query, 'legacy'))
+  }
+}
+
+const htmlPaths = [
+  '/e/ofertas/mas-vendidos/',
+  '/e/tecnologia/',
+  '/e/home-sale/',
+]
+
+const [apiResults, htmlResults] = await Promise.all([
+  Promise.all(apiProbes),
+  Promise.all(htmlPaths.map(probeHtml)),
+])
+
+const report = {
+  status: 'retailer_health_complete_v2',
+  at: new Date().toISOString(),
+  apiResults,
+  htmlResults,
+}
+console.log(JSON.stringify(report, null, 2))
+
+const controlHealthy = apiResults.some((r) => r.target === 'cetrogar-control' && r.ok && r.sellableOffers > 0)
+const fravegaApiHealthy = apiResults.some((r) => r.target.startsWith('fravega-') && r.ok && r.sellableOffers > 0)
+const fravegaHtmlHealthy = htmlResults.some((r) => r.ok && r.bytes > 10000 && (r.priceLikeCount || 0) > 5)
 if (!controlHealthy) throw new Error('Control retailer did not produce sellable evidence; audit environment is inconclusive.')
-if (!fravegaWwwHealthy && !fravegaTycHealthy) throw new Error('Neither Fravega hostname produced sellable VTEX evidence.')
+if (!fravegaApiHealthy && !fravegaHtmlHealthy) throw new Error('Fravega has neither usable VTEX API nor sufficiently populated public HTML catalog evidence.')

@@ -7,9 +7,15 @@ function required(env, key) {
   return value.trim()
 }
 
-function domain(value) {
+function hostName(value) {
   const normalized = value.toLowerCase().replace(/^\.+|\.+$/g, '')
   if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(normalized) || !normalized.includes('.')) throw new Error('stage8_dns_name_invalid')
+  return normalized
+}
+
+function dnsName(value) {
+  const normalized = value.toLowerCase().replace(/^\.+|\.+$/g, '')
+  if (!/^[a-z0-9_](?:[a-z0-9._-]*[a-z0-9_])?$/.test(normalized) || !normalized.includes('.')) throw new Error('stage8_dns_name_invalid')
   return normalized
 }
 
@@ -47,15 +53,15 @@ export async function verifyStage8Dns(env = process.env, dependencies = {}) {
   if (publicOrigin.protocol !== 'https:' || publicOrigin.username || publicOrigin.password || publicOrigin.search || publicOrigin.hash) {
     throw new Error('stage8_public_base_url_https_required')
   }
-  const publicHost = domain(publicOrigin.hostname)
+  const publicHost = hostName(publicOrigin.hostname)
   if (!(await hostResolves(publicHost))) throw new Error(`stage8_public_host_unresolved:${publicHost}`)
 
-  const emailDomain = domain(required(env, 'STAGE8_EMAIL_DOMAIN'))
-  const spfName = domain(env.STAGE8_SPF_RECORD_NAME?.trim() || emailDomain)
+  const emailDomain = hostName(required(env, 'STAGE8_EMAIL_DOMAIN'))
+  const spfName = dnsName(env.STAGE8_SPF_RECORD_NAME?.trim() || emailDomain)
   const spfFragment = required(env, 'STAGE8_SPF_EXPECTED_FRAGMENT')
-  const dkimName = domain(required(env, 'STAGE8_DKIM_RECORD_NAME'))
+  const dkimName = dnsName(required(env, 'STAGE8_DKIM_RECORD_NAME'))
   const dkimFragment = required(env, 'STAGE8_DKIM_EXPECTED_FRAGMENT')
-  const dmarcName = domain(env.STAGE8_DMARC_RECORD_NAME?.trim() || `_dmarc.${emailDomain}`)
+  const dmarcName = dnsName(env.STAGE8_DMARC_RECORD_NAME?.trim() || `_dmarc.${emailDomain}`)
 
   const [spf, dkim, dmarc] = await Promise.all([resolveTxt(spfName), resolveTxt(dkimName), resolveTxt(dmarcName)])
   if (!hasFragment(spf, spfFragment)) throw new Error(`stage8_spf_not_verified:${spfName}`)

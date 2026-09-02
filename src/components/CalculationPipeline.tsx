@@ -95,6 +95,17 @@ function stageDetail(index: number, analysis: ProductAnalysisV2, prefill: QuoteP
   return `Cantidad base: ${prefill.quantity || prefill.moq || 1} unidades`
 }
 
+function pipelineStatusAnnouncement(status: CalculationPipelineStatus, activeStage: number, blocker?: string | null, summary?: CalculationPipelineSummary | null) {
+  if (status === 'confirm') return 'El cálculo espera confirmación de los datos del producto.'
+  if (status === 'processing') {
+    const stage = pipelineSteps[Math.min(Math.max(activeStage, 0), pipelineSteps.length - 1)]
+    return `Procesando: ${stage?.title || 'cálculo de importación'}.`
+  }
+  if (status === 'blocked') return `Cálculo detenido. ${blocker || 'Hay un dato que necesita revisión antes de continuar.'}`
+  if (summary) return `Cálculo completado. Modo ${summary.selectedMode === 'lcl' ? 'LCL' : 'aéreo'}. Costo puesto por unidad ${usd(summary.unitCostUsd)}.`
+  return 'Cálculo completado.'
+}
+
 function numberValue(value: string) {
   const number = Number(value)
   return Number.isFinite(number) ? number : 0
@@ -116,6 +127,7 @@ function knownFact(label: string, value: React.ReactNode, key: string) {
 export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
+  const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
   const [draft, setDraft] = useState<ProductConfirmationData>(() => productConfirmationFromAnalysis(analysis))
   const [showCorrections, setShowCorrections] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
@@ -158,7 +170,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
 
   const quoteFieldMissing = (id: string) => quoteMissing.some((item) => item.id === id)
 
-  return <section className="calculation-pipeline" id="case-confirmation">
+  return <section className="calculation-pipeline" id="case-confirmation" aria-busy={status === 'processing'}>
+    <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>
     {status === 'confirm' ? <>
       <div className="pipeline-confirm-head progressive-confirm-head">
         <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : 'Confirmación inteligente'}</span>
@@ -183,7 +196,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             </div>
             {draft.description && draft.description !== draft.productName && <details className="pipeline-source-detail"><summary>Ver detalle técnico leído</summary><p>{draft.description}</p></details>}
             <div className="pipeline-understood-actions">
-              <button type="button" className="pipeline-secondary" onClick={() => setShowCorrections((value) => !value)}>{showCorrections ? 'Ocultar correcciones' : 'Algo no está bien / quiero corregir'}</button>
+              <button type="button" className="pipeline-secondary" aria-expanded={showCorrections} onClick={() => setShowCorrections((value) => !value)}>{showCorrections ? 'Ocultar correcciones' : 'Algo no está bien / quiero corregir'}</button>
             </div>
           </div>
 
@@ -203,8 +216,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <label><span>Respondeme en tus palabras</span><textarea value={clarification} onChange={(event) => setClarification(event.target.value.slice(0, 1000))} rows={3} placeholder="Ej. Sí, es automático mecánico; la caja es de acero inoxidable y no tiene funciones de smartwatch." /></label>
           </div>}
 
-          {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields"><b>Todavía no puedo nomenclar.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
-          {classifierAskedForMore && !clarificationSatisfied && <div className="pipeline-warning pipeline-missing-fields"><b>Necesito tu respuesta antes de reintentar.</b><span>Así evito repetir la misma clasificación dudosa.</span></div>}
+          {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Todavía no puedo nomenclar.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
+          {classifierAskedForMore && !clarificationSatisfied && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Necesito tu respuesta antes de reintentar.</b><span>Así evito repetir la misma clasificación dudosa.</span></div>}
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
             <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Usar esta aclaración y reclasificar' : 'Sí, es este producto · clasificar'} <span>→</span></button>
@@ -213,7 +226,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         </> : <>
           <div className="pipeline-classification-ready">
             <div><span className="eyebrow">Clasificación lista</span><h3>NCM {analysis.customs.ncmCandidate}</h3><p>Confianza {confidenceLabel(analysis.customs.classificationConfidence)} · derecho {analysis.customs.dutyRatePct}%</p></div>
-            <span>✓</span>
+            <span aria-hidden="true">✓</span>
           </div>
 
           <div className="pipeline-understood-card quote-known-card">
@@ -225,7 +238,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
               {knownFact('Peso embalado', draft.unitWeightKg > 0 ? `${draft.unitWeightKg} kg/u.` : null, 'weight')}
               {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : null, 'volume')}
             </div>
-            <button type="button" className="pipeline-secondary" onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Mostrar sólo faltantes' : 'Corregir un dato detectado'}</button>
+            <button type="button" className="pipeline-secondary" aria-expanded={showAllQuoteFields} onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Mostrar sólo faltantes' : 'Corregir un dato detectado'}</button>
           </div>
 
           <div className="pipeline-progressive-fields quote-missing-fields">
@@ -246,7 +259,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             </div>}
           </div>
 
-          {quoteMissing.length > 0 ? <div className="pipeline-warning pipeline-missing-fields"><b>No te voy a pedir nada más de aduana.</b><span>Sólo falta: {quoteMissing.map((item) => item.label).join(' · ')}.</span></div> : <div className="pipeline-confirm-ok"><b>Listo para cotizar.</b><span>La NCM y los datos físicos/comerciales tienen evidencia suficiente.</span></div>}
+          {quoteMissing.length > 0 ? <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No te voy a pedir nada más de aduana.</b><span>Sólo falta: {quoteMissing.map((item) => item.label).join(' · ')}.</span></div> : <div className="pipeline-confirm-ok"><b>Listo para cotizar.</b><span>La NCM y los datos físicos/comerciales tienen evidencia suficiente.</span></div>}
 
           <div className="pipeline-confirm-grid compact">
             <div><span>Trámite de intervención</span><b>{interventionFee ? 'USD 200 · incluido' : prefill.sensitiveCategory === 'unknown' ? 'Pendiente' : 'No aplica'}</b></div>
@@ -262,26 +275,34 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     </> : <>
       <div className="pipeline-run-head">
         <div><span className="eyebrow">Motor de cálculo</span><h2>{status === 'ready' ? 'Caso calculado.' : status === 'blocked' ? 'Necesito resolver un dato antes de seguir.' : 'Construyendo tu costo de importación.'}</h2></div>
-        <strong>{Math.round(progress)}%</strong>
+        <strong aria-hidden="true">{Math.round(progress)}%</strong>
       </div>
-      <div className="pipeline-overall-progress" aria-label={`Progreso ${Math.round(progress)}%`}><span style={{ width: `${progress}%` }} /></div>
+      <div
+        className="pipeline-overall-progress"
+        role="progressbar"
+        aria-label="Progreso del cálculo de importación"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress)}
+        aria-valuetext={`${Math.round(progress)}% completado`}
+      ><span aria-hidden="true" style={{ width: `${progress}%` }} /></div>
 
       <div className="pipeline-steps">
         {pipelineSteps.map((item, index) => {
           const state = stageState(index, status, activeStage)
-          return <div className={`pipeline-step-row ${state}`} key={item.title}>
-            <span className="pipeline-step-icon">{state === 'done' ? '✓' : state === 'blocked' ? '!' : index + 1}</span>
+          return <div className={`pipeline-step-row ${state}`} aria-current={state === 'active' ? 'step' : undefined} key={item.title}>
+            <span className="pipeline-step-icon" aria-hidden="true">{state === 'done' ? '✓' : state === 'blocked' ? '!' : index + 1}</span>
             <div className="pipeline-step-copy">
               <div><b>{item.title}</b><small>{state === 'active' ? 'Procesando' : state === 'done' ? 'Completo' : state === 'blocked' ? 'Revisión necesaria' : 'Pendiente'}</small></div>
               <p>{item.description}</p>
               {(state === 'done' || state === 'blocked' || state === 'active') && <em>{stageDetail(index, analysis, prefill, summary)}</em>}
-              {state === 'active' && <div className="pipeline-inline-progress"><span /></div>}
+              {state === 'active' && <div className="pipeline-inline-progress" aria-hidden="true"><span /></div>}
             </div>
           </div>
         })}
       </div>
 
-      {status === 'blocked' && <div className="pipeline-blocker">
+      {status === 'blocked' && <div className="pipeline-blocker" role="alert" aria-atomic="true">
         <b>No voy a completar el costo con un supuesto inventado.</b>
         <p>{blocker || 'La clasificación o un dato necesario para el cálculo necesita revisión.'}</p>
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
@@ -291,7 +312,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         </div>
       </div>}
 
-      {status === 'ready' && summary && <div className="pipeline-ready-strip">
+      {status === 'ready' && summary && <div className="pipeline-ready-strip" aria-label="Resumen del cálculo completado">
         <div><span>Clasificación</span><b>{analysis.customs.ncmCandidate}</b></div>
         <div><span>Modo base</span><b>{summary.selectedMode === 'lcl' ? 'LCL' : 'Aéreo'}</b></div>
         <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>

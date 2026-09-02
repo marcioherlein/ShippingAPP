@@ -57,7 +57,14 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   await chooseByKeyboard(page, page.getByRole('button', { name: /Seguir con presupuesto/i }))
   await expect(page.getByText('Presupuesto o rango', { exact: true })).toBeVisible()
 
-  await chooseByKeyboard(page, page.getByRole('radio', { name: /Todavía no sé/i }))
+  const budgetGroup = page.getByRole('radiogroup', { name: 'Presupuesto o rango' })
+  const firstBudgetOption = budgetGroup.getByRole('radio', { name: /Tengo presupuesto/i })
+  const unknownBudgetOption = budgetGroup.getByRole('radio', { name: /Todavía no sé/i })
+  await tabUntil(page, firstBudgetOption)
+  await page.keyboard.press('End')
+  await expect(unknownBudgetOption).toBeFocused()
+  await expect(unknownBudgetOption).toHaveAttribute('aria-checked', 'true')
+
   await chooseByKeyboard(page, page.getByRole('button', { name: /Seguir con el producto/i }))
 
   await expect(page.getByRole('heading', { name: 'Elegí la forma más fácil.' })).toBeVisible()

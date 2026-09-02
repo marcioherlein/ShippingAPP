@@ -10,6 +10,8 @@ const ARGENTINA_STOREFRONT_TERMS: Record<string, string> = {
   blender: 'licuadora',
   wireless: 'inalambrico',
   electric: 'electrico',
+  outdoor: 'exterior',
+  adjustable: 'ajustable',
   storage: 'organizador',
   box: 'caja',
 }

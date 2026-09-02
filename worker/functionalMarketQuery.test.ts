@@ -19,4 +19,20 @@ describe('Argentina functional market query localization', () => {
     expect(buildArgentinaFunctionalMarketQuery('Generic Cordless Vacuum 500W', 'vacuum')).toContain('500w')
     expect(buildArgentinaFunctionalMarketQuery('Generic Wireless Speaker 20W', 'speaker')).toContain('parlante')
   })
+
+  it('localizes proof-required outdoor and adjustable traits for Argentine storefronts', () => {
+    const camera = buildArgentinaFunctionalMarketQuery(
+      'Camara seguridad WiFi exterior 3MP sin marca',
+      'camara de seguridad',
+    )
+    const dumbbell = buildArgentinaFunctionalMarketQuery(
+      'Mancuerna ajustable 20kg sin marca',
+      'mancuerna',
+    )
+
+    expect(camera).toContain('exterior')
+    expect(camera).not.toContain('outdoor')
+    expect(dumbbell).toContain('ajustable')
+    expect(dumbbell).not.toContain('adjustable')
+  })
 })

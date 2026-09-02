@@ -14,6 +14,29 @@ describe('Argentina functional market query localization', () => {
     expect(query).not.toContain('ianoni')
   })
 
+  it('uses raqueta for tennis while preserving paleta for padel', () => {
+    const tennis = buildArgentinaFunctionalMarketQuery(
+      'Raqueta de tenis grafito 300g sin marca',
+      'raqueta de tenis',
+    )
+    const tennisEnglish = buildArgentinaFunctionalMarketQuery(
+      'Generic graphite tennis racket 300g',
+      'tennis racket',
+    )
+    const padel = buildArgentinaFunctionalMarketQuery(
+      'Paleta de padel carbono sin marca',
+      'paleta de padel',
+    )
+
+    expect(tennis).toContain('raqueta')
+    expect(tennis).toContain('tenis')
+    expect(tennis).not.toContain('paleta')
+    expect(tennisEnglish).toContain('raqueta')
+    expect(tennisEnglish).not.toContain('paleta')
+    expect(padel).toContain('paleta')
+    expect(padel).not.toContain('raqueta')
+  })
+
   it('localizes generic electronics and keeps explicit specs', () => {
     expect(buildArgentinaFunctionalMarketQuery('Generic Cordless Vacuum 500W', 'vacuum')).toContain('aspiradora')
     expect(buildArgentinaFunctionalMarketQuery('Generic Cordless Vacuum 500W', 'vacuum')).toContain('500w')

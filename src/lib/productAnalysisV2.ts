@@ -1,6 +1,7 @@
 import { analyzeAlibabaUrl, applyAnalysis, type ProductAnalysis } from './productAnalysis'
 import { customsProfileFor, type CustomsProfile } from './customsClassification'
 import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
+import type { FullNcmApiResult } from './fullNcmClient'
 import type { Inputs } from './types'
 
 export type ProductAnalysisV2 = Omit<ProductAnalysis, 'usageReservationId'> & {
@@ -38,7 +39,7 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
       material: base.product.material ?? null,
       functionText: base.product.functionText ?? null,
       description: base.product.description ?? null,
-    }, base.usageReservationId || '') as typeof import('./fullNcmClient').FullNcmApiResult & {
+    }, base.usageReservationId || '') as FullNcmApiResult & {
       refinement?: { allowed?: boolean; attempt?: number; maxAttempts?: number }
     }
     customs = mergeFullCustomsProfile(localCustoms, full)

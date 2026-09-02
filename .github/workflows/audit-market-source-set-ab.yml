@@ -1,0 +1,20 @@
+name: Argentina Market Source Set A-B Audit
+
+on:
+  push:
+    branches:
+      - audit/market-source-set-ab
+  workflow_dispatch:
+
+jobs:
+  source-set-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Run same-time 5-vs-9 retailer benchmark
+        run: npx --yes vitest@3.2.4 run scripts/market-source-set-ab.audit.test.ts --reporter=verbose

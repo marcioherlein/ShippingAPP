@@ -6,7 +6,7 @@ import { createMercadoLibreMarketProviders } from './mercadoLibreMarketProvider'
 import type { ArgentinaMarketPriceResolver } from './marketProviderContracts'
 import type { ArgentinaMarketResult } from './marketTypes'
 import { withProgressiveFunctionalDiscovery } from './progressiveFunctionalDiscovery'
-import { createArgentinaDirectRetailerProvider, DEFAULT_ARGENTINA_VTEX_RETAILERS } from './vtexRetailerMarketProvider'
+import { createArgentinaDirectRetailerProvider } from './vtexRetailerMarketProvider'
 
 export type ArgentinaMarketHybridOptions = {
   mercadoLibreAccessToken?: string | null
@@ -14,8 +14,6 @@ export type ArgentinaMarketHybridOptions = {
   fetchImpl?: typeof fetch
   salePriceLookupLimit?: number
 }
-
-const RELAXED_RETAILER_MAX_CANDIDATES = 30
 
 function isMercadoLibreItemId(value: string) {
   return /^MLA\d{6,}$/.test(value)
@@ -59,14 +57,7 @@ export async function analyzeArgentinaMarketHybrid(
   const retailerBase = withFunctionalTraitEvidenceGuard(createArgentinaDirectRetailerProvider({
     fetchImpl: options.fetchImpl,
   }))
-  const retailerRelaxed = withFunctionalTraitEvidenceGuard(createArgentinaDirectRetailerProvider({
-    fetchImpl: options.fetchImpl,
-    retailers: DEFAULT_ARGENTINA_VTEX_RETAILERS.map((retailer) => ({
-      ...retailer,
-      maxCandidates: RELAXED_RETAILER_MAX_CANDIDATES,
-    })),
-  }))
-  const retailerProvider = withProgressiveFunctionalDiscovery(retailerBase, retailerRelaxed)
+  const retailerProvider = withProgressiveFunctionalDiscovery(retailerBase)
   const retailers = await runArgentinaMarketBenchmark(productName, category, retailerProvider)
 
   if (retailers.status === 'live') {

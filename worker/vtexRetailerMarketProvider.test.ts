@@ -58,18 +58,26 @@ describe('Argentina direct VTEX retailer discovery', () => {
       'naldo',
       'oncity',
       'pardo',
+      'easy',
+      'coppel',
+      'carrefour',
+      'sportline',
     ])
     expect(DEFAULT_ARGENTINA_VTEX_RETAILERS.every((retailer) => retailer.baseUrl.startsWith('https://'))).toBe(true)
     expect(DEFAULT_ARGENTINA_VTEX_RETAILERS.every((retailer) => (retailer.maxCandidates || 0) <= 12)).toBe(true)
   })
 
-  it('aggregates the five public retailer catalogs without credentials and reports only contributors', async () => {
+  it('aggregates the nine public retailer catalogs without credentials and reports only contributors', async () => {
     const expected = new Map([
       ['fravega.com', ['fra', 'Frávega', 149999]],
       ['cetrogar.com.ar', ['cet', 'Cetrogar', 152000]],
       ['naldo.com.ar', ['nal', 'Naldo', 151000]],
       ['oncity.com', ['onc', 'OnCity', 153000]],
       ['pardo.com.ar', ['par', 'Pardo', 154000]],
+      ['easy.com.ar', ['eas', 'Easy', 155000]],
+      ['coppel.com.ar', ['cop', 'Coppel', 156000]],
+      ['carrefour.com.ar', ['car', 'Carrefour', 157000]],
+      ['sportline.com.ar', ['spo', 'Sportline', 158000]],
     ] as const)
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input)
@@ -90,8 +98,8 @@ describe('Argentina direct VTEX retailer discovery', () => {
     const provider = createArgentinaDirectRetailerProvider({ fetchImpl })
     const result = await provider.discover({ query: 'Logitech MX Master 3S', productName: 'Logitech MX Master 3S', category: 'mouse' })
 
-    expect(result.candidates).toHaveLength(5)
-    for (const name of ['Frávega', 'Cetrogar', 'Naldo', 'OnCity', 'Pardo']) {
+    expect(result.candidates).toHaveLength(9)
+    for (const name of ['Frávega', 'Cetrogar', 'Naldo', 'OnCity', 'Pardo', 'Easy', 'Coppel', 'Carrefour', 'Sportline']) {
       expect(result.sourceLabel).toContain(name)
       expect(result.candidates.some((candidate) => candidate.sellerKey?.startsWith(`${name}:`))).toBe(true)
     }

@@ -1,0 +1,21 @@
+name: Argentina Market Detail Evidence Audit
+
+on:
+  push:
+    branches:
+      - audit/argentina-market-detail-evidence
+
+permissions:
+  contents: read
+
+jobs:
+  detail-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Hydrate bounded public product details
+        run: node scripts/audit-argentina-market-detail-evidence.mjs

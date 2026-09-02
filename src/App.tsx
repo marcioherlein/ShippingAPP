@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import UrlAnalyzer from './components/UrlAnalyzer'
 import HotProductsSection from './components/HotProductsSection'
 import OwnedProductIntake from './components/OwnedProductIntake'
@@ -146,6 +146,8 @@ export default function App() {
     unitsMin,
     unitsMax,
   ]), [purpose, entityType, signature, sensitiveCategory, budgetMode, budgetUsd, unitsMin, unitsMax])
+  const currentCalculationInputKeyRef = useRef(currentCalculationInputKey)
+  currentCalculationInputKeyRef.current = currentCalculationInputKey
 
   const effectiveCalculationStatus: CalculationPipelineStatus = calculationInputKey && calculationInputKey !== currentCalculationInputKey
     ? 'confirm'
@@ -359,6 +361,15 @@ export default function App() {
         totalCostUsd: winner.totalCostUsd,
         freightCostUsd: winner.freightCostUsd,
       }
+
+      if (currentCalculationInputKeyRef.current !== runInputKey) {
+        setCalculationStatus('confirm')
+        setPipelineStage(0)
+        setPipelineSummary(null)
+        setPipelineBlocker(null)
+        return
+      }
+
       setPipelineSummary(completedSummary)
       window.dispatchEvent(new CustomEvent('shippingapp:analysis-completed', {
         detail: {

@@ -26,10 +26,17 @@ describe('Stage 8 production secret boundary', () => {
     }
   })
 
-  it('keeps generic pull-request CI secretless', () => {
+  it('keeps generic pull-request CI disconnected from GitHub production secrets', () => {
     const ci = fs.readFileSync('.github/workflows/ci.yml', 'utf8')
     expect(ci).not.toContain('${{ secrets.')
-    for (const secret of SERVER_ONLY) expect(ci).not.toContain(secret)
+    for (const secret of SERVER_ONLY) {
+      expect(ci, `generic CI must not read secrets.${secret}`).not.toContain(`secrets.${secret}`)
+      expect(ci, `generic CI must not expose VITE_${secret}`).not.toContain(`VITE_${secret}`)
+    }
+    // A deterministic dummy INTERNAL_API_TOKEN in .dev.vars is deliberately
+    // allowed for the local Wrangler smoke. It is not sourced from GitHub
+    // Secrets and cannot authenticate against production.
+    expect(ci).toContain("CI_INTERNAL_TOKEN='ci-local-only-internal-token-")
   })
 
   it('keeps secrets out of versioned Wrangler vars', () => {

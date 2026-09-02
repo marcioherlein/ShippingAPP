@@ -10,6 +10,7 @@ import type {
 import type { MlResult } from './marketTypes'
 
 const LIVE_FLOOR = 5
+const DIRECT_RETAILER_SOURCE_PREFIX = 'Retailers argentinos directos · '
 
 function normalize(value: string) {
   return value
@@ -74,6 +75,29 @@ function mergeCandidates(
   return merged
 }
 
+function directRetailerNames(sourceLabel: string) {
+  if (!sourceLabel.startsWith(DIRECT_RETAILER_SOURCE_PREFIX)) return null
+  return sourceLabel
+    .slice(DIRECT_RETAILER_SOURCE_PREFIX.length)
+    .split(' + ')
+    .map((name) => name.trim())
+    .filter(Boolean)
+}
+
+/**
+ * Strict and relaxed retailer rounds can observe different subsets of healthy
+ * storefronts. Keep one canonical source label instead of concatenating two
+ * complete `Retailers argentinos directos · ...` strings, which obscures
+ * provenance in benchmark output.
+ */
+export function mergeProgressiveSourceLabels(strictLabel: string, relaxedLabel: string) {
+  if (strictLabel === relaxedLabel) return strictLabel
+  const strictNames = directRetailerNames(strictLabel)
+  const relaxedNames = directRetailerNames(relaxedLabel)
+  if (!strictNames || !relaxedNames) return `${strictLabel} + ${relaxedLabel}`
+  return `${DIRECT_RETAILER_SOURCE_PREFIX}${[...new Set([...strictNames, ...relaxedNames])].join(' + ')}`
+}
+
 function withWarning(result: ArgentinaMarketDiscoveryResult, warning: string): ArgentinaMarketDiscoveryResult {
   return { ...result, warnings: [...(result.warnings || []), warning] }
 }
@@ -119,7 +143,7 @@ export function withProgressiveFunctionalDiscovery(
       const candidates = mergeCandidates(strict.candidates || [], relaxed.candidates || [], context.productName)
       return {
         ...strict,
-        sourceLabel: strict.sourceLabel === relaxed.sourceLabel ? strict.sourceLabel : `${strict.sourceLabel} + ${relaxed.sourceLabel}`,
+        sourceLabel: mergeProgressiveSourceLabels(strict.sourceLabel, relaxed.sourceLabel),
         candidates,
         categoryHint: strict.categoryHint || relaxed.categoryHint || null,
         warnings: [

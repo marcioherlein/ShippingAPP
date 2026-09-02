@@ -1,0 +1,21 @@
+name: Tienda Newsan Public Search Shape Audit
+
+on:
+  push:
+    branches:
+      - audit/newsan-public-search-shape
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe public search markup
+        run: node scripts/audit-newsan-search-shape.mjs

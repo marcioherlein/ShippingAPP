@@ -104,6 +104,34 @@ export const DEFAULT_ARGENTINA_VTEX_RETAILERS: readonly ArgentinaVtexRetailer[] 
     tradePolicy: '1',
     maxCandidates: 12,
   },
+  {
+    id: 'easy',
+    name: 'Easy',
+    baseUrl: 'https://www.easy.com.ar',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
+  {
+    id: 'coppel',
+    name: 'Coppel',
+    baseUrl: 'https://www.coppel.com.ar',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
+  {
+    id: 'carrefour',
+    name: 'Carrefour',
+    baseUrl: 'https://www.carrefour.com.ar',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
+  {
+    id: 'sportline',
+    name: 'Sportline',
+    baseUrl: 'https://www.sportline.com.ar',
+    tradePolicy: '1',
+    maxCandidates: 12,
+  },
 ]
 
 function positiveNumber(value: unknown): number | null {

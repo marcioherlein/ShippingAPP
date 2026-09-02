@@ -7,7 +7,7 @@ on:
       - audit/mixed48-semantics-v2
 
 # Evidence-aware audit semantics v2. The production corpus and request parameters remain unchanged.
-# Production checkpoint: main 6acdde55cda3dc2c842cca1a80327d2a38af5791 (progressive functional retailer discovery).
+# Production checkpoint: main 455e474b23c9de8c02d8d45bbd753577f90dcd76 (Argentina retailer trait localization).
 permissions:
   contents: read
 

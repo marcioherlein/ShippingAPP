@@ -7,7 +7,7 @@ on:
       - audit/mixed48-semantics-v2
 
 # Evidence-aware audit semantics v2. The production corpus and request parameters remain unchanged.
-# Rerun marker: 2026-09-02 Fravega structured landing fallback production validation.
+# Rerun marker: 2026-09-02 main d3e6a905 progressive discovery + Fravega structured fallback validation.
 permissions:
   contents: read
 

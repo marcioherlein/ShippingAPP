@@ -40,6 +40,8 @@ type MarketSearchData = {
 }
 
 const API_ROOT = 'https://api.mercadolibre.com'
+// Per-request ceiling so a single slow/hung Mercado Libre call cannot exhaust the Worker.
+const ML_REQUEST_TIMEOUT_MS = 6000
 const CATALOG_HYDRATION_LIMIT = 12
 
 class MercadoLibreApiError extends Error {
@@ -78,9 +80,18 @@ async function mercadoLibreGet<T>(
   accessToken?: string | null,
   mode: MlCallMode = accessToken ? 'authenticated' : 'public',
 ): Promise<T> {
-  const response = await fetchImpl(`${API_ROOT}${path}`, { headers: requestHeaders(accessToken) })
-  if (!response.ok) throw new MercadoLibreApiError(response.status, path, mode)
-  return response.json() as Promise<T>
+  // Bound every Mercado Libre call: a hung upstream must not consume Worker wall-clock.
+  // A timeout surfaces as a thrown error, which callers already treat as provider-unavailable
+  // (fail-closed), never as a fabricated price.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ML_REQUEST_TIMEOUT_MS)
+  try {
+    const response = await fetchImpl(`${API_ROOT}${path}`, { headers: requestHeaders(accessToken), signal: controller.signal })
+    if (!response.ok) throw new MercadoLibreApiError(response.status, path, mode)
+    return await response.json() as T
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function mercadoLibreSearchGet<T>(

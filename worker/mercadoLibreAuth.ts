@@ -74,14 +74,22 @@ async function refreshAccessToken(
     client_secret: clientSecret,
     refresh_token: refreshToken,
   })
-  const response = await fetchImpl('https://api.mercadolibre.com/oauth/token', {
-    method: 'POST',
-    headers: {
-      accept: 'application/json',
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body,
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 6000)
+  let response: Response
+  try {
+    response = await fetchImpl('https://api.mercadolibre.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
   if (!response.ok) throw new Error(`Mercado Libre OAuth ${response.status}`)
   const data = await response.json() as RefreshResponse
   const accessToken = text(data.access_token)

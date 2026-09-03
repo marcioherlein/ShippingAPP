@@ -94,12 +94,20 @@ export function createGoogleShoppingArgentinaProvider(options: GoogleShoppingMar
         location,
         api_key: apiKey,
       })
-      const response = await fetchImpl(`${SERPAPI_ENDPOINT}?${params.toString()}`, {
-        headers: {
-          accept: 'application/json',
-          'user-agent': 'ShippingAPP/2.0',
-        },
-      })
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 6000)
+      let response: Response
+      try {
+        response = await fetchImpl(`${SERPAPI_ENDPOINT}?${params.toString()}`, {
+          headers: {
+            accept: 'application/json',
+            'user-agent': 'ShippingAPP/2.0',
+          },
+          signal: controller.signal,
+        })
+      } finally {
+        clearTimeout(timer)
+      }
       if (!response.ok) throw new Error(`Google Shopping discovery HTTP ${response.status}`)
 
       const data = await response.json() as GoogleShoppingResponse

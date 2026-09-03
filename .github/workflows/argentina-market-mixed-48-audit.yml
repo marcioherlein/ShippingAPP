@@ -7,7 +7,7 @@ on:
       - audit/mixed48-semantics-v2
 
 # Evidence-aware audit semantics v2. The production corpus and request parameters remain unchanged.
-# Rerun marker: 2026-09-02 main d3e6a905 progressive discovery + Fravega structured fallback validation.
+# Rerun marker: 2026-09-02 production 4263bb80 Sony Store Oficial marginal contribution validation.
 permissions:
   contents: read
 

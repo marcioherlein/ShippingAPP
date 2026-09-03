@@ -1,0 +1,32 @@
+name: Diagnose Alibaba user links
+
+on:
+  push:
+    branches:
+      - diag/alibaba-3-user-links-20260903
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
+      INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify diagnostic credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${INTERNAL_API_TOKEN:-}" ] || [ "${#INTERNAL_API_TOKEN}" -lt 32 ]; then
+            echo "::error::INTERNAL_API_TOKEN is missing or invalid."
+            exit 1
+          fi
+      - name: Run production scraper + classifier diagnostics
+        run: node scripts/diagnose-user-alibaba-links.mjs

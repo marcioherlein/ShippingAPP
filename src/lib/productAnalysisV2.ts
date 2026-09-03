@@ -1,4 +1,4 @@
-import { analyzeAlibabaUrl, applyAnalysis, type ProductAnalysis } from './productAnalysis'
+import { applyAnalysis, readAlibabaProduct, startImportAnalysis, type ProductAnalysis } from './productAnalysis'
 import { customsProfileFor, type CustomsProfile } from './customsClassification'
 import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
 import type { FullNcmApiResult } from './fullNcmClient'
@@ -23,28 +23,39 @@ function unclassifiedCustoms(originCountry?: string | null): CustomsProfile {
 }
 
 export async function ingestAlibabaUrlV2(url: string): Promise<ProductAnalysis & { customs: CustomsProfile }> {
-  const base = await analyzeAlibabaUrl(url)
+  // Reading/prefilling the supplier ficha is free. The paid analysis begins only
+  // after the user confirms the product and asks ShippingAPP to analyze it.
+  const base = await readAlibabaProduct(url)
   return { ...base, customs: unclassifiedCustoms(base.product.originCountry) }
 }
 
+async function ensurePaidAnalysis(base: ProductAnalysis): Promise<ProductAnalysis> {
+  if (base.usageReservationId?.trim()) return base
+  return startImportAnalysis(base)
+}
+
 export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<ProductAnalysisV2> {
+  // The credit boundary lives here: this function is reached only when the user
+  // asks to actually analyze the confirmed product. Free intake never reserves
+  // quota. Once reserved, all NCM clarification iterations reuse the same case.
+  const paidBase = await ensurePaidAnalysis(base)
+
   // Alibaba often gives us a very descriptive title but no explicit category.
   // The continuation reservation still represents the same product, so using
-  // the title as classification context is safer than sending an empty category
-  // (which the reservation guard previously rejected before NCM could run).
-  const classificationCategory = base.product.category.trim() || base.product.name.trim()
-  const localCustoms = customsProfileFor(classificationCategory, base.product.originCountry, base.product.name)
+  // the title as classification context is safer than sending an empty category.
+  const classificationCategory = paidBase.product.category.trim() || paidBase.product.name.trim()
+  const localCustoms = customsProfileFor(classificationCategory, paidBase.product.originCountry, paidBase.product.name)
   let customs = localCustoms
   let refinement: ProductAnalysisV2['classificationRefinement']
 
   try {
     const full = await classifyNcmRemote({
-      name: base.product.name,
+      name: paidBase.product.name,
       category: classificationCategory,
-      material: base.product.material ?? null,
-      functionText: base.product.functionText ?? null,
-      description: base.product.description ?? null,
-    }, base.usageReservationId || '') as FullNcmApiResult & {
+      material: paidBase.product.material ?? null,
+      functionText: paidBase.product.functionText ?? null,
+      description: paidBase.product.description ?? null,
+    }, paidBase.usageReservationId || '') as FullNcmApiResult & {
       refinement?: { allowed?: boolean; attempt?: number; maxAttempts?: number }
     }
     customs = mergeFullCustomsProfile(localCustoms, full)
@@ -63,7 +74,7 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
     }
   }
 
-  const { usageReservationId, ...cleanBase } = base
+  const { usageReservationId, ...cleanBase } = paidBase
   const classificationResolved = !!customs.ncmCandidate
     && (customs.classificationConfidence === 'high' || customs.classificationConfidence === 'medium')
     && customs.dutyRatePct !== null
@@ -83,8 +94,9 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
   }
 }
 
+/** Legacy full paid scan kept for old callers; the primary journey uses free intake + enrich. */
 export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
-  return enrichProductAnalysisV2(await analyzeAlibabaUrl(url))
+  return enrichProductAnalysisV2(await readAlibabaProduct(url))
 }
 
 export function applyAnalysisV2(current: Inputs, analysis: ProductAnalysisV2): Inputs {

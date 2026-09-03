@@ -1,4 +1,4 @@
-import { applyAnalysis, readAlibabaProduct, startImportAnalysis, type ProductAnalysis } from './productAnalysis'
+import { analyzeAlibabaUrl, applyAnalysis, readAlibabaProduct, startImportAnalysis, type ProductAnalysis } from './productAnalysis'
 import { customsProfileFor, type CustomsProfile } from './customsClassification'
 import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
 import type { FullNcmApiResult } from './fullNcmClient'
@@ -94,9 +94,13 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
   }
 }
 
-/** Legacy full paid scan kept for old callers; the primary journey uses free intake + enrich. */
+/**
+ * Legacy full paid scan kept for old callers/tests. The primary user journey no
+ * longer uses this helper for intake; it uses `ingestAlibabaUrlV2` (free read)
+ * and starts the paid analysis only after confirmation.
+ */
 export async function analyzeAlibabaUrlV2(url: string): Promise<ProductAnalysisV2> {
-  return enrichProductAnalysisV2(await readAlibabaProduct(url))
+  return enrichProductAnalysisV2(await analyzeAlibabaUrl(url))
 }
 
 export function applyAnalysisV2(current: Inputs, analysis: ProductAnalysisV2): Inputs {

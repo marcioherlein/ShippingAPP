@@ -117,12 +117,27 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
 }
 
-function attributesOf(product: VtexProduct): MlAttribute[] {
+/**
+ * Sony's VTEX catalog currently exposes headphone model identity in both
+ * canonical hyphenated form (WH-1000XM5) and compact SKU form
+ * (WH1000XM5/LMUC). The exact matcher intentionally treats distinct model
+ * codes as hard conflicts, so normalize only Sony's well-known WH/WF compact
+ * headphone prefixes before matching. The prefix is preserved, which keeps
+ * WH1000XM5 and WF1000XM5 distinct.
+ */
+export function normalizeSonyOfficialIdentityText(value: string) {
+  return text(value).replace(/\b(WH|WF)(\d{3,4}XM\d)\b/gi, '$1-$2')
+}
+
+function attributesOf(product: VtexProduct, retailer?: ArgentinaVtexRetailer): MlAttribute[] {
   const rows: MlAttribute[] = []
   const seen = new Set<string>()
+  const normalizeValue = (value: string) => retailer?.id === 'sony-official'
+    ? normalizeSonyOfficialIdentityText(value)
+    : value
   const add = (nameValue: unknown, valuesValue: unknown) => {
     const name = text(nameValue)
-    const values = Array.isArray(valuesValue) ? valuesValue.map(text).filter(Boolean) : []
+    const values = Array.isArray(valuesValue) ? valuesValue.map(text).filter(Boolean).map(normalizeValue) : []
     if (!name || !values.length) return
     const key = `${name.toLowerCase()}=${values.join('|').toLowerCase()}`
     if (seen.has(key)) return
@@ -162,14 +177,15 @@ function candidatesFromProducts(retailer: ArgentinaVtexRetailer, products: VtexP
   const candidates: ArgentinaMarketCandidate[] = []
   const maxCandidates = Math.max(1, Math.min(30, retailer.maxCandidates ?? 12))
   for (const product of products) {
-    const attributes = attributesOf(product)
+    const attributes = attributesOf(product, retailer)
     for (const item of product.items || []) {
       for (const seller of item.sellers || []) {
         const offer = offerOf(seller)
         const priceArs = positiveNumber(offer?.Price)
         if (!priceArs) continue
         if (typeof offer?.AvailableQuantity === 'number' && offer.AvailableQuantity <= 0) continue
-        const title = titleOf(product, item)
+        const rawTitle = titleOf(product, item)
+        const title = retailer.id === 'sony-official' ? normalizeSonyOfficialIdentityText(rawTitle) : rawTitle
         if (!title) continue
         const itemId = text(item.itemId) || text(product.productId) || `unknown-${candidates.length + 1}`
         const sellerId = text(seller.sellerId) || text(seller.sellerName) || 'seller'

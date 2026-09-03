@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { analyzeArgentinaMarketHybrid } from './argentinaMarketOrchestrator'
+import { analyzeArgentinaMarketHybrid, selectFunctionalRelaxedRetailers } from './argentinaMarketOrchestrator'
 import { resetFravegaLandingCacheForTests } from './fravegaLandingMarketProvider'
 
 function json(body: unknown, status = 200) {
@@ -29,6 +29,18 @@ function vtexProducts(title: string, count = 6) {
 }
 
 describe('functional Argentina market subrequest budget', () => {
+  it('uses a small category-aware retailer set only for the relaxed second round', () => {
+    expect(selectFunctionalRelaxedRetailers('raqueta de tenis').map((retailer) => retailer.id)).toEqual([
+      'fravega', 'cetrogar', 'naldo', 'oncity', 'pardo', 'sportline',
+    ])
+    expect(selectFunctionalRelaxedRetailers('auriculares bluetooth').map((retailer) => retailer.id)).toEqual([
+      'fravega', 'cetrogar', 'naldo', 'oncity', 'pardo', 'coppel', 'sony-official',
+    ])
+    expect(selectFunctionalRelaxedRetailers('microondas').map((retailer) => retailer.id)).toEqual([
+      'fravega', 'cetrogar', 'naldo', 'oncity', 'pardo', 'carrefour',
+    ])
+  })
+
   it('produces a live functional benchmark from direct retailers without calling Mercado Libre', async () => {
     resetFravegaLandingCacheForTests()
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
@@ -80,10 +92,14 @@ describe('functional Argentina market subrequest budget', () => {
     expect(result.matchMode).toBe('functional')
     expect(result.status).not.toBe('live')
     expect(urls.some((url) => url.includes('api.mercadolibre.com'))).toBe(false)
-    // Ten direct storefronts, each bounded to Intelligent Search + legacy; the
-    // Frávega public landing may add one request per round. This guard leaves
-    // headroom under Cloudflare's per-request subrequest ceiling.
-    expect(urls.length).toBeLessThanOrEqual(42)
+    // Strict discovery still exercises all ten stores. The relaxed category-only
+    // round is limited to five proven generalists plus Sportline for this sports
+    // category, leaving substantially more headroom for the rest of /api/intake.
+    expect(urls.length).toBeLessThanOrEqual(36)
+    expect(urls.filter((url) => url.includes('coppel.com.ar'))).toHaveLength(2)
+    expect(urls.filter((url) => url.includes('carrefour.com.ar'))).toHaveLength(2)
+    expect(urls.filter((url) => url.includes('easy.com.ar'))).toHaveLength(2)
+    expect(urls.filter((url) => url.includes('store.sony.com.ar'))).toHaveLength(2)
     expect(result.warnings.join(' ')).toContain('Worker subrequest budget')
   })
 })

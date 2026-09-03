@@ -198,3 +198,45 @@ describe('provider-independent Argentina market benchmark engine', () => {
     expect(result.warnings.join(' ')).toContain('deterministic exact matching still gates every accepted comparable')
   })
 })
+
+describe('unauthenticated public-fallback credibility cap', () => {
+  const exactSet = Array.from({ length: 6 }, (_, index) => candidate(
+    `AR${index + 1}`,
+    `Apple iPhone 15 128GB Nuevo ${index + 1}`,
+    1_000_000 + index * 20_000,
+  ))
+
+  it('caps confidence and warns when the listing search used an unauthenticated public retry', async () => {
+    const publicFallbackProvider = provider(exactSet, {
+      async discover() {
+        return {
+          providerId: 'mercadolibre-argentina',
+          sourceLabel: 'Mercado Libre Argentina API · public search fallback after token validation',
+          candidates: exactSet,
+          categoryHint: { categoryId: 'SMARTPHONES', categoryName: 'Smartphones' },
+          warnings: ['MercadoLibre token was validated through /users/me, but listing search used a public retry after Bearer was rejected for that endpoint.'],
+        }
+      },
+    })
+    const result = await runArgentinaMarketBenchmark('Apple iPhone 15 128GB', 'Smartphone', publicFallbackProvider)
+    // Still usable (coverage preserved) but visibly lower-trust.
+    expect(result.status).toBe('live')
+    expect(result.confidence).toBeLessThanOrEqual(45)
+    expect(result.warnings.join(' ')).toMatch(/sin autenticaci/i)
+  })
+
+  it('does NOT cap confidence for an authenticated search', async () => {
+    const authedProvider = provider(exactSet, {
+      async discover() {
+        return {
+          providerId: 'mercadolibre-argentina',
+          sourceLabel: 'Mercado Libre Argentina API · authenticated search',
+          candidates: exactSet,
+          categoryHint: { categoryId: 'SMARTPHONES', categoryName: 'Smartphones' },
+        }
+      },
+    })
+    const result = await runArgentinaMarketBenchmark('Apple iPhone 15 128GB', 'Smartphone', authedProvider)
+    expect(result.warnings.join(' ')).not.toMatch(/sin autenticaci/i)
+  })
+})

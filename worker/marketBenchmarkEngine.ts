@@ -27,6 +27,10 @@ const EXACT_DISCOVERY_GENERIC_TOKENS = new Set([
 ])
 
 const EXACT_DISCOVERY_SPEC_TOKEN = /^\d+(?:[.,]\d+)?(?:tb|gb|mb|mah|w|kw|v|hz|kg|g|l|ml|cm|mm|pa|bar|mp|inch)$/
+// Confidence ceiling for a benchmark whose listing search used an unauthenticated public
+// retry after the token was rejected by the endpoint. Keeps it lower-trust than an
+// authenticated benchmark while remaining usable for screening.
+const UNAUTHENTICATED_FALLBACK_CONFIDENCE_CAP = 45
 
 function buildExactDiscoveryQuery(productName: string, category: string) {
   const fallback = buildMarketQuery(productName, category)
@@ -225,6 +229,17 @@ export async function runArgentinaMarketBenchmark(
     ? Math.min(80, Math.max(0, baseConfidence - 10))
     : baseConfidence
 
+  // Credibility gate: if the listing search fell back to an UNAUTHENTICATED public retry
+  // (the validated token was rejected by the search endpoint), the price is still usable for
+  // screening but must not present as a full-trust authenticated benchmark. Cap its
+  // confidence and state plainly that it is an unauthenticated source. We keep it eligible
+  // for a 'live' status (coverage) but visibly lower-trust.
+  const unauthenticatedFallback = /public search fallback/i.test(discovery.sourceLabel || '')
+  const finalConfidence = unauthenticatedFallback ? Math.min(confidence, UNAUTHENTICATED_FALLBACK_CONFIDENCE_CAP) : confidence
+  if (unauthenticatedFallback) {
+    warnings.push('Benchmark de mercado obtenido por búsqueda pública sin autenticación (el token fue rechazado por el endpoint de búsqueda): se limita la confianza y no debe tratarse como un benchmark autenticado.')
+  }
+
   if (priced.length > accepted.length) warnings.push(`${priced.length - accepted.length} price outlier(s) excluded by IQR screening.`)
   const fallbackPriceCount = accepted.length - effectivePriceCount
   if (fallbackPriceCount > 0) warnings.push(`${fallbackPriceCount} comparable(s) use provider listing price because effective price was unavailable.`)
@@ -250,7 +265,7 @@ export async function runArgentinaMarketBenchmark(
     medianArs,
     p75Ars,
     suggestedPriceArs,
-    confidence,
+    confidence: finalConfidence,
     source: `${discovery.sourceLabel}${resolverSuffix}`,
     priceQuality,
     comparables: accepted.sort((a, b) => b.score - a.score).slice(0, 8),

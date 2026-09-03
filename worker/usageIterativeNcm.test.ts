@@ -40,11 +40,11 @@ function request(path: string, init: RequestInit = {}) {
   return new Request(`https://shippingapp.test${path}`, init)
 }
 
-function analyzeRequest(key: string) {
+function analyzeRequest(key: string, url = 'https://www.alibaba.com/product-detail/cabinet-lock.html') {
   return request('/api/analyze', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'idempotency-key': key },
-    body: JSON.stringify({ url: 'https://www.alibaba.com/product-detail/cabinet-lock.html' }),
+    body: JSON.stringify({ url }),
   })
 }
 
@@ -54,6 +54,14 @@ const product = {
   material: 'zinc alloy',
   functionText: 'lock',
   description: 'Mechanical cabinet and drawer lock',
+}
+
+const thermo = {
+  name: '45oz 1350ml Large Capacity Stainless Steel Water Jug Leak Proof Water Bottle Vacuum Sport Water Bottle for Outdoor',
+  category: '',
+  material: 'stainless steel',
+  functionText: '',
+  description: 'Stainless steel vacuum water bottle',
 }
 
 function continuation(reservationId: string, facts = product) {
@@ -79,6 +87,16 @@ function highResult() {
     status: 'candidate',
     code: '8301.30.00',
     label: 'Cerraduras de los tipos utilizados en muebles',
+    confidence: 'high',
+    missingFacts: [],
+  }
+}
+
+function highThermoResult() {
+  return {
+    status: 'candidate',
+    code: '9617.00.10',
+    label: 'Termos y demás recipientes isotérmicos montados y aislados por vacío',
     confidence: 'high',
     missingFacts: [],
   }
@@ -124,6 +142,47 @@ describe('iterative NCM clarification session', () => {
 
     const row = sqlite.prepare('SELECT status, continuation_attempt_no FROM credit_reservations WHERE id = ?').get(reservationId) as any
     expect(row).toMatchObject({ status: 'settled', continuation_attempt_no: 2 })
+    const usage = sqlite.prepare('SELECT credits_consumed FROM usage_periods WHERE user_id = ?').get(USER) as any
+    expect(Number(usage.credits_consumed)).toBe(1)
+    const consumes = sqlite.prepare("SELECT COUNT(*) AS count FROM credit_ledger WHERE user_id = ? AND entry_type = 'consume'").get(USER) as any
+    expect(Number(consumes.count)).toBe(1)
+  })
+
+  it('lets an already-paid thermo finish NCM even when the user has 0 credits left and Alibaba category was blank', async () => {
+    sqlite.prepare("UPDATE plans SET monthly_credits=1 WHERE code='free'").run()
+    const analyzed = await withUsageEntitlement(
+      analyzeRequest('thermo-zero-credit', 'https://www.alibaba.com/product-detail/vacuum-water-bottle.html'),
+      { DB: db },
+      identity,
+      async () => Response.json({ product: thermo }),
+    )
+    const reservationId = String(analyzed.headers.get(USAGE_RESERVATION_HEADER))
+    expect(analyzed.status).toBe(200)
+    expect(analyzed.headers.get(CREDITS_REMAINING_HEADER)).toBe('0')
+
+    const provider = vi.fn()
+      .mockResolvedValueOnce(Response.json(lowResult('Función/uso principal')))
+      .mockResolvedValueOnce(Response.json(highThermoResult()))
+
+    // The client substitutes the descriptive title when Alibaba omits category.
+    // The continuation remains bound to the same product and costs zero credits.
+    const classificationFacts = { ...thermo, category: thermo.name }
+    const first = await withUsageEntitlement(continuation(reservationId, classificationFacts), { DB: db }, identity, provider)
+    expect(first.status).toBe(200)
+    expect(first.headers.get(CREDITS_REMAINING_HEADER)).toBe('0')
+    expect((await first.json() as any).refinement).toEqual({ allowed: true, attempt: 1, maxAttempts: 3 })
+
+    const clarified = {
+      ...classificationFacts,
+      functionText: 'conservar y transportar bebidas frías o calientes',
+      description: `${thermo.description}. Aclaración del usuario: conservar y transportar bebidas frías o calientes`,
+    }
+    const second = await withUsageEntitlement(continuation(reservationId, clarified), { DB: db }, identity, provider)
+    expect(second.status).toBe(200)
+    expect(second.headers.get(CREDITS_REMAINING_HEADER)).toBe('0')
+    expect((await second.json() as any).refinement).toEqual({ allowed: false, attempt: 2, maxAttempts: 3 })
+    expect(provider).toHaveBeenCalledTimes(2)
+
     const usage = sqlite.prepare('SELECT credits_consumed FROM usage_periods WHERE user_id = ?').get(USER) as any
     expect(Number(usage.credits_consumed)).toBe(1)
     const consumes = sqlite.prepare("SELECT COUNT(*) AS count FROM credit_ledger WHERE user_id = ? AND entry_type = 'consume'").get(USER) as any

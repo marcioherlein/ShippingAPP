@@ -3,10 +3,13 @@ import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { usd } from '../lib/format'
 import {
+  applyClassificationClarification,
+  classificationClarificationTarget,
   missingClassificationConfirmationFields,
   missingQuoteConfirmationFields,
   productConfirmationFromAnalysis,
   resolvedProductVolumeCbm,
+  type ClassificationClarificationTarget,
   type ProductConfirmationData,
 } from '../lib/productConfirmation'
 
@@ -124,6 +127,41 @@ function knownFact(label: string, value: React.ReactNode, key: string) {
   return <div className="pipeline-known-fact" key={key}><span>{label}</span><b>{value}</b></div>
 }
 
+function clarificationCopy(analysis: ProductAnalysisV2, target: ClassificationClarificationTarget) {
+  const name = analysis.product.name.toLocaleLowerCase('es')
+  if (target === 'functionText') {
+    const placeholder = /therm|termo|vacuum|water bottle|bottle|jug|flask/.test(name)
+      ? 'Ej. Se usa para conservar y transportar bebidas frías o calientes; es un recipiente térmico reutilizable.'
+      : /lock|cabinet|drawer|cerradur/.test(name)
+        ? 'Ej. Se usa para asegurar puertas de gabinetes y cajones mediante una cerradura mecánica.'
+        : 'Ej. Se usa principalmente para…'
+    return {
+      question: '¿Para qué se usa este producto?',
+      helper: 'Con una frase corta alcanza. Necesito la función sólo para distinguir la posición arancelaria correcta.',
+      placeholder,
+    }
+  }
+  if (target === 'material') {
+    return {
+      question: '¿De qué material está hecho principalmente?',
+      helper: 'Indicá el material o composición dominante. No hace falta copiar toda la ficha técnica.',
+      placeholder: 'Ej. Acero inoxidable con tapa plástica y junta de silicona.',
+    }
+  }
+  if (target === 'category') {
+    return {
+      question: '¿Qué tipo de producto es?',
+      helper: 'Una categoría común alcanza; no necesitás conocer el nombre aduanero.',
+      placeholder: 'Ej. Botella térmica / termo reutilizable.',
+    }
+  }
+  return {
+    question: '¿Qué detalle técnico distingue a este producto?',
+    helper: 'Respondé sólo el dato que falta para evitar una clasificación dudosa.',
+    placeholder: 'Ej. Tecnología, mecanismo, material o uso principal que lo diferencia.',
+  }
+}
+
 export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
@@ -157,6 +195,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     && refinement.attempt >= refinement.maxAttempts
   const identityEdited = !sameIdentity(draft, sourceDraft)
   const classifierAskedForMore = !classificationResolved && analysis.customs.missingFacts.length > 0
+  const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
+  const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
   const canConfirm = classificationResolved
     ? quoteMissing.length === 0
@@ -170,7 +210,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const submitConfirmation = () => {
     const note = clarification.replace(/\s+/g, ' ').trim()
     const next = note
-      ? { ...draft, description: [draft.description.trim(), `Aclaración del usuario: ${note}`].filter(Boolean).join('. ') }
+      ? applyClassificationClarification(draft, note, analysis.customs.missingFacts)
       : draft
     onConfirm(next)
     setClarification('')
@@ -186,25 +226,25 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <h2>{classificationResolved ? 'La NCM ya está resuelta. Sólo me falta cerrar la logística.' : 'Esto es lo que entendí. ¿Está bien?'}</h2>
         <p>{classificationResolved
           ? 'No vuelvo a pedirte información técnica que ya usamos. Completá únicamente los datos comerciales o físicos que Alibaba no pudo confirmar.'
-          : 'No hace falta llenar una ficha aduanera. Confirmá la identidad que detecté; si el nomenclador necesita distinguir entre dos posiciones, te voy a preguntar sólo ese dato.'}</p>
+          : 'Confirmá el producto que detecté. Si para clasificarlo falta un dato puntual, te hago una sola pregunta clara y seguimos.'}</p>
       </div>
 
       <div className="pipeline-product-card progressive-product-card">
         {!classificationResolved ? <>
           <div className="pipeline-understood-card">
-            <span className="eyebrow">Lo que entendí</span>
-            <p className="pipeline-understood-sentence">Entendí que el producto es <strong>“{draft.productName || 'todavía no identificado'}”</strong>.</p>
+            <span className="eyebrow">Producto detectado</span>
+            <p className="pipeline-understood-sentence"><strong>“{draft.productName || 'todavía no identificado'}”</strong></p>
             <div className="pipeline-known-grid">
-              {knownFact('Tipo / categoría detectada', draft.category, 'category')}
-              {knownFact('Material detectado', draft.material, 'material')}
-              {knownFact('Función detectada', draft.functionText, 'function')}
-              {knownFact('Origen detectado', draft.originCountry, 'origin')}
+              {knownFact('Tipo / categoría', draft.category, 'category')}
+              {knownFact('Material', draft.material, 'material')}
+              {knownFact('Función', draft.functionText, 'function')}
+              {knownFact('Origen', draft.originCountry, 'origin')}
               {knownFact('Precio proveedor', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
-              {knownFact('MOQ detectado', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
             </div>
             {draft.description && draft.description !== draft.productName && <details className="pipeline-source-detail"><summary>Ver detalle técnico leído</summary><p>{draft.description}</p></details>}
             <div className="pipeline-understood-actions">
-              <button type="button" className="pipeline-secondary" aria-expanded={showCorrections} onClick={() => setShowCorrections((value) => !value)}>{showCorrections ? 'Ocultar correcciones' : 'Algo no está bien / quiero corregir'}</button>
+              <button type="button" className="pipeline-secondary" aria-expanded={showCorrections} onClick={() => setShowCorrections((value) => !value)}>{showCorrections ? 'Ocultar correcciones' : 'Corregir datos del producto'}</button>
             </div>
           </div>
 
@@ -218,19 +258,31 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>}
 
           {classifierAskedForMore && !refinementExhausted && <div className="pipeline-clarification-card">
-            <span className="eyebrow">Para cerrar la posición arancelaria</span>
-            <b>Me falta una aclaración concreta.</b>
-            <ul>{analysis.customs.missingFacts.slice(0, 5).map((fact) => <li key={fact}>{fact}</li>)}</ul>
-            <label><span>Respondeme en tus palabras</span><textarea value={clarification} onChange={(event) => setClarification(event.target.value.slice(0, 1000))} rows={3} placeholder="Ej. Sí, es automático mecánico; la caja es de acero inoxidable y no tiene funciones de smartwatch." /></label>
+            <span className="eyebrow">Una pregunta para terminar</span>
+            <div className="pipeline-clarification-copy">
+              <h3>{clarificationUi.question}</h3>
+              <p>{clarificationUi.helper}</p>
+            </div>
+            <label className="pipeline-clarification-input" htmlFor="classification-clarification">
+              <span>Tu respuesta</span>
+              <textarea
+                id="classification-clarification"
+                value={clarification}
+                onChange={(event) => setClarification(event.target.value.slice(0, 1000))}
+                rows={3}
+                placeholder={clarificationUi.placeholder}
+                aria-describedby="classification-clarification-help"
+              />
+              <small id="classification-clarification-help">Una frase corta alcanza. Esta aclaración no consume otro crédito.</small>
+            </label>
           </div>}
 
-          {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Todavía no puedo nomenclar.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
-          {classifierAskedForMore && !clarificationSatisfied && !refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Necesito tu respuesta antes de reintentar.</b><span>Así evito repetir la misma clasificación dudosa.</span></div>}
-          {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No voy a repetir la misma clasificación indefinidamente.</b><span>Se usaron {refinement?.attempt} de {refinement?.maxAttempts} intentos de aclaración sin cerrar una NCM confiable. Revisá la identidad del producto o iniciá un caso nuevo; no se consumieron créditos extra por estos intentos.</span></div>}
+          {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Todavía no puedo clasificarlo.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
+          {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No pude cerrar una clasificación confiable.</b><span>Se usaron {refinement?.attempt} de {refinement?.maxAttempts} intentos de aclaración. Revisá la identidad del producto o iniciá un caso nuevo; estos intentos no consumieron créditos extra.</span></div>}
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Usar esta aclaración y reclasificar' : 'Sí, es este producto · clasificar'} <span>→</span></button>}
-            <button type="button" className="pipeline-secondary" onClick={onEditProduct}>{refinementExhausted ? 'Revisar / elegir producto' : 'Elegir otro producto'}</button>
+            {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <span>→</span></button>}
+            <button type="button" className="pipeline-secondary" onClick={onEditProduct}>{refinementExhausted ? 'Revisar / cambiar producto' : 'Cambiar producto'}</button>
           </div>
         </> : <>
           <div className="pipeline-classification-ready">
@@ -277,7 +329,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
             <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>Cotizar con estos datos <span>→</span></button>
-            <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Elegir otro producto</button>
+            <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
           </div>
         </>}
       </div>
@@ -317,7 +369,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
         <div className="pipeline-confirm-actions">
           <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <span>→</span></button>
-          <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Elegir otro producto</button>
+          <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
         </div>
       </div>}
 

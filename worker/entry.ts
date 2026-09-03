@@ -211,19 +211,50 @@ function confirmedProductAnalysis(body: unknown) {
   }
 }
 
-async function productRead(request: Request, env: Record<string, unknown>) {
+export async function productRead(
+  request: Request,
+  env: Record<string, unknown>,
+  reader: (url: URL, env: any) => Promise<unknown> = resolveAlibabaSelfFirst,
+) {
   let body: any = null
   try { body = await request.json() } catch { body = null }
   const url = parseAlibabaSelfFirstUrl(body?.url)
-  if (!url) return Response.json({ error: 'Ingresá un link HTTPS válido de Alibaba.' }, { status: 400 })
-  try {
-    // Deliberately no market, FX or NCM here. This is only the free supplier-ficha
-    // prefill. If all extractors fail, resolveAlibabaSelfFirst returns a partial
-    // ficha and the UI asks the user for the missing fields instead of charging.
-    return Response.json(await resolveAlibabaSelfFirst(url, env as any))
-  } catch {
-    return Response.json({ error: 'No pude leer esa publicación. Podés reintentar o describir el producto sin link.' }, { status: 503 })
+  if (!url) {
+    // An unusable link is a permanent client error, not a transient provider failure.
+    return Response.json(
+      { error: 'Ingresá un link HTTPS válido de Alibaba.', code: 'invalid_link', retryable: false },
+      { status: 400 },
+    )
   }
+
+  // Deliberately no market, FX or NCM here — this is only the free supplier-ficha prefill.
+  // resolveAlibabaSelfFirst catches provider-level failures internally and returns a partial
+  // ficha (the UI then asks for missing fields), so a THROW reaching here is exceptional: a
+  // Worker CPU/time limit, an unhandled provider exception, or a transient upstream blip. We
+  // give it ONE bounded retry, then surface a structured, retryable error instead of a bare
+  // generic 503 so a transient failure never becomes a permanently broken flow.
+  let lastError: unknown = null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const data = await reader(url, env as any)
+      return Response.json(data)
+    } catch (error) {
+      lastError = error
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400))
+    }
+  }
+  // Provider-stage diagnostic metadata for debugging — no secrets, just the failure class.
+  const detail = lastError instanceof Error ? lastError.message.slice(0, 300) : 'unknown error'
+  return Response.json(
+    {
+      error: 'La lectura de Alibaba falló de forma transitoria. Podés reintentar en unos segundos o describir el producto sin link; no se te cobró nada.',
+      code: 'transient_provider_error',
+      retryable: true,
+      stage: 'alibaba_product_read',
+      detail,
+    },
+    { status: 503 },
+  )
 }
 
 /**

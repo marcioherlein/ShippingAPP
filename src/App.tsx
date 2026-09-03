@@ -1,12 +1,10 @@
 import React, { useMemo, useRef, useState } from 'react'
 import UrlAnalyzer from './components/UrlAnalyzer'
-import HotProductsSection from './components/HotProductsSection'
 import OwnedProductIntake from './components/OwnedProductIntake'
 import CalculationPipeline, { type CalculationPipelineStatus, type CalculationPipelineSummary } from './components/CalculationPipeline'
 import ImportQuoteFlow, { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
 import UiIcon from './components/UiIcon'
-import { getCachedHotProducts, hotProductToQuotePrefill, type QuotePrefill } from './lib/hotProducts'
-import type { HotProduct } from './data/hotProducts'
+import type { QuotePrefill } from './lib/hotProducts'
 import { enrichProductAnalysisV2, ingestAlibabaUrlV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
 import { getJourneyBudgetError } from './lib/journeyValidation'
@@ -30,21 +28,21 @@ function purposeLabel(value: ImportPurpose | null) {
   if (value === 'resale') return 'Reventa'
   if (value === 'own_use') return 'Uso propio'
   if (value === 'unknown') return 'Todavía no sé'
-  return 'Pendiente'
+  return 'Sin responder'
 }
 
 function entityLabel(value: ImportEntityType | null) {
   if (value === 'company') return 'Empresa'
   if (value === 'individual') return 'Persona humana'
   if (value === 'unknown') return 'Todavía no sé'
-  return 'Pendiente'
+  return 'Sin responder'
 }
 
 function signatureLabel(value: SignatureAnswer | null) {
   if (value === 'yes') return 'Sí, tengo firma/importador'
   if (value === 'no') return 'No tengo firma/importador'
   if (value === 'unknown') return 'Todavía no sé'
-  return 'Pendiente'
+  return 'Sin responder'
 }
 
 function sensitiveLabel(value: SensitiveProductCategory | null) {
@@ -55,7 +53,7 @@ function sensitiveLabel(value: SensitiveProductCategory | null) {
   if (value === 'medicines') return 'Medicamentos'
   if (value === 'supplements') return 'Suplementos'
   if (value === 'unknown') return 'Todavía no sé'
-  return 'Pendiente'
+  return 'Sin responder'
 }
 
 function makeAnalysisPrefill(
@@ -124,16 +122,12 @@ export default function App() {
   const [unitsMin, setUnitsMin] = useState(50)
   const [unitsMax, setUnitsMax] = useState(200)
   const [analysis, setAnalysis] = useState<ProductAnalysisV2 | null>(null)
-  const [selectedHotProduct, setSelectedHotProduct] = useState<HotProduct | null>(null)
-  const [selectionLoading, setSelectionLoading] = useState(false)
-  const [selectionError, setSelectionError] = useState('')
   const [calculationStatus, setCalculationStatus] = useState<CalculationPipelineStatus>('confirm')
   const [pipelineStage, setPipelineStage] = useState(0)
   const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
 
-  const hotProducts = useMemo(() => getCachedHotProducts(8), [])
   const operationAnswered = purpose !== null && entityType !== null && signature !== null && sensitiveCategory !== null
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
   const budgetAnswered = budgetMode !== null && budgetError === null
@@ -160,15 +154,6 @@ export default function App() {
     return makeAnalysisPrefill(analysis, budgetMode, budgetUsd, sensitiveCategory)
   }, [analysis, budgetMode, budgetUsd, sensitiveCategory])
 
-  const selectedPrefill = useMemo<QuotePrefill | null>(() => {
-    if (analysisPrefill) return analysisPrefill
-    if (selectedHotProduct) {
-      const base = hotProductToQuotePrefill(selectedHotProduct)
-      return { ...base, budgetUsd: budgetMode === 'budget' ? budgetUsd : base.budgetUsd }
-    }
-    return null
-  }, [selectedHotProduct, analysisPrefill, budgetMode, budgetUsd])
-
   const quoteSetup = useMemo<JourneyQuoteSetup>(() => ({
     budgetUsd: budgetMode === 'budget' ? budgetUsd : 0,
     quantity: budgetMode === 'units' ? Math.max(unitsMin, Math.round((unitsMin + unitsMax) / 2)) : undefined,
@@ -186,20 +171,17 @@ export default function App() {
     setPipelineSummary(null)
     setPipelineBlocker(null)
     setCalculationInputKey(null)
-    setSelectionError('')
   }
 
   const chooseIntent = (next: Exclude<EntryIntent, null>) => {
     setIntent(next)
     setAnalysis(null)
-    setSelectedHotProduct(null)
     resetPipeline()
     setStep(1)
   }
 
   const handleAnalysis = (next: ProductAnalysisV2) => {
     setAnalysis(next)
-    setSelectedHotProduct(null)
     resetPipeline()
     setStep(3)
     window.setTimeout(() => scrollElementIntoView(document.getElementById('case-confirmation')), 0)
@@ -218,26 +200,7 @@ export default function App() {
     handleAnalysis(createManualProductAnalysis('manual://product', description))
   }
 
-  const handleHotProductQuote = async (product: HotProduct) => {
-    if (selectionLoading) return
-    setSelectedHotProduct(product)
-    setSelectionLoading(true)
-    setSelectionError('')
-    resetPipeline()
-    try {
-      const next = await ingestAlibabaUrlV2(product.productUrl)
-      handleAnalysis(next)
-    } catch (error) {
-      setAnalysis(createManualProductAnalysis(product.productUrl))
-      setSelectionError(error instanceof Error ? `${error.message} Podés completar sólo lo que falte abajo.` : 'No pudimos hacer la ingesta profunda. Podés completar sólo lo que falte abajo.')
-      window.setTimeout(() => scrollElementIntoView(document.getElementById('case-confirmation')), 0)
-    } finally {
-      setSelectionLoading(false)
-    }
-  }
-
   const editSelectedProduct = () => {
-    setSelectedHotProduct(null)
     resetPipeline()
     setStep(3)
     setAnalysis(null)
@@ -422,15 +385,13 @@ export default function App() {
     setSensitiveCategory(null)
     setBudgetMode(null)
     setAnalysis(null)
-    setSelectedHotProduct(null)
-    setSelectionLoading(false)
     resetPipeline()
     scrollWindowToTop()
   }
 
   const productStatusLabel = analysis
-    ? effectiveCalculationStatus === 'ready' ? 'Calculado' : effectiveCalculationStatus === 'processing' ? 'Procesando' : effectiveCalculationStatus === 'blocked' ? 'Falta una respuesta' : 'Esperando confirmación'
-    : selectionLoading ? 'Leyendo publicación' : intent === 'have_product' && step >= 3 ? 'Esperando producto' : 'Pendiente'
+    ? effectiveCalculationStatus === 'ready' ? 'Calculado' : effectiveCalculationStatus === 'processing' ? 'Procesando' : effectiveCalculationStatus === 'blocked' ? 'Falta una respuesta' : 'Listo para revisar'
+    : step >= 3 ? 'Elegí o cargá un producto' : 'Todavía no elegido'
 
   return <main className="journey-app" id="home">
     <header className="journey-topbar">
@@ -462,14 +423,14 @@ export default function App() {
 
         {intent === null ? <div className="journey-choice-grid three">
           <button type="button" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Tengo una publicación, proveedor o sé qué quiero traer.</small></button>
-          <button type="button" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y ShippingAPP busca opciones en Alibaba.</small></button>
-          <button type="button" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero descubrir</b><small>Buscá en Alibaba o explorá oportunidades listas para cotizar.</small></button>
-        </div> : <div className="journey-bubble user"><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar oportunidades.'}</b><button type="button" onClick={() => setStep(0)}>Cambiar</button></div></div>}
+          <button type="button" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y ShippingAPP busca opciones reales en Alibaba.</small></button>
+          <button type="button" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Buscá ideas de producto usando la misma búsqueda real, sin catálogo cacheado.</small></button>
+        </div> : <div className="journey-bubble user"><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={() => setStep(0)}>Cambiar</button></div></div>}
 
         {intent && <>
           <div className="journey-bubble assistant">
             <span className="journey-avatar">S</span>
-            <div><b>Antes de cotizar necesito entender cómo vas a importar.</b><p>Estas respuestas pueden cambiar impuestos, gastos y requisitos. Si algo no lo sabés, marcá “No sé” y lo dejamos visible como pendiente.</p></div>
+            <div><b>Antes de cotizar necesito entender cómo vas a importar.</b><p>Estas respuestas pueden cambiar impuestos, gastos y requisitos. Si algo no lo sabés, marcá “No sé”; no voy a disfrazarlo como un dato confirmado.</p></div>
           </div>
 
           <section className={`journey-question-card${step === 1 ? ' active' : ''}`}>
@@ -478,7 +439,7 @@ export default function App() {
               <div><label>¿Para qué lo traés?</label><div className="journey-chip-row"><button className={purpose === 'resale' ? 'selected' : ''} onClick={() => setPurpose('resale')} type="button">Reventa</button><button className={purpose === 'own_use' ? 'selected' : ''} onClick={() => setPurpose('own_use')} type="button">Uso propio</button><button className={purpose === 'unknown' ? 'selected' : ''} onClick={() => setPurpose('unknown')} type="button">No sé</button></div></div>
               <div><label>¿Quién importa?</label><div className="journey-chip-row"><button className={entityType === 'company' ? 'selected' : ''} onClick={() => setEntityType('company')} type="button">Empresa</button><button className={entityType === 'individual' ? 'selected' : ''} onClick={() => setEntityType('individual')} type="button">Persona</button><button className={entityType === 'unknown' ? 'selected' : ''} onClick={() => setEntityType('unknown')} type="button">No sé</button></div></div>
               <div><label>¿Tenés firma/importador para operar?</label><div className="journey-chip-row"><button className={signature === 'yes' ? 'selected' : ''} onClick={() => setSignature('yes')} type="button">Sí</button><button className={signature === 'no' ? 'selected' : ''} onClick={() => setSignature('no')} type="button">No</button><button className={signature === 'unknown' ? 'selected' : ''} onClick={() => setSignature('unknown')} type="button">No sé</button></div></div>
-              <div><label htmlFor="journey-sensitive-category">¿Es una categoría sensible?</label><select id="journey-sensitive-category" value={sensitiveCategory || ''} onChange={(event) => setSensitiveCategory(event.target.value as SensitiveProductCategory)}><option value="" disabled>Elegir</option><option value="none">No</option><option value="food">Alimentos</option><option value="toys">Juguetes</option><option value="cosmetics">Cosméticos</option><option value="medicines">Medicamentos</option><option value="supplements">Suplementos</option><option value="unknown">No sé</option></select></div>
+              <div><label htmlFor="journey-sensitive-category">¿Qué tipo de producto es?</label><small>Esto sirve para detectar si hay intervención especial. Si no sabés, elegí “No sé”.</small><select id="journey-sensitive-category" value={sensitiveCategory || ''} onChange={(event) => setSensitiveCategory(event.target.value as SensitiveProductCategory)}><option value="" disabled>Elegir una opción</option><option value="none">Ninguna de estas categorías</option><option value="food">Alimentos</option><option value="toys">Juguetes</option><option value="cosmetics">Cosméticos</option><option value="medicines">Medicamentos</option><option value="supplements">Suplementos</option><option value="unknown">No sé</option></select></div>
               <button className="journey-primary-action" type="button" disabled={!operationAnswered} onClick={continueOperation}>Seguir con presupuesto <span><UiIcon name="arrow-right" size={18} /></span></button>
             </div> : <div className="journey-complete-row"><span>{purposeLabel(purpose)}</span><span>{entityLabel(entityType)}</span><span>{signatureLabel(signature)}</span><span>{sensitiveLabel(sensitiveCategory)}</span></div>}
           </section>
@@ -486,7 +447,7 @@ export default function App() {
           {step >= 2 && <>
             <div className="journey-bubble assistant">
               <span className="journey-avatar">S</span>
-              <div><b>Ahora definamos el tamaño posible de la operación.</b><p>USD 1.000, USD 10.000 y USD 50.000 son problemas logísticos distintos. También podés pensar en un rango de unidades o decir que todavía no lo sabés.</p></div>
+              <div><b>Ahora definamos el tamaño posible de la operación.</b><p>Podés darme presupuesto, rango de unidades o decir que todavía no lo sabés.</p></div>
             </div>
             <section className={`journey-question-card${step === 2 ? ' active' : ''}`}>
               <div className="journey-question-head"><span>02</span><div><b>Presupuesto o rango</b><small>Esto limita las cantidades que vale la pena simular.</small></div>{step > 2 && <button type="button" onClick={() => setStep(2)}>Editar</button>}</div>
@@ -494,13 +455,13 @@ export default function App() {
                 <div className="journey-choice-grid budget">
                   <button className={budgetMode === 'budget' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('budget')}><b>Tengo presupuesto</b><small>Quiero maximizar lo que puedo traer sin pasarme.</small></button>
                   <button className={budgetMode === 'units' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('units')}><b>Tengo rango de unidades</b><small>Sé más o menos cuántas quiero probar.</small></button>
-                  <button className={budgetMode === 'unknown' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('unknown')}><b>Todavía no sé</b><small>Calculame escenarios para entender el orden de magnitud.</small></button>
+                  <button className={budgetMode === 'unknown' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('unknown')}><b>Todavía no sé</b><small>Quiero entender primero el orden de magnitud.</small></button>
                 </div>
-                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" min="1" step="500" value={budgetUsd} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setBudgetUsd(Number(event.target.value))} /></div><em>Usamos costo final estimado, no sólo compra FOB.</em></label>}
-                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Desde</span><input type="number" min="1" step="1" value={unitsMin} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setUnitsMin(Number(event.target.value))} /></label><label><span>Hasta</span><input type="number" min="1" step="1" value={unitsMax} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setUnitsMax(Number(event.target.value))} /></label></div>}
+                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" min="1" step="500" value={budgetUsd} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setBudgetUsd(Number(event.target.value))} /></div><em>Incluye compra, flete e impuestos estimados.</em></label>}
+                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" min="1" step="1" value={unitsMin} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setUnitsMin(Number(event.target.value))} /></label><label><span>Máximo de unidades</span><input type="number" min="1" step="1" value={unitsMax} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onChange={(event) => setUnitsMax(Number(event.target.value))} /></label></div>}
                 {budgetError && <div className="pipeline-warning" id="journey-budget-error" role="alert"><b>Revisá presupuesto o rango.</b><span>{budgetError}</span></div>}
                 <button className="journey-primary-action" type="button" disabled={!budgetAnswered} onClick={continueBudget}>Seguir con el producto <span><UiIcon name="arrow-right" size={18} /></span></button>
-              </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : 'Cantidad/presupuesto por definir'}</span></div>}
+              </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : 'Todavía sin cantidad definida'}</span></div>}
             </section>
           </>}
 
@@ -508,28 +469,16 @@ export default function App() {
             <div className="journey-bubble assistant">
               <span className="journey-avatar">S</span>
               <div>
-                <b>{intent === 'have_product' ? '¿Tenés el link o preferís contarme qué producto es?' : intent === 'search_product' ? 'Describime el producto como se lo explicarías a una persona.' : 'Buscá en Alibaba o elegí una oportunidad lista.'}</b>
+                <b>{intent === 'have_product' ? '¿Tenés el link o preferís contarme qué producto es?' : '¿Qué producto querés buscar?'}</b>
                 <p>{intent === 'have_product'
-                  ? 'Si pegás el link, intento traer los datos automáticamente. Si no, describilo en una frase. En ambos casos confirmamos lo que entendí y sólo te pregunto lo imprescindible.'
-                  : intent === 'search_product'
-                    ? 'Podés escribir “buscame paletas de pádel de carbono hasta USD 30 y MOQ menor a 100”, pegar un link o describir lo que necesitás.'
-                    : 'Escribí cualquier producto para buscarlo en Alibaba. Si sólo querés explorar, abajo siguen disponibles oportunidades cacheadas sin iniciar una búsqueda nueva.'}</p>
+                  ? 'Pegá el link de Alibaba o describí el producto. Después confirmamos sólo la información que realmente haga falta.'
+                  : 'Escribí producto + material/uso y, si querés, precio máximo o MOQ. También podés pegar directamente un link de Alibaba.'}</p>
               </div>
             </div>
 
             {intent === 'have_product' && !analysis && <div className="journey-product-surface"><OwnedProductIntake onAlibabaLink={handleOwnedProductLink} onDescribeProduct={handleOwnedProductDescription} /></div>}
 
-            {intent === 'search_product' && <div className="journey-product-surface"><UrlAnalyzer deferCalculation onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>}
-
-            {intent === 'discover' && <>
-              <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode="discovery" onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>
-              <div className="journey-product-surface">
-                <div className="journey-section-heading"><span className="eyebrow">O explorar sin buscar</span><h2>Oportunidades cacheadas</h2><p>Al elegir una, ShippingAPP abre la publicación real y completa lo que pueda; cualquier faltante se confirma con preguntas puntuales.</p></div>
-                <HotProductsSection products={hotProducts} selectedId={selectedHotProduct?.id ?? null} onQuote={handleHotProductQuote} />
-                {selectionLoading && <div className="journey-selection-status"><span className="journey-spinner" /><div><b>Leyendo la publicación seleccionada</b><p>Estoy intentando completar identidad, precio, MOQ y logística antes de pedirte confirmación.</p></div></div>}
-                {selectionError && <div className="pipeline-warning"><b>La fuente automática quedó incompleta.</b><span>{selectionError}</span></div>}
-              </div>
-            </>}
+            {(intent === 'search_product' || intent === 'discover') && <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode={intent === 'discover' ? 'discovery' : 'intake'} onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>}
           </>}
         </>}
       </div>
@@ -537,16 +486,16 @@ export default function App() {
       <aside className="journey-case-summary">
         <div className="journey-summary-sticky">
           <span className="eyebrow">Caso en construcción</span>
-          <h2>{selectedPrefill?.productName || (intent === 'have_product' ? 'Tu producto' : 'Nueva importación')}</h2>
+          <h2>{analysisPrefill?.productName || (intent === 'have_product' ? 'Tu producto' : 'Nueva importación')}</h2>
           <div className="journey-summary-list">
-            <div><span>Objetivo</span><b>{intent === 'have_product' ? 'Cotizar producto propio' : intent === 'search_product' ? 'Buscar + cotizar' : intent === 'discover' ? 'Descubrir + cotizar' : 'Pendiente'}</b></div>
+            <div><span>Objetivo</span><b>{intent === 'have_product' ? 'Cotizar producto propio' : intent === 'search_product' ? 'Buscar + cotizar' : intent === 'discover' ? 'Explorar + cotizar' : 'Sin elegir'}</b></div>
             <div><span>Uso</span><b>{purposeLabel(purpose)}</b></div>
             <div><span>Importador</span><b>{entityLabel(entityType)}</b></div>
             <div><span>Firma</span><b>{signatureLabel(signature)}</b></div>
-            <div><span>Capacidad</span><b>{budgetMode === 'budget' ? `USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} u.` : budgetMode === 'unknown' ? 'A definir' : 'Pendiente'}</b></div>
+            <div><span>Capacidad</span><b>{budgetMode === 'budget' ? `USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} u.` : budgetMode === 'unknown' ? 'Todavía no definida' : 'Sin responder'}</b></div>
             <div><span>Producto</span><b>{productStatusLabel}</b></div>
           </div>
-          <div className="journey-summary-note"><span>La lógica</span><p>Identidad confirmada → NCM → completar sólo datos faltantes de compra/flete → costo puesto → optimización. Si una posición es dudosa, la app pregunta antes de seguir.</p></div>
+          <div className="journey-summary-note"><span>La lógica</span><p>Producto real → confirmar identidad → NCM → pedir sólo datos faltantes de compra/flete → costo puesto → optimización.</p></div>
         </div>
       </aside>
     </section>
@@ -566,15 +515,15 @@ export default function App() {
     </section>}
 
     {analysisPrefill && effectiveCalculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
-      <div className="journey-section-heading"><span className="eyebrow">Resultado del caso</span><h2>Primero entendé el costo de una unidad. Después optimizamos.</h2><p>El costo unitario se calcula dentro de la cantidad base/MOQ seleccionada, distribuyendo flete y gastos fijos. Debajo podés ver cómo cambia al traer más o menos unidades.</p></div>
+      <div className="journey-section-heading"><span className="eyebrow">Resultado del caso</span><h2>Primero entendé el costo de una unidad. Después optimizamos.</h2><p>El costo unitario se calcula dentro de la cantidad base/MOQ seleccionada, distribuyendo flete y gastos fijos.</p></div>
       <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={quoteSetup} />
     </section>}
 
     <section className="journey-output-explainer">
-      <div><span>01</span><b>Identificar</b><p>Pegás un link o describís el producto. ShippingAPP confirma en lenguaje simple qué entendió.</p></div>
-      <div><span>02</span><b>NCM</b><p>Clasifico con los datos técnicos disponibles. Si hay duda, pregunto sólo el atributo que distingue la posición.</p></div>
-      <div><span>03</span><b>Cotizar</b><p>Con la NCM resuelta, pido únicamente origen, FOB, MOQ, peso o medidas que todavía falten.</p></div>
-      <div><span>04</span><b>Optimizar</b><p>Flete, costo puesto y escenarios de cantidad según presupuesto, stock y modo logístico.</p></div>
+      <div><span>01</span><b>Identificar</b><p>Pegás un link, buscás o describís el producto.</p></div>
+      <div><span>02</span><b>NCM</b><p>Clasifico con los datos técnicos disponibles y pregunto sólo si falta algo decisivo.</p></div>
+      <div><span>03</span><b>Cotizar</b><p>Con la NCM resuelta, pido únicamente precio, origen, MOQ, peso o medidas que falten.</p></div>
+      <div><span>04</span><b>Optimizar</b><p>Comparo flete, costo puesto y escenarios de cantidad.</p></div>
     </section>
   </main>
 }

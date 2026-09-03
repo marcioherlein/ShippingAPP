@@ -7,7 +7,7 @@ on:
       - audit/mixed48-semantics-v2
 
 # Evidence-aware audit semantics v2. The production corpus and request parameters remain unchanged.
-# Rerun marker: 2026-09-02 production 4800a062 Sony compact WH/WF identity normalization validation.
+# Rerun marker: 2026-09-03 production c26d6bff post-Sony/post-retailers/subrequest-budget validation.
 permissions:
   contents: read
 

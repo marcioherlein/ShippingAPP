@@ -70,6 +70,19 @@ describe('Google Shopping Argentina discovery adapter', () => {
     expect(result.warnings?.join(' ')).toContain('2 shopping result(s) rejected')
   })
 
+  it('rejects bare-number / signless prices instead of assuming ARS', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => json({
+      shopping_results: [
+        { title: 'Producto con signo', price: '$ 90.000', extracted_price: 90000, product_id: 'ars' },
+        { title: 'Producto sin signo', price: '150', extracted_price: 150, product_id: 'bare' },
+        { title: 'Producto sin price string', extracted_price: 200, product_id: 'nostring' },
+      ],
+    }))
+    const provider = createGoogleShoppingArgentinaProvider({ apiKey: 'x', fetchImpl })
+    const result = await provider.discover({ query: 'producto', productName: 'producto', category: '' })
+    expect(result.candidates.map((item) => item.id)).toEqual(['google-shopping:ars'])
+  })
+
   it('marks used/refurbished shopping results so the matcher can reject them', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => json({
       shopping_results: [

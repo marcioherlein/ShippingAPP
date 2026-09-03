@@ -129,6 +129,17 @@ export function normalizeSonyOfficialIdentityText(value: string) {
   return text(value).replace(/\b(WH|WF)(\d{3,4}XM\d)\b/gi, '$1-$2')
 }
 
+// Lowercased, de-accented, alphanumeric-tokenized text for coarse query↔title relevance.
+function normalizeForRelevance(value: string) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function attributesOf(product: VtexProduct, retailer?: ArgentinaVtexRetailer): MlAttribute[] {
   const rows: MlAttribute[] = []
   const seen = new Set<string>()
@@ -236,16 +247,35 @@ function legacySearchUrl(retailer: ArgentinaVtexRetailer, query: string) {
 
 async function fravegaLandingFallback(
   retailer: ArgentinaVtexRetailer,
+  query: string,
   fetchImpl: typeof fetch,
   requestTimeoutMs: number,
   warnings: string[],
 ): Promise<RetailerDiscovery> {
   const landing = await discoverFravegaLanding(fetchImpl, { timeoutMs: requestTimeoutMs })
-  const mergedWarnings = [...warnings, ...landing.warnings]
+  // The Frávega fallback scrapes a fixed best-sellers page, so its candidates are NOT
+  // query-scoped. Drop obviously-unrelated products at the source (require a shared query
+  // token) instead of relying only on the downstream comparable matcher. The precise
+  // ≥55-score matcher still runs afterwards; this just avoids feeding it off-target noise.
+  const queryTokens = new Set(
+    normalizeForRelevance(query).split(' ').filter((token) => token.length >= 4),
+  )
+  const relevant = queryTokens.size
+    ? landing.candidates.filter((candidate) => {
+        const titleTokens = normalizeForRelevance(candidate.title).split(' ')
+        return titleTokens.some((token) => token.length >= 4 && queryTokens.has(token))
+      })
+    : landing.candidates
+  const droppedByRelevance = landing.candidates.length - relevant.length
+  const mergedWarnings = [
+    ...warnings,
+    ...landing.warnings,
+    ...(droppedByRelevance > 0 ? [`Frávega best-seller landing: ${droppedByRelevance} product(s) dropped for not matching the query before comparable scoring.`] : []),
+  ]
   return {
     retailer,
-    mode: landing.candidates.length ? 'structured-landing' : 'unavailable',
-    candidates: landing.candidates,
+    mode: relevant.length ? 'structured-landing' : 'unavailable',
+    candidates: relevant,
     warnings: mergedWarnings,
   }
 }
@@ -287,7 +317,7 @@ async function discoverRetailer(
     warnings.push(`${retailer.name} legacy public search failed (${reason}).`)
   }
 
-  if (retailer.id === 'fravega') return fravegaLandingFallback(retailer, fetchImpl, requestTimeoutMs, warnings)
+  if (retailer.id === 'fravega') return fravegaLandingFallback(retailer, query, fetchImpl, requestTimeoutMs, warnings)
   return { retailer, mode: 'unavailable', candidates: [], warnings }
 }
 

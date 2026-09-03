@@ -7,7 +7,7 @@ import { fetchBcraReferenceFx } from './bcraFx'
 import { runImportAnalyst } from './importAnalyst'
 import { runConversationalIntake } from './conversationalIntake'
 import { discoverAlibabaProducts } from './productDiscovery'
-import { rankDiscoveryResponse } from './discoveryRanking'
+import { describeDiscoveryConstraints, rankDiscoveryResponse } from './discoveryRanking'
 import { searchAlibabaOpportunities } from './parsebotOpportunity'
 import { proxyProductImage } from './imageProxy'
 import type { BrowserRun } from './alibabaSource'
@@ -416,19 +416,11 @@ export default {
           sort: parsed.sort,
           limit: parsed.limit,
         })
-        const constraints = rankDiscoveryResponse({
-          status: 'unavailable',
-          mode: 'unavailable',
-          query: parsed.query,
-          results: [],
-          browserAttempted: false,
-          browserMsUsed: null,
-          note: '',
-        }, parsed.userText)
+        const { constraints, constraintsNote } = describeDiscoveryConstraints(parsed.userText)
         return json({
           ...result,
-          constraints: constraints.constraints,
-          constraintsNote: constraints.constraintsNote,
+          constraints,
+          constraintsNote,
         })
       } catch (error) {
         return json({

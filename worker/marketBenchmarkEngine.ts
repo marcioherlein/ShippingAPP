@@ -230,14 +230,15 @@ export async function runArgentinaMarketBenchmark(
     : baseConfidence
 
   // Credibility gate: if the listing search fell back to an UNAUTHENTICATED public retry
-  // (the validated token was rejected by the search endpoint), the price is still usable for
-  // screening but must not present as a full-trust authenticated benchmark. Cap its
-  // confidence and state plainly that it is an unauthenticated source. We keep it eligible
-  // for a 'live' status (coverage) but visibly lower-trust.
+  // (the validated token was rejected by the search endpoint), the price is NOT promoted to a
+  // 'live' benchmark and therefore never feeds landed-cost/profitability economics. The
+  // comparables and percentiles are still returned for transparency (visible reference,
+  // confidence-capped), but the authenticated-only guarantee for economics is preserved. Other
+  // providers (direct retailers, Google) can still yield a legitimate 'live' benchmark.
   const unauthenticatedFallback = /public search fallback/i.test(discovery.sourceLabel || '')
   const finalConfidence = unauthenticatedFallback ? Math.min(confidence, UNAUTHENTICATED_FALLBACK_CONFIDENCE_CAP) : confidence
   if (unauthenticatedFallback) {
-    warnings.push('Benchmark de mercado obtenido por búsqueda pública sin autenticación (el token fue rechazado por el endpoint de búsqueda): se limita la confianza y no debe tratarse como un benchmark autenticado.')
+    warnings.push('Benchmark de mercado obtenido por búsqueda pública sin autenticación (el token fue rechazado por el endpoint de búsqueda): se muestra como referencia pero NO se promueve a economics; sólo un benchmark autenticado alimenta el costo y la rentabilidad.')
   }
 
   if (priced.length > accepted.length) warnings.push(`${priced.length - accepted.length} price outlier(s) excluded by IQR screening.`)
@@ -253,7 +254,7 @@ export async function runArgentinaMarketBenchmark(
 
   const resolverSuffix = resolver && effectivePriceCount > 0 ? ` + ${resolver.id}` : ''
   return {
-    status: accepted.length >= minimumComparables && medianArs ? 'live' : 'insufficient',
+    status: accepted.length >= minimumComparables && medianArs && !unauthenticatedFallback ? 'live' : 'insufficient',
     query,
     matchMode,
     categoryId: categoryHint?.categoryId || null,

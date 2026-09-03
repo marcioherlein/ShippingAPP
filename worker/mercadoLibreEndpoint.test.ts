@@ -203,13 +203,16 @@ describe('MercadoLibre benchmark endpoints', () => {
     expect(response.status).toBe(200)
     const body: any = await response.json()
 
-    expect(body.status).toBe('live')
+    // Policy: an unauthenticated public search fallback is NOT promoted to a live benchmark
+    // (it must never feed economics). The reference price/comparables are still returned for
+    // transparency, clearly labelled, but status stays 'insufficient'.
+    expect(body.status).toBe('insufficient')
     expect(body.auth.ready).toBe(true)
     expect(body.market.source).toContain('public search fallback')
     expect(body.market.comparableCount).toBeGreaterThanOrEqual(5)
-    expect(body.market.suggestedPriceArs).toBeGreaterThan(0)
     expect(body.market.comparables[0].priceSource).toBe('search_price')
     expect(body.market.warnings.join(' ')).toContain('Bearer')
+    expect(body.market.warnings.join(' ')).toMatch(/NO se promueve a economics|sin autenticaci/i)
     expect(JSON.stringify(body)).not.toContain('test-ml-token')
   })
 })

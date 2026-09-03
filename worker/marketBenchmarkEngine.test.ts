@@ -219,10 +219,12 @@ describe('unauthenticated public-fallback credibility cap', () => {
       },
     })
     const result = await runArgentinaMarketBenchmark('Apple iPhone 15 128GB', 'Smartphone', publicFallbackProvider)
-    // Still usable (coverage preserved) but visibly lower-trust.
-    expect(result.status).toBe('live')
+    // Hard-gate: an unauthenticated public fallback is NOT promoted to 'live' economics, but
+    // the reference price is still returned (confidence-capped, clearly warned).
+    expect(result.status).toBe('insufficient')
+    expect(result.comparableCount).toBeGreaterThanOrEqual(5)
     expect(result.confidence).toBeLessThanOrEqual(45)
-    expect(result.warnings.join(' ')).toMatch(/sin autenticaci/i)
+    expect(result.warnings.join(' ')).toMatch(/sin autenticaci|NO se promueve a economics/i)
   })
 
   it('does NOT cap confidence for an authenticated search', async () => {

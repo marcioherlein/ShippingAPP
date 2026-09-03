@@ -143,12 +143,10 @@ function rankOne(query: string, result: DiscoveryResult) {
   return { ...result, titleMatch, matchedTerms, score: ratio * 100 + matchedTerms.length }
 }
 
-export function rankDiscoveryResponse(source: DiscoveryResponse, userText: string): RankedDiscoveryResponse {
-  const ranked = source.results
-    .map((item, index) => ({ ...rankOne(source.query, item), index }))
-    .sort((a, b) => b.score - a.score || a.index - b.index)
-    .map(({ score: _score, index: _index, ...item }) => item)
-
+// Build the human "pending constraints" note from a parsed constraint set. Exposed so
+// callers that only need constraints (e.g. Parse.bot opportunity search) don't have to
+// fabricate a throwaway DiscoveryResponse just to reach it.
+export function describeDiscoveryConstraints(userText: string): { constraints: DiscoveryConstraints; constraintsNote: string } {
   const constraints = parseDiscoveryConstraints(userText)
   const pending: string[] = []
   if (constraints.maxUnitPriceUsd !== null) pending.push(`precio ≤ USD ${constraints.maxUnitPriceUsd}`)
@@ -156,13 +154,26 @@ export function rankDiscoveryResponse(source: DiscoveryResponse, userText: strin
   if (constraints.originCountry) pending.push(`origen ${constraints.originCountry}`)
   for (const country of constraints.excludedOriginCountries) pending.push(`origen ≠ ${country}`)
   if (constraints.lowMoqPreference) pending.push('preferencia por MOQ bajo')
+  return {
+    constraints,
+    constraintsNote: pending.length
+      ? `Restricciones solicitadas pendientes de validar en la publicación: ${pending.join(' · ')}.`
+      : 'Sin restricciones comerciales duras detectadas; el orden usa sólo relevancia visible del título.',
+  }
+}
+
+export function rankDiscoveryResponse(source: DiscoveryResponse, userText: string): RankedDiscoveryResponse {
+  const ranked = source.results
+    .map((item, index) => ({ ...rankOne(source.query, item), index }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(({ score: _score, index: _index, ...item }) => item)
+
+  const { constraints, constraintsNote } = describeDiscoveryConstraints(userText)
 
   return {
     ...source,
     results: ranked,
     constraints,
-    constraintsNote: pending.length
-      ? `Restricciones solicitadas pendientes de validar en la publicación: ${pending.join(' · ')}.`
-      : 'Sin restricciones comerciales duras detectadas; el orden usa sólo relevancia visible del título.',
+    constraintsNote,
   }
 }

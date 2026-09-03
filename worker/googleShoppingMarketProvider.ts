@@ -38,6 +38,17 @@ function isExplicitForeignCurrency(price: string | undefined) {
     || normalized.includes('u$s')
     || normalized.includes('dolar')
     || normalized.includes('dólar')
+    || normalized.includes('eur')
+    || normalized.includes('€')
+    || normalized.includes('brl')
+    || normalized.includes('r$')
+}
+
+// Argentine prices are shown with a peso sign ("$ 1.234"). Requiring an explicit "$" (and no
+// foreign marker) prevents a bare-number or foreign listing from being silently promoted as
+// ARS into economics — a screening tool must not guess currency.
+function confirmsArsPrice(price: string | undefined) {
+  return typeof price === 'string' && price.includes('$') && !isExplicitForeignCurrency(price)
 }
 
 export function extractMercadoLibreItemId(link: string | undefined): string | null {
@@ -64,7 +75,7 @@ function stableCandidateId(result: GoogleShoppingResult, index: number) {
 function asCandidate(result: GoogleShoppingResult, index: number): ArgentinaMarketCandidate | null {
   const title = result.title?.trim()
   const priceArs = positiveNumber(result.extracted_price)
-  if (!title || !priceArs || isExplicitForeignCurrency(result.price)) return null
+  if (!title || !priceArs || !confirmsArsPrice(result.price)) return null
 
   return {
     id: stableCandidateId(result, index),

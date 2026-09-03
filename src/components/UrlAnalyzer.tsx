@@ -232,7 +232,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         {analysis.product.volumeCbm && analysis.product.volumeCbm > 0 ? <div><span>Volumen unitario</span><b>{analysis.product.volumeCbm} m³</b></div> : null}
       </div>
       <p className="assumption-note">Siguiente paso: revisá lo detectado abajo. La app sólo te va a pedir los campos imprescindibles que falten.</p>
-      {constraintChecks.length > 0 && <div className="constraint-checks">{constraintChecks.map((check) => <span key={check.label} className={check.ok ? 'score-pill' : 'score-pill warning-pill'}>{check.label}</span>)}</div>}
+      {constraintChecks.length > 0 && <div className="constraint-checks">{constraintChecks.map((check) => <span key={check.id} className={check.status === 'pass' ? 'score-pill' : 'score-pill warning-pill'} title={check.detail}>{check.status === 'pass' ? 'OK' : check.status === 'fail' ? 'No cumple' : 'Falta verificar'} · {check.label}</span>)}</div>}
     </div>}
   </section>
 }

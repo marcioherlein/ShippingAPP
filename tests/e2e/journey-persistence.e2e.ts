@@ -15,7 +15,9 @@ async function completeOperation(page: Page) {
   await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
   await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
   await page.getByRole('radio', { name: 'Sí', exact: true }).click()
-  await page.getByRole('combobox', { name: /categoría sensible/i }).selectOption('none')
+  // This field's user-facing copy can evolve. Persistence behavior should be
+  // anchored to the stable form control contract instead of label wording.
+  await page.locator('#journey-sensitive-category').selectOption('none')
   await page.getByRole('button', { name: /Seguir con presupuesto/i }).click()
   await expect(page.locator('.journey-question-card.active .journey-question-head > span')).toHaveText('02')
   await expect.poll(() => persistedStep(page)).toBe(2)

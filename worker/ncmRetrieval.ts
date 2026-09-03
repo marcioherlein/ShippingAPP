@@ -334,6 +334,31 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, co
   return null
 }
 
+// Per-record tokenization is expensive (Unicode NFD normalize + regexes over ~10.5k
+// hierarchical labels ≈ hundreds of ms of CPU). It is INVARIANT for a given index, so we
+// compute it once per index object and memoize it. Rebuilding it on every classify call —
+// including each iterative NCM continuation attempt — was the dominant CPU cost behind the
+// intermittent Cloudflare "Worker exceeded resource limits" 503 on the analysis path.
+type PreparedNcmRecord = { code: string; label: string; normalizedLabel: string; labelTokens: Set<string> }
+let preparedIndexCache = new WeakMap<NcmSearchIndex, PreparedNcmRecord[]>()
+let preparedBuilds = 0
+
+function prepareIndex(index: NcmSearchIndex): PreparedNcmRecord[] {
+  const cached = preparedIndexCache.get(index)
+  if (cached) return cached
+  preparedBuilds += 1
+  const prepared: PreparedNcmRecord[] = []
+  for (const row of index.records) {
+    if (!Array.isArray(row) || row.length < 2) continue
+    const [code, label] = row
+    if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string' || !label.trim()) continue
+    const normalizedLabel = normalizeText(label)
+    prepared.push({ code, label, normalizedLabel, labelTokens: new Set(tokens(normalizedLabel)) })
+  }
+  preparedIndexCache.set(index, prepared)
+  return prepared
+}
+
 export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25, exclusionTerms: string[] = []): NcmRetrievalCandidate[] {
   if (!index || ![3, 4].includes(index.meta.indexSchema) || !Array.isArray(index.records)) return []
   const rawPhrases = [...safeTerms(searchTerms), facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''].filter(Boolean)
@@ -347,13 +372,9 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
 
   const chapterPrefixes = allowedChapterPrefixes(facts)
   const scored: NcmRetrievalCandidate[] = []
-  for (const row of index.records) {
-    if (!Array.isArray(row) || row.length < 2) continue
-    const [code, label] = row
-    if (!/^\d{4}\.\d{2}\.\d{2}$/.test(code) || typeof label !== 'string' || !label.trim()) continue
+  for (const record of prepareIndex(index)) {
+    const { code, label, normalizedLabel, labelTokens } = record
     if (chapterPrefixes && !chapterPrefixes.some((prefix) => code.startsWith(prefix))) continue
-    const normalizedLabel = normalizeText(label)
-    const labelTokens = new Set(tokens(normalizedLabel))
     const matchedTerms: string[] = []
     let score = 0
 
@@ -628,3 +649,7 @@ export async function loadNcmIndex(requestUrl: string, assets: { fetch: (request
 }
 
 export function resetNcmIndexCacheForTests() { cachedIndex = null }
+
+// Test-only hooks for the per-index tokenization memoization.
+export function __ncmPreparedBuildsForTests() { return preparedBuilds }
+export function __resetNcmPreparedCacheForTests() { preparedIndexCache = new WeakMap(); preparedBuilds = 0 }

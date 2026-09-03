@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyClassificationClarification,
   applyProductConfirmation,
+  classificationClarificationTarget,
   createManualProductAnalysis,
   missingClassificationConfirmationFields,
   missingProductConfirmationFields,
@@ -42,6 +44,32 @@ describe('progressive product confirmation', () => {
     }
     expect(resolvedProductVolumeCbm(draft)).toBeCloseTo(0.002592)
     expect(missingQuoteConfirmationFields(draft)).toHaveLength(0)
+  })
+
+  it('maps a tariff request for función/uso principal to functionText', () => {
+    expect(classificationClarificationTarget(['Función/uso principal'])).toBe('functionText')
+    expect(classificationClarificationTarget(['Material / composición predominante'])).toBe('material')
+    expect(classificationClarificationTarget(['Tipo o categoría del producto'])).toBe('category')
+  })
+
+  it('puts a thermo clarification into the structured function fact and the audit description', () => {
+    const base = createManualProductAnalysis('manual://thermo', '45oz 1350ml Stainless Steel Vacuum Water Bottle')
+    const draft = productConfirmationFromAnalysis(base)
+    const answer = 'Se usa para conservar y transportar bebidas frías o calientes.'
+    const clarified = applyClassificationClarification(draft, answer, ['Función/uso principal'])
+
+    expect(clarified.functionText).toBe(answer)
+    expect(clarified.description).toContain('Aclaración del usuario:')
+    expect(clarified.description).toContain('bebidas frías o calientes')
+  })
+
+  it('does not overwrite an existing structured fact when adding an audit clarification', () => {
+    const base = createManualProductAnalysis('manual://thermo', 'Botella térmica de acero inoxidable')
+    const draft = { ...productConfirmationFromAnalysis(base), material: 'acero inoxidable' }
+    const clarified = applyClassificationClarification(draft, 'acero inoxidable 304 con tapa plástica', ['Material/composición'])
+
+    expect(clarified.material).toBe('acero inoxidable')
+    expect(clarified.description).toContain('acero inoxidable 304 con tapa plástica')
   })
 
   it('preserves a resolved NCM when only quote/logistics facts change', () => {

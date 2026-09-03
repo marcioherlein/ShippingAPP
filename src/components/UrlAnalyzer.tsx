@@ -4,9 +4,6 @@ import { isAlibabaUrl } from '../lib/productIntake'
 import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
 import { buildDiscoveryQuery, isGenericAlibabaSearchRequest } from '../lib/searchIntent'
-import { getCachedHotProducts } from '../lib/hotProducts'
-import type { HotProduct } from '../data/hotProducts'
-import HotProductsSection from './HotProductsSection'
 
 type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
@@ -38,11 +35,11 @@ function readLabel(analysis: ProductAnalysisV2) {
 }
 
 function money(value?: number | null) {
-  return value ? `USD ${value.toFixed(2)}` : 'Precio pendiente'
+  return value && value > 0 ? `USD ${value.toFixed(2)}` : null
 }
 
 function units(value?: number | null) {
-  return value ? `${value} u.` : 'MOQ pendiente'
+  return value && value > 0 ? `${value} u.` : null
 }
 
 export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mode = 'intake', deferCalculation = false }: Props) {
@@ -50,11 +47,9 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   const [messages, setMessages] = useState<ThreadMessage[]>([])
   const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(null)
   const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(null)
-  const [selectedCachedId, setSelectedCachedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(null)
-  const cachedProducts = useMemo(() => getCachedHotProducts(6), [])
 
   const constraintChecks = useMemo(
     () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],
@@ -70,25 +65,26 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     setMessages((current) => [...current, {
       role: 'assistant',
       content: fromDiscovery
-        ? 'Producto seleccionado. Leí lo que pude de la publicación. Confirmá y completá la ficha abajo antes de iniciar NCM o cálculo.'
-        : 'Producto ingerido desde Alibaba. Revisá y completá la ficha abajo; la clasificación NCM empieza recién después de tu confirmación.',
+        ? 'Producto seleccionado. Validé la publicación real. Abajo vas a completar solamente los datos que no pude confirmar.'
+        : 'Producto leído. Abajo vas a revisar lo detectado y completar únicamente lo que falte.',
     }])
   }
 
   const runDiscoverySearch = async (query: string, userText: string) => {
-    setSelectedCachedId(null)
     setFailedSourceUrl(null)
     setMessages((current) => [...current, {
       role: 'assistant',
-      content: 'Buscando en Alibaba. Si una fuente no responde, ShippingAPP prueba automáticamente una alternativa.',
+      content: 'Buscando publicaciones reales en Alibaba…',
     }])
     const live = await discoverProducts(query, userText)
     setDiscovery(live)
     setMessages((current) => [...current, {
       role: 'assistant',
       content: live.status === 'live'
-        ? `Encontré ${live.results.length} candidatos reales. Elegí uno; después confirmamos precio, MOQ, peso, volumen e identidad antes de clasificar.`
-        : live.note,
+        ? live.results.length > 0
+          ? `Encontré ${live.results.length} opciones reales. Elegí una y sigo con esa publicación.`
+          : 'La búsqueda respondió pero no encontró publicaciones útiles. Probá describiendo el producto con más detalle.'
+        : 'No pude obtener resultados reales ahora. Podés reformular la búsqueda o pegar directamente un link de Alibaba.',
     }])
   }
 
@@ -103,7 +99,6 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     setFailedSourceUrl(null)
     setDiscovery(null)
     setSelectedConstraints(null)
-    setSelectedCachedId(null)
 
     try {
       if (isAlibabaUrl(value)) {
@@ -115,7 +110,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       if (!query || isGenericAlibabaSearchRequest(value)) {
         setMessages((current) => [...current, {
           role: 'assistant',
-          content: 'Decime qué producto querés buscar. Podés agregar precio máximo, MOQ, material u otra condición.',
+          content: 'Decime qué producto querés buscar. Ejemplo: “paleta de pádel de carbono, hasta USD 30, MOQ menor a 100”.',
         }])
         return
       }
@@ -123,7 +118,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       await runDiscoverySearch(query, value)
     } catch (err) {
       if (isAlibabaUrl(value)) setFailedSourceUrl(value)
-      setError(err instanceof Error ? err.message : 'No pudimos leer ese producto en este momento.')
+      setError(err instanceof Error ? err.message : 'No pude completar la búsqueda en este momento.')
     } finally {
       setLoading(false)
     }
@@ -134,35 +129,11 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     setLoading(true)
     setError('')
     setFailedSourceUrl(null)
-    setSelectedCachedId(null)
     try {
       await analyzeRealUrl(url, true, discovery.constraints)
     } catch (err) {
       setFailedSourceUrl(url)
-      setError(err instanceof Error ? err.message : 'No pudimos analizar el producto seleccionado.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const selectCachedProduct = async (product: HotProduct) => {
-    if (loading) return
-    setSelectedCachedId(product.id)
-    setLoading(true)
-    setError('')
-    setFailedSourceUrl(null)
-    setDiscovery(null)
-    setSelectedConstraints(null)
-    setMessages((current) => [...current, {
-      role: 'assistant',
-      content: 'Abriendo la oportunidad cacheada. Valido la publicación real; cualquier faltante quedará editable antes de NCM.',
-    }])
-    try {
-      await analyzeRealUrl(product.productUrl, true, null)
-    } catch (err) {
-      setSelectedCachedId(null)
-      setFailedSourceUrl(product.productUrl)
-      setError(err instanceof Error ? err.message : 'No pudimos abrir la oportunidad cacheada.')
+      setError(err instanceof Error ? err.message : 'No pude analizar la publicación seleccionada.')
     } finally {
       setLoading(false)
     }
@@ -173,26 +144,13 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     void submitValue(draft)
   }
 
-  const classificationLabel = !analysis?.customs.ncmCandidate
-    ? 'Clasificación pendiente'
-    : analysis.customs.dutyRateStatus === 'candidate'
-      ? 'Clasificación para screening'
-      : 'NCM candidata · economics bloqueado'
-
-  const dutyLabel = analysis?.customs.dutyRatePct !== null && analysis?.customs.dutyRatePct !== undefined
-    ? `${analysis.customs.dutyRatePct}%`
-    : analysis?.customs.classificationConfidence === 'low'
-      ? 'Retenido · LOW confidence'
-      : 'Pendiente'
-
-  const conversational = !!analysis?.sourceUrl.startsWith('chat://')
   const modeClass = mode === 'discovery' ? ' discovery-search-mode' : ' search-first-mode'
 
   return <section className={`url-analyzer${modeClass}`}>
     <div className="analyzer-copy">
-      <span className="eyebrow">Alibaba live search</span>
-      <h1>Encontrá el producto que querés importar.</h1>
-      <p>Buscá en Alibaba con lenguaje natural o pegá una publicación concreta. ShippingAPP intenta completar la ficha automáticamente, pero nunca usa un faltante como supuesto silencioso.</p>
+      <span className="eyebrow">Búsqueda real en Alibaba</span>
+      <h1>Buscá un producto o pegá un link.</h1>
+      <p>La app muestra sólo publicaciones reales. Si un dato no está disponible, no lo rellena con “pendiente”: te lo pide después únicamente si es necesario para calcular.</p>
     </div>
 
     {messages.length === 0 && <div className="analyst-suggestions intake-suggestions">
@@ -204,7 +162,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         <span>{message.role === 'user' ? 'Vos' : 'ShippingAPP'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Buscando o validando productos reales en Alibaba…</p></div>}
+      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Estoy consultando Alibaba y validando las publicaciones encontradas…</p></div>}
     </div>}
 
     <form className="url-form" onSubmit={submit}>
@@ -217,92 +175,64 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
           disabled={loading}
           aria-label="Buscar productos en Alibaba"
         />
-        <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Buscando…' : 'Buscar en Alibaba'}</button>
+        <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Buscando…' : 'Buscar'}</button>
       </div>
-      {error && <div className="analyzer-error manual-fallback-error">
+      <small>También podés pegar directamente una URL de producto de Alibaba.</small>
+      {error && <div className="analyzer-error manual-fallback-error" role="alert">
         <span>{error}</span>
-        {failedSourceUrl && onManualFallback && <button type="button" onClick={() => onManualFallback(failedSourceUrl)}>Completar ficha manualmente</button>}
+        {failedSourceUrl && onManualFallback && <button type="button" onClick={() => onManualFallback(failedSourceUrl)}>Cargar este producto manualmente</button>}
       </div>}
     </form>
 
     {discovery && <section className="discovery-card">
       <div className="discovery-head">
-        <div><span className="eyebrow">Opportunity Finder</span><h2>Resultados Alibaba</h2><p>{discovery.note}</p></div>
-        <span className="confidence">{discovery.mode === 'parsebot' ? 'Structured' : discovery.mode === 'browser' ? 'Browser' : discovery.mode === 'direct' ? 'Direct' : 'Unavailable'}</span>
+        <div><span className="eyebrow">Resultados reales</span><h2>{discovery.results.length > 0 ? 'Elegí una publicación' : 'No encontré una publicación útil'}</h2><p>{discovery.note}</p></div>
+        {discovery.results.length > 0 && <span className="confidence">{discovery.results.length} resultado{discovery.results.length === 1 ? '' : 's'}</span>}
       </div>
-      <div className="discovery-constraints"><b>Tu criterio</b><span>{discovery.constraintsNote}</span></div>
+      {discovery.constraintsNote && <div className="discovery-constraints"><b>Tu búsqueda</b><span>{discovery.constraintsNote}</span></div>}
 
       {discovery.results.length > 0 ? <div className="discovery-grid">
-        {discovery.results.map((item) => <article key={item.url} className="discovery-item">
-          <div className="discovery-item-top">
-            <span>ALIBABA · {item.source === 'parsebot_search_products' ? 'STRUCTURED DATA' : 'LIVE SOURCE'}</span>
-            <small>{item.opportunityScore ? `${item.opportunityScore}/100` : `${(item.titleMatch || 'partial').toUpperCase()} MATCH`}</small>
-          </div>
-          {item.imageUrl && <img className="discovery-thumb" src={item.imageUrl} alt="" loading="lazy" />}
-          <h3>{item.title}</h3>
-          <div className="opportunity-facts">
-            <span><b>{money(item.unitPriceUsd)}</b><small>{item.priceDisplay || 'supplier price'}</small></span>
-            <span><b>{units(item.moq)}</b><small>minimum order</small></span>
-            <span><b>{item.supplierName || 'Proveedor pendiente'}</b><small>{item.supplierYears || 'supplier'}</small></span>
-            <span><b>{item.volumeCbm ? `${item.volumeCbm} m³` : 'Volumen pendiente'}</b><small>{item.packedWeightKg ? `${item.packedWeightKg} kg` : 'peso pendiente'}</small></span>
-          </div>
-          {(item.supplierBadges?.length || item.sellingPoints?.length) ? <p>Señales: {[...(item.sellingPoints || []), ...(item.supplierBadges || [])].slice(0, 5).join(' · ')}</p> : null}
-          {item.missingFacts?.length
-            ? <p>Falta validar: {item.missingFacts.join(' · ')}. Al elegirlo, la ficha te pedirá completar lo que falte.</p>
-            : <p>Datos comerciales principales presentes desde búsqueda. Igual confirmamos la ficha antes de NCM.</p>}
-          <div className="discovery-actions">
-            <a href={item.url} target="_blank" rel="noreferrer">Ver en Alibaba</a>
-            <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>{deferCalculation ? 'Elegir producto' : 'Elegir y cotizar'}</button>
-          </div>
-        </article>)}
-      </div> : <div className="customs-note"><b>NO RESULTS</b><span>No mostramos productos sintéticos. Podés reformular la búsqueda o elegir una oportunidad cacheada abajo.</span></div>}
-
-      {discovery.creditsEstimated !== undefined && discovery.creditsEstimated > 0 && <p className="assumption-note">Costo estimado de búsqueda estructurada: {discovery.creditsEstimated} créditos. El análisis profundo puede consumir créditos adicionales por producto seleccionado.</p>}
-      {discovery.browserAttempted && <p className="assumption-note">Fuente alternativa con navegador: {discovery.browserMsUsed ? `${(discovery.browserMsUsed / 1000).toFixed(1)}s` : 'intentada'}. Se usa sólo cuando las fuentes anteriores no entregan suficientes URLs reales.</p>}
+        {discovery.results.map((item) => {
+          const price = money(item.unitPriceUsd)
+          const moq = units(item.moq)
+          const missing = item.missingFacts?.filter(Boolean) ?? []
+          return <article key={item.url} className="discovery-item">
+            <div className="discovery-item-top">
+              <span>ALIBABA · PUBLICACIÓN REAL</span>
+              {item.opportunityScore ? <small>{item.opportunityScore}/100</small> : null}
+            </div>
+            {item.imageUrl && <img className="discovery-thumb" src={item.imageUrl} alt="" loading="lazy" />}
+            <h3>{item.title}</h3>
+            <div className="opportunity-facts">
+              {price && <span><b>{price}</b><small>{item.priceDisplay || 'precio proveedor'}</small></span>}
+              {moq && <span><b>{moq}</b><small>pedido mínimo</small></span>}
+              {item.supplierName && <span><b>{item.supplierName}</b><small>{item.supplierYears || 'proveedor'}</small></span>}
+              {item.packedWeightKg && item.packedWeightKg > 0 && <span><b>{item.packedWeightKg} kg</b><small>peso detectado</small></span>}
+              {item.volumeCbm && item.volumeCbm > 0 && <span><b>{item.volumeCbm} m³</b><small>volumen detectado</small></span>}
+            </div>
+            {missing.length > 0 && <p><b>Después de elegirlo voy a necesitar confirmar:</b> {missing.join(' · ')}.</p>}
+            <div className="discovery-actions">
+              <a href={item.url} target="_blank" rel="noreferrer">Ver publicación</a>
+              <button type="button" disabled={loading} onClick={() => void selectDiscovery(item.url)}>{deferCalculation ? 'Usar este producto' : 'Usar y cotizar'}</button>
+            </div>
+          </article>
+        })}
+      </div> : <div className="customs-note"><b>Sin resultados utilizables</b><span>Probá con nombre + material + uso, o pegá directamente una publicación de Alibaba.</span></div>}
     </section>}
-
-    {!analysis && <div className="finder-cached-opportunities">
-      <div className="finder-cache-intro">
-        <span className="eyebrow">O explorar sin buscar</span>
-        <p>Estas oportunidades vienen del cache local. Elegir una no inicia una búsqueda nueva: ShippingAPP abre la publicación real y después te pide confirmar cualquier dato faltante.</p>
-      </div>
-      <HotProductsSection
-        products={cachedProducts}
-        selectedId={selectedCachedId}
-        onQuote={(product) => void selectCachedProduct(product)}
-      />
-    </div>}
 
     {analysis && !loading && <div className="extraction-card">
       <div className="extraction-top">
-        <div><span className="eyebrow">Ingesta de producto</span><h2>{analysis.product.name || 'Producto por completar'}</h2><p>{analysis.product.category || 'Categoría pendiente'}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div>
-        <span className="confidence">{analysis.confidence.overall}% auto</span>
+        <div><span className="eyebrow">Producto seleccionado</span><h2>{analysis.product.name || 'Necesito que me digas qué producto es'}</h2><p>{readLabel(analysis)}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div>
+        {analysis.confidence.overall > 0 && <span className="confidence">{analysis.confidence.overall}% detectado</span>}
       </div>
       <div className="fact-grid">
-        <div><span>Precio proveedor</span><b>{analysis.product.unitPriceUsd ? `USD ${analysis.product.unitPriceUsd.toFixed(2)}` : 'No verificado'}</b></div>
-        <div><span>MOQ</span><b>{analysis.product.moq ? `${analysis.product.moq} u.` : 'No verificado'}</b></div>
-        {deferCalculation ? <>
-          <div><span>Peso unitario</span><b>{analysis.product.packedWeightKg ? `${analysis.product.packedWeightKg} kg` : 'No verificado'}</b></div>
-          <div><span>Volumen unitario</span><b>{analysis.product.volumeCbm ? `${analysis.product.volumeCbm} m³` : 'No verificado'}</b></div>
-        </> : <>
-          <div><span>NCM candidato</span><b>{analysis.customs.ncmCandidate || 'Pendiente'}</b></div>
-          <div><span>Derecho candidato</span><b>{dutyLabel}</b></div>
-        </>}
-        <div><span>Fuente del producto</span><b>{readLabel(analysis)}</b></div>
-        <div><span>Browser Run</span><b>{conversational ? 'No aplica' : analysis.sourceRead?.browserAttempted ? `${analysis.sourceRead.browserMsUsed ? `${(analysis.sourceRead.browserMsUsed / 1000).toFixed(1)}s` : 'intentado'}` : 'No necesario'}</b></div>
+        {analysis.product.unitPriceUsd && analysis.product.unitPriceUsd > 0 ? <div><span>Precio proveedor</span><b>USD {analysis.product.unitPriceUsd.toFixed(2)}</b></div> : null}
+        {analysis.product.moq && analysis.product.moq > 0 ? <div><span>MOQ</span><b>{analysis.product.moq} u.</b></div> : null}
+        {analysis.product.packedWeightKg && analysis.product.packedWeightKg > 0 ? <div><span>Peso unitario</span><b>{analysis.product.packedWeightKg} kg</b></div> : null}
+        {analysis.product.volumeCbm && analysis.product.volumeCbm > 0 ? <div><span>Volumen unitario</span><b>{analysis.product.volumeCbm} m³</b></div> : null}
       </div>
-
-      {constraintChecks.length > 0 && <div className="constraint-checks">
-        <b>Restricciones de tu búsqueda · verificadas después de abrir la publicación</b>
-        <div>{constraintChecks.map((check) => <span key={check.id} className={`constraint-${check.status}`} title={check.detail}>{check.status.toUpperCase()} · {check.label}</span>)}</div>
-      </div>}
-
-      {analysis.sourceRead && <div className="customs-note"><b>{analysis.sourceRead.mode.toUpperCase()}</b><span>{analysis.sourceRead.reason}</span></div>}
-      {conversational && <div className="customs-note"><b>USER-SUPPLIED</b><span>Los datos comerciales provienen de la conversación y deben confirmarse antes de la corrida.</span></div>}
-      {deferCalculation
-        ? <div className="customs-note"><b>INGESTA, NO COTIZACIÓN</b><span>Lo leído automáticamente es sólo un borrador. Confirmá/completá la ficha abajo; recién después se ejecutan NCM y aranceles.</span></div>
-        : <div className="customs-note"><b>{classificationLabel}</b><span>{analysis.customs.source} · Revisado {analysis.customs.reviewedAt}.</span></div>}
-      <details className="assumptions"><summary>Ver supuestos y calidad de datos</summary><ul>{analysis.assumptions.map((item) => <li key={item}>{item}</li>)}</ul></details>
+      <p className="assumption-note">Siguiente paso: revisá lo detectado abajo. La app sólo te va a pedir los campos imprescindibles que falten.</p>
+      {constraintChecks.length > 0 && <div className="constraint-checks">{constraintChecks.map((check) => <span key={check.label} className={check.ok ? 'score-pill' : 'score-pill warning-pill'}>{check.label}</span>)}</div>}
     </div>}
   </section>
 }

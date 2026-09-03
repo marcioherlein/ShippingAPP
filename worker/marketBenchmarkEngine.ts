@@ -115,6 +115,32 @@ function dedupeKey(candidate: ArgentinaMarketCandidate) {
   return `title:${cleanText(candidate.title)}:${candidate.sellerKey || 'x'}`
 }
 
+function directRetailerName(candidate: ArgentinaMarketCandidate) {
+  const sellerKey = candidate.sellerKey?.trim()
+  if (sellerKey?.includes(':')) return sellerKey.slice(0, sellerKey.indexOf(':')).trim()
+  return ''
+}
+
+function acceptedSourceLabel(
+  discoveryProviderId: string,
+  discoverySourceLabel: string,
+  selected: Array<{ candidate: ArgentinaMarketCandidate; comparable: MarketComparable }>,
+  accepted: MarketComparable[],
+) {
+  if (discoveryProviderId !== 'argentina-direct-retailers' || !accepted.length) return discoverySourceLabel
+  const acceptedIds = new Set(accepted.map((item) => item.id))
+  const names: string[] = []
+  const seen = new Set<string>()
+  for (const { candidate, comparable } of selected) {
+    if (!acceptedIds.has(comparable.id)) continue
+    const name = directRetailerName(candidate)
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    names.push(name)
+  }
+  return names.length ? `Retailers argentinos directos · ${names.join(' + ')}` : discoverySourceLabel
+}
+
 async function resolveComparablePrice(
   comparable: MarketComparable,
   candidate: ArgentinaMarketCandidate,
@@ -237,6 +263,7 @@ export async function runArgentinaMarketBenchmark(
       : 'listed_search_price'
 
   const resolverSuffix = resolver && effectivePriceCount > 0 ? ` + ${resolver.id}` : ''
+  const evidenceSource = acceptedSourceLabel(discovery.providerId, discovery.sourceLabel, selected, accepted)
   return {
     status: accepted.length >= minimumComparables && medianArs ? 'live' : 'insufficient',
     query,
@@ -251,7 +278,7 @@ export async function runArgentinaMarketBenchmark(
     p75Ars,
     suggestedPriceArs,
     confidence,
-    source: `${discovery.sourceLabel}${resolverSuffix}`,
+    source: `${evidenceSource}${resolverSuffix}`,
     priceQuality,
     comparables: accepted.sort((a, b) => b.score - a.score).slice(0, 8),
     warnings,

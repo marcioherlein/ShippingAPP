@@ -1,0 +1,193 @@
+/* NCM clarification is part of the normal journey, not a warning state. Keep it
+   on the same typography, colour, spacing and control system as the rest of the app. */
+.calculation-pipeline .progressive-product-card {
+  gap: var(--ds-space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.calculation-pipeline .pipeline-understood-card,
+.calculation-pipeline .pipeline-progressive-fields,
+.calculation-pipeline .pipeline-clarification-card {
+  padding: var(--ds-space-5);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-xl);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: none;
+}
+
+.calculation-pipeline .pipeline-understood-sentence {
+  margin: var(--ds-space-2) 0 var(--ds-space-4);
+  color: var(--ds-text-strong);
+  font-size: var(--ds-type-body-lg);
+  line-height: var(--ds-leading-body);
+}
+
+.calculation-pipeline .pipeline-known-fact {
+  padding: var(--ds-space-3) var(--ds-space-4);
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-subtle);
+}
+
+.calculation-pipeline .pipeline-known-fact span {
+  margin-bottom: var(--ds-space-1);
+  color: var(--ds-text-muted);
+  font-size: var(--ds-type-meta);
+  font-weight: 700;
+}
+
+.calculation-pipeline .pipeline-known-fact b {
+  color: var(--ds-text);
+  font-size: var(--ds-type-body);
+  line-height: 1.45;
+}
+
+.calculation-pipeline .pipeline-source-detail summary {
+  color: var(--ds-text-secondary);
+  font-size: var(--ds-type-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.calculation-pipeline .pipeline-source-detail p {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-type-body);
+  line-height: var(--ds-leading-body);
+}
+
+.calculation-pipeline .pipeline-clarification-card {
+  gap: var(--ds-space-4);
+  border-color: rgba(79, 93, 228, 0.24);
+  background: linear-gradient(145deg, rgba(246, 247, 255, 0.96), rgba(255, 255, 255, 0.88));
+}
+
+.calculation-pipeline .pipeline-clarification-copy h3 {
+  margin: 0;
+  color: var(--ds-text-strong);
+  font-size: var(--ds-type-heading);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.calculation-pipeline .pipeline-clarification-copy p {
+  max-width: 760px;
+  margin: var(--ds-space-2) 0 0;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-type-body);
+  line-height: var(--ds-leading-body);
+}
+
+.calculation-pipeline .pipeline-clarification-input {
+  display: grid;
+  gap: var(--ds-space-2);
+  margin: 0;
+}
+
+.calculation-pipeline .pipeline-clarification-input > span,
+.calculation-pipeline .pipeline-confirm-field > span {
+  color: var(--ds-text-secondary);
+  font-size: var(--ds-type-label);
+  font-weight: 800;
+}
+
+.calculation-pipeline .pipeline-clarification-input textarea,
+.calculation-pipeline .pipeline-progressive-fields textarea,
+.calculation-pipeline .pipeline-progressive-fields input,
+.calculation-pipeline .pipeline-dimensions input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface);
+  color: var(--ds-text-strong);
+  font: inherit;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color var(--ds-motion-fast) var(--ds-ease), box-shadow var(--ds-motion-fast) var(--ds-ease);
+}
+
+.calculation-pipeline .pipeline-clarification-input textarea,
+.calculation-pipeline .pipeline-progressive-fields textarea {
+  min-height: 104px;
+  padding: 13px 14px;
+  resize: vertical;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
+}
+
+.calculation-pipeline .pipeline-progressive-fields input,
+.calculation-pipeline .pipeline-dimensions input {
+  min-height: 44px;
+  padding: 0 13px;
+}
+
+.calculation-pipeline .pipeline-clarification-input textarea:focus,
+.calculation-pipeline .pipeline-progressive-fields textarea:focus,
+.calculation-pipeline .pipeline-progressive-fields input:focus,
+.calculation-pipeline .pipeline-dimensions input:focus {
+  border-color: rgba(79, 93, 228, 0.62);
+  box-shadow: 0 0 0 3px rgba(79, 93, 228, 0.12);
+}
+
+.calculation-pipeline .pipeline-clarification-input textarea::placeholder,
+.calculation-pipeline .pipeline-progressive-fields textarea::placeholder,
+.calculation-pipeline .pipeline-progressive-fields input::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.calculation-pipeline .pipeline-clarification-input small {
+  color: var(--ds-text-muted);
+  font-size: var(--ds-type-meta);
+  line-height: 1.45;
+}
+
+.calculation-pipeline .progressive-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  margin-top: var(--ds-space-1);
+}
+
+.calculation-pipeline .progressive-confirm-actions .journey-primary-action,
+.calculation-pipeline .progressive-confirm-actions .pipeline-secondary {
+  min-height: 44px;
+  border-radius: var(--ds-radius-md);
+  padding: 11px 16px;
+  font-size: var(--ds-type-body);
+}
+
+.calculation-pipeline .progressive-confirm-actions .journey-primary-action:disabled {
+  opacity: 0.42;
+}
+
+.calculation-pipeline .pipeline-missing-fields {
+  margin-top: 0;
+  border-radius: var(--ds-radius-md);
+}
+
+@media (max-width: 700px) {
+  .calculation-pipeline .pipeline-understood-card,
+  .calculation-pipeline .pipeline-progressive-fields,
+  .calculation-pipeline .pipeline-clarification-card {
+    padding: var(--ds-space-4);
+  }
+
+  .calculation-pipeline .progressive-confirm-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calculation-pipeline .progressive-confirm-actions .journey-primary-action,
+  .calculation-pipeline .progressive-confirm-actions .pipeline-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+}

@@ -24,8 +24,8 @@ export type ProductAnalysis = {
   fetched: boolean
   /**
    * Ephemeral server-issued reservation used only to continue a one-credit full
-   * analysis into NCM classification. `enrichProductAnalysisV2` strips it before
-   * the analysis becomes normal application/history data.
+   * analysis into NCM classification. Product intake itself is intentionally
+   * zero-credit and therefore never receives this reservation.
    */
   usageReservationId?: string
   sourceRead?: SourceReadEvidence
@@ -58,6 +58,58 @@ export type ProductAnalysis = {
   assumptions: string[]
 }
 
+function withReservation(response: Response, data: ProductAnalysis) {
+  const usageReservationId = response.headers.get('x-shippingapp-usage-reservation')?.trim()
+  return usageReservationId ? { ...data, usageReservationId } : data
+}
+
+/**
+ * Zero-credit product intake. This endpoint only tries to identify/prefill the
+ * supplier ficha; it does not classify NCM, query the Argentina market, or
+ * consume one of the user's analysis credits.
+ */
+export async function readAlibabaProduct(url: string): Promise<ProductAnalysis> {
+  const response = await apiFetch('/api/product-read', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+  const data = await response.json() as ProductAnalysis & { error?: string }
+  if (!response.ok) throw new Error(data.error || 'No pudimos leer el link de Alibaba.')
+  return data
+}
+
+/**
+ * Starts the paid unit of value: one complete import analysis. The confirmed
+ * product facts are sent to the server without customs output. The server
+ * reserves exactly one credit, hydrates live market/FX evidence, and returns a
+ * reservation that authorizes the NCM continuation for this same product.
+ */
+export async function startImportAnalysis(base: ProductAnalysis): Promise<ProductAnalysis> {
+  const response = await apiFetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sourceUrl: base.sourceUrl,
+      fetched: base.fetched,
+      sourceRead: base.sourceRead ?? null,
+      product: base.product,
+      suggestedQuantities: base.suggestedQuantities,
+      confidence: base.confidence,
+      assumptions: base.assumptions,
+    }),
+  })
+  const data = await response.json() as ProductAnalysis & { error?: string; code?: string }
+  if (!response.ok) {
+    if (response.status === 402 || data.code === 'usage_exhausted') {
+      throw new Error('Tu producto está listo. Para clasificar la NCM y calcular el costo puesto necesitás 1 análisis disponible.')
+    }
+    throw new Error(data.error || 'No pudimos iniciar el análisis de importación.')
+  }
+  return withReservation(response, data)
+}
+
+/** Legacy paid Alibaba entry point retained for compatibility and diagnostics. */
 export async function analyzeAlibabaUrl(url: string): Promise<ProductAnalysis> {
   const response = await apiFetch('/api/analyze', {
     method: 'POST',
@@ -66,8 +118,7 @@ export async function analyzeAlibabaUrl(url: string): Promise<ProductAnalysis> {
   })
   const data = await response.json() as ProductAnalysis & { error?: string }
   if (!response.ok) throw new Error(data.error || 'No pudimos analizar el link.')
-  const usageReservationId = response.headers.get('x-shippingapp-usage-reservation')?.trim()
-  return usageReservationId ? { ...data, usageReservationId } : data
+  return withReservation(response, data)
 }
 
 export function applyAnalysis(current: Inputs, analysis: ProductAnalysis): Inputs {

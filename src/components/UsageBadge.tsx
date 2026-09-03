@@ -48,10 +48,13 @@ export default function UsageBadge() {
     return <button type="button" className="auth-usage-badge auth-usage-retry" onClick={refresh} aria-label="Reintentar consulta de créditos">Créditos no disponibles</button>
   }
 
+  const unlimited = state.usage.plan.code === 'admin'
   return <span
-    className={`auth-usage-badge${state.usage.period.creditsRemaining === 0 ? ' exhausted' : ''}`}
-    aria-label={`${state.usage.period.creditsRemaining} créditos disponibles de ${state.usage.period.creditsGranted}`}
-    title={`Período: ${state.usage.period.start} — ${state.usage.period.end}`}
+    className={`auth-usage-badge${!unlimited && state.usage.period.creditsRemaining === 0 ? ' exhausted' : ''}`}
+    aria-label={unlimited
+      ? 'Créditos de administrador ilimitados'
+      : `${state.usage.period.creditsRemaining} créditos disponibles de ${state.usage.period.creditsGranted}`}
+    title={unlimited ? 'Cuenta de administrador para pruebas' : `Período: ${state.usage.period.start} — ${state.usage.period.end}`}
   >
     {usageLabel(state.usage)}
   </span>

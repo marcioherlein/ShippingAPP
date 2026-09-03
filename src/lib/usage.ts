@@ -27,6 +27,7 @@ export async function loadUsage(): Promise<UsageSummary> {
 }
 
 export function usageLabel(usage: UsageSummary) {
+  if (usage.plan.code === 'admin') return 'Admin · créditos ilimitados'
   const remaining = Math.max(0, usage.period.creditsRemaining)
   const granted = Math.max(0, usage.period.creditsGranted)
   return `${usage.plan.name} · ${remaining}/${granted} créditos`

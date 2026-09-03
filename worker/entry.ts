@@ -1,9 +1,10 @@
 import app from './router'
 import { authorizeRequest } from './auth'
 import { withRequestContext } from './requestContext'
-import { analyzeAlibabaSelfFirst, parseAlibabaSelfFirstUrl } from './alibabaSelfFirst'
+import { analyzeAlibabaSelfFirst, parseAlibabaSelfFirstUrl, resolveAlibabaSelfFirst } from './alibabaSelfFirst'
 import { analyzeArgentinaMarketHybrid } from './argentinaMarketOrchestrator'
 import { resolveMercadoLibreAccessToken } from './mercadoLibreAuth'
+import { fetchBcraReferenceFx } from './bcraFx'
 import { handleAnalysisHistory, isAnalysisHistoryRoute } from './analysisHistory'
 import { overlayHybridMarketEconomics } from './hybridMarketEconomics'
 import { handleWatchlist, isWatchlistRoute } from './watchlist'
@@ -130,6 +131,101 @@ async function overlayUserAnalysisResponse(
   return jsonResponseLike(response, body)
 }
 
+function cleanText(value: unknown, max: number) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : ''
+}
+
+function positiveNumber(value: unknown) {
+  const number = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(number) && number > 0 ? number : 0
+}
+
+function safeImageUrl(value: unknown) {
+  const raw = cleanText(value, 2048)
+  if (!raw) return null
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Build a server-owned analysis shell from a ficha the user already confirmed.
+ * Customs fields are deliberately absent: the paid reservation authorizes the
+ * subsequent NCM endpoint, which remains fail-closed and tied to this identity.
+ */
+function confirmedProductAnalysis(body: unknown) {
+  const raw = body && typeof body === 'object' ? body as any : null
+  const product = raw?.product && typeof raw.product === 'object' ? raw.product : null
+  if (!product) return null
+
+  const name = cleanText(product.name, 500)
+  if (name.length < 3) return null
+  const category = cleanText(product.category, 300)
+  const unitPriceUsd = positiveNumber(product.unitPriceUsd) || null
+  const moq = positiveNumber(product.moq) || null
+  const packedWeightKg = positiveNumber(product.packedWeightKg)
+  const volumeCbm = positiveNumber(product.volumeCbm)
+  const originCountry = cleanText(product.originCountry, 120)
+  const sourceUrl = cleanText(raw.sourceUrl, 2048) || 'manual://product'
+  const suggested = Array.isArray(raw.suggestedQuantities)
+    ? raw.suggestedQuantities.map(positiveNumber).filter((value: number) => value > 0).slice(0, 12)
+    : []
+  const suggestedQuantities = [...new Set([...(moq ? [moq] : []), ...suggested])].sort((a, b) => a - b)
+
+  return {
+    sourceUrl,
+    fetched: raw.fetched === true,
+    sourceRead: raw.sourceRead && typeof raw.sourceRead === 'object' ? raw.sourceRead : undefined,
+    product: {
+      name,
+      category,
+      unitPriceUsd,
+      moq,
+      packedWeightKg,
+      volumeCbm,
+      originCountry,
+      imageUrl: safeImageUrl(product.imageUrl),
+      material: cleanText(product.material, 500) || null,
+      functionText: cleanText(product.functionText, 700) || null,
+      description: cleanText(product.description, 1500) || null,
+    },
+    market: {
+      estimatedPriceArs: null,
+      estimatedMonthlyDemand: 0,
+      source: 'Mercado argentino pendiente del análisis',
+    },
+    suggestedQuantities,
+    confidence: {
+      overall: Math.max(60, Math.min(95, Number(raw.confidence?.overall) || 60)),
+      productSource: 'Ficha confirmada por el usuario',
+      logistics: packedWeightKg > 0 && volumeCbm > 0 ? 'confirmed' : 'missing',
+      market: 'pending',
+    },
+    assumptions: [
+      ...(Array.isArray(raw.assumptions) ? raw.assumptions.filter((item: unknown): item is string => typeof item === 'string').slice(0, 20) : []),
+      'La ficha fue confirmada por el usuario antes de iniciar el análisis pago. NCM, mercado y economics se resuelven después de esta reserva.',
+    ],
+  }
+}
+
+async function productRead(request: Request, env: Record<string, unknown>) {
+  let body: any = null
+  try { body = await request.json() } catch { body = null }
+  const url = parseAlibabaSelfFirstUrl(body?.url)
+  if (!url) return Response.json({ error: 'Ingresá un link HTTPS válido de Alibaba.' }, { status: 400 })
+  try {
+    // Deliberately no market, FX or NCM here. This is only the free supplier-ficha
+    // prefill. If all extractors fail, resolveAlibabaSelfFirst returns a partial
+    // ficha and the UI asks the user for the missing fields instead of charging.
+    return Response.json(await resolveAlibabaSelfFirst(url, env as any))
+  } catch {
+    return Response.json({ error: 'No pude leer esa publicación. Podés reintentar o describir el producto sin link.' }, { status: 503 })
+  }
+}
+
 /**
  * Dispatch an already-authenticated request into the existing product/SaaS
  * handlers. Stage 5 wraps this function, so metered routes must reserve quota
@@ -166,20 +262,31 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
     return hybridMarketBenchmark(request, env)
   }
 
-  // Normal Alibaba analysis is self-scrape first. Parse.bot is now only an
-  // optional supplement when first-party HTML/JSON does not complete the
-  // mandatory product ficha. Explicit diagnostic sourceMode requests keep
-  // using the existing router probes unchanged.
+  if (url.pathname === '/api/product-read' && request.method === 'POST') {
+    return productRead(request, env)
+  }
+
+  // Primary paid path: the product is already identified/confirmed in the UI.
+  // Reserve one analysis credit, hydrate market/FX, and then let NCM continue on
+  // the same reservation. No supplier scraper is repeated here.
   if (url.pathname === '/api/analyze' && request.method === 'POST') {
     let body: any = null
     try { body = await request.clone().json() } catch { body = null }
+
+    const confirmed = confirmedProductAnalysis(body)
+    if (confirmed) {
+      const [marketed, fx] = await Promise.all([
+        overlayHybridMarketEconomics(confirmed, env as any),
+        fetchBcraReferenceFx(),
+      ])
+      return Response.json({ ...marketed, fx })
+    }
+
+    // Legacy direct-link callers remain supported. The new primary journey uses
+    // /api/product-read before this point, so a link alone here is compatibility.
     const alibabaUrl = !body?.sourceMode ? parseAlibabaSelfFirstUrl(body?.url) : null
     if (alibabaUrl) {
       try {
-        // Self-first still owns Alibaba extraction + FX hydration, but its
-        // legacy ML-only hydration must not see provider credentials. The
-        // authoritative hybrid overlay immediately below gets the original
-        // env and performs the single real Argentina-market lookup.
         const selfFirstEnv = withoutLegacyMarketCredentials(env, '/api/analyze')
         const analysis = await analyzeAlibabaSelfFirst(alibabaUrl, selfFirstEnv as any)
         return Response.json(await overlayHybridMarketEconomics(analysis, env as any))

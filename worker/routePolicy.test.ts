@@ -31,12 +31,17 @@ describe('SaaS API route inventory', () => {
     expect([...implemented].sort()).toEqual([...classified].sort())
   })
 
-  it('keeps every high-cost route away from a public target state', () => {
+  it('keeps every high-cost route controlled, with product prefill as the explicit zero-credit exception', () => {
     const highCost = API_ROUTE_POLICIES.filter((route) => route.costRisk === 'high')
     expect(highCost.length).toBeGreaterThan(0)
     for (const route of highCost) {
       expect(['authenticated', 'internal']).toContain(route.targetAccess)
-      if (route.targetAccess === 'authenticated') expect(route.targetMetered).toBe(true)
+      if (route.id === 'product-read') {
+        expect(route.targetAccess).toBe('authenticated')
+        expect(route.targetMetered).toBe(false)
+      } else if (route.targetAccess === 'authenticated') {
+        expect(route.targetMetered).toBe(true)
+      }
     }
   })
 
@@ -64,6 +69,15 @@ describe('SaaS API route inventory', () => {
     expect(resolveRoutePolicy('/api/watchlist-refresh', 'POST')).toMatchObject({ id: 'watchlist-refresh', targetAccess: 'authenticated', targetMetered: true, costRisk: 'high' })
   })
 
+  it('keeps supplier ficha prefill authenticated but zero analysis-credit', () => {
+    expect(resolveRoutePolicy('/api/product-read', 'POST')).toMatchObject({
+      id: 'product-read',
+      targetAccess: 'authenticated',
+      targetMetered: false,
+      costRisk: 'high',
+    })
+  })
+
   it('gives every targetMetered route exactly one explicit Stage 5 economic rule', () => {
     const coverage = validateMeteringRuleCoverage()
     expect(coverage.complete).toBe(true)
@@ -75,6 +89,7 @@ describe('SaaS API route inventory', () => {
 
   it('resolves only declared method/path pairs', () => {
     expect(resolveRoutePolicy('/api/analyze', 'POST')?.id).toBe('analyze')
+    expect(resolveRoutePolicy('/api/product-read', 'POST')?.id).toBe('product-read')
     expect(resolveRoutePolicy('/api/alibaba-native-probe', 'POST')?.targetAccess).toBe('internal')
     expect(resolveRoutePolicy('/api/argentina-market/benchmark', 'POST')).toMatchObject({
       id: 'argentina-market-benchmark',
@@ -83,6 +98,7 @@ describe('SaaS API route inventory', () => {
       costRisk: 'high',
     })
     expect(resolveRoutePolicy('/api/analyze', 'GET')).toBeNull()
+    expect(resolveRoutePolicy('/api/product-read', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/history', 'DELETE')).toBeNull()
     expect(resolveRoutePolicy('/api/watchlist-refresh', 'GET')).toBeNull()
     expect(resolveRoutePolicy('/api/usage', 'POST')).toBeNull()

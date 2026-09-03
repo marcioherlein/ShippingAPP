@@ -203,6 +203,17 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     notes: 'Diagnostic route that deliberately bypasses Parse.bot. Must not remain a public production compute surface.',
   },
   {
+    id: 'product-read',
+    path: '/api/product-read',
+    methods: ['POST'],
+    currentAccess: 'public',
+    targetAccess: 'authenticated',
+    targetMetered: false,
+    costRisk: 'high',
+    externalProviders: ['Alibaba', 'Cloudflare Browser', 'Parse.bot'],
+    notes: 'Intentional zero-analysis-credit supplier-ficha prefill. It may use bounded extraction fallbacks but must never run NCM, Argentina-market benchmarking or landed-cost economics. Authentication is mandatory to limit anonymous abuse.',
+  },
+  {
     id: 'mercadolibre-oauth-callback',
     path: '/oauth/mercadolibre/callback',
     methods: ['GET'],
@@ -332,7 +343,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetMetered: true,
     costRisk: 'high',
     externalProviders: ['Parse.bot / Alibaba', 'ShippingAPP direct Alibaba', 'Cloudflare Browser', 'Cloudflare Workers AI', 'Mercado Libre', 'BCRA'],
-    notes: 'Starts a one-credit full-analysis reservation. The same reservation covers the subsequent NCM continuation and settles only after that continuation succeeds.',
+    notes: 'Starts the one-credit import-analysis reservation only after product confirmation. For legacy callers it can still ingest Alibaba directly; the primary journey uses /api/product-read first, then submits confirmed product facts here. The same reservation covers NCM continuation and clarifications.',
   },
 ] as const
 

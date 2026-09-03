@@ -15,6 +15,7 @@ import './styles/design-system.css'
 import './styles/journey-refinement.css'
 import './styles/p2-semantic-polish.css'
 import './styles/accessibility.css'
+import './styles/ncm-clarification.css'
 
 const root = document.getElementById('root')
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.trim()

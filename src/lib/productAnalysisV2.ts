@@ -28,14 +28,19 @@ export async function ingestAlibabaUrlV2(url: string): Promise<ProductAnalysis &
 }
 
 export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<ProductAnalysisV2> {
-  const localCustoms = customsProfileFor(base.product.category, base.product.originCountry, base.product.name)
+  // Alibaba often gives us a very descriptive title but no explicit category.
+  // The continuation reservation still represents the same product, so using
+  // the title as classification context is safer than sending an empty category
+  // (which the reservation guard previously rejected before NCM could run).
+  const classificationCategory = base.product.category.trim() || base.product.name.trim()
+  const localCustoms = customsProfileFor(classificationCategory, base.product.originCountry, base.product.name)
   let customs = localCustoms
   let refinement: ProductAnalysisV2['classificationRefinement']
 
   try {
     const full = await classifyNcmRemote({
       name: base.product.name,
-      category: base.product.category,
+      category: classificationCategory,
       material: base.product.material ?? null,
       functionText: base.product.functionText ?? null,
       description: base.product.description ?? null,

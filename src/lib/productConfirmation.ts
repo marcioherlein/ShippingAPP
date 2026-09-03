@@ -22,12 +22,45 @@ export type ProductConfirmationMissingField = {
   label: string
 }
 
+export type ClassificationClarificationTarget = 'functionText' | 'material' | 'category' | 'description'
+
 function cleanText(value: string | null | undefined, max = 1200) {
   return (value || '').replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
 function positive(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
+export function classificationClarificationTarget(missingFacts: string[]): ClassificationClarificationTarget {
+  const text = missingFacts.join(' ').toLocaleLowerCase('es')
+  if (/funci[oó]n|uso principal|para qu[eé] sirve|utiliza/.test(text)) return 'functionText'
+  if (/material|composici[oó]n|fabricad/.test(text)) return 'material'
+  if (/tipo|categor[ií]a|naturaleza del producto/.test(text)) return 'category'
+  return 'description'
+}
+
+export function applyClassificationClarification(
+  data: ProductConfirmationData,
+  rawNote: string,
+  missingFacts: string[],
+): ProductConfirmationData {
+  const note = cleanText(rawNote, 1000)
+  if (!note) return data
+
+  const target = classificationClarificationTarget(missingFacts)
+  const descriptionNote = `Aclaración del usuario: ${note}`
+  const description = cleanText(data.description, 1200).includes(descriptionNote)
+    ? cleanText(data.description, 1200)
+    : cleanText([data.description, descriptionNote].filter(Boolean).join('. '), 1200)
+
+  return {
+    ...data,
+    description,
+    ...(target === 'functionText' && !cleanText(data.functionText, 500) ? { functionText: cleanText(note, 500) } : {}),
+    ...(target === 'material' && !cleanText(data.material, 300) ? { material: cleanText(note, 300) } : {}),
+    ...(target === 'category' && !cleanText(data.category, 300) ? { category: cleanText(note, 300) } : {}),
+  }
 }
 
 export function resolvedProductVolumeCbm(data: ProductConfirmationData) {

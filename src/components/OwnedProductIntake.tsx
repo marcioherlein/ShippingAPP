@@ -52,7 +52,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
     <div className="owned-product-intro">
       <span className="eyebrow">Tu producto</span>
       <h2>Elegí la forma más fácil.</h2>
-      <p>No hace falta saber de aduana ni completar una ficha entera. Primero identifico el producto; después te pregunto únicamente lo que realmente falte para clasificar y cotizar.</p>
+      <p>Cargar, leer y completar el producto no consume un análisis. El crédito se usa recién cuando pedís clasificar la NCM y calcular la importación.</p>
     </div>
 
     {mode === null && <div className="owned-product-options">
@@ -60,18 +60,18 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
         <span className="owned-product-option-icon"><UiIcon name="external-link" size={19} /></span>
         <b>Pegar link de Alibaba</b>
         <small>Intento traer título, tipo, specs, precio, MOQ, peso, volumen y origen. Después sólo confirmás o completás faltantes.</small>
-        <em>Más rápido</em>
+        <em>Lectura gratis</em>
       </button>
       <button type="button" onClick={() => setMode('describe')}>
         <span className="owned-product-option-icon"><UiIcon name="edit" size={19} /></span>
         <b>Describir el producto</b>
-        <small>Decime qué es en una frase. Primero resuelvo la clasificación; los datos de logística se piden después sólo si hacen falta.</small>
+        <small>Decime qué es en una frase. Primero armamos la ficha; el análisis se consume sólo cuando pedís NCM, impuestos y costo puesto.</small>
       </button>
     </div>}
 
     {mode === 'link' && <form className="owned-product-entry" onSubmit={(event) => void submitLink(event)}>
       <div className="owned-product-entry-head">
-        <div><b>Pegá la publicación de Alibaba</b><small>ShippingAPP intenta lectura propia primero; Parse.bot y Browser Run quedan como respaldo.</small></div>
+        <div><b>Pegá la publicación de Alibaba</b><small>ShippingAPP intenta lectura propia primero; Browser Run y Parse.bot quedan como respaldo. Esta lectura no consume un análisis.</small></div>
         <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
       </div>
       <div className="owned-product-link-row">
@@ -90,7 +90,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
 
     {mode === 'describe' && <form className="owned-product-entry" onSubmit={submitDescription}>
       <div className="owned-product-entry-head">
-        <div><b>¿Qué producto es?</b><small>Escribilo como se lo explicarías a una persona. No hace falta conocer la NCM.</small></div>
+        <div><b>¿Qué producto es?</b><small>Escribilo como se lo explicarías a una persona. Completar la ficha es gratis; el análisis empieza después.</small></div>
         <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
       </div>
       <textarea

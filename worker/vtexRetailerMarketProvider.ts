@@ -81,6 +81,14 @@ export const DEFAULT_ARGENTINA_VTEX_RETAILERS: readonly ArgentinaVtexRetailer[] 
   { id: 'sportline', name: 'Sportline', baseUrl: 'https://www.sportline.com.ar', tradePolicy: '1', maxCandidates: 12 },
 ]
 
+// Specialized official-brand storefronts are kept separate from the generalist
+// registry so their marginal value can be measured independently. They still
+// participate in the same parallel public-VTEX discovery and every candidate
+// is gated by the same deterministic matcher before economics.
+export const SPECIALIZED_ARGENTINA_VTEX_RETAILERS: readonly ArgentinaVtexRetailer[] = [
+  { id: 'sony-official', name: 'Sony Store Oficial', baseUrl: 'https://store.sony.com.ar', tradePolicy: '1', maxCandidates: 12 },
+]
+
 function positiveNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
@@ -269,7 +277,10 @@ async function discoverRetailer(
 
 export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarketProviderOptions = {}): ArgentinaMarketDiscoveryProvider {
   const fetchImpl = options.fetchImpl || fetch
-  const retailers = (options.retailers?.length ? options.retailers : [...DEFAULT_ARGENTINA_VTEX_RETAILERS]).map((retailer) => ({
+  const configuredRetailers = options.retailers?.length
+    ? options.retailers
+    : [...DEFAULT_ARGENTINA_VTEX_RETAILERS, ...SPECIALIZED_ARGENTINA_VTEX_RETAILERS]
+  const retailers = configuredRetailers.map((retailer) => ({
     ...retailer,
     baseUrl: retailer.baseUrl.replace(/\/+$/, ''),
   }))

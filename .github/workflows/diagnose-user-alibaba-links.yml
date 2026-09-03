@@ -11,7 +11,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
       INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
@@ -28,5 +28,5 @@ jobs:
             echo "::error::INTERNAL_API_TOKEN is missing or invalid."
             exit 1
           fi
-      - name: Run production scraper + classifier diagnostics
-        run: node scripts/diagnose-user-alibaba-links.mjs
+      - name: Run Spanish NCM + continuation retry diagnostics
+        run: node scripts/diagnose-ncm-spanish-retry.mjs

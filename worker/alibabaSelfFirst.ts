@@ -5,6 +5,7 @@ import type { BrowserRun } from './alibabaSource'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
 import { fetchBcraReferenceFx } from './bcraFx'
+import { deriveNormalizedCategory, deriveSemanticConcepts } from './semanticConcepts'
 
 type Env = MercadoLibreAuthEnv & {
   BROWSER: BrowserRun
@@ -109,6 +110,53 @@ export function requiredSelfFirstSignals(data: any) {
     usableNumber(product.volumeCbm),
     usableText(product.originCountry),
   ].filter(Boolean).length
+}
+
+// Derive a safe normalized category from the evidence already gathered when the supplier did
+// not expose one. This avoids asking the user a silly "¿qué categoría?" question about a
+// product whose material/function are already clear. It is explicitly a ShippingAPP-DERIVED
+// normalization (categorySource='derived'), never presented as a supplier assertion, and it
+// fails closed (leaves 'Sin clasificar') when the evidence does not clearly describe a
+// product. Supplier-provided categories are tagged categorySource='supplier'.
+function applyDerivedCategory(data: any) {
+  const product = data.product || {}
+  if (usableText(product.category, ['Sin clasificar'])) {
+    product.categorySource = product.categorySource || 'supplier'
+    data.product = product
+    return data
+  }
+  const facts = {
+    name: usableText(product.name, ['Producto Alibaba', 'Sin clasificar']) ? product.name : null,
+    material: product.material || null,
+    functionText: product.functionText || null,
+    description: product.description || null,
+  }
+  const concepts = deriveSemanticConcepts(facts)
+  const derived = deriveNormalizedCategory(facts, {
+    concepts: concepts.concepts,
+    material: concepts.material,
+    construction: concepts.construction,
+  })
+  if (!derived) {
+    data.product = product
+    return data
+  }
+  product.category = derived
+  product.categorySource = 'derived'
+  data.product = product
+  data.sourceEvidence = {
+    ...(data.sourceEvidence || {}),
+    derivedCategory: {
+      value: derived,
+      basis: concepts.concepts,
+      note: 'Categoría normalizada derivada por ShippingAPP a partir de la evidencia; NO es una afirmación del proveedor.',
+    },
+  }
+  data.assumptions = [
+    `Categoría normalizada "${derived}" derivada por ShippingAPP desde la evidencia del producto (material/función); no es un dato declarado por el proveedor y puede corregirse.`,
+    ...(data.assumptions || []),
+  ]
+  return data
 }
 
 function mergeCommonFacts(data: any, facts: ParsebotAlibabaFacts, options: {
@@ -289,6 +337,12 @@ export async function resolveAlibabaSelfFirst(
   if (direct.status !== 'unavailable') data = mergeDirect(data, direct)
   else data.assumptions = [...direct.warnings, ...(data.assumptions || [])]
 
+  // Fill a safe derived category from evidence already gathered. Category is the only one of
+  // the seven signals ShippingAPP can supply without a provider call, so deriving it here
+  // avoids spending Browser Run / Parse.bot merely to obtain a generic category label when
+  // every other signal is already present. Genuinely-missing numeric facts still gate below.
+  data = applyDerivedCategory(data)
+
   // First-party path: direct HTTPS/embedded JSON first, then our own rendered
   // browser extraction. A complete product ficha must consume zero Parse.bot credits.
   if (requiredSelfFirstSignals(data) < 7) {
@@ -303,6 +357,7 @@ export async function resolveAlibabaSelfFirst(
       }
       data.assumptions = [...native.warnings, ...(data.assumptions || [])]
     }
+    data = applyDerivedCategory(data)
   }
 
   // Parse.bot is a last-resort supplement only. ShippingAPP remains operational
@@ -311,6 +366,7 @@ export async function resolveAlibabaSelfFirst(
     const parsebot = await parsebotReader(url, env)
     if (parsebot.status === 'ready') data = mergeParsebot(data, parsebot)
     else data.assumptions = [...parsebot.warnings, ...(data.assumptions || [])]
+    data = applyDerivedCategory(data)
   }
 
   if (requiredSelfFirstSignals(data) < 7) {

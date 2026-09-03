@@ -1,4 +1,5 @@
 import { ncmAppTariffOverride } from './ncmTariffOverrides'
+import { deriveClarifications, deriveSemanticConcepts, type SemanticConcepts } from './semanticConcepts'
 
 export type NcmIndexRecord = [
   code: string,
@@ -50,6 +51,31 @@ export type NcmRetrievalCandidate = {
   label: string
   score: number
   matchedTerms: string[]
+  // Positive score before negative-evidence penalties (observability).
+  positiveScore?: number
+  // Penalty applied because the candidate label matched product exclusion evidence.
+  penalty?: number
+  // Human-readable exclusion terms that conflicted with this candidate's label.
+  conflicts?: string[]
+}
+
+export type ClassificationDiagnostics = {
+  // Canonical concept keys that fired (e.g. 'beverage_container', '!vacuum_insulated').
+  normalizedConcepts: string[]
+  // Positive Spanish retrieval terms actually used.
+  positiveConcepts: string[]
+  // Negative/exclusion terms applied during retrieval.
+  negativeConcepts: string[]
+  // Structured normalized facts.
+  material: string | null
+  construction: string | null
+  activeMechanism: string | null
+  // Top candidate scores with any penalties/conflicts (never the whole catalog).
+  topCandidates: Array<{ code: string; score: number; positiveScore?: number; penalty?: number; conflicts?: string[] }>
+  // Why the confidence gate resolved as it did.
+  confidenceReason: string
+  // What triggered a clarification, if any.
+  clarificationTrigger: string | null
 }
 
 export type NcmProductFacts = {
@@ -74,10 +100,11 @@ export type FullNcmClassification = {
   catalogRecordCount: number
   retrievalMode: 'ai_reranked' | 'deterministic_fallback' | 'missing'
   tariff: NcmTariff | null
+  diagnostics?: ClassificationDiagnostics
 }
 
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
-type AiExpansion = { searchTerms: string[]; missingFacts: string[] }
+type AiExpansion = { searchTerms: string[]; negativeTerms: string[]; missingFacts: string[] }
 type AiRanking = { ranking: Array<{ code: string; reason?: string }>; confidence?: 'high' | 'medium' | 'low'; missingFacts?: string[] }
 
 const STOPWORDS = new Set([
@@ -226,7 +253,7 @@ function shortcutClassification(
   }
 }
 
-function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): FullNcmClassification | null {
+function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, concepts: SemanticConcepts): FullNcmClassification | null {
   const text = normalizeText(factsText(facts))
 
   if (automaticMechanicalCommonMetalWristwatch(facts)) {
@@ -237,6 +264,28 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
         official,
         ['reloj de pulsera', 'automatico', 'mecanico', 'acero inoxidable'],
         'Producto identificado como reloj de pulsera mecánico automático con evidencia de caja/material de metal común; se excluye la partida 91.01 de caja de metal precioso.',
+      )
+    }
+  }
+
+  // Language-invariant insulated-beverage-container shortcut. Fires only when the semantic
+  // layer asserts BOTH a beverage-container function AND vacuum-insulated construction and
+  // insulation is not explicitly denied. This is what makes an English "vacuum flask", a
+  // Spanish "termo aislado por vacío" and a mixed "vacuum flask de acero inoxidable"
+  // converge on 9617.00.10 without any per-language token hardcoding. A plain plastic bottle
+  // whose spec says "thermal insulation: none" carries '!vacuum_insulated' and never reaches
+  // here.
+  const insulatedBeverage = concepts.concepts.includes('beverage_container')
+    && concepts.concepts.includes('vacuum_insulated')
+    && !concepts.concepts.includes('!vacuum_insulated')
+  if (insulatedBeverage) {
+    const official = findOfficial(index, '9617.00.10')
+    if (official) {
+      return shortcutClassification(
+        index,
+        official,
+        ['termo', 'recipiente isotermico', 'aislado por vacio', 'botella termica'],
+        'Producto identificado como termo / recipiente isotérmico aislado por vacío (evidencia de aislamiento térmico + función de recipiente para bebidas), con independencia del idioma de la ficha.',
       )
     }
   }
@@ -285,12 +334,16 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts): F
   return null
 }
 
-export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25): NcmRetrievalCandidate[] {
+export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25, exclusionTerms: string[] = []): NcmRetrievalCandidate[] {
   if (!index || ![3, 4].includes(index.meta.indexSchema) || !Array.isArray(index.records)) return []
   const rawPhrases = [...safeTerms(searchTerms), facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''].filter(Boolean)
   const phraseNorms = [...new Set(rawPhrases.map(normalizeText).filter((phrase) => phrase.length >= 4))]
   const queryTokens = [...new Set(rawPhrases.flatMap(tokens))]
   if (queryTokens.length < 2 && phraseNorms.every((phrase) => phrase.split(' ').length < 2)) return []
+
+  // Negative-evidence tokens: normalized exclusion substrings matched against candidate
+  // labels. These are penalties, not query terms — they never add score, only subtract it.
+  const exclusionNorms = [...new Set(exclusionTerms.map(normalizeText).filter((term) => term.length >= 3))]
 
   const chapterPrefixes = allowedChapterPrefixes(facts)
   const scored: NcmRetrievalCandidate[] = []
@@ -317,9 +370,30 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
       matchedTerms.push(token)
     }
 
-    if (score >= 8 && new Set(matchedTerms).size >= 2) {
-      scored.push({ code, label, score: Math.round(score * 100) / 100, matchedTerms: [...new Set(matchedTerms)] })
+    // Inclusion is decided on POSITIVE evidence only: a candidate must earn its place with
+    // real textual overlap. Contradicted families are not silently promoted by a negative.
+    if (score < 8 || new Set(matchedTerms).size < 2) continue
+    const positiveScore = Math.round(score * 100) / 100
+
+    // Negative-evidence penalty: each distinct exclusion concept present in the label is a
+    // contradiction between the product and the candidate family. Penalize heavily so
+    // lexical overlap on generic words (recipiente, thermal, stainless…) cannot outrank a
+    // family the product explicitly is not.
+    const conflicts: string[] = []
+    for (const exclusion of exclusionNorms) {
+      if (normalizedLabel.includes(exclusion)) conflicts.push(exclusion)
     }
+    const penalty = conflicts.length ? 18 + (conflicts.length - 1) * 8 : 0
+    const finalScore = Math.round((positiveScore - penalty) * 100) / 100
+
+    scored.push({
+      code,
+      label,
+      score: finalScore,
+      matchedTerms: [...new Set(matchedTerms)],
+      positiveScore,
+      ...(penalty ? { penalty, conflicts } : {}),
+    })
   }
 
   return scored.sort((a, b) => b.score - a.score || a.code.localeCompare(b.code)).slice(0, Math.max(1, Math.min(50, limit)))
@@ -329,21 +403,22 @@ async function expandSearchTerms(ai: AI, facts: NcmProductFacts): Promise<AiExpa
   try {
     const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
       messages: [
-        { role: 'system', content: 'You prepare search vocabulary for Argentina customs nomenclature retrieval. Return JSON only: {"searchTerms":[...],"missingFacts":[...]}. searchTerms must be Spanish customs/product nouns or short phrases describing what the product IS, its principal function, material/composition and important technical nature. Include useful synonyms/translations. NEVER output HS, NCM, tariff or numeric classification codes. Do not guess missing technical facts.' },
+        { role: 'system', content: 'You prepare search vocabulary for Argentina customs nomenclature retrieval. Return JSON only: {"searchTerms":[...],"negativeTerms":[...],"missingFacts":[...]}. searchTerms must be Spanish customs/product nouns or short phrases describing what the product IS, its principal function, material/composition and important technical nature. negativeTerms must be Spanish customs concepts that the product explicitly is NOT (e.g. "isotérmico", "eléctrico", "refrigeración", "correctora") ONLY when the evidence explicitly denies them; never guess. Include useful synonyms/translations. NEVER output HS, NCM, tariff or numeric classification codes. Do not guess missing technical facts.' },
         { role: 'user', content: JSON.stringify(facts) },
       ],
       response_format: { type: 'json_object' },
       temperature: 0,
-      max_completion_tokens: 350,
+      max_completion_tokens: 380,
     })
     const content = result?.response ?? result?.choices?.[0]?.message?.content
     const parsed = typeof content === 'string' ? JSON.parse(content) : content
     return {
       searchTerms: safeTerms(parsed?.searchTerms),
+      negativeTerms: safeTerms(parsed?.negativeTerms),
       missingFacts: Array.isArray(parsed?.missingFacts) ? parsed.missingFacts.filter((v: unknown): v is string => typeof v === 'string').slice(0, 8) : [],
     }
   } catch {
-    return { searchTerms: [], missingFacts: [] }
+    return { searchTerms: [], negativeTerms: [], missingFacts: [] }
   }
 }
 
@@ -398,24 +473,68 @@ function deriveConfidence(shortlist: NcmRetrievalCandidate[], ranked: AiRanking)
   return 'low'
 }
 
+function buildDiagnostics(
+  concepts: SemanticConcepts,
+  positiveTerms: string[],
+  exclusionTerms: string[],
+  ordered: NcmRetrievalCandidate[],
+  confidenceReason: string,
+  clarificationTrigger: string | null,
+): ClassificationDiagnostics {
+  return {
+    normalizedConcepts: concepts.concepts,
+    positiveConcepts: positiveTerms.slice(0, 14),
+    negativeConcepts: exclusionTerms.slice(0, 14),
+    material: concepts.material,
+    construction: concepts.construction,
+    activeMechanism: concepts.activeMechanism,
+    topCandidates: ordered.slice(0, 4).map((c) => ({
+      code: c.code, score: c.score, positiveScore: c.positiveScore, penalty: c.penalty, conflicts: c.conflicts,
+    })),
+    confidenceReason,
+    clarificationTrigger,
+  }
+}
+
 export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmProductFacts): Promise<FullNcmClassification> {
-  const deterministic = deterministicKnownNcm(index, facts)
-  if (deterministic) return deterministic
+  // Deterministic, language-independent semantic normalization runs first and unconditionally
+  // — it is the language-invariance floor and it feeds both retrieval and observability even
+  // when the AI expansion later degrades to nothing.
+  const concepts = deriveSemanticConcepts(facts)
+  // Specific, structured clarification questions asked only when they would change the
+  // classification. Surfaced on fail-closed paths so the user is asked something precise
+  // ("¿tiene aislamiento al vacío?") instead of a generic "¿qué es?".
+  const clarifications = deriveClarifications(concepts).map((c) => c.question)
+
+  const deterministic = deterministicKnownNcm(index, facts, concepts)
+  if (deterministic) {
+    return {
+      ...deterministic,
+      diagnostics: buildDiagnostics(concepts, deterministic.searchTerms, concepts.exclusionTerms, [], 'Shortcut determinístico de identidad obvia validado contra la snapshot oficial.', null),
+    }
+  }
 
   const expansion = await expandSearchTerms(ai, facts)
   const fallbackTerms = safeTerms([facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''])
-  const searchTerms = expansion.searchTerms.length ? expansion.searchTerms : fallbackTerms
-  const shortlist = retrieveNcmCandidates(index, searchTerms, facts, 25)
+  // Merge the deterministic Spanish concept vocabulary with the AI expansion. The concept
+  // terms guarantee tariff vocabulary reaches retrieval regardless of the source language;
+  // the AI expansion supplements with synonyms. Deterministic exclusions are unioned with
+  // any AI-provided negative terms.
+  const aiOrFallback = expansion.searchTerms.length ? expansion.searchTerms : fallbackTerms
+  const searchTerms = [...new Set([...concepts.positiveTerms, ...aiOrFallback])].slice(0, 20)
+  const exclusionTerms = [...new Set([...concepts.exclusionTerms, ...expansion.negativeTerms])]
+  const shortlist = retrieveNcmCandidates(index, searchTerms, facts, 25, exclusionTerms)
   if (!shortlist.length) {
     return {
       status: 'missing', code: null, label: null, confidence: 'missing', alternatives: [], tariff: null,
-      missingFacts: expansion.missingFacts,
+      missingFacts: [...new Set([...clarifications, ...expansion.missingFacts])].slice(0, 8),
       rationale: ['El índice oficial no produjo una shortlist con evidencia textual suficiente; no se inventa una NCM.'],
       searchTerms,
       sourceDate: index.meta.sourceDate,
       source: index.meta.source,
       catalogRecordCount: index.meta.recordCount,
       retrievalMode: 'missing',
+      diagnostics: buildDiagnostics(concepts, searchTerms, exclusionTerms, [], 'Sin shortlist: evidencia textual insuficiente contra el índice oficial.', 'evidencia insuficiente para recuperar candidatos'),
     }
   }
 
@@ -432,16 +551,20 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   const combinedMissingFacts = [...new Set([...expansion.missingFacts, ...(ranked.missingFacts || [])])].slice(0, 8)
 
   if (confidence === 'low') {
+    const confidenceReason = top.code !== shortlist[0].code
+      ? `AI rerank (${top.code}) discrepó del top determinístico (${shortlist[0].code}); fail-closed.`
+      : `Evidencia insuficiente para superar el umbral de confianza (score ${shortlist[0].score}).`
     return {
       status: 'missing',
       code: null,
       label: null,
       confidence: 'low',
       alternatives: ordered.slice(0, 4).map(({ code, label, score }) => ({ code, label, score })),
-      missingFacts: [...new Set([...combinedMissingFacts, 'Validar clasificación antes de usar aranceles o economics'])].slice(0, 8),
+      missingFacts: [...new Set([...clarifications, ...combinedMissingFacts, 'Validar clasificación antes de usar aranceles o economics'])].slice(0, 8),
       rationale: [
         'FAIL-CLOSED: la evidencia no alcanza para promover una NCM. Un candidato LOW nunca alimenta aranceles, impuestos ni economics.',
         ...(allowedChapterPrefixes(facts) ? [`Family gate activo: candidatos limitados al capítulo ${allowedChapterPrefixes(facts)?.join('/')}.`] : []),
+        ...(concepts.exclusions.length ? [`Evidencia negativa aplicada: ${concepts.exclusions.join(' ')}`] : []),
         ...(reason ? [reason] : []),
         `Retrieval determinístico: ${shortlist[0].code} score ${shortlist[0].score}.`,
         ...(top.code !== shortlist[0].code ? [`AI rerank discrepó y propuso ${top.code}; la discrepancia queda bloqueada.`] : []),
@@ -452,6 +575,7 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
       catalogRecordCount: index.meta.recordCount,
       retrievalMode: 'missing',
       tariff: null,
+      diagnostics: buildDiagnostics(concepts, searchTerms, exclusionTerms, ordered, confidenceReason, combinedMissingFacts[0] ?? 'confianza insuficiente'),
     }
   }
 
@@ -466,6 +590,7 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
     rationale: [
       'El candidato pertenece a la snapshot oficial ARCA; el modelo sólo pudo reordenar códigos de la shortlist determinística.',
       ...(allowedChapterPrefixes(facts) ? [`Family gate activo: candidatos limitados al capítulo ${allowedChapterPrefixes(facts)?.join('/')}.`] : []),
+      ...(concepts.exclusions.length ? [`Evidencia negativa aplicada: ${concepts.exclusions.join(' ')}`] : []),
       ...(tariff ? ['Tarifa NCM_APP aplicada automáticamente para economics de screening.'] : []),
       ...(reason ? [reason] : []),
       `Retrieval determinístico: ${shortlist[0].code} score ${shortlist[0].score}.`,
@@ -477,6 +602,7 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
     catalogRecordCount: index.meta.recordCount,
     retrievalMode: ranked.ranking.length ? 'ai_reranked' : 'deterministic_fallback',
     tariff,
+    diagnostics: buildDiagnostics(concepts, searchTerms, exclusionTerms, ordered, `Confianza ${confidence}: AI y retrieval determinístico coinciden en ${top.code}.`, combinedMissingFacts[0] ?? null),
   }
 }
 

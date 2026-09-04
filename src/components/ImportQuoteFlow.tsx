@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { importFreightValues } from '../data/importFreightValues'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type ModeCostBreakdown, type SensitiveProductCategory, type TransportMode } from '../lib/landedCostEngine'
 import { optimizeQuantity, type BuyStrategy } from '../lib/quantityOptimizer'
+import { buildImporterSummary, type ImporterSummary } from '../lib/importerSummary'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { usd } from '../lib/format'
 
@@ -74,6 +75,57 @@ function strategyCopy(strategy: BuyStrategy) {
   if (strategy === 'test') return 'prioriza no pasarse de presupuesto ni inmovilizar stock.'
   if (strategy === 'aggressive') return 'acepta más stock si baja el costo unitario.'
   return 'balancea costo unitario, presupuesto y meses de stock.'
+}
+
+const verdictClass: Record<string, string> = {
+  si: 'importer-verdict importer-verdict-si',
+  no: 'importer-verdict importer-verdict-no',
+  ajusta: 'importer-verdict importer-verdict-ajusta',
+  'faltan-datos': 'importer-verdict importer-verdict-neutral',
+}
+
+function ImporterSummaryCard({ summary, quantity }: { summary: ImporterSummary; quantity: number }) {
+  return <section className="table-card importer-summary-card">
+    <div className={verdictClass[summary.verdict] ?? verdictClass['faltan-datos']}>
+      <strong>{summary.verdictHeadline}</strong>
+      <span>{summary.verdictDetail}</span>
+    </div>
+
+    <div className="importer-cost-grid">
+      <div className="importer-cost-block">
+        <div className="importer-cost-block-title">Pagás una sola vez</div>
+        <div className="importer-cost-amount">{usd(summary.fixedCostUsd)}</div>
+        <ul className="importer-cost-list">
+          {summary.fixedItems.map((item) => <li key={item.label}><span>{item.label}</span><b>{usd(item.usd)}</b></li>)}
+          {summary.fixedItems.length === 0 && <li><span>Sin gastos fijos adicionales</span></li>}
+        </ul>
+      </div>
+
+      <div className="importer-cost-block">
+        <div className="importer-cost-block-title">Por cada unidad traída</div>
+        <div className="importer-cost-amount">{usd(summary.unitTotalCostUsd)}</div>
+        <ul className="importer-cost-list">
+          {summary.unitItems.map((item) => <li key={item.label}><span>{item.label}</span><b>{usd(item.usd)}</b></li>)}
+        </ul>
+      </div>
+    </div>
+
+    {summary.mode && <div className="importer-logistics-row">
+      <span>Mejor opción: <b>{summary.modeLabel}</b> · {quantity} u. · total <b>{usd(summary.totalCostUsd)}</b></span>
+      {summary.logisticsFact && <em className="importer-logistics-fact">{summary.logisticsFact}</em>}
+      {summary.freightSignals.map((s) => <em key={s} className="importer-logistics-fact importer-logistics-signal">{s}</em>)}
+    </div>}
+
+    {summary.sellPriceUsd !== null && <div className="importer-profit-row">
+      <span>Precio de venta <b>{usd(summary.sellPriceUsd)}</b></span>
+      <span>Ganás por unidad <b>{usd(summary.profitPerUnitUsd ?? 0)}</b></span>
+      <span>Margen <b>{summary.profitPct?.toFixed(0)}%</b></span>
+    </div>}
+
+    <div className="importer-capital-row">
+      Plata que necesitás ahora: <b>{usd(summary.needsCapitalUsd)}</b>
+    </div>
+  </section>
 }
 
 function perUnit(value: number, quantity: number) {
@@ -152,6 +204,8 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
     localSellPriceUsd,
   }), [originCountry, quantity, unitPriceUsd, unitWeightKg, unitVolumeCbm, dutyRatePct, statisticsRatePct, vatRatePct, vatAdditionalRatePct, gainsRatePct, iibbRatePct, purpose, entityType, hasImporterSignature, sensitiveCategory, capitalGoodEligible, capitalGoodUse, budgetUsd, moq, monthlyDemand, strategy, localSellPriceUsd])
 
+  const [showTechnicalDetail, setShowTechnicalDetail] = useState(false)
+
   const lcl = quote.modes.lcl
   const air = quote.modes.air
   const fcl = quote.modes.fcl
@@ -161,6 +215,8 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
   const quantityRecommendation = optimizer.recommendation
   const topCandidates = optimizer.candidates.slice(0, 5)
   const breakdown = winner ? unitBreakdown(winner, quantity) : []
+
+  const summary = useMemo(() => buildImporterSummary(quote, quantity, localSellPriceUsd, optimizer), [quote, quantity, localSellPriceUsd, optimizer])
 
   return <section className="manual-quote-shell journey-quote-shell">
     <div className="table-title journey-quote-title">
@@ -233,39 +289,51 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
       </aside>
 
       <section className="results-column">
-        <section className="recommendation journey-main-result unit-result-hero">
-          <div className="recommendation-top">
-            <div><span className="eyebrow">Resultado base</span><strong>{winner ? `${usd(winner.unitCostUsd)} por unidad puesta` : decision.title}</strong></div>
-            <div className="score"><span>Cantidad base</span><b>{quantity} u.</b></div>
-          </div>
-          <p className="mode">{winner ? `${productName || 'Producto'} · ${originCountry} · ${winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · total de la operación ${usd(winner.totalCostUsd)}.` : decision.body}</p>
-          <p className="unit-result-explainer">Este valor es el costo de <b>una unidad dentro de una importación de {quantity} unidades</b>. No simula importar una unidad aislada, porque los mínimos de flete y gastos fijos distorsionarían la decisión.</p>
-        </section>
+        <ImporterSummaryCard summary={summary} quantity={quantity} />
 
-        {winner && <section className="table-card unit-breakdown-card">
-          <div className="table-title"><div><span className="eyebrow">Costo puesto por unidad</span><h2>De FOB a tu costo final, punto por punto</h2></div><small>{winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · {quantity} u.</small></div>
-          <div className="unit-breakdown-list">
-            {breakdown.map(([label, value]) => <div key={label}><span>{label}</span><b>{usd(value)}</b></div>)}
-            <div className="unit-breakdown-total"><span>Costo puesto final / unidad</span><b>{usd(winner.unitCostUsd)}</b></div>
-          </div>
-          <div className="unit-context-grid">
-            <div><span>FOB total</span><b>{usd(winner.fobUsd)}</b></div>
-            <div><span>Flete total</span><b>{usd(winner.freightCostUsd)}</b></div>
-            <div><span>Trámite intervención</span><b>{winner.sensitiveCategoryUsd > 0 ? usd(winner.sensitiveCategoryUsd) : 'No aplica'}</b></div>
-            <div><span>Total operación</span><b>{usd(winner.totalCostUsd)}</b></div>
-          </div>
-        </section>}
+        <button
+          className="secondary importer-detail-toggle"
+          type="button"
+          onClick={() => setShowTechnicalDetail((v) => !v)}
+        >
+          {showTechnicalDetail ? 'Ocultar detalle técnico' : 'Ver detalle técnico (CIF, FOB, percepciones…)'}
+        </button>
 
-        <section className="table-card">
-          <div className="table-title"><div><span className="eyebrow">Comparativa logística</span><h2>LCL, aéreo y referencia FCL</h2></div><small>{quote.origin ? `${quote.origin.region} · ${quote.origin.capital}` : quote.status}</small></div>
-          <div className="table-scroll"><table><thead><tr><th>Modo</th><th>Flete</th><th>CIF</th><th>Impuestos</th><th>Gastos</th><th>Total</th><th>Unitario</th></tr></thead><tbody>{([lcl, air, fcl] as const).map((mode) => {
-            const taxes = mode.dutyUsd + mode.statisticsUsd + mode.vatUsd + mode.vatAdditionalUsd + mode.gainsUsd + mode.iibbUsd
-            const expenses = mode.fixedDestinationUsd + mode.noImporterSignatureUsd + mode.sensitiveCategoryUsd
-            const selected = winner?.mode === mode.mode
-            return <tr key={mode.mode} className={selected ? 'selected-row' : undefined}><td><b>{modeLabels[mode.mode]}</b>{selected && <em>recomendado</em>}{mode.mode === 'fcl' && <em>referencia</em>}</td><td>{usd(mode.freightCostUsd)}<br /><small>{mode.chargeableUnits} {mode.mode === 'air' ? 'kg cobrables' : mode.mode === 'lcl' ? 'WM' : 'cont.'}</small></td><td>{usd(mode.cifUsd)}</td><td>{usd(taxes)}</td><td>{usd(expenses)}</td><td><b>{usd(mode.totalCostUsd)}</b></td><td><b>{usd(mode.unitCostUsd)}</b></td></tr>
-          })}</tbody></table></div>
-          <div className="analysis-banner" style={{ marginTop: 16 }}><b>LCL vs Aéreo:</b> {quote.lclVsAir.cheaperMode === 'lcl' ? `LCL ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs aéreo.` : quote.lclVsAir.cheaperMode === 'air' ? `Aéreo ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs LCL.` : 'empate con los datos actuales.'} FCL queda como referencia de contenedor entero.</div>
-        </section>
+        {showTechnicalDetail && <>
+          <section className="recommendation journey-main-result unit-result-hero">
+            <div className="recommendation-top">
+              <div><span className="eyebrow">Resultado base</span><strong>{winner ? `${usd(winner.unitCostUsd)} por unidad puesta` : decision.title}</strong></div>
+              <div className="score"><span>Cantidad base</span><b>{quantity} u.</b></div>
+            </div>
+            <p className="mode">{winner ? `${productName || 'Producto'} · ${originCountry} · ${winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · total de la operación ${usd(winner.totalCostUsd)}.` : decision.body}</p>
+            <p className="unit-result-explainer">Este valor es el costo de <b>una unidad dentro de una importación de {quantity} unidades</b>. No simula importar una unidad aislada, porque los mínimos de flete y gastos fijos distorsionarían la decisión.</p>
+          </section>
+
+          {winner && <section className="table-card unit-breakdown-card">
+            <div className="table-title"><div><span className="eyebrow">Costo puesto por unidad</span><h2>De FOB a tu costo final, punto por punto</h2></div><small>{winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · {quantity} u.</small></div>
+            <div className="unit-breakdown-list">
+              {breakdown.map(([label, value]) => <div key={label}><span>{label}</span><b>{usd(value)}</b></div>)}
+              <div className="unit-breakdown-total"><span>Costo puesto final / unidad</span><b>{usd(winner.unitCostUsd)}</b></div>
+            </div>
+            <div className="unit-context-grid">
+              <div><span>FOB total</span><b>{usd(winner.fobUsd)}</b></div>
+              <div><span>Flete total</span><b>{usd(winner.freightCostUsd)}</b></div>
+              <div><span>Trámite intervención</span><b>{winner.sensitiveCategoryUsd > 0 ? usd(winner.sensitiveCategoryUsd) : 'No aplica'}</b></div>
+              <div><span>Total operación</span><b>{usd(winner.totalCostUsd)}</b></div>
+            </div>
+          </section>}
+
+          <section className="table-card">
+            <div className="table-title"><div><span className="eyebrow">Comparativa logística</span><h2>LCL, aéreo y referencia FCL</h2></div><small>{quote.origin ? `${quote.origin.region} · ${quote.origin.capital}` : quote.status}</small></div>
+            <div className="table-scroll"><table><thead><tr><th>Modo</th><th>Flete</th><th>CIF</th><th>Impuestos</th><th>Gastos</th><th>Total</th><th>Unitario</th></tr></thead><tbody>{([lcl, air, fcl] as const).map((mode) => {
+              const taxes = mode.dutyUsd + mode.statisticsUsd + mode.vatUsd + mode.vatAdditionalUsd + mode.gainsUsd + mode.iibbUsd
+              const expenses = mode.fixedDestinationUsd + mode.noImporterSignatureUsd + mode.sensitiveCategoryUsd
+              const selected = winner?.mode === mode.mode
+              return <tr key={mode.mode} className={selected ? 'selected-row' : undefined}><td><b>{modeLabels[mode.mode]}</b>{selected && <em>recomendado</em>}{mode.mode === 'fcl' && <em>referencia</em>}</td><td>{usd(mode.freightCostUsd)}<br /><small>{mode.chargeableUnits} {mode.mode === 'air' ? 'kg cobrables' : mode.mode === 'lcl' ? 'WM' : 'cont.'}</small></td><td>{usd(mode.cifUsd)}</td><td>{usd(taxes)}</td><td>{usd(expenses)}</td><td><b>{usd(mode.totalCostUsd)}</b></td><td><b>{usd(mode.unitCostUsd)}</b></td></tr>
+            })}</tbody></table></div>
+            <div className="analysis-banner" style={{ marginTop: 16 }}><b>LCL vs Aéreo:</b> {quote.lclVsAir.cheaperMode === 'lcl' ? `LCL ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs aéreo.` : quote.lclVsAir.cheaperMode === 'air' ? `Aéreo ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs LCL.` : 'empate con los datos actuales.'} FCL queda como referencia de contenedor entero.</div>
+          </section>
+        </>}
 
         <section className="table-card journey-quantity-card">
           <div className="table-title"><div><span className="eyebrow">Ahora sí: optimización</span><h2>{quantityRecommendation ? `${quantityRecommendation.quantity} unidades recomendadas` : budgetUsd <= 0 ? 'Definí presupuesto para optimizar' : 'Sin recomendación'}</h2></div><small>{budgetUsd > 0 ? `Presupuesto ${usd(budgetUsd)}` : 'Presupuesto abierto'}</small></div>
@@ -279,6 +347,9 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
               <div><span>Stock estimado</span><b>{quantityRecommendation.monthsOfStock === null ? 'sin demanda' : `${quantityRecommendation.monthsOfStock} meses`}</b></div>
               <div><span>Score</span><b>{quantityRecommendation.score}/100</b></div>
             </div>
+            {quantityRecommendation.reasons.filter((r) => r.includes('m³')).map((r) => (
+              <p key={r} className="assumption-note importer-logistics-signal">💡 {r}</p>
+            ))}
             <p className="assumption-note">{quantityRecommendation.affordable ? 'Entra dentro del presupuesto cargado.' : 'No entra dentro del presupuesto: es la opción menos mala encontrada desde el MOQ.'} {optimizer.notes[2]}</p>
             <button className="secondary" type="button" onClick={() => setQuantity(quantityRecommendation.quantity)}>Usar esta cantidad en la simulación</button>
           </>}

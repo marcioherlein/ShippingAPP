@@ -409,6 +409,10 @@ export default function App() {
       <p className="journey-landing-proof">100% gratuito &#xB7; Sin registro &#xB7; Sin estimaciones inventadas</p>
     </section>
 
+    <div className="journey-photo-break" aria-hidden="true">
+      <img src="/images/containers.jpg" alt="" />
+    </div>
+
     <section className="journey-how-it-works" id="como-funciona">
       <h2 className="journey-how-it-works-title">Tres pasos al costo real</h2>
       <p className="journey-how-it-works-sub">Sin formularios interminables ni datos que no ten&#xE9;s.</p>

@@ -9,7 +9,6 @@ export const TRUSTED_AUTH_KIND_HEADER = 'x-shippingapp-auth-kind'
 export const INTERNAL_TOKEN_HEADER = 'x-shippingapp-internal-token'
 
 const DEFAULT_AUTHORIZED_PARTIES = [
-  'http://localhost:5173',
   'https://shippingapp.marciofabrizio.workers.dev',
 ] as const
 

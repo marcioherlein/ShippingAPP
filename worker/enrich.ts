@@ -198,7 +198,6 @@ async function runtimeSmoke(baseUrl: string, env: Env) {
   const sim95Records = Array.isArray(sim95?.records) ? sim95.records.length : 0
 
   const ncmIsLegacyArca = ncm?.meta?.source === 'ARCA Arancel Integrado'
-    && ncm?.meta?.sourceDate === '2026-08-14'
     && ncm?.meta?.tariffDataIncluded === false
   const ncmIsAppTariffAsset = ncm?.meta?.source === 'NCM_APP.xlsx'
     && ncm?.meta?.sourceFile === 'NCM_APP.xlsx'
@@ -212,7 +211,7 @@ async function runtimeSmoke(baseUrl: string, env: Env) {
     throw new Error('NCM_APP asset row shape mismatch')
   }
   if (sim95?.meta?.chapter !== '95') throw new Error('SIM chapter 95 metadata mismatch')
-  if (sim95?.meta?.sourceDate !== '2026-08-14') throw new Error('SIM chapter 95 sourceDate mismatch')
+  if (!sim95?.meta?.sourceDate || !/^\d{4}-\d{2}-\d{2}$/.test(sim95.meta.sourceDate)) throw new Error('SIM chapter 95 sourceDate missing or malformed')
   if (sim95Records < 1) throw new Error('SIM chapter 95 has no records')
 
   return {

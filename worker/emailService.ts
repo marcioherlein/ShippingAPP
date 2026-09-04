@@ -73,6 +73,7 @@ function appOrigin(env: EmailEnv) {
     if (parsed.protocol === 'https:' || parsed.hostname === 'localhost') return parsed.origin
   } catch {
     // Invalid server-owned configuration fails closed.
+    console.error(JSON.stringify({ event: 'email.app_origin.config_error', configured }))
   }
   return null
 }
@@ -219,6 +220,7 @@ export async function sendApplicationEmail(
     } catch {
       // Provider failure is authoritative. A secondary persistence failure must
       // not leak raw D1 errors or change the delivery outcome reported upstream.
+      console.error(JSON.stringify({ event: 'email.mark_failed.persistence_error', eventId: reserved.event.id }))
     }
     return { status: 'failed', replayed: !reserved.created, eventId: reserved.event.id, code }
   }
@@ -231,6 +233,7 @@ export async function sendApplicationEmail(
     // failed solely because D1 could not persist the acknowledgement: that would
     // invite an unsafe duplicate retry. Keep the reservation queued/ambiguous;
     // later retries reuse the exact same provider idempotency key.
+    console.error(JSON.stringify({ event: 'email.mark_sent.persistence_error', eventId: reserved.event.id }))
   }
 
   return {

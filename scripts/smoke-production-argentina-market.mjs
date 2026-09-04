@@ -4,11 +4,27 @@ const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizi
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 25000)
 const MIN_COMPARABLES = Number(process.env.ARGENTINA_MARKET_MIN_COMPARABLES || 5)
 
-const probes = [
+// Branded / exact-mode controls (existing)
+const BRANDED_PROBES = [
   { id: 'logitech-m170', productName: 'Logitech M170', category: 'mouse inalámbrico' },
   { id: 'samsung-a16-128-4', productName: 'Samsung Galaxy A16 128GB 4GB', category: 'celular' },
   { id: 'motorola-g15-256-4', productName: 'Motorola G15 256GB 4GB', category: 'celular' },
 ]
+
+// Generic commodity probes (Stream B) — these must reach a live benchmark via functional mode
+// against Argentine retailers. Validates the language-bridge and commodity routing fixes.
+const COMMODITY_PROBES = [
+  { id: 'thermo-bottle-stainless', productName: '45oz 1350ml Large Capacity Stainless Steel Vacuum Bottle', category: 'stainless steel water bottle' },
+  { id: 'sport-bottle-plastic', productName: 'Large Capacity Sport Water Bottle Gym Plastic', category: 'sport water bottle' },
+  { id: 'sunglasses-uv400', productName: 'Mens Sunglasses Luxury Designer UV400 Polarized', category: 'sunglasses' },
+  { id: 'tws-earbuds', productName: 'TWS Wireless Bluetooth Earbuds', category: 'wireless earphones' },
+  { id: 'laptop-backpack', productName: 'Waterproof Laptop Backpack 30L', category: 'backpack' },
+  { id: 'usbc-charger-65w', productName: 'USB-C Fast Charger 65W GaN', category: 'power adapter' },
+  { id: 'bt-speaker', productName: 'Portable Bluetooth Speaker Waterproof', category: 'parlante bluetooth' },
+  { id: 'running-sneakers', productName: 'Running Sport Shoes Breathable', category: 'zapatillas deportivas' },
+]
+
+const probes = [...BRANDED_PROBES, ...COMMODITY_PROBES]
 
 async function postJson(payload) {
   const controller = new AbortController()
@@ -77,12 +93,15 @@ async function main() {
   }
 
   const healthy = results.filter((result) => result.marketHealth.healthy)
+  const commodityIds = new Set(COMMODITY_PROBES.map((p) => p.id))
+  const healthyCommodity = healthy.filter((result) => commodityIds.has(result.id))
   const completionRate = healthy.length / results.length
   console.log(JSON.stringify({
-    status: healthy.length ? 'ok' : 'fail',
+    status: healthyCommodity.length === COMMODITY_PROBES.length ? 'ok' : 'fail',
     baseUrl,
     freeRetailerProof: {
       healthyProbes: healthy.length,
+      healthyCommodityProbes: healthyCommodity.length,
       totalProbes: results.length,
       completionRate,
       minimumComparables: MIN_COMPARABLES,
@@ -90,8 +109,8 @@ async function main() {
     results,
   }, null, 2))
 
-  if (!healthy.length) {
-    throw new Error(`Free direct-retailer production gate failed: 0/${results.length} probes reached a live >=${MIN_COMPARABLES} benchmark.`)
+  if (healthyCommodity.length < COMMODITY_PROBES.length) {
+    throw new Error(`Generic-commodity production gate failed: ${healthyCommodity.length}/${COMMODITY_PROBES.length} commodity probes reached a live >=${MIN_COMPARABLES} benchmark.`)
   }
 }
 

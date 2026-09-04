@@ -1,15 +1,69 @@
 import { EXCLUDED_LISTING_TERMS, HIGH_BRAND_EQUITY } from './catalogRules'
 import { cleanText } from './catalogMatch'
+import { deriveSemanticConcepts } from './semanticConcepts'
 import type { MlResult } from './marketTypes'
 
 export type ArgentinaMarketMatchMode = 'exact' | 'functional'
 
-const SPEC_UNITS = 'tb|gb|mb|mah|w|watt|watts|kw|v|volt|volts|hz|kg|g|l|lt|litro|litros|ml|cm|mm|pa|bar|mp|inch|inches|pulgada|pulgadas'
+const SPEC_UNITS = 'tb|gb|mb|mah|w|watt|watts|kw|v|volt|volts|hz|kg|g|l|lt|litro|litros|ml|oz|onza|onzas|cm|mm|pa|bar|mp|inch|inches|pulgada|pulgadas'
 const SPEC_UNIT_ALIASES: Record<string, string> = {
   tb: 'tb', gb: 'gb', mb: 'mb', mah: 'mah', w: 'w', watt: 'w', watts: 'w', kw: 'kw', v: 'v', volt: 'v', volts: 'v',
-  hz: 'hz', kg: 'kg', g: 'g', l: 'l', lt: 'l', litro: 'l', litros: 'l', ml: 'ml', cm: 'cm', mm: 'mm', pa: 'pa',
-  bar: 'bar', mp: 'mp', inch: 'inch', inches: 'inch', pulgada: 'inch', pulgadas: 'inch',
+  hz: 'hz', kg: 'kg', g: 'g', l: 'l', lt: 'l', litro: 'l', litros: 'l', ml: 'ml', oz: 'oz', onza: 'oz', onzas: 'oz',
+  cm: 'cm', mm: 'mm', pa: 'pa', bar: 'bar', mp: 'mp', inch: 'inch', inches: 'inch', pulgada: 'inch', pulgadas: 'inch',
 }
+
+// Commodity concepts: generic imported goods (the Alibaba norm) whose price is driven by
+// category + material + traits, NOT by an exact model code or an exact capacity. These need
+// two special behaviors: (1) they must route to FUNCTIONAL mode even when the title carries
+// spec-like alphanumerics (45oz, UV400, 1350ml) that would otherwise be read as a model; and
+// (2) their dimensional specs (ml/l/oz/cm) are matched SOFTLY (an Argentine "botella 1L"
+// listing is a valid comparable for a "1350ml bottle"). Detection is intentionally a precise
+// NOUN lexicon here — NOT semanticConcepts, whose NCM-tuned liters regex would misfire on an
+// appliance like "termotanque 80 litros". Appliances (vacuum/kettle/washer/heater) are NOT
+// commodities and keep their hard spec gates.
+const COMMODITY_LEXICON: Array<{ key: string; match: RegExp; anchors: string[] }> = [
+  { key: 'drinkware', match: /\b(bottle|botella|flask|termo|thermos|tumbler|mug|vaso|taza|cantimplora|sorbete|drinkware|water\s*bottle)\b/, anchors: ['botella', 'termo', 'vaso', 'recipiente', 'cantimplora'] },
+  { key: 'eyewear', match: /\b(sunglasses|gafas\s+de\s+sol|anteojos\s+de\s+sol|gafas|anteojos|lentes\s+de\s+sol|shades|uv400)\b/, anchors: ['gafas', 'anteojos', 'lentes'] },
+  { key: 'footwear', match: /\b(shoes|sneakers|footwear|zapatillas|calzado|zapatos)\b/, anchors: ['zapatillas', 'calzado', 'zapatos'] },
+  { key: 'bag', match: /\b(backpack|rucksack|mochila|bolso)\b/, anchors: ['mochila', 'bolso'] },
+  { key: 'earphones', match: /\b(headphones|earbuds|earphones|auriculares|\btws\b)\b/, anchors: ['auriculares'] },
+  { key: 'charger', match: /\b(charger|cargador|power\s*adapter|adaptador|fuente\s+de\s+alimentacion)\b/, anchors: ['cargador', 'fuente', 'adaptador'] },
+  { key: 'speaker', match: /\b(speaker|parlante|altavoz)\b/, anchors: ['parlante', 'altavoz'] },
+]
+
+function commodityMatch(productName: string, category: string): { key: string; anchors: string[] } | null {
+  const haystack = normalizeSpecText(`${productName} ${category}`)
+  for (const entry of COMMODITY_LEXICON) {
+    if (entry.match.test(haystack)) return { key: entry.key, anchors: entry.anchors }
+  }
+  return null
+}
+
+// Light Spanish stem so "plastico"/"plastica", "acero"/"aceros" collapse to a common root for
+// cross-language overlap on commodity comparables.
+function stem(token: string) {
+  return token.length > 4 ? token.replace(/(?:os|as|es|o|a|s)$/, '') : token
+}
+
+// Cross-language bonus for commodities: the product name is English but Argentine listings are
+// Spanish, so token overlap is ~0. Translate the product to Spanish tariff/material vocabulary
+// via the shared semanticConcepts layer and reward listings that share those stems (acero
+// inoxidable, plástico, aislado/termo…). Bonus only — never a hard gate.
+function spanishConceptBonus(productName: string, category: string, evidence: string, anchors: string[] = []) {
+  const concepts = deriveSemanticConcepts({ name: productName, category })
+  const targetStems = new Set(
+    [...concepts.positiveTerms.flatMap((term) => cleanText(term).split(' ')), ...anchors]
+      .filter((token) => token.length >= 4)
+      .map(stem),
+  )
+  if (!targetStems.size) return 0
+  const evidenceStems = new Set(cleanText(evidence).split(' ').filter((token) => token.length >= 4).map(stem))
+  let hits = 0
+  for (const target of targetStems) if (evidenceStems.has(target)) hits += 1
+  return Math.min(24, hits * 8)
+}
+
+
 
 const TOKEN_ALIASES: Record<string, string> = {
   aspiradora: 'vacuum', vacuum: 'vacuum',
@@ -19,7 +73,7 @@ const TOKEN_ALIASES: Record<string, string> = {
   auricular: 'headphones', auriculares: 'headphones', headphones: 'headphones',
   parlante: 'speaker', speaker: 'speaker',
   licuadora: 'blender', blender: 'blender',
-  inalambrico: 'wireless', inalambrica: 'wireless', wireless: 'wireless', cordless: 'wireless',
+  inalambrico: 'wireless', inalambrica: 'wireless', inalambricos: 'wireless', inalambricas: 'wireless', wireless: 'wireless', cordless: 'wireless',
   electrico: 'electric', electrica: 'electric', electric: 'electric',
   carbono: 'carbon', carbon: 'carbon',
   cancelacion: 'anc', cancelling: 'anc', canceling: 'anc', cancellation: 'anc', anc: 'anc',
@@ -84,7 +138,11 @@ function hasStrongIdentity(productName: string) {
   return false
 }
 
-export function inferArgentinaMarketMatchMode(productName: string, _category = ''): ArgentinaMarketMatchMode {
+export function inferArgentinaMarketMatchMode(productName: string, category = ''): ArgentinaMarketMatchMode {
+  // A recognized commodity without a real brand is ALWAYS functional — capacity/spec-like
+  // tokens (45oz, UV400, 1350ml) must not be mistaken for a model code and force exact mode
+  // (which then rejects every Spanish listing on model-code mismatch).
+  if (commodityMatch(productName, category) && !containsBrand(productName)) return 'functional'
   return hasStrongIdentity(productName) ? 'exact' : 'functional'
 }
 
@@ -167,11 +225,13 @@ function hasSemanticCountConflict(target: string, candidate: string) {
   return candidateSlots !== targetSlots
 }
 
-function hasAccessoryMismatch(target: string, candidate: string) {
+function hasAccessoryMismatch(target: string, candidate: string, allow: string[] = []) {
   const targetTokens = tokenSet(target)
   const candidateTokens = tokenSet(candidate)
+  const allowSet = new Set(allow.map((term) => TOKEN_ALIASES[cleanText(term)] || cleanText(term)))
   return [...ACCESSORY_TERMS].some((term) => {
     const normalized = TOKEN_ALIASES[cleanText(term)] || cleanText(term)
+    if (allowSet.has(normalized)) return false
     return candidateTokens.has(normalized) && !targetTokens.has(normalized)
   })
 }
@@ -245,7 +305,11 @@ export function buildFunctionalMarketQuery(productName: string, category: string
   const usefulTraits = productTokens.filter((token) => ['carbon', 'wireless', 'electric', 'frontal', '4k', 'qled', 'oled', 'bluetooth', 'inverter', 'anc', 'outdoor', 'adjustable', 'eva', 'diamante', 'redonda', 'lagrima', 'storage', 'box'].includes(token))
   const slotCount = extractSlotCount(productName)
   const semanticCounts = slotCount ? [`${slotCount} ranuras`] : []
-  const query = [...categoryTokens, ...usefulTraits, ...specs, ...semanticCounts]
+  // For commodities, lead the storefront query with the Spanish anchor noun (botella, gafas,
+  // zapatillas…) so Argentine retailers return relevant listings for an English-titled import.
+  const commodity = commodityMatch(productName, category)
+  const commodityTerms = commodity ? [commodity.anchors[0]] : []
+  const query = [...commodityTerms, ...categoryTokens, ...usefulTraits, ...specs, ...semanticCounts]
   return [...new Set(query)].slice(0, 8).join(' ') || cleanText(category || productName)
 }
 
@@ -255,10 +319,17 @@ export function functionalComparableScore(item: MlResult, productName: string, c
   const target = `${productName} ${category}`
   if (!cleanText(title) || !item.price || item.price <= 0 || item.currency_id !== 'ARS') return 0
   if (item.condition && item.condition !== 'new') return 0
-  if (hasAccessoryMismatch(target, title)) return 0
+  const commodity = commodityMatch(productName, category)
+  if (hasAccessoryMismatch(target, title, commodity?.anchors ?? [])) return 0
   if (hasBundleMismatch(target, title)) return 0
-  if (hasMissingOrConflictingSpecs(target, evidence)) return 0
-  if (hasExplicitTitleSpecConflict(target, title)) return 0
+
+  // Appliances/electronics keep hard dimensional-spec gates (a 700W vacuum is not a 500W one).
+  // Commodities match capacity SOFTLY (an AR "botella 1L" is a valid comparable for a
+  // "1350ml bottle"); their specs only add a bonus below, never hard-reject.
+  if (!commodity) {
+    if (hasMissingOrConflictingSpecs(target, evidence)) return 0
+    if (hasExplicitTitleSpecConflict(target, title)) return 0
+  }
   if (hasSemanticCountConflict(target, evidence)) return 0
   if (hasPhraseConstraintConflict(target, evidence)) return 0
   if (hasCriticalTraitConflict(target, evidence)) return 0
@@ -268,13 +339,18 @@ export function functionalComparableScore(item: MlResult, productName: string, c
   if (targetPack && candidatePack && targetPack !== candidatePack) return 0
   if (!targetPack && candidatePack && candidatePack > 1) return 0
 
-  const categoryScore = categoryEvidenceScore(category, evidence)
+  // Category gate: the raw (often English) all-token requirement, OR — for commodities — a
+  // Spanish anchor noun present in the listing (bridges "sport water bottle" → "botella").
+  const rawCategoryScore = categoryEvidenceScore(category, evidence)
+  const anchorHit = commodity ? commodity.anchors.some((anchor) => cleanText(evidence).includes(anchor)) : false
+  const categoryScore = rawCategoryScore || (anchorHit ? 38 : 0)
   if (categoryScore === 0) return 0
 
   let score = categoryScore
   score += overlapScore(productName, evidence) * 22
   score += Math.min(32, matchedSpecCount(target, evidence) * 16)
   score += traitBonus(target, evidence)
+  if (commodity) score += spanishConceptBonus(productName, category, evidence, commodity.anchors)
   score += 10
 
   if (containsBrand(title) && !containsBrand(productName)) score -= 5

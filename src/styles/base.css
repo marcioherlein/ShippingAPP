@@ -8,9 +8,9 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: #f4f6fa; }
-button, input { font: inherit; }
+button, input, textarea { font: inherit; }
 button { cursor: pointer; }
-input {
+input, textarea {
   width: 100%;
   border: 1px solid #d9deea;
   border-radius: 10px;
@@ -19,6 +19,11 @@ input {
   padding: 11px 12px;
   outline: none;
 }
-input:focus { border-color: #5468ff; box-shadow: 0 0 0 3px rgba(84, 104, 255, .12); }
+textarea {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.55;
+}
+input:focus, textarea:focus { border-color: #5468ff; box-shadow: 0 0 0 3px rgba(84, 104, 255, .12); }
 h1, h2, h3, p { margin-top: 0; }
 .eyebrow { color: #69758c; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }

@@ -379,9 +379,10 @@ export default {
           market,
         })
       } catch (error) {
+        console.error(JSON.stringify({ event: 'mercadolibre.benchmark.failed', error: error instanceof Error ? error.message : String(error) }))
         return json({
           error: 'No pudimos consultar MercadoLibre.',
-          detail: error instanceof Error ? error.message : 'unknown error',
+          detail: error instanceof Error ? error.message.slice(0, 300) : 'unknown error',
         }, 503)
       }
     }
@@ -422,9 +423,10 @@ export default {
           constraintsNote,
         })
       } catch (error) {
+        console.error(JSON.stringify({ event: 'opportunity_search.failed', error: error instanceof Error ? error.message : String(error) }))
         return json({
           error: 'No pudimos ejecutar la búsqueda Parse.bot de Alibaba.',
-          detail: error instanceof Error ? error.message : 'unknown error',
+          detail: error instanceof Error ? error.message.slice(0, 300) : 'unknown error',
         }, 503)
       }
     }
@@ -442,6 +444,8 @@ export default {
 
     if (url.pathname === '/api/ncm-classify' && request.method === 'POST') {
       try {
+        const contentLength = Number(request.headers.get('content-length'))
+        if (contentLength > 64 * 1024) return json({ error: 'Solicitud demasiado grande.' }, 413)
         const facts = validFacts(await request.json())
         if (!facts) return json({ error: 'Faltan datos del producto para clasificar.' }, 400)
         const index = await loadNcmIndex(request.url, env.ASSETS)
@@ -455,20 +459,21 @@ export default {
             'SIM hydration timeout',
           )
           return json({ ...classification, sim })
-        } catch (error) {
+        } catch {
           return json({
             ...classification,
             sim: {
               status: 'unavailable', ncmCode: classification.code, ncmLabel: classification.label,
               candidate: null, alternatives: [], confidence: 'missing', missingFacts: [], sourceDate: classification.sourceDate,
-              rationale: [`No se pudo hidratar la apertura SIM: ${error instanceof Error ? error.message : 'unknown error'}. La NCM candidata se conserva; no se inventa un sufijo.`],
+              rationale: ['No se pudo hidratar la apertura SIM. La NCM candidata se conserva; no se inventa un sufijo.'],
             },
           })
         }
       } catch (error) {
+        console.error(JSON.stringify({ event: 'ncm_classify.failed', error: error instanceof Error ? error.message : String(error) }))
         return json({
           error: 'No pudimos consultar el índice NCM completo. ShippingAPP debe degradar al clasificador local sin inventar una posición.',
-          detail: error instanceof Error ? error.message : 'unknown error',
+          detail: error instanceof Error ? error.message.slice(0, 300) : 'unknown error',
         }, 503)
       }
     }

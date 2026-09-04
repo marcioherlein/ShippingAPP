@@ -343,11 +343,14 @@ export default {
     const url = new URL(request.url)
     if (url.pathname === '/api/analyze' && request.method === 'POST') {
       try {
+        const contentLength = Number(request.headers.get('content-length'))
+        if (contentLength > 64 * 1024) return json({ error: 'Solicitud demasiado grande.' }, 413)
         const body = await request.json() as { url?: string }
         if (!body.url) return json({ error: 'Pegá un link de Alibaba.' }, 400)
         return json(await analyze(body.url, env))
       } catch (error) {
-        return json({ error: error instanceof Error ? error.message : 'No pudimos analizar el link.' }, 400)
+        console.error(JSON.stringify({ event: 'analyze.failed', error: error instanceof Error ? error.message : String(error) }))
+        return json({ error: 'No pudimos analizar el link.' }, 400)
       }
     }
     if (url.pathname.startsWith('/api/')) return json({ error: 'Not found' }, 404)

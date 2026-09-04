@@ -94,8 +94,8 @@
   max-width: 820px;
   margin: 11px auto 16px;
   font-size: clamp(42px, 7vw, 76px);
-  line-height: .98;
-  letter-spacing: -.065em;
+  line-height: 1.02;
+  letter-spacing: -.045em;
   font-weight: 780;
   color: #10172a;
 }
@@ -173,20 +173,21 @@
 }
 
 .journey-step small { font-size: 11px; font-weight: 700; }
-.journey-step.active { color: #4f5de4; }
 .journey-step.active span { color: #fff; border-color: transparent; background: #5666f5; box-shadow: 0 8px 22px rgba(86, 102, 245, .26); }
 .journey-step.done { color: #64748b; }
 .journey-step.done span { color: #16a34a; border-color: rgba(34,197,94,.25); background: #f0fdf4; }
 .journey-step.done:not(:last-child)::after { background: linear-gradient(90deg, #86efac, #dbe2ee); }
 
 .journey-workspace {
-  width: min(1180px, calc(100% - 32px));
+  width: min(820px, calc(100% - 32px));
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 310px;
+  grid-template-columns: 1fr;
   gap: 22px;
   align-items: start;
 }
+
+.journey-case-summary { display: none; }
 
 .journey-conversation,
 .journey-summary-sticky,
@@ -334,7 +335,7 @@
 .journey-primary-action:disabled { opacity: .38; cursor: default; box-shadow: none; }
 
 .journey-complete-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 16px; }
-.journey-complete-row span { border-radius: 999px; background: #f3f6fb; color: #64748b; padding: 7px 10px; font-size: 11px; font-weight: 700; }
+.journey-complete-row span { border-radius: 999px; background: #eef1ff; color: #4454dc; border: 1px solid rgba(86,102,245,.18); padding: 7px 11px; font-size: 11px; font-weight: 700; }
 
 .journey-number-field > div { max-width: 300px; position: relative; }
 .journey-number-field > div small { position: absolute; left: 12px; top: 13px; z-index: 1; color: #94a3b8; font-weight: 800; }
@@ -410,10 +411,6 @@
 .journey-output-explainer p { margin: 0; color: #64748b; font-size: 12px; line-height: 1.5; }
 
 @media (max-width: 920px) {
-  .journey-workspace { grid-template-columns: 1fr; }
-  .journey-case-summary { order: -1; }
-  .journey-summary-sticky { position: static; }
-  .journey-summary-list { grid-template-columns: repeat(2, 1fr); column-gap: 18px; }
   .journey-choice-grid.three,
   .journey-choice-grid.budget { grid-template-columns: 1fr; }
   .journey-choice-grid > button { min-height: 0; }
@@ -428,7 +425,7 @@
   .journey-hero h1 { font-size: 43px; }
   .journey-hero > p { font-size: 14px; }
   .journey-stepper { overflow-x: auto; grid-template-columns: repeat(5, minmax(76px, 1fr)); }
-  .journey-step small { font-size: 9px; }
+  .journey-step small { font-size: 10px; }
   .journey-workspace,
   .journey-calculator-section,
   .journey-output-explainer { width: min(100% - 16px, 1180px); }
@@ -450,4 +447,196 @@
   .journey-output-explainer { grid-template-columns: 1fr; }
   .journey-output-explainer > div { border-right: 0; border-bottom: 1px solid rgba(226,232,240,.78); }
   .journey-output-explainer > div:last-child { border-bottom: 0; }
+}
+
+/* Helper text for field labels */
+.journey-field-hint {
+  display: block;
+  margin: 3px 0 10px;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+/* Disabled CTA missing fields hint */
+.journey-action-row { display: contents; }
+.journey-missing-hint {
+  display: block;
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Budget range inline hint */
+.journey-range-fields em.journey-range-hint {
+  grid-column: 1 / -1;
+  display: block;
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: normal;
+  margin-top: 2px;
+}
+
+/* Sidebar welcome intro text */
+.journey-summary-intro {
+  margin: 0 0 18px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* Step entrance animations — respects reduced-motion */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes step-enter {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .journey-bubble.assistant,
+  .journey-question-card,
+  .journey-product-surface,
+  .journey-manual-ready,
+  .journey-pipeline-section,
+  .journey-calculator-section {
+    animation: step-enter .28s cubic-bezier(.2, .8, .2, 1) both;
+  }
+}
+
+/* ── Importer-friendly summary card ───────────────────────────────────── */
+
+.importer-summary-card {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.importer-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  border-radius: 0;
+}
+.importer-verdict strong {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.importer-verdict span {
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: .85;
+}
+.importer-verdict-si   { background: #d1fae5; color: #065f46; }
+.importer-verdict-no   { background: #fee2e2; color: #991b1b; }
+.importer-verdict-ajusta { background: #fef3c7; color: #92400e; }
+.importer-verdict-neutral { background: var(--surface-2, #f3f4f6); color: var(--text-2, #374151); }
+
+.importer-cost-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+@media (max-width: 600px) {
+  .importer-cost-grid { grid-template-columns: 1fr; }
+}
+
+.importer-cost-block {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.importer-cost-block + .importer-cost-block {
+  border-left: 1px solid var(--border, #e5e7eb);
+}
+@media (max-width: 600px) {
+  .importer-cost-block + .importer-cost-block {
+    border-left: none;
+    border-top: 1px solid var(--border, #e5e7eb);
+  }
+}
+
+.importer-cost-block-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3, #6b7280);
+}
+
+.importer-cost-amount {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-1, #111827);
+  line-height: 1.1;
+}
+
+.importer-cost-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.importer-cost-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2, #374151);
+}
+.importer-cost-list li b {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.importer-logistics-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  color: var(--text-2, #374151);
+}
+.importer-logistics-fact {
+  font-size: 12px;
+  color: var(--text-3, #6b7280);
+  font-style: normal;
+}
+.importer-logistics-signal {
+  color: #0369a1;
+  font-weight: 500;
+}
+
+.importer-profit-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  color: var(--text-2, #374151);
+}
+
+.importer-capital-row {
+  padding: 10px 20px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  color: var(--text-2, #374151);
+}
+.importer-capital-row b {
+  font-weight: 700;
+  color: var(--text-1, #111827);
+}
+
+.importer-detail-toggle {
+  align-self: flex-start;
+  margin: 8px 0 4px;
+  font-size: 13px;
 }

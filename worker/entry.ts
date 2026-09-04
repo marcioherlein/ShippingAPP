@@ -308,7 +308,7 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
     if (confirmed) {
       const [marketed, fx] = await Promise.all([
         overlayHybridMarketEconomics(confirmed, env as any),
-        fetchBcraReferenceFx(),
+        fetchBcraReferenceFx(fetch, (env as any).DB),
       ])
       return Response.json({ ...marketed, fx })
     }
@@ -321,9 +321,10 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
         const selfFirstEnv = withoutLegacyMarketCredentials(env, '/api/analyze')
         const analysis = await analyzeAlibabaSelfFirst(alibabaUrl, selfFirstEnv as any)
         return Response.json(await overlayHybridMarketEconomics(analysis, env as any))
-      } catch {
+      } catch (err) {
         // Reliability backstop: if the new orchestrator itself fails, keep
         // the previous router pipeline available rather than dropping the case.
+        console.error(JSON.stringify({ event: 'orchestrator.alibaba_self_first.failed', url: alibabaUrl.toString(), error: err instanceof Error ? err.message : String(err) }))
       }
     }
   }

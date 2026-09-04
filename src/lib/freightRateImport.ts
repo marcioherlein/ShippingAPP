@@ -32,6 +32,10 @@ function num(value: string) {
 }
 
 export function parseFreightRateCsv(text: string): FreightImportResult {
+  // 2 MB cap \u2014 large enough for any real rate sheet, blocks runaway main-thread parse
+  if (text.length > 2 * 1024 * 1024) {
+    return { records: [], issues: [{ row: 1, message: 'El archivo excede el l\u00EDmite de 2 MB.' }] }
+  }
   const clean = text.replace(/^\uFEFF/, '').trim()
   if (!clean) return { records: [], issues: [{ row: 1, message: 'Archivo vacío.' }] }
   const lines = clean.split(/\r?\n/).filter((line) => line.trim())

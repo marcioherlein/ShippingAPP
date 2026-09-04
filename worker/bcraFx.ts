@@ -7,6 +7,8 @@ export type BcraFxResult = {
   note: string
 }
 
+import type { D1DatabaseLike } from './persistence/d1'
+
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
 const ENDPOINT = 'https://api.bcra.gob.ar/estadisticascambiarias/v1.0/Cotizaciones'
@@ -45,14 +47,38 @@ export function parseBcraReferenceFx(payload: unknown): BcraFxResult {
   }
 }
 
-export async function fetchBcraReferenceFx(fetchImpl: FetchLike = fetch): Promise<BcraFxResult> {
+export async function fetchBcraReferenceFx(
+  fetchImpl: FetchLike = fetch,
+  db?: D1DatabaseLike | null,
+): Promise<BcraFxResult> {
   try {
     const response = await fetchImpl(ENDPOINT, {
       headers: { accept: 'application/json' },
     })
     if (!response.ok) throw new Error(`BCRA HTTP ${response.status}`)
-    return parseBcraReferenceFx(await response.json())
+    const result = parseBcraReferenceFx(await response.json())
+    if (result.status === 'live' && result.arsPerUsd !== null && result.sourceDate && db) {
+      await db.prepare(
+        'INSERT OR REPLACE INTO fx_snapshots (code, ars_per_usd, source_date, fetched_at) VALUES (?, ?, ?, ?)',
+      ).bind('REF', result.arsPerUsd, result.sourceDate, new Date().toISOString()).run().catch(() => undefined)
+    }
+    return result
   } catch (error) {
+    if (db) {
+      const cached = await db.prepare(
+        'SELECT ars_per_usd, source_date, fetched_at FROM fx_snapshots WHERE code = ?',
+      ).bind('REF').first<{ ars_per_usd: number; source_date: string; fetched_at: string }>().catch(() => null)
+      if (cached && Number.isFinite(cached.ars_per_usd) && cached.ars_per_usd > 0) {
+        return {
+          status: 'live',
+          arsPerUsd: cached.ars_per_usd,
+          sourceDate: cached.source_date,
+          source: 'BCRA · Dólar Referencia Comunicación A 3500 (caché)',
+          code: 'REF',
+          note: `BCRA no disponible (${error instanceof Error ? error.message : 'unknown error'}); se usa la última tasa registrada del ${cached.source_date}. Puede no reflejar el tipo de cambio actual.`,
+        }
+      }
+    }
     return {
       status: 'unavailable', arsPerUsd: null, sourceDate: null,
       source: 'BCRA · Estadísticas Cambiarias', code: 'REF',

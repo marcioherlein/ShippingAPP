@@ -308,7 +308,7 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
     if (confirmed) {
       const [marketed, fx] = await Promise.all([
         overlayHybridMarketEconomics(confirmed, env as any),
-        fetchBcraReferenceFx(),
+        fetchBcraReferenceFx(fetch, (env as any).DB),
       ])
       return Response.json({ ...marketed, fx })
     }

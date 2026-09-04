@@ -244,7 +244,7 @@ async function hydrateMarketAndFx(data: any, env: Env) {
     analyzeArgentinaMarket(data.product?.name || '', data.product?.category || '', {
       accessToken: mlAuth.accessToken,
     }),
-    fetchBcraReferenceFx(),
+    fetchBcraReferenceFx(fetch, env.DB),
   ])
   if (mlAuth.status !== 'ready') {
     market.warnings.push(mlAuth.reason)

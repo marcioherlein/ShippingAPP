@@ -6,15 +6,9 @@
     radial-gradient(circle at 88% 10%, rgba(91, 207, 255, .10), transparent 24%),
     linear-gradient(180deg, #f8faff 0%, #f3f6fb 52%, #eef2f8 100%);
   padding-bottom: 72px;
-}
-
-/* Topbar floats over the dark hero */
-.journey-app > header.journey-topbar-wrapper {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .journey-topbar {
@@ -653,12 +647,12 @@
 }
 
 /* ─── LANDING HERO ─── */
-@keyframes hero-bg-drift {
-  from { transform: scale(1.05) translateY(0); }
-  to   { transform: scale(1.12) translateY(-3%); }
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes hero-rise {
+@keyframes section-reveal {
   from { opacity: 0; transform: translateY(28px); }
   to   { opacity: 1; transform: translateY(0); }
 }
@@ -679,9 +673,8 @@
 .journey-landing-hero::before {
   content: '';
   position: absolute;
-  inset: -8%;
+  inset: 0;
   background: url('/images/ship.jpg') center / cover no-repeat;
-  animation: hero-bg-drift 28s ease-in-out infinite alternate;
   z-index: 0;
 }
 
@@ -821,6 +814,41 @@
   height: 65%;
   background: linear-gradient(to top, #f3f6fb, transparent);
   z-index: 1;
+}
+
+/* ─── HOW IT WORKS ─── */
+@supports (animation-timeline: view()) {
+  .journey-photo-break,
+  .journey-how-it-works,
+  .journey-trust-strip {
+    animation: section-reveal .7s linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 18%;
+  }
+
+  .journey-how-step:nth-child(1) {
+    animation: section-reveal .6s linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 22%;
+  }
+
+  .journey-how-step:nth-child(2) {
+    animation: section-reveal .6s linear both;
+    animation-timeline: view();
+    animation-range: entry 2% entry 24%;
+  }
+
+  .journey-how-step:nth-child(3) {
+    animation: section-reveal .6s linear both;
+    animation-timeline: view();
+    animation-range: entry 4% entry 26%;
+  }
+
+  .journey-faq-item {
+    animation: section-reveal .5s linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 28%;
+  }
 }
 
 /* ─── HOW IT WORKS ─── */

@@ -206,6 +206,28 @@ function scoreCandidates(candidates: QuantityCandidate[], input: QuantityOptimiz
     if (candidate.monthsOfStock !== null && targetMonths) reasons.push(`${candidate.monthsOfStock} meses de stock vs objetivo ${targetMonths}.`)
     if (candidate.totalVolumeCbm >= 1) reasons.push(`${candidate.totalVolumeCbm} m³ estimados; revisar packaging real con proveedor.`)
 
+    // Fill-the-meter: if the LCL billed W/M has unused capacity, quantify it
+    if (candidate.selectedMode === 'lcl' && input.unitVolumeCbm > 0) {
+      const lclData = candidate.comparison.modes.lcl
+      const rawWm = lclData.lclRawWm ?? 0
+      const billedWm = lclData.lclBilledWm ?? 0
+      const freeSpace = billedWm - rawWm
+      if (freeSpace > 0.05) {
+        const fillUnits = Math.floor(freeSpace / input.unitVolumeCbm)
+        if (fillUnits >= 1) {
+          reasons.push(`Podés agregar hasta ${fillUnits} u. más sin pagar otro m³ de flete.`)
+        }
+      }
+      // Pull-back: if we're just barely over a step boundary, cost to undo it
+      const overage = rawWm - Math.floor(rawWm)
+      if (overage > 0 && overage < 0.1 && billedWm > 1) {
+        const pullBack = Math.ceil(overage / input.unitVolumeCbm) + 1
+        if (pullBack >= 1) {
+          reasons.push(`Bajando ${pullBack} u. ahorrás un m³ de flete.`)
+        }
+      }
+    }
+
     return {
       ...candidate,
       score: round(Math.max(0, unitCostScore + marginScore + stockScore + budgetScore - affordabilityPenalty), 1),

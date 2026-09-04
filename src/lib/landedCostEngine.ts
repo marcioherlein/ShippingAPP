@@ -50,6 +50,12 @@ export type ModeCostBreakdown = {
   chargeableBasis: 'container' | 'volume_or_weight_measurement' | 'actual_or_volumetric_weight'
   totalWeightKg: number
   totalVolumeCbm: number
+  // LCL: real W/M before step-rounding, billed W/M after (max(MIN_WM, ceil(rawWm)))
+  lclRawWm?: number
+  lclBilledWm?: number
+  // FCL: number of 40ft containers needed to fit the shipment volume
+  fclContainers?: number
+  fclFitsInOne?: boolean
   fobUsd: number
   cifUsd: number
   dutyUsd: number
@@ -91,6 +97,18 @@ export type LandedCostComparison = {
 }
 
 const sensitiveCategories = new Set<SensitiveProductCategory>(['food', 'toys', 'cosmetics', 'medicines', 'supplements'])
+
+// LCL is billed in whole W/M increments with a 1 W/M minimum.
+// Forwarders differ; these constants make the model explicit.
+const LCL_MIN_WM = 1
+const LCL_STEP_WM = 1.0
+
+function billedLclWm(rawWm: number): number {
+  return Math.max(LCL_MIN_WM, Math.ceil(rawWm / LCL_STEP_WM) * LCL_STEP_WM)
+}
+
+// Usable volume (m³) of a standard 40' container. Source: standard shipping specs.
+const FCL_40FT_CBM = 58
 
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
@@ -134,10 +152,14 @@ function chargeable(mode: TransportMode, input: LandedCostInput) {
   const qty = Math.max(0, input.quantity)
   const totalWeightKg = qty * Math.max(0, input.unitWeightKg)
   const totalVolumeCbm = qty * Math.max(0, input.unitVolumeCbm)
-  if (mode === 'fcl') return { totalWeightKg, totalVolumeCbm, units: 1, basis: 'container' as const }
+  if (mode === 'fcl') {
+    const fclContainers = Math.max(1, Math.ceil(totalVolumeCbm / FCL_40FT_CBM))
+    return { totalWeightKg, totalVolumeCbm, units: fclContainers, basis: 'container' as const, fclContainers, fclFitsInOne: fclContainers === 1 }
+  }
   if (mode === 'lcl') {
-    const weightMeasurement = totalWeightKg / 1000
-    return { totalWeightKg, totalVolumeCbm, units: Math.max(totalVolumeCbm, weightMeasurement), basis: 'volume_or_weight_measurement' as const }
+    const rawWm = Math.max(totalVolumeCbm, totalWeightKg / 1000)
+    const billedWm = billedLclWm(rawWm)
+    return { totalWeightKg, totalVolumeCbm, units: billedWm, basis: 'volume_or_weight_measurement' as const, lclRawWm: rawWm, lclBilledWm: billedWm }
   }
   const volumetricWeightKg = totalVolumeCbm * (1000 / 6)
   return { totalWeightKg, totalVolumeCbm, units: Math.max(totalWeightKg, volumetricWeightKg), basis: 'actual_or_volumetric_weight' as const }
@@ -145,7 +167,10 @@ function chargeable(mode: TransportMode, input: LandedCostInput) {
 
 function freightCost(mode: TransportMode, rate: FreightRateLookup, input: LandedCostInput) {
   const base = chargeable(mode, input)
-  if (mode === 'fcl') return { ...base, rate: rate.fclContainerUsd, minimum: null as number | null, cost: rate.fclContainerUsd }
+  if (mode === 'fcl') {
+    const containers = base.fclContainers ?? 1
+    return { ...base, rate: rate.fclContainerUsd, minimum: null as number | null, cost: containers * rate.fclContainerUsd }
+  }
   if (mode === 'lcl') return { ...base, rate: rate.lclUsdPerWm, minimum: null as number | null, cost: base.units * rate.lclUsdPerWm }
   const variable = base.units * rate.airUsdPerKg
   return { ...base, rate: rate.airUsdPerKg, minimum: rate.airMinimumUsd, cost: Math.max(variable, rate.airMinimumUsd) }
@@ -212,6 +237,8 @@ export function calculateLandedCostMode(mode: TransportMode, input: LandedCostIn
     chargeableBasis: freight.basis,
     totalWeightKg: roundMoney(freight.totalWeightKg),
     totalVolumeCbm: roundMoney(freight.totalVolumeCbm),
+    ...(mode === 'lcl' ? { lclRawWm: roundMoney(freight.lclRawWm ?? 0), lclBilledWm: roundMoney(freight.lclBilledWm ?? 0) } : {}),
+    ...(mode === 'fcl' ? { fclContainers: freight.fclContainers ?? 1, fclFitsInOne: freight.fclFitsInOne ?? true } : {}),
     fobUsd: roundMoney(fobUsd),
     cifUsd,
     dutyUsd,
@@ -267,7 +294,7 @@ export function compareLandedCost(input: LandedCostInput): LandedCostComparison 
     bestMode: cheaperMode,
     lclVsAir: { cheaperMode, savingsUsd: savingsUsd === null ? null : roundMoney(savingsUsd), savingsPct },
     notes: [
-      'FCL se calcula como referencia por contenedor entero y nunca define la recomendación principal.',
+      'FCL se calcula como referencia por contenedor(es) entero(s) (40\' ≈ 58 m³ útiles) y nunca define la recomendación principal.',
       'El valor principal para oportunidad compara LCL vs aéreo.',
       'FOB + flete internacional = CIF; derecho y tasa estadística se calculan sobre CIF; IVA/percepciones sobre base IVA.',
       taxNote,

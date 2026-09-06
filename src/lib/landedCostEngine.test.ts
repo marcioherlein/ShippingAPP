@@ -70,13 +70,17 @@ describe('Valores landed cost engine', () => {
     expect(result.freightCostUsd).toBe(200)   // 1 W/M minimum × $200
   })
 
-  it('counts multiple FCL containers for oversized shipments', () => {
-    // 6000 units × 0.01 CBM = 60 CBM > 58 m³ (40ft capacity) → 2 containers
+  it('compares both FCL sizes and selects the cheaper modeled plan', () => {
     const result = calculateLandedCostMode('fcl', { ...base, quantity: 6000 }, lookupFreightRate('China'))
     expect(result.available).toBe(true)
-    expect(result.fclContainers).toBe(2)
+    expect(result.fclContainers).toBe(3)
     expect(result.fclFitsInOne).toBe(false)
-    expect(result.freightCostUsd).toBe(19200)  // 2 × $9600
+    expect(result.fclContainerSize).toBe('20ft')
+    expect(result.freightCostUsd).toBe(18720)
+    expect(result.fclOptions).toEqual([
+      { size: '20ft', containers: 3, rateUsd: 6240, freightCostUsd: 18720, rateEstimated: true },
+      { size: '40ft', containers: 2, rateUsd: 9600, freightCostUsd: 19200, rateEstimated: false },
+    ])
   })
 
   it('single FCL container for a shipment that fits in 40ft', () => {
@@ -84,6 +88,7 @@ describe('Valores landed cost engine', () => {
     const result = calculateLandedCostMode('fcl', { ...base, quantity: 5000 }, lookupFreightRate('China'))
     expect(result.fclContainers).toBe(1)
     expect(result.fclFitsInOne).toBe(true)
+    expect(result.fclContainerSize).toBe('40ft')
     expect(result.freightCostUsd).toBe(9600)
   })
 

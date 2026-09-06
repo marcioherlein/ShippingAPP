@@ -66,6 +66,7 @@ function checklistSignal(ok: boolean, label: string) {
 function decisionCopy(mode: 'lcl' | 'air' | null, marginPct: number | null, blockers: string[]) {
   if (!mode) return { title: 'Completá datos', body: 'Faltan datos para comparar LCL contra aéreo.' }
   if (blockers.length) return { title: 'Faltan datos clave', body: 'El costo se calcula, pero la decisión queda abierta hasta cerrar checklist.' }
+  if (marginPct === null) return { title: `Menor costo logístico: ${mode === 'lcl' ? 'LCL' : 'aéreo'}`, body: 'Esta comparación sólo elige el flete más barato. Falta un precio argentino confiable para decidir si importar es rentable.' }
   if (marginPct !== null && marginPct < 0) return { title: 'No conviene con estos datos', body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} es el menor costo logístico, pero el costo unitario supera el precio local cargado.` }
   if (marginPct !== null && marginPct < 20) return { title: 'Margen débil', body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} gana por costo, pero el margen rápido queda bajo para absorber errores, demoras o gastos no modelados.` }
   return { title: `Conviene ${mode === 'lcl' ? 'LCL' : 'aéreo'}`, body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} es el menor costo entre las opciones accionables. FCL queda sólo como referencia.` }
@@ -142,7 +143,7 @@ function buildVerdictSignals(summary: ImporterSummary, quote: ReturnType<typeof 
       : { label: 'Capital', title: 'Supera el presupuesto', detail: `Faltan ${usd(summary.needsCapitalUsd - budgetUsd)}.`, tone: 'negative' }
 
   const market: VerdictSignal = marketLive
-    ? { label: 'Mercado argentino', title: 'Benchmark confirmado', detail: `${prefill?.marketComparableCount || 0} comparables · confianza ${prefill?.marketConfidence ?? 0}%.`, tone: 'positive' }
+    ? { label: 'Mercado argentino', title: 'Benchmark confirmado', detail: `${prefill?.marketComparableCount || 0} comparables${prefill?.marketConfidence !== null && prefill?.marketConfidence !== undefined ? ` · confianza ${prefill.marketConfidence}%` : ''}.`, tone: 'positive' }
     : { label: 'Mercado argentino', title: 'Evidencia insuficiente', detail: 'No se usa un precio local no validado para declarar rentabilidad.', tone: 'warning' }
 
   const customsKnown = Boolean(prefill?.ncmCode) && (prefill?.classificationConfidence === 'high' || prefill?.classificationConfidence === 'medium')

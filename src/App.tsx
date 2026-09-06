@@ -102,7 +102,7 @@ function makeAnalysisPrefill(
     marketP75Ars: marketDetails?.p75Ars ?? null,
     marketComparableCount: marketDetails?.comparableCount ?? marketComparables.length,
     marketConfidence: marketDetails?.confidence ?? null,
-    marketStatus: marketDetails?.status ?? 'unknown',
+    marketStatus: marketDetails?.status ?? (analysis.market.estimatedPriceArs && analysis.market.estimatedPriceArs > 0 ? 'live' : 'unknown'),
     marketSource: analysis.market.source,
     marketComparables,
     fxArsPerUsd: fx,

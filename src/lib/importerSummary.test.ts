@@ -37,11 +37,19 @@ describe('importerSummary', () => {
     expect(summary.unitVariableCostUsd).toBeGreaterThan(0)
   })
 
-  it('returns verdict=si when margin ≥20 %', () => {
+  it('returns verdict=si for a viable 20–35% margin', () => {
     const comparison = compareLandedCost(base)
-    const summary = buildImporterSummary(comparison, 100, 100, null)
+    const sellPrice = comparison.modes.lcl.unitCostUsd / 0.7
+    const summary = buildImporterSummary(comparison, 100, sellPrice, null)
     expect(summary.verdict).toBe('si')
     expect(summary.profitPct).toBeGreaterThanOrEqual(20)
+    expect(summary.profitPct).toBeLessThan(35)
+  })
+
+  it('returns verdict=excelente when margin is at least 35%', () => {
+    const comparison = compareLandedCost(base)
+    const summary = buildImporterSummary(comparison, 100, comparison.modes.lcl.unitCostUsd / 0.6, null)
+    expect(summary.verdict).toBe('excelente')
   })
 
   it('returns verdict=no when unit cost exceeds sell price', () => {
@@ -56,12 +64,23 @@ describe('importerSummary', () => {
   it('returns verdict=ajusta when margin is between 0 and 20 %', () => {
     const comparison = compareLandedCost(base)
     const unitCost = comparison.modes.lcl.unitCostUsd
-    // Sell at 10 % above unit cost → margin 10/110 ≈ 9 %
-    const sellPrice = unitCost * 1.10
+    const sellPrice = unitCost / 0.85
     const summary = buildImporterSummary(comparison, 100, sellPrice, null)
     expect(summary.verdict).toBe('ajusta')
-    expect(summary.profitPct).toBeGreaterThanOrEqual(0)
+    expect(summary.profitPct).toBeGreaterThanOrEqual(10)
     expect(summary.profitPct!).toBeLessThan(20)
+  })
+
+  it('returns verdict=fragil when margin is positive but below 10%', () => {
+    const comparison = compareLandedCost(base)
+    const summary = buildImporterSummary(comparison, 100, comparison.modes.lcl.unitCostUsd / 0.95, null)
+    expect(summary.verdict).toBe('fragil')
+  })
+
+  it('does not say the import is viable without a local market price', () => {
+    const comparison = compareLandedCost(base)
+    const summary = buildImporterSummary(comparison, 100, 0, null)
+    expect(summary.verdict).toBe('sin-mercado')
   })
 
   it('returns verdict=faltan-datos when blockers present', () => {

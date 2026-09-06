@@ -4,7 +4,7 @@ import { compareLandedCost, type ImportEntityType, type ImportPurpose, type Mode
 import { optimizeQuantity, type BuyStrategy } from '../lib/quantityOptimizer'
 import { buildImporterSummary, type ImporterSummary } from '../lib/importerSummary'
 import type { QuotePrefill } from '../lib/hotProducts'
-import { usd } from '../lib/format'
+import { ars, usd } from '../lib/format'
 
 const interventionLabels: Record<SensitiveProductCategory, string> = {
   unknown: 'No sé todavía',
@@ -78,9 +78,12 @@ function strategyCopy(strategy: BuyStrategy) {
 }
 
 const verdictClass: Record<string, string> = {
+  excelente: 'importer-verdict importer-verdict-excelente',
   si: 'importer-verdict importer-verdict-si',
   no: 'importer-verdict importer-verdict-no',
   ajusta: 'importer-verdict importer-verdict-ajusta',
+  fragil: 'importer-verdict importer-verdict-fragil',
+  'sin-mercado': 'importer-verdict importer-verdict-neutral',
   'faltan-datos': 'importer-verdict importer-verdict-neutral',
 }
 
@@ -91,23 +94,11 @@ function ImporterSummaryCard({ summary, quantity }: { summary: ImporterSummary; 
       <span>{summary.verdictDetail}</span>
     </div>
 
-    <div className="importer-cost-grid">
-      <div className="importer-cost-block">
-        <div className="importer-cost-block-title">Pagás una sola vez</div>
-        <div className="importer-cost-amount">{usd(summary.fixedCostUsd)}</div>
-        <ul className="importer-cost-list">
-          {summary.fixedItems.map((item) => <li key={item.label}><span>{item.label}</span><b>{usd(item.usd)}</b></li>)}
-          {summary.fixedItems.length === 0 && <li><span>Sin gastos fijos adicionales</span></li>}
-        </ul>
-      </div>
-
-      <div className="importer-cost-block">
-        <div className="importer-cost-block-title">Por cada unidad traída</div>
-        <div className="importer-cost-amount">{usd(summary.unitTotalCostUsd)}</div>
-        <ul className="importer-cost-list">
-          {summary.unitItems.map((item) => <li key={item.label}><span>{item.label}</span><b>{usd(item.usd)}</b></li>)}
-        </ul>
-      </div>
+    <div className="importer-primary-numbers" aria-label="Resumen económico">
+      <div><span>Costo puesto por unidad</span><strong>{usd(summary.unitTotalCostUsd)}</strong></div>
+      <div><span>Total para importar {quantity} unidades</span><strong>{usd(summary.totalCostUsd)}</strong></div>
+      <div><span>Gastos fijos incluidos</span><strong>{usd(summary.fixedCostUsd)}</strong></div>
+      <div><span>Capital necesario ahora</span><strong>{usd(summary.needsCapitalUsd)}</strong></div>
     </div>
 
     {summary.mode && <div className="importer-logistics-row">
@@ -117,14 +108,68 @@ function ImporterSummaryCard({ summary, quantity }: { summary: ImporterSummary; 
     </div>}
 
     {summary.sellPriceUsd !== null && <div className="importer-profit-row">
-      <span>Precio de venta <b>{usd(summary.sellPriceUsd)}</b></span>
-      <span>Ganás por unidad <b>{usd(summary.profitPerUnitUsd ?? 0)}</b></span>
-      <span>Margen <b>{summary.profitPct?.toFixed(0)}%</b></span>
+      <span>Precio local usado <b>{usd(summary.sellPriceUsd)}</b></span>
+      <span>Resultado por unidad <b>{usd(summary.profitPerUnitUsd ?? 0)}</b></span>
+      <span>Margen bruto <b>{summary.profitPct?.toFixed(0)}%</b></span>
     </div>}
+  </section>
+}
 
-    <div className="importer-capital-row">
-      Plata que necesitás ahora: <b>{usd(summary.needsCapitalUsd)}</b>
-    </div>
+type VerdictSignal = { label: string; title: string; detail: string; tone: 'positive' | 'warning' | 'negative' | 'neutral' }
+
+function buildVerdictSignals(summary: ImporterSummary, quote: ReturnType<typeof compareLandedCost>, budgetUsd: number, prefill: QuotePrefill | null): VerdictSignal[] {
+  const marketLive = prefill?.marketStatus === 'live' && Number(prefill.marketPriceArs) > 0
+  const margin = summary.profitPct
+  const commercial: VerdictSignal = margin === null
+    ? { label: 'Rentabilidad', title: 'No evaluada', detail: 'Falta un precio argentino confiable.', tone: 'neutral' }
+    : margin < 0
+      ? { label: 'Rentabilidad', title: 'Pierde dinero', detail: `${Math.abs(margin).toFixed(0)}% de margen negativo.`, tone: 'negative' }
+      : margin < 10
+        ? { label: 'Rentabilidad', title: 'Margen crítico', detail: `${margin.toFixed(0)}% deja casi ningún colchón.`, tone: 'negative' }
+        : margin < 20
+          ? { label: 'Rentabilidad', title: 'Margen ajustado', detail: `${margin.toFixed(0)}% antes de costos no modelados.`, tone: 'warning' }
+          : { label: 'Rentabilidad', title: margin >= 35 ? 'Margen fuerte' : 'Margen viable', detail: `${margin.toFixed(0)}% de margen bruto estimado.`, tone: 'positive' }
+
+  const savings = quote.lclVsAir.savingsUsd
+  const logistics: VerdictSignal = quote.bestMode
+    ? { label: 'Logística', title: quote.bestMode === 'lcl' ? 'Conviene LCL' : 'Conviene aéreo', detail: savings ? `Ahorro estimado: ${usd(savings)} frente a la alternativa.` : 'Es la opción accionable de menor costo.', tone: 'positive' }
+    : { label: 'Logística', title: 'Sin comparación', detail: 'Faltan peso, volumen u origen.', tone: 'neutral' }
+
+  const capital: VerdictSignal = budgetUsd <= 0
+    ? { label: 'Capital', title: 'No evaluado', detail: `La operación requiere ${usd(summary.needsCapitalUsd)}.`, tone: 'neutral' }
+    : summary.needsCapitalUsd <= budgetUsd
+      ? { label: 'Capital', title: 'Entra en presupuesto', detail: `Quedan ${usd(budgetUsd - summary.needsCapitalUsd)} de margen.`, tone: 'positive' }
+      : { label: 'Capital', title: 'Supera el presupuesto', detail: `Faltan ${usd(summary.needsCapitalUsd - budgetUsd)}.`, tone: 'negative' }
+
+  const market: VerdictSignal = marketLive
+    ? { label: 'Mercado argentino', title: 'Benchmark confirmado', detail: `${prefill?.marketComparableCount || 0} comparables · confianza ${prefill?.marketConfidence ?? 0}%.`, tone: 'positive' }
+    : { label: 'Mercado argentino', title: 'Evidencia insuficiente', detail: 'No se usa un precio local no validado para declarar rentabilidad.', tone: 'warning' }
+
+  const customsKnown = Boolean(prefill?.ncmCode) && (prefill?.classificationConfidence === 'high' || prefill?.classificationConfidence === 'medium')
+  const customs: VerdictSignal = customsKnown
+    ? { label: 'Aduana', title: 'NCM utilizable', detail: `${prefill?.ncmCode} · confianza ${prefill?.classificationConfidence}.`, tone: 'positive' }
+    : { label: 'Aduana', title: 'Requiere validación', detail: 'El costo aduanero todavía contiene supuestos.', tone: 'warning' }
+
+  return [commercial, market, capital, logistics, customs]
+}
+
+function ArgentinaMarketCard({ prefill, localSellPriceUsd }: { prefill: QuotePrefill | null; localSellPriceUsd: number }) {
+  const marketPriceArs = Number(prefill?.marketPriceArs) || 0
+  const hasMarket = prefill?.marketStatus === 'live' && marketPriceArs > 0
+  return <section className={`table-card argentina-market-card${hasMarket ? '' : ' market-missing'}`} aria-labelledby="argentina-market-title">
+    <div className="table-title"><div><span className="eyebrow">Mercado argentino</span><h2 id="argentina-market-title">Precios encontrados en Argentina</h2></div><small>{hasMarket ? 'Evidencia vigente' : 'Sin benchmark confirmado'}</small></div>
+    {hasMarket ? <>
+      <div className="market-price-hero"><span>Precio usado para calcular el margen</span><strong>{ars(marketPriceArs)}</strong><small>{localSellPriceUsd > 0 ? `${usd(localSellPriceUsd)} al tipo de cambio disponible` : 'Conversión USD no disponible'}</small></div>
+      <div className="market-price-range">
+        <div><span>25% más barato</span><b>{prefill?.marketP25Ars ? ars(prefill.marketP25Ars) : '—'}</b></div>
+        <div><span>Precio mediano</span><b>{prefill?.marketMedianArs ? ars(prefill.marketMedianArs) : '—'}</b></div>
+        <div><span>25% más caro</span><b>{prefill?.marketP75Ars ? ars(prefill.marketP75Ars) : '—'}</b></div>
+      </div>
+      {prefill?.marketComparables?.length ? <div className="market-comparables"><h3>Publicaciones comparables</h3>{prefill.marketComparables.map((item) => item.permalink
+        ? <a key={item.id} href={item.permalink} target="_blank" rel="noreferrer"><span>{item.title}</span><b>{ars(item.priceArs)}</b></a>
+        : <div key={item.id}><span>{item.title}</span><b>{ars(item.priceArs)}</b></div>)}</div> : null}
+      <p className="market-provenance"><b>{prefill?.marketComparableCount || 0} comparables aceptados</b>{prefill?.marketConfidence !== null && prefill?.marketConfidence !== undefined ? ` · confianza ${prefill.marketConfidence}%` : ''}<br />Fuente: {prefill?.marketSource || 'mercado argentino'}{prefill?.fxSourceDate ? ` · tipo de cambio ${prefill.fxSourceDate}` : ''}</p>
+    </> : <div className="market-empty"><strong>No encontramos suficientes precios argentinos comparables.</strong><p>El costo puesto sigue visible, pero no mostramos un “conviene” comercial hasta tener un benchmark local confiable. Podés cargar un precio manual en los supuestos.</p></div>}
   </section>
 }
 
@@ -217,6 +262,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
   const breakdown = winner ? unitBreakdown(winner, quantity) : []
 
   const summary = useMemo(() => buildImporterSummary(quote, quantity, localSellPriceUsd, optimizer), [quote, quantity, localSellPriceUsd, optimizer])
+  const verdictSignals = useMemo(() => buildVerdictSignals(summary, quote, budgetUsd, prefill), [summary, quote, budgetUsd, prefill])
 
   return <section className="manual-quote-shell journey-quote-shell">
     <div className="table-title journey-quote-title">
@@ -240,7 +286,8 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
     </section>}
 
     <div className="workspace manual-quote-workspace">
-      <aside className="inputs-column">
+      <details className="inputs-column quote-assumptions">
+        <summary><span><b>Revisar o corregir supuestos</b><small>Producto, operación, aranceles y optimización</small></span><em>Editar</em></summary>
         <section className="panel">
           <div className="section-heading"><span>01</span><div><h2>Producto y proveedor</h2><p>Base física y comercial usada para la simulación.</p></div></div>
           <label className="field field-wide"><span>Producto</span><input placeholder="Ej. paleta de pádel carbono" value={productName} onChange={(e) => setProductName(e.target.value)} /></label>
@@ -282,21 +329,42 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
             <NumberField label="Presupuesto máximo" hint="Costo final total. 0 = todavía no definido." value={budgetUsd} onChange={setBudgetUsd} step={100} suffix="USD" />
             <NumberField label="MOQ proveedor" value={moq} onChange={setMoq} min={1} suffix="u." />
             <NumberField label="Demanda mensual" hint="Opcional; 0 si no sabés" value={monthlyDemand} onChange={setMonthlyDemand} suffix="u./mes" />
-            <NumberField label="Precio venta local" hint="Opcional; para margen rápido" value={localSellPriceUsd} onChange={setLocalSellPriceUsd} step={0.01} suffix="USD" />
+            <NumberField label="Precio venta local (USD)" hint="Se precarga desde el benchmark argentino cuando hay tipo de cambio disponible; podés reemplazarlo." value={localSellPriceUsd} onChange={setLocalSellPriceUsd} step={0.01} suffix="USD" />
             <label className="field"><span>Estrategia</span><small>{strategyCopy(strategy)}</small><select value={strategy} onChange={(e) => setStrategy(e.target.value as BuyStrategy)}>{(Object.keys(strategyLabels) as BuyStrategy[]).map((key) => <option key={key} value={key}>{strategyLabels[key]}</option>)}</select></label>
           </div>
         </section>
-      </aside>
+      </details>
 
       <section className="results-column">
         <ImporterSummaryCard summary={summary} quantity={quantity} />
+
+        <ArgentinaMarketCard prefill={prefill} localSellPriceUsd={localSellPriceUsd} />
+
+        <section className="table-card verdict-stack" aria-labelledby="verdict-stack-title">
+          <div className="table-title"><div><span className="eyebrow">Veredictos del caso</span><h2 id="verdict-stack-title">Qué está bien y qué todavía frena la decisión</h2></div></div>
+          <div className="verdict-signal-list">{verdictSignals.map((signal) => <div className={`verdict-signal verdict-signal-${signal.tone}`} key={signal.label}><span>{signal.label}</span><div><b>{signal.title}</b><p>{signal.detail}</p></div></div>)}</div>
+        </section>
+
+        {winner && <section className="table-card unit-breakdown-card">
+          <div className="table-title"><div><span className="eyebrow">Costo puesto por unidad</span><h2>De FOB a tu costo final, punto por punto</h2></div><small>{winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · {quantity} u.</small></div>
+          <div className="unit-breakdown-list">
+            {breakdown.map(([label, value]) => <div key={label}><span>{label}</span><b>{usd(value)}</b></div>)}
+            <div className="unit-breakdown-total"><span>Costo puesto final / unidad</span><b>{usd(winner.unitCostUsd)}</b></div>
+          </div>
+          <div className="unit-context-list">
+            <div><span>FOB total</span><b>{usd(winner.fobUsd)}</b></div>
+            <div><span>Flete total</span><b>{usd(winner.freightCostUsd)}</b></div>
+            <div><span>Trámite intervención</span><b>{winner.sensitiveCategoryUsd > 0 ? usd(winner.sensitiveCategoryUsd) : 'No aplica'}</b></div>
+            <div><span>Total operación</span><b>{usd(winner.totalCostUsd)}</b></div>
+          </div>
+        </section>}
 
         <button
           className="secondary importer-detail-toggle"
           type="button"
           onClick={() => setShowTechnicalDetail((v) => !v)}
         >
-          {showTechnicalDetail ? 'Ocultar detalle técnico' : 'Ver detalle técnico (CIF, FOB, percepciones…)'}
+          {showTechnicalDetail ? 'Ocultar comparativa técnica' : 'Ver comparativa técnica de fletes e impuestos'}
         </button>
 
         {showTechnicalDetail && <>
@@ -308,20 +376,6 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
             <p className="mode">{winner ? `${productName || 'Producto'} · ${originCountry} · ${winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · total de la operación ${usd(winner.totalCostUsd)}.` : decision.body}</p>
             <p className="unit-result-explainer">Este valor es el costo de <b>una unidad dentro de una importación de {quantity} unidades</b>. No simula importar una unidad aislada, porque los mínimos de flete y gastos fijos distorsionarían la decisión.</p>
           </section>
-
-          {winner && <section className="table-card unit-breakdown-card">
-            <div className="table-title"><div><span className="eyebrow">Costo puesto por unidad</span><h2>De FOB a tu costo final, punto por punto</h2></div><small>{winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · {quantity} u.</small></div>
-            <div className="unit-breakdown-list">
-              {breakdown.map(([label, value]) => <div key={label}><span>{label}</span><b>{usd(value)}</b></div>)}
-              <div className="unit-breakdown-total"><span>Costo puesto final / unidad</span><b>{usd(winner.unitCostUsd)}</b></div>
-            </div>
-            <div className="unit-context-grid">
-              <div><span>FOB total</span><b>{usd(winner.fobUsd)}</b></div>
-              <div><span>Flete total</span><b>{usd(winner.freightCostUsd)}</b></div>
-              <div><span>Trámite intervención</span><b>{winner.sensitiveCategoryUsd > 0 ? usd(winner.sensitiveCategoryUsd) : 'No aplica'}</b></div>
-              <div><span>Total operación</span><b>{usd(winner.totalCostUsd)}</b></div>
-            </div>
-          </section>}
 
           <section className="table-card">
             <div className="table-title"><div><span className="eyebrow">Comparativa logística</span><h2>LCL, aéreo y referencia FCL</h2></div><small>{quote.origin ? `${quote.origin.region} · ${quote.origin.capital}` : quote.status}</small></div>

@@ -64,6 +64,26 @@ function makeAnalysisPrefill(
 ): QuotePrefill {
   const fx = analysis.fx?.status === 'live' && analysis.fx.arsPerUsd && analysis.fx.arsPerUsd > 0 ? analysis.fx.arsPerUsd : null
   const estimatedLocalUsd = fx && analysis.market.estimatedPriceArs ? analysis.market.estimatedPriceArs / fx : 0
+  const marketDetails = (analysis.market as typeof analysis.market & {
+    details?: {
+      status?: QuotePrefill['marketStatus']
+      p25Ars?: number | null
+      medianArs?: number | null
+      p75Ars?: number | null
+      comparableCount?: number
+      confidence?: number | null
+      comparables?: Array<{ id?: string; title?: string; priceArs?: number; permalink?: string }>
+    }
+  }).details
+  const marketComparables = (marketDetails?.comparables || [])
+    .filter((item) => item.id && item.title && Number(item.priceArs) > 0)
+    .slice(0, 4)
+    .map((item) => ({
+      id: String(item.id),
+      title: String(item.title),
+      priceArs: Number(item.priceArs),
+      ...(item.permalink?.startsWith('https://') ? { permalink: item.permalink } : {}),
+    }))
   const confirmedQuantity = analysis.product.moq || analysis.suggestedQuantities[0] || 0
   return {
     productName: analysis.product.name,
@@ -76,6 +96,17 @@ function makeAnalysisPrefill(
     budgetUsd: budgetMode === 'budget' ? budgetUsd : 0,
     monthlyDemand: analysis.market.estimatedMonthlyDemand || 0,
     localSellPriceUsd: estimatedLocalUsd,
+    marketPriceArs: analysis.market.estimatedPriceArs,
+    marketP25Ars: marketDetails?.p25Ars ?? null,
+    marketMedianArs: marketDetails?.medianArs ?? null,
+    marketP75Ars: marketDetails?.p75Ars ?? null,
+    marketComparableCount: marketDetails?.comparableCount ?? marketComparables.length,
+    marketConfidence: marketDetails?.confidence ?? null,
+    marketStatus: marketDetails?.status ?? 'unknown',
+    marketSource: analysis.market.source,
+    marketComparables,
+    fxArsPerUsd: fx,
+    fxSourceDate: analysis.fx?.sourceDate ?? null,
     sensitiveCategory: sensitiveCategory || 'unknown',
     sourceLabel: analysis.sourceUrl.startsWith('manual://')
       ? 'Producto descripto por el usuario'

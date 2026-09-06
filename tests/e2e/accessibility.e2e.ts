@@ -25,7 +25,7 @@ async function chooseByKeyboard(page: Page, target: Locator) {
 
 test('initial journey has no serious or critical axe violations', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: /Contame qué querés importar/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Cuánto te cuesta importarlo/i })).toBeVisible()
   await expectNoSeriousAxeViolations(page)
 })
 
@@ -111,7 +111,9 @@ test('mobile journey prioritizes current work and keeps compact controls touch-f
   await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
 
   await expect(page.getByText('Perfil de la operación', { exact: true })).toBeVisible()
-  await expect(page.locator('.journey-hero > p')).toBeHidden()
+  const heroParagraphs = page.locator('.journey-hero > p')
+  await expect(heroParagraphs).toHaveCount(2)
+  for (const paragraph of await heroParagraphs.all()) await expect(paragraph).toBeHidden()
   await expect(page.locator('.journey-question-card.active')).toBeVisible()
 
   const chipBox = await page.getByRole('radio', { name: 'Reventa', exact: true }).boundingBox()

@@ -13,7 +13,7 @@ for (const name of migrationFiles) {
 
 const expectedTables = [
   'analyses', 'billing_events', 'credit_ledger', 'credit_reservations', 'digest_run_recipients', 'digest_runs',
-  'email_events', 'email_preferences', 'plans', 'subscriptions', 'usage_periods', 'users', 'watchlist_items', 'watchlist_snapshots',
+  'email_events', 'email_preferences', 'fx_snapshots', 'plans', 'subscriptions', 'usage_periods', 'users', 'watchlist_items', 'watchlist_snapshots',
 ]
 const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name)
 if (JSON.stringify(tables) !== JSON.stringify(expectedTables)) throw new Error(`D1 schema table mismatch: ${JSON.stringify(tables)}`)

@@ -1,7 +1,7 @@
 import type { LandedCostComparison, ModeCostBreakdown } from './landedCostEngine'
 import type { QuantityOptimization } from './quantityOptimizer'
 
-export type ImportVerdict = 'si' | 'no' | 'ajusta' | 'faltan-datos'
+export type ImportVerdict = 'excelente' | 'si' | 'ajusta' | 'fragil' | 'no' | 'sin-mercado' | 'faltan-datos'
 
 export type ImporterCostItem = {
   label: string
@@ -87,6 +87,13 @@ function verdictFor(
         : 'Cargá producto, origen y peso/volumen para ver la comparación.',
     }
   }
+  if (marginPct === null) {
+    return {
+      verdict: 'sin-mercado',
+      headline: 'Todavía no se puede decidir',
+      detail: 'Calculamos el costo puesto, pero falta un precio argentino confiable para saber si existe margen comercial.',
+    }
+  }
   if (marginPct !== null && marginPct < 0) {
     return {
       verdict: 'no',
@@ -94,19 +101,31 @@ function verdictFor(
       detail: `El costo por unidad supera el precio de venta que cargaste. Revisá precio de compra o precio de venta.`,
     }
   }
-  if (marginPct !== null && marginPct < 20) {
+  if (marginPct < 10) {
+    return {
+      verdict: 'fragil',
+      headline: 'Margen demasiado frágil',
+      detail: `El margen estimado es ${marginPct.toFixed(0)} %. Cualquier variación de flete, tipo de cambio o precio local puede volver negativa la operación.`,
+    }
+  }
+  if (marginPct < 20) {
     return {
       verdict: 'ajusta',
       headline: 'Ajustá la cantidad o el precio',
       detail: `El margen queda por debajo del 20 %. Hay poco colchón para errores, demoras o gastos no modelados. Probá traer más unidades para bajar el costo unitario.`,
     }
   }
+  if (marginPct >= 35) {
+    return {
+      verdict: 'excelente',
+      headline: `Oportunidad fuerte por ${modeLabel(mode)}`,
+      detail: `El margen estimado es ${marginPct.toFixed(0)} %. Hay un colchón inicial atractivo, sujeto a validar demanda y cotizaciones vigentes.`,
+    }
+  }
   return {
     verdict: 'si',
     headline: `Conviene importar por ${modeLabel(mode)}`,
-    detail: marginPct !== null
-      ? `Margen estimado de ${marginPct.toFixed(0)} % sobre el precio de venta cargado.`
-      : `${modeLabel(mode).charAt(0).toUpperCase() + modeLabel(mode).slice(1)} es el menor costo entre las opciones.`,
+    detail: `Margen estimado de ${marginPct.toFixed(0)} % sobre el precio de venta cargado.`,
   }
 }
 

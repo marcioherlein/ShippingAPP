@@ -81,6 +81,17 @@ export type QuotePrefill = {
   budgetUsd: number
   monthlyDemand: number
   localSellPriceUsd: number
+  marketPriceArs?: number | null
+  marketP25Ars?: number | null
+  marketMedianArs?: number | null
+  marketP75Ars?: number | null
+  marketComparableCount?: number
+  marketConfidence?: number | null
+  marketStatus?: 'live' | 'unavailable' | 'insufficient' | 'configuration_required' | 'unknown'
+  marketSource?: string | null
+  marketComparables?: Array<{ id: string; title: string; priceArs: number; permalink?: string }>
+  fxArsPerUsd?: number | null
+  fxSourceDate?: string | null
   sensitiveCategory: HotProduct['sensitiveCategory']
   sourceLabel: string
   ncmCode?: string | null

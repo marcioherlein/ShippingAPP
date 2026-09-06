@@ -218,9 +218,9 @@ function scoreCandidates(candidates: QuantityCandidate[], input: QuantityOptimiz
           reasons.push(`Podés agregar hasta ${fillUnits} u. más sin pagar otro m³ de flete.`)
         }
       }
-      // Pull-back: if we're just barely over a step boundary, cost to undo it
+      // Pull-back: if we're over a step boundary by up to 0.4 m³, quantify the saving
       const overage = rawWm - Math.floor(rawWm)
-      if (overage > 0 && overage < 0.1 && billedWm > 1) {
+      if (overage > 0 && overage < 0.4 && billedWm > 1) {
         const pullBack = Math.ceil(overage / input.unitVolumeCbm) + 1
         if (pullBack >= 1) {
           reasons.push(`Bajando ${pullBack} u. ahorrás un m³ de flete.`)

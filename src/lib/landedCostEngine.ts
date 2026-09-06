@@ -53,9 +53,17 @@ export type ModeCostBreakdown = {
   // LCL: real W/M before step-rounding, billed W/M after (max(MIN_WM, ceil(rawWm)))
   lclRawWm?: number
   lclBilledWm?: number
-  // FCL: number of 40ft containers needed to fit the shipment volume
+  // FCL: selected container plan plus both modeled alternatives.
   fclContainers?: number
   fclFitsInOne?: boolean
+  fclContainerSize?: '20ft' | '40ft'
+  fclOptions?: Array<{
+    size: '20ft' | '40ft'
+    containers: number
+    rateUsd: number
+    freightCostUsd: number
+    rateEstimated: boolean
+  }>
   fobUsd: number
   cifUsd: number
   dutyUsd: number
@@ -107,8 +115,12 @@ function billedLclWm(rawWm: number): number {
   return Math.max(LCL_MIN_WM, Math.ceil(rawWm / LCL_STEP_WM) * LCL_STEP_WM)
 }
 
-// Usable volume (m³) of a standard 40' container. Source: standard shipping specs.
+// Conservative usable volumes used by this planning model.
 const FCL_40FT_CBM = 58
+const FCL_20FT_CBM = 28
+// The source workbook only contains a 40' rate. Keep this assumption explicit
+// everywhere it is surfaced; it must not be presented as a quoted 20' rate.
+const FCL_20FT_COST_RATIO = 0.65
 
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
@@ -153,8 +165,11 @@ function chargeable(mode: TransportMode, input: LandedCostInput) {
   const totalWeightKg = qty * Math.max(0, input.unitWeightKg)
   const totalVolumeCbm = qty * Math.max(0, input.unitVolumeCbm)
   if (mode === 'fcl') {
-    const fclContainers = Math.max(1, Math.ceil(totalVolumeCbm / FCL_40FT_CBM))
-    return { totalWeightKg, totalVolumeCbm, units: fclContainers, basis: 'container' as const, fclContainers, fclFitsInOne: fclContainers === 1 }
+    const containers40 = Math.max(1, Math.ceil(totalVolumeCbm / FCL_40FT_CBM))
+    const containers20 = Math.max(1, Math.ceil(totalVolumeCbm / FCL_20FT_CBM))
+    const use20ft = totalVolumeCbm > 0 && containers20 * FCL_20FT_COST_RATIO < containers40
+    const fclContainers = use20ft ? containers20 : containers40
+    return { totalWeightKg, totalVolumeCbm, units: fclContainers, basis: 'container' as const, fclContainers, fclFitsInOne: fclContainers === 1, fclContainerSize: use20ft ? '20ft' as const : '40ft' as const }
   }
   if (mode === 'lcl') {
     const rawWm = Math.max(totalVolumeCbm, totalWeightKg / 1000)
@@ -169,7 +184,16 @@ function freightCost(mode: TransportMode, rate: FreightRateLookup, input: Landed
   const base = chargeable(mode, input)
   if (mode === 'fcl') {
     const containers = base.fclContainers ?? 1
-    return { ...base, rate: rate.fclContainerUsd, minimum: null as number | null, cost: containers * rate.fclContainerUsd }
+    const rate20 = roundMoney(rate.fclContainerUsd * FCL_20FT_COST_RATIO)
+    const rate40 = rate.fclContainerUsd
+    const containers20 = Math.max(1, Math.ceil(base.totalVolumeCbm / FCL_20FT_CBM))
+    const containers40 = Math.max(1, Math.ceil(base.totalVolumeCbm / FCL_40FT_CBM))
+    const fclOptions = [
+      { size: '20ft' as const, containers: containers20, rateUsd: rate20, freightCostUsd: roundMoney(containers20 * rate20), rateEstimated: true },
+      { size: '40ft' as const, containers: containers40, rateUsd: rate40, freightCostUsd: roundMoney(containers40 * rate40), rateEstimated: false },
+    ]
+    const effectiveRate = base.fclContainerSize === '20ft' ? rate20 : rate40
+    return { ...base, rate: effectiveRate, minimum: null as number | null, cost: containers * effectiveRate, fclOptions }
   }
   if (mode === 'lcl') return { ...base, rate: rate.lclUsdPerWm, minimum: null as number | null, cost: base.units * rate.lclUsdPerWm }
   const variable = base.units * rate.airUsdPerKg
@@ -238,7 +262,7 @@ export function calculateLandedCostMode(mode: TransportMode, input: LandedCostIn
     totalWeightKg: roundMoney(freight.totalWeightKg),
     totalVolumeCbm: roundMoney(freight.totalVolumeCbm),
     ...(mode === 'lcl' ? { lclRawWm: roundMoney(freight.lclRawWm ?? 0), lclBilledWm: roundMoney(freight.lclBilledWm ?? 0) } : {}),
-    ...(mode === 'fcl' ? { fclContainers: freight.fclContainers ?? 1, fclFitsInOne: freight.fclFitsInOne ?? true } : {}),
+    ...(mode === 'fcl' ? { fclContainers: freight.fclContainers ?? 1, fclFitsInOne: freight.fclFitsInOne ?? true, fclContainerSize: freight.fclContainerSize ?? '40ft', fclOptions: 'fclOptions' in freight ? freight.fclOptions : undefined } : {}),
     fobUsd: roundMoney(fobUsd),
     cifUsd,
     dutyUsd,
@@ -294,7 +318,7 @@ export function compareLandedCost(input: LandedCostInput): LandedCostComparison 
     bestMode: cheaperMode,
     lclVsAir: { cheaperMode, savingsUsd: savingsUsd === null ? null : roundMoney(savingsUsd), savingsPct },
     notes: [
-      'FCL se calcula como referencia por contenedor(es) entero(s) (40\' ≈ 58 m³ útiles) y nunca define la recomendación principal.',
+      'FCL se calcula como referencia por contenedor(es) entero(s): 20\' ≈ 28 m³ y 40\' ≈ 58 m³ útiles. La tarifa de 20\' es una estimación del 65% de la tarifa de 40\' hasta cargar una cotización específica.',
       'El valor principal para oportunidad compara LCL vs aéreo.',
       'FOB + flete internacional = CIF; derecho y tasa estadística se calculan sobre CIF; IVA/percepciones sobre base IVA.',
       taxNote,

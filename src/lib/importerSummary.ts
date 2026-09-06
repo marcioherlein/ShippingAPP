@@ -67,7 +67,8 @@ function logisticsFactFor(breakdown: ModeCostBreakdown): string | null {
   }
   if (breakdown.mode === 'fcl') {
     const c = breakdown.fclContainers ?? 1
-    return `Tu carga necesita ${c} contenedor${c > 1 ? 'es' : ''} de 40 pies.`
+    const size = breakdown.fclContainerSize === '20ft' ? '20 pies' : '40 pies'
+    return `Tu carga necesita ${c} contenedor${c > 1 ? 'es' : ''} de ${size}.`
   }
   return null
 }

@@ -265,7 +265,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
         </section>
 
         <details className="panel journey-advanced-taxes">
-          <summary><div className="section-heading"><span>03</span><div><h2>Aranceles del nomenclador</h2><p>Precargados automáticamente; editá sólo si tenés una validación mejor.</p></div></div></summary>
+          <summary><div className="section-heading"><span>03</span><div><h2>Aranceles del nomenclador</h2><p className={!prefill?.ncmCode ? 'tariff-default-warning' : undefined}>{prefill?.ncmCode ? 'Derivados del NCM asignado; editá sólo si tenés una validación mejor.' : '⚠ Tasas aproximadas por defecto — NCM no validado. Reemplazalas por los aranceles reales de tu producto.'}</p></div></div></summary>
           <div className="field-grid">
             <NumberField label="Derecho importación" value={dutyRatePct} onChange={setDutyRatePct} step={0.1} suffix="%" />
             <NumberField label="Tasa estadística" value={statisticsRatePct} onChange={setStatisticsRatePct} step={0.1} suffix="%" />
@@ -329,7 +329,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
               const taxes = mode.dutyUsd + mode.statisticsUsd + mode.vatUsd + mode.vatAdditionalUsd + mode.gainsUsd + mode.iibbUsd
               const expenses = mode.fixedDestinationUsd + mode.noImporterSignatureUsd + mode.sensitiveCategoryUsd
               const selected = winner?.mode === mode.mode
-              return <tr key={mode.mode} className={selected ? 'selected-row' : undefined}><td><b>{modeLabels[mode.mode]}</b>{selected && <em>recomendado</em>}{mode.mode === 'fcl' && <em>referencia</em>}</td><td>{usd(mode.freightCostUsd)}<br /><small>{mode.chargeableUnits} {mode.mode === 'air' ? 'kg cobrables' : mode.mode === 'lcl' ? 'WM' : 'cont.'}</small></td><td>{usd(mode.cifUsd)}</td><td>{usd(taxes)}</td><td>{usd(expenses)}</td><td><b>{usd(mode.totalCostUsd)}</b></td><td><b>{usd(mode.unitCostUsd)}</b></td></tr>
+              return <tr key={mode.mode} className={selected ? 'selected-row' : undefined}><td><b>{modeLabels[mode.mode]}</b>{selected && <em>recomendado</em>}{mode.mode === 'fcl' && <em>referencia</em>}</td><td>{usd(mode.freightCostUsd)}<br /><small>{mode.chargeableUnits} {mode.mode === 'air' ? 'kg cobrables' : mode.mode === 'lcl' ? 'WM' : `cont. de ${mode.fclContainerSize === '20ft' ? '20′' : '40′'}`}</small>{mode.mode === 'fcl' && mode.fclOptions && <small className="fcl-options">{mode.fclOptions.map((option) => `${option.containers}×${option.size === '20ft' ? '20′ estimado' : '40′ cotizado'}: ${usd(option.freightCostUsd)}`).join(' · ')}</small>}</td><td>{usd(mode.cifUsd)}</td><td>{usd(taxes)}</td><td>{usd(expenses)}</td><td><b>{usd(mode.totalCostUsd)}</b></td><td><b>{usd(mode.unitCostUsd)}</b></td></tr>
             })}</tbody></table></div>
             <div className="analysis-banner" style={{ marginTop: 16 }}><b>LCL vs Aéreo:</b> {quote.lclVsAir.cheaperMode === 'lcl' ? `LCL ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs aéreo.` : quote.lclVsAir.cheaperMode === 'air' ? `Aéreo ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs LCL.` : 'empate con los datos actuales.'} FCL queda como referencia de contenedor entero.</div>
           </section>

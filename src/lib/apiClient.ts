@@ -1,6 +1,7 @@
 export type ApiTokenProvider = () => Promise<string | null>
 
 let tokenProvider: ApiTokenProvider | null = null
+let lastUsableToken: string | null = null
 
 const IDEMPOTENT_METERED_POSTS = new Set([
   '/api/analyze',
@@ -14,6 +15,7 @@ const IDEMPOTENT_METERED_POSTS = new Set([
 
 export function setApiTokenProvider(provider: ApiTokenProvider | null) {
   tokenProvider = provider
+  if (!provider) lastUsableToken = null
 }
 
 function inputUrl(input: RequestInfo | URL) {
@@ -71,7 +73,20 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   }
 
   if (shouldAttach && tokenProvider) {
-    const token = await tokenProvider()
+    let token: string | null = null
+    try {
+      token = await tokenProvider()
+      if (token) lastUsableToken = token
+    } catch {
+      // Clerk/browser storage can fail transiently (Safari reports a cryptic DOMException:
+      // "The string did not match the expected pattern"). Reuse only the in-memory token
+      // already accepted for this signed-in page; never persist it or send it off-origin.
+      token = lastUsableToken
+      if (!token) {
+        signalAuthenticationRequired()
+        throw new Error('No pude validar tu sesión. Volvé a ingresar y reintentá; no se consumió ningún análisis.')
+      }
+    }
     if (token) headers.set('authorization', `Bearer ${token}`)
   }
 

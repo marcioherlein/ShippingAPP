@@ -248,6 +248,27 @@ const PLAIN_CONCEPTS: PlainConcept[] = [
     functionText: 'convierte corriente eléctrica',
     activeMechanism: 'electric',
   },
+  {
+    key: 'cooking_appliance',
+    match: [
+      /\b(smokeless\s+)?stove\b/,
+      /\b(cook(ing|er)?|cocinar|coccion|cocina)\b/,
+      /\b(grill|barbecue|barbeque|bbq)\b/,
+      /\b(parrilla|asador|barbacoa)\b/,
+    ],
+    positiveTerms: ['aparato de coccion', 'cocina', 'parrilla', 'barbacoa', 'uso domestico'],
+    functionText: 'cocinar alimentos',
+    householdUse: true,
+  },
+  {
+    key: 'solid_fuel',
+    match: [
+      /\b(wood|wooden|firewood|charcoal|coal|solid\s+fuel)\b/,
+      /\b(lena|carbon|combustible\s+solido)\b/,
+    ],
+    positiveTerms: ['combustible solido', 'lena', 'carbon'],
+    activeMechanism: 'passive',
+  },
 ]
 
 function matchAny(patterns: RegExp[], text: string) {
@@ -367,6 +388,10 @@ export function deriveNormalizedCategory(
   if (has('headphones')) return 'Auriculares'
   if (has('battery_lithium')) return 'Acumulador de litio'
   if (has('power_adapter')) return 'Fuente de alimentación / cargador'
+  if (has('cooking_appliance') && has('solid_fuel')) {
+    return `Parrilla / aparato de cocción a combustible sólido ${materialWord}`.replace(/\s+/g, ' ').trim()
+  }
+  if (has('cooking_appliance')) return 'Parrilla / aparato de cocción'
 
   return null
 }
@@ -409,4 +434,3 @@ export function deriveClarifications(concepts: SemanticConcepts): Clarification[
 
   return clarifications
 }
-

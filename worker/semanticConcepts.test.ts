@@ -88,6 +88,19 @@ describe('semantic concept derivation', () => {
     expect(c.concepts).not.toContain('!vacuum_insulated')
     expect(c.exclusionTerms).toEqual([])
   })
+
+  it('retains Spanish grill, cooking and solid-fuel clarifications as tariff concepts', () => {
+    const c = deriveSemanticConcepts({
+      name: 'Eco-Friendly Smokeless Stove Efficient Stainless Steel',
+      functionText: 'parrilla para cocinar',
+      description: 'Aclaración del usuario: parrilla a leña. Aclaración del usuario: parrilla a carbón cerrada.',
+    })
+    expect(c.concepts).toContain('cooking_appliance')
+    expect(c.concepts).toContain('solid_fuel')
+    expect(c.concepts).toContain('material_stainless_steel')
+    expect(c.functionText).toBe('parrilla para cocinar')
+    expect(c.derivedCategory).toMatch(/combustible sólido/i)
+  })
 })
 
 describe('derived category normalization', () => {
@@ -139,4 +152,3 @@ describe('clarification questions (asked only when they change classification)',
     expect(deriveClarifications(deriveSemanticConcepts({ name: 'notebook laptop' }))).toEqual([])
   })
 })
-

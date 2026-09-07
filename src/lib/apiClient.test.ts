@@ -39,6 +39,21 @@ describe('apiFetch authentication and metering transport boundary', () => {
     expect(headers.get('authorization')).toBe('Bearer session-token')
   })
 
+  it('reuses the current in-memory session when Clerk throws a transient browser DOMException', async () => {
+    const provider = vi.fn()
+      .mockResolvedValueOnce('working-session-token')
+      .mockRejectedValueOnce(new DOMException('The string did not match the expected pattern'))
+    setApiTokenProvider(provider)
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiFetch('/api/me')
+    await apiFetch('/api/product-read', { method: 'POST', body: '{}' })
+
+    const secondHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers)
+    expect(secondHeaders.get('authorization')).toBe('Bearer working-session-token')
+  })
+
   it('adds an opaque idempotency key to metered POSTs without trusting the browser for entitlement data', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

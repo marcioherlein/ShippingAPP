@@ -174,6 +174,8 @@ function automaticMechanicalCommonMetalWristwatch(facts: NcmProductFacts) {
 // be added here only with regression coverage.
 function allowedChapterPrefixes(facts: NcmProductFacts): string[] | null {
   if (conventionalWristwatchText(facts)) return ['91']
+  const concepts = deriveSemanticConcepts(facts).concepts
+  if (concepts.includes('cooking_appliance') && concepts.includes('solid_fuel')) return ['73']
   return null
 }
 
@@ -255,6 +257,20 @@ function shortcutClassification(
 
 function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, concepts: SemanticConcepts): FullNcmClassification | null {
   const text = normalizeText(factsText(facts))
+
+  const solidFuelCookingAppliance = concepts.concepts.includes('cooking_appliance')
+    && concepts.concepts.includes('solid_fuel')
+  if (solidFuelCookingAppliance) {
+    const official = findOfficial(index, '7321.19.00')
+    if (official) {
+      return shortcutClassification(
+        index,
+        official,
+        ['aparato de coccion', 'parrilla', 'combustible solido', 'lena', 'carbon'],
+        'Producto identificado como parrilla o aparato no eléctrico para cocinar con leña, carbón u otro combustible sólido.',
+      )
+    }
+  }
 
   if (automaticMechanicalCommonMetalWristwatch(facts)) {
     const official = findOfficial(index, '9102.21.00')

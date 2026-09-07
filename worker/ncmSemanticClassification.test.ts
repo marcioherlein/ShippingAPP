@@ -15,6 +15,7 @@ const index: NcmSearchIndex = {
     simOpeningsIncluded: false, recordShape: '[ncmCode,label,...tariff]',
   },
   records: [
+    row('7321.19.00', 'ESTUFAS, CALDERAS CON HOGAR, COCINAS, BARBACOAS, BRASEROS Y APARATOS NO ELECTRICOS DE USO DOMESTICO, DE HIERRO O ACERO > Aparatos de coccion y calientaplatos > Los demas, incluidos los de combustible solido'),
     row('9617.00.10', 'TERMOS Y DEMAS RECIPIENTES ISOTERMICOS, MONTADOS Y AISLADOS POR VACIO, ASI COMO SUS PARTES > Termos y demas recipientes isotermicos'),
     row('3924.10.00', 'VAJILLA, ARTICULOS DE COCINA O DE USO DOMESTICO Y ARTICULOS DE HIGIENE O TOCADOR, DE PLASTICO > Vajilla y demas articulos para el servicio de mesa o de cocina'),
     row('3924.90.00', 'VAJILLA, ARTICULOS DE COCINA O DE USO DOMESTICO Y ARTICULOS DE HIGIENE O TOCADOR, DE PLASTICO > Los demas'),
@@ -61,6 +62,20 @@ describe('language invariance — vacuum thermo converges on 9617.00.10', () => 
       expect(result.diagnostics?.normalizedConcepts).toContain('vacuum_insulated')
     },
   )
+})
+
+describe('reported smokeless stove / parrilla flow', () => {
+  it('classifies the exact title plus the user clarifications without another AI loop', async () => {
+    const result = await classifyFullNcm(index, noAi, {
+      name: 'Eco-Friendly Smokeless Stove Efficient Stainless Steel',
+      functionText: 'parrilla para cocinar',
+      description: 'Parrilla a leña, parrilla a carbón cerrada',
+    })
+    expect(result.status).toBe('candidate')
+    expect(result.code).toBe('7321.19.00')
+    expect(result.confidence).not.toBe('low')
+    expect(result.missingFacts).toEqual([])
+  })
 })
 
 describe('negative-evidence scoring — retrieval level', () => {
@@ -162,4 +177,3 @@ describe('adversarial — misleading lexical overlap must not force a family', (
     expect(c.exclusionTerms).toContain('electric')
   })
 })
-

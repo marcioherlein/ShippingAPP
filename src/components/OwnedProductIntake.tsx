@@ -29,9 +29,11 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
     try {
       await onAlibabaLink(value)
     } catch (err) {
-      setError(err instanceof Error
-        ? `${err.message} Podés reintentar o describir el producto sin link.`
-        : 'No pude leer esa publicación. Podés reintentar o describir el producto sin link.')
+      const raw = err instanceof Error ? err.message : ''
+      const message = /expected pattern|string did not match/i.test(raw)
+        ? 'Falló transitoriamente la sesión del navegador. Reintentá; el enlace es válido y no se consumió ningún análisis.'
+        : raw || 'No pude leer esa publicación.'
+      setError(`${message} También podés describir el producto sin link.`)
     } finally {
       setLoading(false)
     }

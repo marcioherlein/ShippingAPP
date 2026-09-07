@@ -10,6 +10,7 @@ function req(url: unknown) {
 }
 
 const validAlibaba = 'https://www.alibaba.com/product-detail/Sample_1600000000000.html'
+const reportedAlibaba = 'https://www.alibaba.com/product-detail/Eco-Friendly-Smokeless-Stove-Efficient-Stainless_1601673494197.html?spm=a2700.prosearch.normal_offer.d_image.19f867af4nbsWj&priceId=8f00a0848f9a4e4baa8580569b996155'
 
 describe('product-read transient reliability (Case C class of failures)', () => {
   it('rejects an invalid link as a permanent, non-retryable client error', async () => {
@@ -20,6 +21,14 @@ describe('product-read transient reliability (Case C class of failures)', () => 
     expect(body.code).toBe('invalid_link')
     expect(body.retryable).toBe(false)
     expect(reader).not.toHaveBeenCalled()
+  })
+
+  it('accepts the exact reported Alibaba URL including its tracking query', async () => {
+    const reader = vi.fn(async (url: URL) => ({ product: { name: url.pathname }, sourceRead: { mode: 'direct' } }))
+    const response = await productRead(req(reportedAlibaba), {}, reader as any)
+    expect(response.status).toBe(200)
+    expect(reader).toHaveBeenCalledTimes(1)
+    expect(reader.mock.calls[0]?.[0].searchParams.get('priceId')).toBe('8f00a0848f9a4e4baa8580569b996155')
   })
 
   it('recovers a transient failure with a single bounded retry (503 on read #1, 200 on read #2)', async () => {

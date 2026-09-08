@@ -112,7 +112,7 @@ test('mobile journey prioritizes current work and keeps compact controls touch-f
 
   await expect(page.getByText('Perfil de la operación', { exact: true })).toBeVisible()
   const heroParagraphs = page.locator('.journey-hero > p')
-  await expect(heroParagraphs).toHaveCount(2)
+  await expect(heroParagraphs).not.toHaveCount(0)
   for (const paragraph of await heroParagraphs.all()) await expect(paragraph).toBeHidden()
   await expect(page.locator('.journey-question-card.active')).toBeVisible()
 

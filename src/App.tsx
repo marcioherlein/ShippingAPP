@@ -431,18 +431,16 @@ export default function App() {
     </header>
 
     <section className="journey-landing-hero">
-      <h1 className="journey-landing-headline">El costo real de importar a Argentina, <em>antes de comprometerte.</em></h1>
-      <p className="journey-landing-sub">Calcul&#xE1; aranceles, IVA, flete y todas las cargas para cualquier producto. En 2 minutos, sin saber de aduana.</p>
+      <h1 className="journey-landing-headline">Recib&#xED; el valor real de tu producto <em>puesto en Argentina.</em></h1>
+      <p className="journey-landing-sub">Pod&#xE9;s calcular flete, impuestos y gastos en destino en menos de 2 minutos.</p>
       <div className="journey-landing-cta-row">
         <a className="journey-landing-cta-primary" href="#cotizador">Calcul&#xE1; ahora &#x2192;</a>
         <a className="journey-landing-cta-secondary" href="#como-funciona">Ver c&#xF3;mo funciona</a>
       </div>
-      <p className="journey-landing-proof">100% gratuito &#xB7; Sin registro &#xB7; Sin estimaciones inventadas</p>
     </section>
 
     <section className="journey-how-it-works" id="como-funciona">
-      <h2 className="journey-how-it-works-title">Tres pasos al costo real</h2>
-      <p className="journey-how-it-works-sub">Sin formularios interminables ni datos que no ten&#xE9;s.</p>
+      <h2 className="journey-how-it-works-title">Consegu&#xED; en 3 pasos tu costo real</h2>
       <div className="journey-how-steps">
         <div className="journey-how-step">
           <div className="journey-how-step-number">1</div>
@@ -464,10 +462,9 @@ export default function App() {
 
     <div className="journey-trust-strip">
       <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>Basado en NCM del MERCOSUR</span>
-      <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>Tipos de cambio reales</span>
+      <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>Fletes Internacionales Reales</span>
       <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>+1.000 categor&#xED;as arancelarias</span>
       <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>C&#xE1;lculo en tiempo real</span>
-      <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>Sin estimaciones de aduana</span>
     </div>
 
     <section className="journey-hero" id="cotizador">
@@ -475,8 +472,7 @@ export default function App() {
       <div className="journey-orb journey-orb-two" aria-hidden="true" />
       <span className="eyebrow">Motor de costo de importaci&#xF3;n</span>
       <h1>Cu&#xE1;nto te cuesta importarlo,<br />calculado sin inventar.</h1>
-      <p>Del link del proveedor al costo unitario puesto en Argentina. ShippingAPP clasifica el NCM, carga aranceles e impuestos, y compara LCL vs. a&#xE9;reo &#x2014; en minutos, sin suposiciones.</p>
-      <p style={{ marginTop: '8px', fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}><strong style={{ color: '#16a34a' }}>100% gratuito.</strong> Sin registro. Sin promesas.</p>
+      <p>Del link del proveedor al costo unitario puesto en Argentina. ShippingAPP clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p>
       <div className="journey-stepper" role="region" aria-label="Progreso de la cotización" tabIndex={0}>
         {stepLabels.map((label, index) => <div className={`journey-step${index < progressStep ? ' done' : ''}${index === progressStep ? ' active' : ''}`} key={label}>
           <span>{index < progressStep ? <UiIcon name="check" size={16} /> : index + 1}</span><small>{label}</small>
@@ -502,7 +498,7 @@ export default function App() {
         {intent && <>
           <div className="journey-bubble assistant">
             <span className="journey-avatar">S</span>
-            <div><b>Antes de cotizar necesito entender cómo vas a importar.</b><p>Estas respuestas pueden cambiar impuestos, gastos y requisitos. Si algo no lo sabés, marcá “No sé”; no voy a disfrazarlo como un dato confirmado.</p></div>
+            <div><b>Antes de cotizar necesito entender cómo vas a importar.</b><p>Estas respuestas pueden cambiar impuestos, gastos y requisitos. Si algo no lo sabés, marcá “No sé”.</p></div>
           </div>
 
           <section className={`journey-question-card${step === 1 ? ' active' : ''}`}>
@@ -590,36 +586,6 @@ export default function App() {
       <div className="journey-section-heading"><span className="eyebrow">Resultado del caso</span><h2>Primero entendé el costo de una unidad. Después optimizamos.</h2><p>El costo unitario se calcula dentro de la cantidad base/MOQ seleccionada, distribuyendo flete y gastos fijos.</p></div>
       <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={quoteSetup} />
     </section>}
-
-    <section className="journey-faq">
-      <h2 className="journey-faq-title">Preguntas frecuentes</h2>
-      <div className="journey-faq-list">
-        <details className="journey-faq-item">
-          <summary>&#xBF;Es gratis?<span className="journey-faq-toggle">+</span></summary>
-          <p className="journey-faq-answer">S&#xED;, el c&#xE1;lculo es completamente gratuito. No necesit&#xE1;s registrarte ni ingresar ning&#xFA;n dato de pago.</p>
-        </details>
-        <details className="journey-faq-item">
-          <summary>&#xBF;Qu&#xE9; tan preciso es el c&#xE1;lculo?<span className="journey-faq-toggle">+</span></summary>
-          <p className="journey-faq-answer">Se basa en los aranceles reales del NCM del MERCOSUR y en los tipos de cambio actualizados del SIM de AFIP. El c&#xE1;lculo de flete es una estimaci&#xF3;n seg&#xFA;n origen y volumen; los valores exactos dependen del courier o freight forwarder que uses.</p>
-        </details>
-        <details className="journey-faq-item">
-          <summary>&#xBF;Para qu&#xE9; sirve exactamente?<span className="journey-faq-toggle">+</span></summary>
-          <p className="journey-faq-answer">Para evaluar si importar un producto conviene antes de comprometerte: conocer el costo real puesto en Argentina, comparar modos de flete (a&#xE9;reo vs. LCL mar&#xED;timo) y estimar cu&#xE1;nto necesit&#xE1;s vender para que sea rentable.</p>
-        </details>
-        <details className="journey-faq-item">
-          <summary>&#xBF;Qu&#xE9; costos incluye?<span className="journey-faq-toggle">+</span></summary>
-          <p className="journey-faq-answer">Precio de compra, derecho de importaci&#xF3;n (arancel NCM), tasa estad&#xED;stica, IVA importaci&#xF3;n, IVA adicional, Ganancias, Ingresos Brutos, y flete estimado seg&#xFA;n el modo log&#xED;stico. Muestra cada componente por separado.</p>
-        </details>
-        <details className="journey-faq-item">
-          <summary>&#xBF;Necesito ser importador para usar ShippingAPP?<span className="journey-faq-toggle">+</span></summary>
-          <p className="journey-faq-answer">No. Pod&#xE9;s usarlo para evaluar cualquier compra internacional, ya sea que operes con firma importadora propia o a trav&#xE9;s de un importador tercero. ShippingAPP contempla ambos casos.</p>
-        </details>
-        <details className="journey-faq-item">
-          <summary>&#xBF;Qu&#xE9; es el NCM?<span className="journey-faq-toggle">+</span></summary>
-          <p className="journey-faq-answer">El Nomenclador Com&#xFA;n del MERCOSUR (NCM) es el c&#xF3;digo de 8 d&#xED;gitos que identifica cada tipo de producto en aduana. Define el arancel que paga ese producto al ingresar al pa&#xED;s. ShippingAPP lo determina autom&#xE1;ticamente seg&#xFA;n la descripci&#xF3;n de tu producto.</p>
-        </details>
-      </div>
-    </section>
 
     <footer className="journey-footer">
       <div className="journey-footer-left">

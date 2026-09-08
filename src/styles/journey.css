@@ -670,13 +670,21 @@
   padding: 48px 16px 80px;
   position: relative;
   overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 24%, rgba(91, 110, 255, .34), transparent 28%),
+    radial-gradient(circle at 82% 72%, rgba(44, 180, 255, .18), transparent 32%),
+    linear-gradient(145deg, #040816 0%, #0c1430 54%, #111a3d 100%);
 }
 
 .journey-landing-hero::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/images/ship.jpg') center / cover no-repeat;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .72), transparent 88%);
   z-index: 0;
 }
 
@@ -783,44 +791,8 @@
   animation: hero-rise .8s .58s cubic-bezier(.2,.8,.2,1) both;
 }
 
-/* ─── CONTAINER PHOTO BREAK ─── */
-.journey-photo-break {
-  width: 100%;
-  height: 320px;
-  overflow: hidden;
-  position: relative;
-  margin-bottom: -40px;
-}
-
-.journey-photo-break img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 42%;
-  display: block;
-}
-
-.journey-photo-break::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 55%;
-  background: linear-gradient(to bottom, rgba(4,8,22,.75), transparent);
-  z-index: 1;
-}
-
-.journey-photo-break::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 65%;
-  background: linear-gradient(to top, #f3f6fb, transparent);
-  z-index: 1;
-}
-
 /* ─── HOW IT WORKS ─── */
 @supports (animation-timeline: view()) {
-  .journey-photo-break,
   .journey-how-it-works,
   .journey-trust-strip {
     animation: section-reveal .7s linear both;

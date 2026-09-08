@@ -783,14 +783,6 @@
 
 .journey-landing-cta-secondary:hover { background: rgba(255,255,255,.18); }
 
-.journey-landing-proof {
-  font-size: 12px;
-  color: rgba(255,255,255,.45);
-  font-weight: 600;
-  letter-spacing: .01em;
-  animation: hero-rise .8s .58s cubic-bezier(.2,.8,.2,1) both;
-}
-
 /* ─── HOW IT WORKS ─── */
 @supports (animation-timeline: view()) {
   .journey-how-it-works,
@@ -818,11 +810,6 @@
     animation-range: entry 4% entry 26%;
   }
 
-  .journey-faq-item {
-    animation: section-reveal .5s linear both;
-    animation-timeline: view();
-    animation-range: entry 0% entry 28%;
-  }
 }
 
 /* ─── HOW IT WORKS ─── */
@@ -838,12 +825,6 @@
   font-weight: 780;
   margin: 0 0 10px;
   color: #0f172a;
-}
-
-.journey-how-it-works-sub {
-  color: #64748b;
-  margin: 0 0 44px;
-  font-size: 16px;
 }
 
 .journey-how-steps {
@@ -917,71 +898,6 @@
   font-size: 12px;
 }
 
-/* ─── FAQ ─── */
-.journey-faq {
-  width: min(1180px, calc(100% - 32px));
-  margin: 56px auto 0;
-  padding: 48px 0;
-}
-
-.journey-faq-title {
-  font-size: clamp(26px, 4vw, 38px);
-  letter-spacing: -.04em;
-  font-weight: 780;
-  margin: 0 0 32px;
-  text-align: center;
-  color: #0f172a;
-}
-
-.journey-faq-list {
-  display: grid;
-  gap: 8px;
-  max-width: 760px;
-  margin: 0 auto;
-}
-
-.journey-faq-item {
-  border: 1px solid rgba(203, 213, 225, .65);
-  border-radius: 18px;
-  background: rgba(255,255,255,.68);
-  overflow: hidden;
-}
-
-.journey-faq-item summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 18px 20px;
-  font-weight: 750;
-  font-size: 15px;
-  color: #1e293b;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  user-select: none;
-}
-
-.journey-faq-item summary::-webkit-details-marker { display: none; }
-
-.journey-faq-toggle {
-  color: #5363ed;
-  font-size: 20px;
-  font-weight: 900;
-  flex: 0 0 auto;
-  transition: transform .18s ease;
-  line-height: 1;
-}
-
-details[open] .journey-faq-toggle { transform: rotate(45deg); }
-
-.journey-faq-answer {
-  padding: 0 20px 18px;
-  color: #64748b;
-  font-size: 14px;
-  line-height: 1.65;
-  margin: 0;
-}
-
 /* ─── FOOTER ─── */
 .journey-footer {
   width: min(1180px, calc(100% - 32px));
@@ -1047,5 +963,4 @@ details[open] .journey-faq-toggle { transform: rotate(45deg); }
 @media (max-width: 640px) {
   .journey-landing-cta-row { flex-direction: column; align-items: center; }
   .journey-trust-strip { gap: 8px; }
-  .journey-faq-list { max-width: 100%; }
 }

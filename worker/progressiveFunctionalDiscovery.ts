@@ -12,6 +12,10 @@ import type { MlResult } from './marketTypes'
 const LIVE_FLOOR = 5
 const DIRECT_RETAILER_SOURCE_PREFIX = 'Retailers argentinos directos · '
 
+export type ProgressiveFunctionalDiscoveryOptions = {
+  relaxedProvider?: ArgentinaMarketDiscoveryProvider | null
+}
+
 function normalize(value: string) {
   return value
     .toLowerCase()
@@ -106,11 +110,15 @@ function withWarning(result: ArgentinaMarketDiscoveryResult, warning: string): A
  * Wrap only the free Argentine retailer provider. Exact-mode requests remain
  * single-shot. Functional requests get one category-only storefront query when
  * strict discovery cannot produce the five deterministic matches required for
- * a live benchmark. Candidate acceptance remains fail-closed in the unchanged
- * deterministic matcher plus the shared critical-trait evidence gate.
+ * a live benchmark. The optional relaxedProvider lets the caller use a smaller,
+ * category-aware retailer set for that second round so query relaxation does
+ * not multiply the full storefront fan-out. Candidate acceptance remains
+ * fail-closed in the unchanged deterministic matcher plus shared critical-trait
+ * evidence gate.
  */
 export function withProgressiveFunctionalDiscovery(
   baseProvider: ArgentinaMarketDiscoveryProvider,
+  options: ProgressiveFunctionalDiscoveryOptions = {},
 ): ArgentinaMarketDiscoveryProvider {
   return {
     id: baseProvider.id,
@@ -129,9 +137,10 @@ export function withProgressiveFunctionalDiscovery(
         )
       }
 
+      const relaxedProvider = options.relaxedProvider || baseProvider
       let relaxed: ArgentinaMarketDiscoveryResult
       try {
-        relaxed = await baseProvider.discover({ ...context, query: relaxedQuery })
+        relaxed = await relaxedProvider.discover({ ...context, query: relaxedQuery })
       } catch (error) {
         const reason = error instanceof Error ? error.message : 'relaxed retailer discovery failed'
         return withWarning(

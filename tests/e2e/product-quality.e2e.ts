@@ -10,7 +10,7 @@ for (const width of [390, 1280]) {
     await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
     await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
     await expect(page.locator('.journey-landing-hero')).toBeHidden()
-    await expect.poll(() => new URL(page.url()).searchParams.has('journey')).toBe(true)
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('shippingapp:journey:v1') || '{}')?.purpose)).toBe('resale')
     const savedUrl = page.url()
     await page.screenshot({ path: testInfo.outputPath('operation.png'), fullPage: true })
     await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()

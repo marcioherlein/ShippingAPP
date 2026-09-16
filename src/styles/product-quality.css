@@ -112,3 +112,25 @@ body { background: var(--ds-surface-subtle); }
 @media (prefers-reduced-motion: reduce) {
   .journey-app *, .journey-app *::before, .journey-app *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+/* Legacy literal colors must follow the same contrast contract as tokens. */
+.journey-brand b, .journey-footer-brand b { color: var(--ds-brand-strong); }
+.journey-live-dot, .journey-hero .eyebrow, .journey-choice-grid > button small,
+.journey-footer-copy, .journey-footer-links a, .journey-step small { color: var(--ds-text-muted); }
+.journey-step:is(.active, .done) small { color: var(--ds-brand-strong); }
+/* Content is readable from first paint; decoration must never hide a section. */
+.journey-landing-hero {
+  min-height: 0; padding: clamp(3.5rem, 8vw, 6rem) 1.5rem;
+  background: var(--ds-surface); border-bottom: 1px solid var(--ds-border-soft);
+}
+.journey-landing-hero::before, .journey-landing-hero::after { display: none; }
+.journey-landing-headline { color: var(--ds-text-strong); font-size: clamp(2.5rem, 6vw, 4.5rem); line-height: 1.05; }
+.journey-landing-headline em { color: var(--ds-brand-strong); background: none; -webkit-text-fill-color: currentColor; }
+.journey-landing-sub { color: var(--ds-text-secondary); }
+.journey-landing-cta-secondary { color: var(--ds-brand-strong); background: transparent; border-color: var(--ds-border); }
+.journey-landing-hero > *, .journey-how-it-works, .journey-trust-strip, .journey-how-step { animation: none !important; opacity: 1; transform: none; }
+.journey-landing-cta-row { margin-bottom: 0; }
+.journey-landing-cta-primary:hover { transform: none; box-shadow: none; }
+.journey-bubble.user > div { background: var(--ds-brand-strong); box-shadow: none; }
+.journey-step:is(.active, .done) > span { box-shadow: none; }
+.skip-to-quote:not(:focus-visible) { clip-path: inset(50%); width: 1px; height: 1px; padding: 0; overflow: hidden; }
+@media (max-width: 640px) { .journey-landing-hero { padding: 3rem 1.25rem; } }

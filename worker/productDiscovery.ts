@@ -274,7 +274,7 @@ async function browserSearch(searchUrl: string, browser: BrowserRun) {
 
 export async function discoverAlibabaProducts(
   query: string,
-  browser: BrowserRun,
+  browser: BrowserRun | undefined,
   fetchImpl: FetchLike = fetch,
 ): Promise<DiscoveryResponse> {
   const searchUrl = buildAlibabaSearchUrl(query)
@@ -306,7 +306,7 @@ export async function discoverAlibabaProducts(
     }
   }
 
-  const rendered = await browserSearch(searchUrl, browser)
+  const rendered = browser ? await browserSearch(searchUrl, browser) : { results: [], ms: null }
   if (rendered.results.length > 0) {
     const renderedResults = mergeDiscoveryResults([freeDirectResults, rendered.results], 8)
     return {
@@ -318,7 +318,7 @@ export async function discoverAlibabaProducts(
 
   return {
     status: 'unavailable', mode: 'unavailable', query: normalized,
-    results: [], browserAttempted: true, browserMsUsed: rendered.ms,
+    results: [], browserAttempted: Boolean(browser), browserMsUsed: rendered.ms,
     note: `Alibaba no expuso resultados de producto verificables después de trade search, ${seo.attempted} superficies SEO públicas y Browser Run. ShippingAPP no genera una lista sintética.`,
   }
 }

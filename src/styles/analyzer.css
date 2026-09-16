@@ -40,3 +40,14 @@
 .value-strip p { color: #7a8497; font-size: 13px; line-height: 1.45; }
 @media (max-width: 760px) { .url-input-wrap { grid-template-columns: 1fr; } .url-input-wrap button { min-height: 48px; } .extraction-top { flex-direction: column; } .fact-grid, .value-strip { grid-template-columns: 1fr 1fr; } .customs-note { flex-direction:column; } }
 @media (max-width: 480px) { .fact-grid, .value-strip { grid-template-columns: 1fr; } }
+
+.search-loading-bar { height: 4px; overflow: hidden; border-radius: 8px; background: #dce7f0; margin-top: 14px; }
+.search-loading-bar span { display: block; width: 35%; height: 100%; background: #1672d4; border-radius: inherit; animation: search-progress 1.4s ease-in-out infinite alternate; }
+@keyframes search-progress { from { transform: translateX(0); } to { transform: translateX(185%); } }
+@media (prefers-reduced-motion: reduce) { .search-loading-bar span { animation: none; } }
+.search-recovery { display: flex; gap: 12px; flex-wrap: wrap; padding: 20px; border-radius: 16px; background: #f0f5fa; }
+.search-recovery p { width: 100%; margin: 0; }
+.intake-thread { max-height: 400px; overflow-y: auto; padding: 12px 0; }
+.intake-message { max-width: 90%; padding: 14px 18px; border-radius: 18px; margin-bottom: 12px; }
+.intake-message.user { margin-left: auto; background: #e8f2fc; }
+.intake-message.assistant { background: #f4f6f8; }

@@ -88,4 +88,12 @@ describe('Parse.bot opportunity search', () => {
     expect(result.note).not.toContain('Parse.bot')
     expect(browser.quickAction).not.toHaveBeenCalled()
   })
+  it('uses direct search even when Browser Run is not configured', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(directHtml, { status: 200 })))
+    const result = await searchAlibabaOpportunities('tennis racket', {})
+    expect(result.status).toBe('live')
+    expect(result.results).toHaveLength(3)
+    expect(result.browserAttempted).toBe(false)
+  })
+
 })

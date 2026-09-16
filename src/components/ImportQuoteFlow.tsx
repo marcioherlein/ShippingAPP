@@ -14,6 +14,7 @@ const interventionLabels: Record<SensitiveProductCategory, string> = {
   cosmetics: 'Cosméticos',
   medicines: 'Medicamentos',
   supplements: 'Suplementos',
+  plants: 'Plantas / Flores',
 }
 
 const modeLabels: Record<TransportMode, string> = {
@@ -148,7 +149,7 @@ function buildVerdictSignals(summary: ImporterSummary, quote: ReturnType<typeof 
 
   const customsKnown = Boolean(prefill?.ncmCode) && (prefill?.classificationConfidence === 'high' || prefill?.classificationConfidence === 'medium')
   const customs: VerdictSignal = customsKnown
-    ? { label: 'Aduana', title: 'NCM utilizable', detail: `${prefill?.ncmCode} · confianza ${prefill?.classificationConfidence}.`, tone: 'positive' }
+    ? { label: 'Aduana', title: 'Clasificación disponible', detail: 'Aranceles incorporados al cálculo.', tone: 'positive' }
     : { label: 'Aduana', title: 'Requiere validación', detail: 'El costo aduanero todavía contiene supuestos.', tone: 'warning' }
 
   return [commercial, market, capital, logistics, customs]
@@ -274,10 +275,8 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
     {prefill && <div className="analysis-banner hot-prefill-banner"><b>Datos precargados desde el pipeline.</b> NCM, aranceles, costos de trámite y datos físicos alimentan el motor; podés revisar cualquier supuesto antes de decidir.</div>}
 
     {prefill?.ncmCode && <section className="quote-customs-evidence">
-      <div><span className="eyebrow">Clasificación usada</span><h3>NCM {prefill.ncmCode}</h3><p>Clasificación y aranceles aplicados automáticamente desde el nomenclador cargado.</p></div>
+      <div><span className="eyebrow">Clasificación usada</span><h3>Aranceles aplicados</h3><p>Clasificación y aranceles aplicados automáticamente desde el nomenclador cargado.</p></div>
       <div className="quote-customs-facts">
-        <span><small>Confianza</small><b>{prefill.classificationConfidence || 'pendiente'}</b></span>
-        <span><small>SIM</small><b>{prefill.simCode || '-'}</b></span>
         <span><small>Derecho</small><b>{dutyRatePct}%</b></span>
         <span><small>Tasa</small><b>{statisticsRatePct}%</b></span>
         <span><small>IVA</small><b>{vatRatePct}%</b></span>

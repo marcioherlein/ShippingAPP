@@ -7,7 +7,7 @@ export type PersistedJourneyState = {
   purpose?: 'resale' | 'own_use' | 'unknown'
   entityType?: 'company' | 'individual' | 'unknown'
   signature?: 'yes' | 'no' | 'unknown'
-  sensitiveCategory?: 'none' | 'food' | 'toys' | 'cosmetics' | 'medicines' | 'supplements' | 'unknown'
+  sensitiveCategory?: 'none' | 'food' | 'toys' | 'cosmetics' | 'medicines' | 'supplements' | 'plants' | 'unknown'
   budgetMode?: 'budget' | 'units' | 'unknown'
   budgetUsd?: number
   unitsMin?: number
@@ -55,6 +55,7 @@ const sensitiveByCopy: Record<string, PersistedJourneyState['sensitiveCategory']
   Cosméticos: 'cosmetics',
   Medicamentos: 'medicines',
   Suplementos: 'supplements',
+  'Plantas / Flores': 'plants',
   'Todavía no sé': 'unknown',
 }
 

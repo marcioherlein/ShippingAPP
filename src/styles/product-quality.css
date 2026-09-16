@@ -134,3 +134,4 @@ body { background: var(--ds-surface-subtle); }
 .journey-step:is(.active, .done) > span { box-shadow: none; }
 .skip-to-quote:not(:focus-visible) { clip-path: inset(50%); width: 1px; height: 1px; padding: 0; overflow: hidden; }
 @media (max-width: 640px) { .journey-landing-hero { padding: 3rem 1.25rem; } }
+.journey-bubble.user button { background: #fff; color: var(--ds-brand-strong); border-color: #fff; }

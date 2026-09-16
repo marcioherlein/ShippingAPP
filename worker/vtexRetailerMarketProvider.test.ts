@@ -51,6 +51,32 @@ function product(input: {
 }
 
 describe('Argentina direct VTEX retailer discovery', () => {
+  it('tries legacy search when intelligent search has products but no buyable offers', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).includes('intelligent-search')) return json({ products: [
+        product({ productName: 'Raqueta de tenis', itemId: 'unavailable', price: 100000, stock: 0 }),
+      ] })
+      return json([product({ productName: 'Raqueta de tenis', itemId: 'available', price: 110000 })])
+    })
+    const provider = createArgentinaDirectRetailerProvider({ retailers: [BASE_RETAILERS[1]], fetchImpl })
+    const result = await provider.discover({ query: 'raqueta tenis', productName: 'Raqueta de tenis', category: 'raqueta de tenis' })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0].id).toContain('available')
+    expect(result.candidates[0].priceArs).toBe(110000)
+  })
+
+  it('ranks requested products before unrelated size variants consume the candidate cap', async () => {
+    const shoes = Array.from({ length: 12 }, (_, i) => product({ productName: 'Zapatillas Tenis', itemId: `shoe-${i}`, price: 90000 }))
+    const fetchImpl = vi.fn<typeof fetch>(async () => json({ products: [
+      ...shoes, product({ productName: 'Raquetas de Tenis', itemId: 'racket', price: 150000 }),
+    ] }))
+    const provider = createArgentinaDirectRetailerProvider({ retailers: [{ ...BASE_RETAILERS[1], maxCandidates: 1 }], fetchImpl })
+    const result = await provider.discover({ query: 'raqueta tenis', productName: 'raqueta de tenis', category: 'raqueta de tenis' })
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0].id).toContain('racket')
+  })
+
   it('keeps the default free-retailer registry explicit and bounded', () => {
     expect(DEFAULT_ARGENTINA_VTEX_RETAILERS.map((retailer) => retailer.id)).toEqual([
       'fravega',

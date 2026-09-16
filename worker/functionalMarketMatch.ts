@@ -67,7 +67,8 @@ function spanishConceptBonus(productName: string, category: string, evidence: st
 
 const TOKEN_ALIASES: Record<string, string> = {
   aspiradora: 'vacuum', vacuum: 'vacuum',
-  paleta: 'racket', raqueta: 'racket', racket: 'racket',
+  paleta: 'racket', paletas: 'racket', raqueta: 'racket', raquetas: 'racket', racket: 'racket', rackets: 'racket', racquet: 'racket', racquets: 'racket',
+  tennis: 'tenis',
   celular: 'phone', smartphone: 'phone', telefono: 'phone', movil: 'phone', phone: 'phone',
   taladro: 'drill', drill: 'drill',
   auricular: 'headphones', auriculares: 'headphones', headphones: 'headphones',
@@ -255,6 +256,14 @@ function hasPhraseConstraintConflict(target: string, candidate: string) {
 function hasCriticalTraitConflict(target: string, candidate: string) {
   const expected = tokenSet(target)
   const actual = tokenSet(candidate)
+
+  // Tennis, padel and badminton equipment are not interchangeable, even when
+  // every listing contains the generic word racket.
+  if (expected.has('racket')) {
+    for (const sport of ['tenis', 'padel', 'badminton']) {
+      if (expected.has(sport) && !actual.has(sport)) return true
+    }
+  }
 
   for (const trait of REQUIRED_TRAITS) {
     if (expected.has(trait) && !actual.has(trait)) return true

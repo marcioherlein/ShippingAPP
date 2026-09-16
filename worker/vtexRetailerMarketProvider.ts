@@ -184,10 +184,20 @@ function permalinkOf(retailer: ArgentinaVtexRetailer, product: VtexProduct) {
   return linkText ? `${retailer.baseUrl}/${linkText}/p` : undefined
 }
 
-function candidatesFromProducts(retailer: ArgentinaVtexRetailer, products: VtexProduct[]): ArgentinaMarketCandidate[] {
+function candidatesFromProducts(retailer: ArgentinaVtexRetailer, products: VtexProduct[], query: string): ArgentinaMarketCandidate[] {
   const candidates: ArgentinaMarketCandidate[] = []
   const maxCandidates = Math.max(1, Math.min(30, retailer.maxCandidates ?? 12))
-  for (const product of products) {
+  // Storefront search can put footwear ahead of rackets and return many sizes
+  // of the first product. Rank title relevance BEFORE the candidate cap so those
+  // variants cannot displace the actual product being requested. Acceptance is
+  // still decided by the downstream identity/critical-trait matcher.
+  const tokens = normalizeForRelevance(query).split(' ').filter((token) => token.length >= 3)
+  const relevance = (product: VtexProduct) => {
+    const title = normalizeForRelevance(text(product.productName)).split(' ')
+    return tokens.filter((token) => title.some((word) => word === token || word === `${token}s` || word === `${token}es`)).length
+  }
+  const ranked = [...products].sort((a, b) => relevance(b) - relevance(a))
+  for (const product of ranked) {
     const attributes = attributesOf(product, retailer)
     for (const item of product.items || []) {
       for (const seller of item.sellers || []) {
@@ -291,9 +301,9 @@ async function discoverRetailer(
     const intelligent = await fetchJsonWithTimeout(fetchImpl, intelligentSearchUrl(retailer, query), requestTimeoutMs)
     if (intelligent.ok) {
       const products = productsOf(intelligent.data)
-      const candidates = candidatesFromProducts(retailer, products)
-      if (products.length || candidates.length) return { retailer, mode: 'intelligent-search', candidates, warnings }
-      warnings.push(`${retailer.name} Intelligent Search returned no products; legacy public search was attempted.`)
+      const candidates = candidatesFromProducts(retailer, products, query)
+      if (candidates.length) return { retailer, mode: 'intelligent-search', candidates, warnings }
+      warnings.push(`${retailer.name} Intelligent Search returned no buyable offers; legacy public search was attempted.`)
     } else {
       warnings.push(`${retailer.name} Intelligent Search returned HTTP ${intelligent.status}; legacy public search was attempted.`)
     }
@@ -306,9 +316,9 @@ async function discoverRetailer(
     const legacy = await fetchJsonWithTimeout(fetchImpl, legacySearchUrl(retailer, query), requestTimeoutMs)
     if (legacy.ok) {
       const products = productsOf(legacy.data)
-      const candidates = candidatesFromProducts(retailer, products)
-      if (products.length || candidates.length) return { retailer, mode: 'legacy-search', candidates, warnings }
-      warnings.push(`${retailer.name} legacy public search returned no products.`)
+      const candidates = candidatesFromProducts(retailer, products, query)
+      if (candidates.length) return { retailer, mode: 'legacy-search', candidates, warnings }
+      warnings.push(`${retailer.name} legacy public search returned no buyable offers.`)
     } else {
       warnings.push(`${retailer.name} legacy public search returned HTTP ${legacy.status}.`)
     }

@@ -187,3 +187,16 @@ describe('Argentina market functional comparable matcher', () => {
     expect(query).not.toContain('ianoni')
   })
 })
+
+
+describe('racket storefront identity', () => {
+  it('matches Spanish plural racket listings and English tennis requests', () => {
+    const item = { title: 'Raquetas de Tenis Wilson Adulto', price: 150000, currency_id: 'ARS', condition: 'new' }
+    expect(functionalComparableScore(item, 'Tennis racket', 'tennis racket')).toBeGreaterThanOrEqual(55)
+  })
+  it('rejects padel and badminton rackets when tennis is requested', () => {
+    for (const sport of ['Padel', 'Badminton']) {
+      expect(functionalComparableScore({ title: `Raquetas ${sport}`, price: 150000, currency_id: 'ARS', condition: 'new' }, 'Raqueta de tenis', 'raqueta de tenis')).toBe(0)
+    }
+  })
+})

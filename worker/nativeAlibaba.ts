@@ -1,3 +1,4 @@
+import { parseWeightKg } from './weightUnits'
 import type { BrowserRun } from './alibabaSource'
 import { extractAlibabaDirectFacts, type AlibabaDirectFacts } from './alibabaDirectExtract'
 import type { ParsebotAlibabaFacts } from './parsebotAlibaba'
@@ -21,13 +22,7 @@ function positiveNumber(value: unknown) {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-function weightKg(value: unknown) {
-  const text = cleanString(value, 120)
-  const n = positiveNumber(value)
-  if (!n) return null
-  if (text && /\b(?:g|gram|grams)\b/i.test(text) && !/\bkg\b|kilogram/i.test(text)) return Number((n / 1000).toFixed(6))
-  return n
-}
+const weightKg = parseWeightKg
 
 function volumeCbm(value: unknown) {
   const text = cleanString(value, 160)

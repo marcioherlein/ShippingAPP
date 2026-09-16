@@ -177,3 +177,16 @@ describe('adversarial — misleading lexical overlap must not force a family', (
     expect(c.exclusionTerms).toContain('electric')
   })
 })
+
+describe('facial cream classification', () => {
+  it.each(['Crema facial hidratante', 'Face cream moisturizer', 'Crema nutritiva para el rostro'])('classifies %s from an existing catalog position without repeated questions', async name => {
+    const cosmeticsIndex = { ...index, records: [...index.records, row('3304.99.10', 'Preparaciones para cuidado de la piel > Cremas de belleza y cremas nutritivas')] }
+    const result = await classifyFullNcm(cosmeticsIndex, noAi, { name })
+    expect(result.code).toBe('3304.99.10')
+    expect(result.missingFacts).toEqual([])
+  })
+  it('does not force medicinal creams into the cosmetics shortcut', async () => {
+    const result = await classifyFullNcm(index, noAi, { name: 'Crema facial medicinal con corticoides' })
+    expect(result.code).not.toBe('3304.99.10')
+  })
+})

@@ -258,6 +258,13 @@ function shortcutClassification(
 function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, concepts: SemanticConcepts): FullNcmClassification | null {
   const text = normalizeText(factsText(facts))
 
+  const faceCream = /\b(?:crema(?:s)? facial(?:es)?|face cream|facial cream|crema hidratante|crema nutritiva)\b/.test(text)
+  const medicinal = /\b(?:medicament|medicinal|terapeutic|corticoid|antibiotic|tretinoin|hydrocortisone)/.test(text)
+  if (faceCream && !medicinal) {
+    const official = findOfficial(index, '3304.99.10')
+    if (official) return shortcutClassification(index, official, ['crema facial', 'cuidado de la piel', 'cremas de belleza'], 'Crema de cuidado facial identificada; no se detectaron indicaciones de medicamento en la ficha.')
+  }
+
   const solidFuelCookingAppliance = concepts.concepts.includes('cooking_appliance')
     && concepts.concepts.includes('solid_fuel')
   if (solidFuelCookingAppliance) {

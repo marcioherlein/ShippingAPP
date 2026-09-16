@@ -13,6 +13,10 @@ const ARGENTINA_STOREFRONT_TERMS: Record<string, string> = {
   adjustable: 'ajustable',
   storage: 'organizador',
   box: 'caja',
+  tennis: 'tenis',
+  racquet: 'raqueta',
+  badminton: 'badminton',
+  paddle: 'paleta',
 }
 
 function normalize(value: string) {
@@ -28,7 +32,7 @@ function normalize(value: string) {
 export function buildArgentinaFunctionalMarketQuery(productName: string, category: string) {
   const base = buildFunctionalMarketQuery(productName, category)
   const target = normalize(`${productName} ${category}`)
-  const racketTerm = /\b(?:tenis|tennis)\b/.test(target) ? 'raqueta' : 'paleta'
+  const racketTerm = /\b(?:tenis|tennis|badminton)\b/.test(target) ? 'raqueta' : 'paleta'
   const localized = base
     .split(/\s+/)
     .filter(Boolean)

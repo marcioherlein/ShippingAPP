@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { ingestAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
+import { createManualProductAnalysis } from '../lib/productConfirmation'
 import { isAlibabaUrl } from '../lib/productIntake'
 import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
@@ -44,6 +45,7 @@ function units(value?: number | null) {
 
 export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mode = 'intake', deferCalculation = false }: Props) {
   const [draft, setDraft] = useState('')
+  const [lastSearch, setLastSearch] = useState('')
   const [messages, setMessages] = useState<ThreadMessage[]>([])
   const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(null)
   const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(null)
@@ -93,6 +95,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     if (!value || loading) return
 
     setMessages((current) => [...current, { role: 'user', content: value }])
+    setLastSearch(value)
     setDraft('')
     setLoading(true)
     setError('')
@@ -162,7 +165,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         <span>{message.role === 'user' ? 'Vos' : 'ShippingAPP'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Estoy consultando Alibaba y validando las publicaciones encontradas…</p></div>}
+      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Consultando publicaciones y comprobando los datos…</p><div className="search-loading-bar" role="progressbar" aria-label="Buscando productos"><span /></div></div>}
     </div>}
 
     <form className="url-form" onSubmit={submit}>
@@ -184,6 +187,12 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       </div>}
     </form>
 
+    {!loading && lastSearch && (error || (discovery && discovery.results.length === 0)) && <div className="search-recovery">
+      <p>Podés continuar sin esperar la búsqueda automática.</p>
+      <a href={`https://www.alibaba.com/trade/search?SearchText=${encodeURIComponent(buildDiscoveryQuery(lastSearch))}`} target="_blank" rel="noopener noreferrer">Buscar directamente en Alibaba</a>
+      <button type="button" onClick={() => onAnalysis(createManualProductAnalysis('manual://product', isAlibabaUrl(lastSearch) ? '' : lastSearch))}>Completar la ficha manualmente</button>
+      <button type="button" onClick={() => void submitValue(lastSearch)}>Reintentar búsqueda</button>
+    </div>}
     {discovery && <section className="discovery-card">
       <div className="discovery-head">
         <div><span className="eyebrow">Resultados reales</span><h2>{discovery.results.length > 0 ? 'Elegí una publicación' : 'No encontré una publicación útil'}</h2><p>{discovery.note}</p></div>

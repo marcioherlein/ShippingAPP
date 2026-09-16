@@ -1,3 +1,5 @@
+import ManualNcmPicker from './ManualNcmPicker'
+import type { CustomsProfile } from '../lib/customsClassification'
 import React, { useEffect, useMemo, useState } from 'react'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import type { QuotePrefill } from '../lib/hotProducts'
@@ -31,11 +33,12 @@ type Props = {
   summary?: CalculationPipelineSummary | null
   blocker?: string | null
   onConfirm: (product: ProductConfirmationData) => void
+  onManualNcm: (customs: CustomsProfile, product: ProductConfirmationData) => void
   onEditProduct: () => void
   onReviewProduct: () => void
 }
 
-const interventionCategories = new Set(['food', 'toys', 'cosmetics', 'medicines', 'supplements'])
+const interventionCategories = new Set(['food', 'toys', 'cosmetics', 'medicines', 'supplements', 'plants'])
 
 const pipelineSteps = [
   {
@@ -162,11 +165,12 @@ function clarificationCopy(analysis: ProductAnalysisV2, target: ClassificationCl
   }
 }
 
-export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct }: Props) {
+export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
   const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
   const [draft, setDraft] = useState<ProductConfirmationData>(() => productConfirmationFromAnalysis(analysis))
+  const [showManualNcm, setShowManualNcm] = useState(false)
   const [showCorrections, setShowCorrections] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
   const [clarification, setClarification] = useState('')
@@ -198,8 +202,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
   const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
-  const canConfirm = classificationResolved
-    ? quoteMissing.length === 0
+  const canConfirm = classificationResolved && !identityEdited
+    ? quoteMissing.length === 0 && (draft.quantity ?? 0) > 0
     : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied
   const volume = resolvedProductVolumeCbm(draft)
 
@@ -230,6 +234,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
       </div>
 
       <div className="pipeline-product-card progressive-product-card">
+        <button type="button" className="pipeline-secondary" aria-expanded={showManualNcm} onClick={() => setShowManualNcm(value => !value)}>Buscar o cambiar posición en el nomenclador</button>
+        {showManualNcm && <ManualNcmPicker customs={analysis.customs} onSelect={customs => { onManualNcm(customs, draft); setShowManualNcm(false) }} />}
         {!classificationResolved ? <>
           <div className="pipeline-understood-card">
             <span className="eyebrow">Producto detectado</span>
@@ -278,7 +284,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>}
 
           {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Todavía no puedo clasificarlo.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
-          {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No pude cerrar una clasificación confiable.</b><span>Se usaron {refinement?.attempt} de {refinement?.maxAttempts} intentos de aclaración. Revisá la identidad del producto o iniciá un caso nuevo; estos intentos no consumieron créditos extra.</span></div>}
+          {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No pude cerrar una clasificación confiable.</b><span>Se usaron {refinement?.attempt} de {refinement?.maxAttempts} intentos de aclaración. Podés buscar y confirmar una posición en el nomenclador sin iniciar otro caso.</span></div>}
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
             {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <span>→</span></button>}
@@ -302,11 +308,20 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <button type="button" className="pipeline-secondary" aria-expanded={showAllQuoteFields} onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Mostrar sólo faltantes' : 'Corregir un dato detectado'}</button>
           </div>
 
+          {showAllQuoteFields && <div className="pipeline-progressive-fields">
+            <label className="pipeline-confirm-field"><span>Nombre del producto</span><input value={draft.productName} onChange={event => update('productName', event.target.value)} /></label>
+            <label className="pipeline-confirm-field"><span>Tipo / categoría</span><input value={draft.category} onChange={event => update('category', event.target.value)} /></label>
+            <label className="pipeline-confirm-field"><span>Material</span><input value={draft.material} onChange={event => update('material', event.target.value)} /></label>
+            <label className="pipeline-confirm-field"><span>Función</span><input value={draft.functionText} onChange={event => update('functionText', event.target.value)} /></label>
+            <label className="pipeline-confirm-field wide"><span>Descripción</span><textarea value={draft.description} onChange={event => update('description', event.target.value)} /></label>
+            {identityEdited && <p>Al cambiar el producto volveremos a validar su clasificación.</p>}
+          </div>}
           <div className="pipeline-progressive-fields quote-missing-fields">
             <div className="pipeline-progressive-title"><b>{quoteMissing.length ? `Me ${quoteMissing.length === 1 ? 'falta' : 'faltan'} ${quoteMissing.length} ${quoteMissing.length === 1 ? 'dato' : 'datos'} para cotizar.` : 'Ya tengo todo para cotizar.'}</b><small>Pedimos sólo lo que interviene en compra o flete.</small></div>
+            <label className="pipeline-confirm-field"><span>Cantidad a cotizar (unidades)</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} /></label>
             {(showAllQuoteFields || quoteFieldMissing('originCountry')) && <label className="pipeline-confirm-field"><span>País de origen de la mercadería</span><input value={draft.originCountry} onChange={(event) => update('originCountry', event.target.value)} placeholder="Ej. China" /></label>}
             {(showAllQuoteFields || quoteFieldMissing('unitPriceUsd')) && <label className="pipeline-confirm-field"><span>Precio FOB unitario (USD)</span><input type="number" min="0" step="0.01" value={draft.unitPriceUsd || ''} onChange={(event) => update('unitPriceUsd', numberValue(event.target.value))} /></label>}
-            {(showAllQuoteFields || quoteFieldMissing('moq')) && <label className="pipeline-confirm-field"><span>MOQ / cantidad mínima</span><input type="number" min="0" step="1" value={draft.moq || ''} onChange={(event) => update('moq', numberValue(event.target.value))} /></label>}
+            {(showAllQuoteFields || quoteFieldMissing('moq')) && <label className="pipeline-confirm-field"><span>MOQ / cantidad mínima (opcional)</span><input type="number" min="0" step="1" value={draft.moq || ''} onChange={(event) => update('moq', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('unitWeightKg')) && <label className="pipeline-confirm-field"><span>Peso de una unidad embalada (kg)</span><input type="number" min="0" step="0.001" value={draft.unitWeightKg || ''} onChange={(event) => update('unitWeightKg', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('packageVolume')) && <div className="pipeline-volume-entry wide">
               <label className="pipeline-confirm-field"><span>Volumen unitario, si lo sabés (m³)</span><input type="number" min="0" step="0.000001" value={draft.unitVolumeCbm || ''} onChange={(event) => update('unitVolumeCbm', numberValue(event.target.value))} /></label>
@@ -373,8 +388,9 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         </div>
       </div>}
 
+      {status === 'ready' && <button type="button" className="pipeline-secondary" onClick={onReviewProduct}>Modificar datos del producto</button>}
       {status === 'ready' && summary && <div className="pipeline-ready-strip" aria-label="Resumen del cálculo completado">
-        <div><span>Clasificación</span><b>{analysis.customs.ncmCandidate}</b></div>
+
         <div><span>Modo base</span><b>{summary.selectedMode === 'lcl' ? 'LCL' : 'Aéreo'}</b></div>
         <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
         <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>

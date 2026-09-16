@@ -1,3 +1,4 @@
+import { parseWeightKg } from './weightUnits'
 export type AlibabaDirectFacts = {
   name: string | null
   category: string | null
@@ -265,14 +266,7 @@ function stringArray(value: unknown) {
     .slice(0, 20)
 }
 
-function normalizeWeightKg(value: unknown) {
-  const amount = positiveNumber(value)
-  if (!amount) return null
-  const text = cleanString(value, 140) || ''
-  if (/\b(?:g|gram|grams)\b/i.test(text) && !/\bkg\b|kilogram/i.test(text)) return Number((amount / 1000).toFixed(6))
-  if (/\b(?:lb|lbs|pound|pounds)\b/i.test(text)) return Number((amount * 0.45359237).toFixed(6))
-  return amount
-}
+const normalizeWeightKg = parseWeightKg
 
 function dimensionsToCbm(value: unknown) {
   let text = cleanString(value, 260)

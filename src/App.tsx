@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react'
+import { startImportAnalysis } from './lib/productAnalysis'
 import UrlAnalyzer from './components/UrlAnalyzer'
 import OwnedProductIntake from './components/OwnedProductIntake'
 import CalculationPipeline, { type CalculationPipelineStatus, type CalculationPipelineSummary } from './components/CalculationPipeline'
@@ -49,6 +50,7 @@ function sensitiveLabel(value: SensitiveProductCategory | null) {
   if (value === 'none') return 'No es categoría sensible'
   if (value === 'food') return 'Alimentos'
   if (value === 'toys') return 'Juguetes'
+  if (value === 'plants') return 'Plantas / Flores'
   if (value === 'cosmetics') return 'Cosméticos'
   if (value === 'medicines') return 'Medicamentos'
   if (value === 'supplements') return 'Suplementos'
@@ -84,7 +86,7 @@ function makeAnalysisPrefill(
       priceArs: Number(item.priceArs),
       ...(item.permalink?.startsWith('https://') ? { permalink: item.permalink } : {}),
     }))
-  const confirmedQuantity = analysis.product.moq || analysis.suggestedQuantities[0] || 0
+  const confirmedQuantity = analysis.suggestedQuantities[0] || analysis.product.moq || 0
   return {
     productName: analysis.product.name,
     originCountry: analysis.product.originCountry || '',
@@ -212,7 +214,7 @@ export default function App() {
   }
 
   const handleAnalysis = (next: ProductAnalysisV2) => {
-    setAnalysis(next)
+    setAnalysis({ ...next, suggestedQuantities: quoteSetup.quantity ? [quoteSetup.quantity, ...next.suggestedQuantities] : next.suggestedQuantities })
     resetPipeline()
     setStep(3)
     window.setTimeout(() => scrollElementIntoView(document.getElementById('case-confirmation')), 0)
@@ -272,9 +274,12 @@ export default function App() {
     setPipelineBlocker(null)
 
     try {
-      const refreshed = hasUsableClassification(confirmedAnalysis)
-        ? confirmedAnalysis
-        : await enrichProductAnalysisV2(confirmedAnalysis)
+      const manualSelection = confirmedAnalysis.customs.source.includes('selección confirmada por el usuario')
+      const refreshed = manualSelection && !confirmedAnalysis.usageReservationId && !confirmedAnalysis.fx
+        ? { ...await startImportAnalysis(confirmedAnalysis), customs: confirmedAnalysis.customs }
+        : hasUsableClassification(confirmedAnalysis)
+          ? confirmedAnalysis
+          : await enrichProductAnalysisV2(confirmedAnalysis)
       setAnalysis(refreshed)
 
       if (!refreshed.customs.ncmCandidate || refreshed.customs.classificationConfidence === 'missing') {
@@ -312,7 +317,7 @@ export default function App() {
       await nextPaint()
       setPipelineStage(2)
 
-      const baseQuantity = quoteSetup.quantity ?? prefill.quantity ?? prefill.moq
+      const baseQuantity = confirmedProduct.quantity ?? quoteSetup.quantity ?? (prefill.quantity || prefill.moq)
       if (!baseQuantity || baseQuantity <= 0) {
         setPipelineBlocker('Necesito una cantidad base positiva para distribuir flete y gastos por unidad.')
         setCalculationStatus('blocked')
@@ -507,7 +512,7 @@ export default function App() {
               <div><label>¿Para qué lo traés?</label><div className="journey-chip-row"><button className={purpose === 'resale' ? 'selected' : ''} onClick={() => setPurpose('resale')} type="button">Reventa</button><button className={purpose === 'own_use' ? 'selected' : ''} onClick={() => setPurpose('own_use')} type="button">Uso propio</button><button className={purpose === 'unknown' ? 'selected' : ''} onClick={() => setPurpose('unknown')} type="button">No sé</button></div></div>
               <div><label>¿Quién importa?</label><div className="journey-chip-row"><button className={entityType === 'company' ? 'selected' : ''} onClick={() => setEntityType('company')} type="button">Empresa</button><button className={entityType === 'individual' ? 'selected' : ''} onClick={() => setEntityType('individual')} type="button">Persona</button><button className={entityType === 'unknown' ? 'selected' : ''} onClick={() => setEntityType('unknown')} type="button">No sé</button></div></div>
               <div><label>¿Tenés firma/importador para operar?</label><div className="journey-chip-row"><button className={signature === 'yes' ? 'selected' : ''} onClick={() => setSignature('yes')} type="button">Sí</button><button className={signature === 'no' ? 'selected' : ''} onClick={() => setSignature('no')} type="button">No</button><button className={signature === 'unknown' ? 'selected' : ''} onClick={() => setSignature('unknown')} type="button">No sé</button></div></div>
-              <div><label htmlFor="journey-sensitive-category">¿Qué tipo de producto es?</label><small>Esto sirve para detectar si hay intervención especial. Si no sabés, elegí “No sé”.</small><select id="journey-sensitive-category" value={sensitiveCategory || ''} onChange={(event) => setSensitiveCategory(event.target.value as SensitiveProductCategory)}><option value="" disabled>Elegir una opción</option><option value="none">Ninguna de estas categorías</option><option value="food">Alimentos</option><option value="toys">Juguetes</option><option value="cosmetics">Cosméticos</option><option value="medicines">Medicamentos</option><option value="supplements">Suplementos</option><option value="unknown">No sé</option></select></div>
+              <div><label htmlFor="journey-sensitive-category">¿Qué tipo de producto es?</label><small>Esto sirve para detectar si hay intervención especial. Si no sabés, elegí “No sé”.</small><select id="journey-sensitive-category" value={sensitiveCategory || ''} onChange={(event) => setSensitiveCategory(event.target.value as SensitiveProductCategory)}><option value="" disabled>Elegir una opción</option><option value="none">Ninguna de estas categorías</option><option value="food">Alimentos</option><option value="toys">Juguetes</option><option value="cosmetics">Cosméticos</option><option value="medicines">Medicamentos</option><option value="supplements">Suplementos</option><option value="plants">Plantas / Flores</option><option value="unknown">No sé</option></select></div>
               <button className="journey-primary-action" type="button" disabled={!operationAnswered} onClick={continueOperation}>Seguir con presupuesto <span><UiIcon name="arrow-right" size={18} /></span></button>
             </div> : <div className="journey-complete-row"><span>{purposeLabel(purpose)}</span><span>{entityLabel(entityType)}</span><span>{signatureLabel(signature)}</span><span>{sensitiveLabel(sensitiveCategory)}</span></div>}
           </section>
@@ -577,6 +582,10 @@ export default function App() {
         summary={pipelineSummary}
         blocker={pipelineBlocker}
         onConfirm={(product) => void confirmAndCalculate(product)}
+        onManualNcm={(customs, product) => {
+          setAnalysis({ ...applyProductConfirmation(analysis, product), customs })
+          reviewProductData()
+        }}
         onEditProduct={editSelectedProduct}
         onReviewProduct={reviewProductData}
       />
@@ -584,7 +593,7 @@ export default function App() {
 
     {analysisPrefill && effectiveCalculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
       <div className="journey-section-heading"><span className="eyebrow">Resultado del caso</span><h2>Primero entendé el costo de una unidad. Después optimizamos.</h2><p>El costo unitario se calcula dentro de la cantidad base/MOQ seleccionada, distribuyendo flete y gastos fijos.</p></div>
-      <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={quoteSetup} />
+      <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={{ ...quoteSetup, quantity: pipelineSummary?.baseQuantity ?? quoteSetup.quantity }} />
     </section>}
 
     <footer className="journey-footer">

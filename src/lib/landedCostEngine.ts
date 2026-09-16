@@ -3,7 +3,7 @@ import { importFreightValues } from '../data/importFreightValues'
 export type TransportMode = 'fcl' | 'lcl' | 'air'
 export type ImportPurpose = 'own_use' | 'resale' | 'unknown'
 export type ImportEntityType = 'company' | 'individual' | 'unknown'
-export type SensitiveProductCategory = 'none' | 'food' | 'toys' | 'cosmetics' | 'medicines' | 'supplements' | 'unknown'
+export type SensitiveProductCategory = 'none' | 'food' | 'toys' | 'cosmetics' | 'medicines' | 'supplements' | 'plants' | 'unknown'
 
 export type ImporterChecklistInput = {
   purpose: ImportPurpose
@@ -104,7 +104,7 @@ export type LandedCostComparison = {
   notes: string[]
 }
 
-const sensitiveCategories = new Set<SensitiveProductCategory>(['food', 'toys', 'cosmetics', 'medicines', 'supplements'])
+const sensitiveCategories = new Set<SensitiveProductCategory>(['food', 'toys', 'cosmetics', 'medicines', 'supplements', 'plants'])
 
 // LCL is billed in whole W/M increments with a 1 W/M minimum.
 // Forwarders differ; these constants make the model explicit.

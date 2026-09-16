@@ -343,7 +343,6 @@ function missingFor(facts: IntakeFacts) {
   const missing: string[] = []
   if (!facts.name && !facts.category) missing.push('producto / categoría')
   if (!facts.unitPriceUsd) missing.push('precio proveedor')
-  if (!facts.moq) missing.push('MOQ')
   if (!facts.packedWeightKg) missing.push('peso embalado por unidad')
   if (!facts.volumeCbm) missing.push('volumen embalado por unidad')
   return missing

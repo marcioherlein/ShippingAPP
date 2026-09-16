@@ -1,3 +1,4 @@
+import { parseWeightKg } from './weightUnits'
 type ParsebotEnv = {
   PARSEBOT_API_KEY?: string
   PARSEBOT_ENDPOINT_URL?: string
@@ -126,13 +127,7 @@ function priceFromDisplay(value: unknown) {
   return numbers[0] ?? null
 }
 
-function weightKg(value: unknown) {
-  const text = cleanString(value, 120)
-  const amount = numberOrNull(value)
-  if (!amount) return null
-  if (text && /\b(?:g|gram|grams)\b/i.test(text) && !/\bkg\b|kilogram/i.test(text)) return Number((amount / 1000).toFixed(6))
-  return amount
-}
+const weightKg = parseWeightKg
 
 function volumeToCbm(value: unknown) {
   const text = cleanString(value, 160)

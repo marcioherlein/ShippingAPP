@@ -59,3 +59,9 @@ describe('Argentina functional market query localization', () => {
     expect(dumbbell).not.toContain('adjustable')
   })
 })
+
+it('localizes tennis queries for Argentine storefronts', () => {
+  const query = buildArgentinaFunctionalMarketQuery('Professional tennis racket', 'tennis racket')
+  expect(query).toContain('tenis')
+  expect(query).toContain('raqueta')
+})

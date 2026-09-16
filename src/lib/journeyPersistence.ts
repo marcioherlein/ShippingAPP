@@ -432,17 +432,9 @@ export function installJourneyPersistence() {
     if (!button) return
     const copy = textOf(button)
 
-    if (copy === 'Cambiar') {
-      event.preventDefault()
-      event.stopPropagation()
-      buttonContaining('Nuevo caso')?.click()
-      return
-    }
-
-    if (copy.includes('Nuevo caso')) {
-      clearToNewCase()
-      return
-    }
+    // React asks before discarding a live case. Clear persistence only after
+    // confirmation; opening/cancelling the dialog must preserve URL and draft.
+    if (copy === 'Cambiar' || copy.includes('Nuevo caso')) return
 
     scheduleSync()
   }
@@ -478,6 +470,7 @@ export function installJourneyPersistence() {
   document.addEventListener('change', onFieldChange, true)
   document.addEventListener('input', onFieldChange, true)
   window.addEventListener('popstate', onPopState)
+  window.addEventListener('shippingapp:journey-reset', clearToNewCase)
 
   const observer = new MutationObserver(scheduleSync)
   observer.observe(document.documentElement, {
@@ -496,5 +489,6 @@ export function installJourneyPersistence() {
     document.removeEventListener('change', onFieldChange, true)
     document.removeEventListener('input', onFieldChange, true)
     window.removeEventListener('popstate', onPopState)
+    window.removeEventListener('shippingapp:journey-reset', clearToNewCase)
   }
 }

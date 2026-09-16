@@ -24,6 +24,13 @@ jobs:
         run: npx --yes vitest@3.2.4 run
       - name: Browser accessibility and UX gates
         run: npm run test:e2e
+      - name: Save browser design review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-design-review
+          path: test-results/
+          retention-days: 7
       - name: Validate D1 migrations and schema
         shell: bash
         run: |

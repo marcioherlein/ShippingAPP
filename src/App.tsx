@@ -144,6 +144,7 @@ function hasUsableClassification(analysis: ProductAnalysisV2) {
 }
 
 export default function App() {
+  const resetDialog = useRef<HTMLDialogElement>(null)
   const [intent, setIntent] = useState<EntryIntent>(null)
   const [step, setStep] = useState(0)
   const [purpose, setPurpose] = useState<ImportPurpose | null>(null)
@@ -413,6 +414,8 @@ export default function App() {
   }
 
   const resetJourney = () => {
+    resetDialog.current?.close()
+    window.dispatchEvent(new Event('shippingapp:journey-reset'))
     setIntent(null)
     setStep(0)
     setPurpose(null)
@@ -425,14 +428,28 @@ export default function App() {
     scrollWindowToTop()
   }
 
+  const requestReset = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (intent && event.isTrusted) resetDialog.current?.showModal()
+    else resetJourney()
+  }
+
   const productStatusLabel = analysis
     ? effectiveCalculationStatus === 'ready' ? 'Calculado' : effectiveCalculationStatus === 'processing' ? 'Procesando' : effectiveCalculationStatus === 'blocked' ? 'Falta una respuesta' : 'Listo para revisar'
     : step >= 3 ? 'Elegí o cargá un producto' : 'Todavía no elegido'
 
   return <main className="journey-app" id="home">
+    <a className="skip-to-quote" href="#cotizador">Ir al cotizador</a>
+    <dialog ref={resetDialog} className="journey-reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
+      <h2 id="reset-title">¿Empezar un caso nuevo?</h2>
+      <p id="reset-description">Se quitarán los datos de este caso. Tus análisis guardados no se borran.</p>
+      <div className="journey-dialog-actions">
+        <button type="button" autoFocus onClick={() => resetDialog.current?.close()}>Seguir con este caso</button>
+        <button type="button" className="journey-destructive-action" onClick={resetJourney}>Empezar de nuevo</button>
+      </div>
+    </dialog>
     <header className="journey-topbar">
       <a className="journey-brand" href="#home"><span className="journey-brand-mark">S</span><span>Shipping<b>APP</b></span></a>
-      <div className="journey-top-actions"><span className="journey-live-dot">Motor de importación activo</span><button type="button" onClick={resetJourney}>Nuevo caso</button></div>
+      <div className="journey-top-actions"><span className="journey-live-dot">Motor de importación activo</span><button type="button" onClick={requestReset}>Nuevo caso</button></div>
     </header>
 
     <section className="journey-landing-hero">
@@ -472,14 +489,14 @@ export default function App() {
       <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>C&#xE1;lculo en tiempo real</span>
     </div>
 
-    <section className="journey-hero" id="cotizador">
+    <section className="journey-hero" id="cotizador" tabIndex={-1}>
       <div className="journey-orb journey-orb-one" aria-hidden="true" />
       <div className="journey-orb journey-orb-two" aria-hidden="true" />
       <span className="eyebrow">Motor de costo de importaci&#xF3;n</span>
-      <h1>Cu&#xE1;nto te cuesta importarlo,<br />calculado sin inventar.</h1>
+      <h2 className="journey-task-title">Tu cotización, paso a paso</h2>
       <p>Del link del proveedor al costo unitario puesto en Argentina. ShippingAPP clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p>
       <div className="journey-stepper" role="region" aria-label="Progreso de la cotización" tabIndex={0}>
-        {stepLabels.map((label, index) => <div className={`journey-step${index < progressStep ? ' done' : ''}${index === progressStep ? ' active' : ''}`} key={label}>
+        {stepLabels.map((label, index) => <div className={`journey-step${index < progressStep ? ' done' : ''}${index === progressStep ? ' active' : ''}`} key={label} aria-current={index === progressStep ? 'step' : undefined}>
           <span>{index < progressStep ? <UiIcon name="check" size={16} /> : index + 1}</span><small>{label}</small>
         </div>)}
       </div>
@@ -498,7 +515,7 @@ export default function App() {
           <button type="button" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Tengo una publicación, proveedor o sé qué quiero traer.</small></button>
           <button type="button" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y ShippingAPP busca opciones reales en Alibaba.</small></button>
           <button type="button" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Buscá ideas de producto usando la misma búsqueda real, sin catálogo cacheado.</small></button>
-        </div> : <div className="journey-bubble user"><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={() => setStep(0)}>Cambiar</button></div></div>}
+        </div> : <div className="journey-bubble user"><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
 
         {intent && <>
           <div className="journey-bubble assistant">

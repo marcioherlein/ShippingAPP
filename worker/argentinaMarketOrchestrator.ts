@@ -65,8 +65,8 @@ export async function analyzeArgentinaMarketHybrid(
   // hydration first can consume another large block of subrequests and push the
   // whole intake above the Cloudflare Worker budget. Keep the same deterministic
   // matcher, but prioritize the free direct-retailer evidence and skip ML network
-  // discovery entirely for functional mode. Mercado Libre remains primary for
-  // exact SKU/model requests and retains its dedicated production diagnostic.
+  // discovery entirely for functional mode. Exact SKU/model requests also try retailers first below, retaining Mercado
+  // Libre as a fallback and an independent production diagnostic.
   if (matchMode === 'functional') {
     const retailers = await analyzeDirectRetailers(productName, category, options)
     if (retailers.status === 'live') {
@@ -102,21 +102,25 @@ export async function analyzeArgentinaMarketHybrid(
     return chosen
   }
 
+  // Healthy storefront evidence must not wait for blocked listing searches or
+  // catalog hydration. Keep ML as an independent fallback when retail coverage
+  // is insufficient; never relax the identity/variant or live-evidence gates.
+  const retailers = await analyzeDirectRetailers(productName, category, options)
+  if (retailers.status === 'live') {
+    retailers.warnings.unshift(
+      'Direct Argentine retailers produced the live benchmark; Mercado Libre discovery was not needed.',
+    )
+    return retailers
+  }
+
   const primary = await analyzeArgentinaMarket(productName, category, {
     accessToken,
     fetchImpl: options.fetchImpl,
     salePriceLookupLimit: options.salePriceLookupLimit,
   })
-
-  if (primary.status === 'live') return primary
-
-  const retailers = await analyzeDirectRetailers(productName, category, options)
-
-  if (retailers.status === 'live') {
-    retailers.warnings.unshift(
-      `${evidenceSummary('Mercado Libre primary discovery', primary)}; direct Argentine retailers produced the live benchmark without a paid search API.`,
-    )
-    return retailers
+  if (primary.status === 'live') {
+    primary.warnings.unshift(`${evidenceSummary('Direct retailer discovery', retailers)}; Mercado Libre fallback produced the live benchmark.`)
+    return primary
   }
 
   if (!googleShoppingApiKey) {

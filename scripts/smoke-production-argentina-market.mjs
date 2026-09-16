@@ -14,6 +14,7 @@ const BRANDED_PROBES = [
 // Generic commodity probes (Stream B) — these must reach a live benchmark via functional mode
 // against Argentine retailers. Validates the language-bridge and commodity routing fixes.
 const COMMODITY_PROBES = [
+  { id: 'padel-racket', productName: 'Paleta de padel', category: 'paleta de padel' },
   { id: 'thermo-bottle-stainless', productName: '45oz 1350ml Large Capacity Stainless Steel Vacuum Bottle', category: 'stainless steel water bottle' },
   { id: 'sport-bottle-plastic', productName: 'Large Capacity Sport Water Bottle Gym Plastic', category: 'sport water bottle' },
   { id: 'sunglasses-uv400', productName: 'Mens Sunglasses Luxury Designer UV400 Polarized', category: 'sunglasses' },

@@ -21,7 +21,7 @@ function googleResults(title: string, count = 6) {
 }
 
 describe('Argentina market hybrid orchestrator', () => {
-  it('keeps Mercado Libre as primary when it already produces a live benchmark', async () => {
+  it('uses Mercado Libre when direct retailers cannot produce a live benchmark', async () => {
     const items = Array.from({ length: 6 }, (_, i) => ({
       id: `MLA${1000000 + i}`,
       title: `Logitech MX Master 3S ${i + 1}`,
@@ -49,6 +49,30 @@ describe('Argentina market hybrid orchestrator', () => {
     expect(result.status).toBe('live')
     expect(result.source).toContain('Mercado Libre Argentina API')
     expect(fetchImpl.mock.calls.some(([input]) => String(input).includes('serpapi.com'))).toBe(false)
+  })
+
+  it('returns exact-model retailer evidence without calling blocked Mercado Libre', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.includes('api.mercadolibre.com') || url.includes('serpapi.com')) {
+        throw new Error('external fallback must not be needed')
+      }
+      if (!url.includes('cetrogar.com.ar')) return json({}, 404)
+      return json(Array.from({ length: 6 }, (_, i) => ({
+        productId: String(i), productName: 'Logitech MX Master 3S',
+        linkText: `logitech-mx-master-3s-${i}`,
+        items: [{ itemId: String(i), sellers: [{ sellerId: String(i),
+          commertialOffer: { Price: 140000 + i * 1000, AvailableQuantity: 10 },
+        }] }],
+      })))
+    })
+    const result = await analyzeArgentinaMarketHybrid('Logitech MX Master 3S', 'mouse', {
+      mercadoLibreAccessToken: 'blocked-token', fetchImpl,
+    })
+    expect(result.status).toBe('live')
+    expect(result.comparableCount).toBe(6)
+    expect(result.source).toContain('Cetrogar')
+    expect(fetchImpl.mock.calls.some(([url]) => String(url).includes('api.mercadolibre.com'))).toBe(false)
   })
 
   it('falls back to Google Shopping Argentina when Mercado Libre has insufficient discovery', async () => {

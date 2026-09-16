@@ -1,3 +1,4 @@
+import { parseWeightKg } from './weightUnits'
 import type { BrowserRun } from './alibabaSource'
 import { discoverAlibabaProducts } from './productDiscovery'
 
@@ -130,13 +131,7 @@ function priceFromDisplay(value: unknown) {
   return numbers[0] ?? null
 }
 
-function weightKg(value: unknown) {
-  const text = cleanString(value, 120)
-  const amount = numberOrNull(value)
-  if (!amount) return null
-  if (text && /\bg\b|grams?/i.test(text) && !/kg/i.test(text)) return Number((amount / 1000).toFixed(4))
-  return amount
-}
+const weightKg = parseWeightKg
 
 function dimensionsToCbm(value: unknown) {
   const text = cleanString(value, 200)
@@ -313,7 +308,6 @@ async function fallbackSearch(
   warnings: string[],
   unavailableStatus: 'unavailable' | 'not_configured' = 'unavailable',
 ): Promise<OpportunitySearchResponse> {
-  if (!env.BROWSER) return unavailable(query, page, creditsEstimated, warnings, unavailableStatus)
 
   try {
     const fallback = await discoverAlibabaProducts(query, env.BROWSER)

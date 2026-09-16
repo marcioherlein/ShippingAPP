@@ -27,19 +27,18 @@ describe('conversational intake adversarial boundaries', () => {
     expect(result.factSources).toEqual({ moq: 'user', packedWeightKg: 'user', volumeCbm: 'user' })
   })
 
-  it('uses supported padel logistics benchmarks but still requires supplier-specific MOQ', async () => {
+  it('uses supported padel logistics benchmarks without requiring supplier-specific MOQ', async () => {
     const result = await runConversationalIntake(ai({
       intent: 'analyze_product', searchQuery: null,
       facts: { ...emptyFacts, name: 'Padel racket', category: 'Padel racket', unitPriceUsd: 25.5 },
     }), { message: 'padel case' })
 
-    expect(result.status).toBe('needs_input')
+    expect(result.status).toBe('ready')
     expect(result.facts.moq).toBeNull()
     expect(result.facts.packedWeightKg).toBe(0.65)
     expect(result.facts.volumeCbm).toBe(0.006)
     expect(result.factSources.moq).toBe('missing')
-    expect(result.missingFields).toContain('MOQ')
-    expect(result.message).toContain('supplier-specific')
+    expect(result.missingFields).not.toContain('MOQ')
     expect(result.assumptions.join(' ')).toContain('benchmark soportado')
   })
 

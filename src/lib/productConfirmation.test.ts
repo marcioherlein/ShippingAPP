@@ -18,7 +18,7 @@ describe('progressive product confirmation', () => {
     const quoteMissing = missingQuoteConfirmationFields(draft).map((item) => item.id)
     expect(quoteMissing).toContain('originCountry')
     expect(quoteMissing).toContain('unitPriceUsd')
-    expect(quoteMissing).toContain('moq')
+    expect(quoteMissing).not.toContain('moq')
     expect(quoteMissing).toContain('unitWeightKg')
     expect(quoteMissing).toContain('packageVolume')
   })
@@ -63,12 +63,12 @@ describe('progressive product confirmation', () => {
     expect(clarified.description).toContain('bebidas frías o calientes')
   })
 
-  it('does not overwrite an existing structured fact when adding an audit clarification', () => {
+  it('updates an existing structured fact when the user clarifies it', () => {
     const base = createManualProductAnalysis('manual://thermo', 'Botella térmica de acero inoxidable')
     const draft = { ...productConfirmationFromAnalysis(base), material: 'acero inoxidable' }
     const clarified = applyClassificationClarification(draft, 'acero inoxidable 304 con tapa plástica', ['Material/composición'])
 
-    expect(clarified.material).toBe('acero inoxidable')
+    expect(clarified.material).toBe('acero inoxidable 304 con tapa plástica')
     expect(clarified.description).toContain('acero inoxidable 304 con tapa plástica')
   })
 

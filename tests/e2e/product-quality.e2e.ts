@@ -1,0 +1,45 @@
+import AxeBuilder from '@axe-core/playwright'
+import { test, expect } from '@playwright/test'
+
+for (const width of [390, 1280]) {
+  test(`design quality and reversible reset at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/')
+    await expect(page.locator('h1')).toHaveCount(1)
+    await page.screenshot({ path: testInfo.outputPath('landing.png'), fullPage: true })
+    await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
+    await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
+    await expect(page.locator('.journey-landing-hero')).toBeHidden()
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('shippingapp:journey:v1') || '{}')?.purpose)).toBe('resale')
+    const savedUrl = page.url()
+    await page.screenshot({ path: testInfo.outputPath('operation.png'), fullPage: true })
+    await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Seguir con este caso' })).toBeFocused()
+    await page.screenshot({ path: testInfo.outputPath('confirmation.png') })
+    const audit = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()
+    expect(audit.violations.filter(v => ['serious', 'critical'].includes(v.impact || ''))).toEqual([])
+    await page.keyboard.press('Escape')
+    await expect(dialog).not.toBeVisible()
+    await expect(page.getByRole('button', { name: 'Nuevo caso', exact: true })).toBeFocused()
+    expect(page.url()).toBe(savedUrl)
+    await expect(page.getByRole('radio', { name: 'Reventa', exact: true })).toHaveAttribute('aria-checked', 'true')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
+    await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
+    await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toBeVisible()
+    await expect.poll(() => new URL(page.url()).searchParams.has('journey')).toBe(false)
+  })
+}
+
+test('larger text and reduced motion preserve the operation form', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await page.addStyleTag({ content: 'html { font-size: 200% !important; }' })
+  await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
+  await expect(page.getByRole('radio', { name: 'Reventa', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(await page.locator('.journey-primary-action').first().evaluate(el => getComputedStyle(el).animationName)).toBe('none')
+})

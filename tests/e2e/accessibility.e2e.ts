@@ -25,7 +25,7 @@ async function chooseByKeyboard(page: Page, target: Locator) {
 
 test('initial journey has no serious or critical axe violations', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: /Cuánto te cuesta importarlo/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Tu cotización, paso a paso/i })).toBeVisible()
   await expectNoSeriousAxeViolations(page)
 })
 
@@ -98,6 +98,7 @@ test('reduced motion preference suppresses transitions and JS smooth scrolling',
     }) as typeof window.scrollTo
   })
   await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
+  if (await page.getByRole('dialog').isVisible()) await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
   const behavior = await page.evaluate(() => {
     const calls = (window as Window & { __shippingAppScrollCalls?: ScrollToOptions[] }).__shippingAppScrollCalls || []
     return calls.at(-1)?.behavior

@@ -9,6 +9,7 @@ export type ProductConfirmationData = {
   functionText: string
   originCountry: string
   unitPriceUsd: number
+  quantity?: number
   moq: number
   unitWeightKg: number
   unitVolumeCbm: number
@@ -57,9 +58,9 @@ export function applyClassificationClarification(
   return {
     ...data,
     description,
-    ...(target === 'functionText' && !cleanText(data.functionText, 500) ? { functionText: cleanText(note, 500) } : {}),
-    ...(target === 'material' && !cleanText(data.material, 300) ? { material: cleanText(note, 300) } : {}),
-    ...(target === 'category' && !cleanText(data.category, 300) ? { category: cleanText(note, 300) } : {}),
+    ...(target === 'functionText' ? { functionText: cleanText(note, 500) } : {}),
+    ...(target === 'material' ? { material: cleanText(note, 300) } : {}),
+    ...(target === 'category' ? { category: cleanText(note, 300) } : {}),
   }
 }
 
@@ -82,6 +83,7 @@ export function productConfirmationFromAnalysis(analysis: ProductAnalysisV2): Pr
     functionText: cleanText(analysis.product.functionText, 500),
     originCountry: cleanText(analysis.product.originCountry, 120),
     unitPriceUsd: positive(analysis.product.unitPriceUsd),
+    quantity: positive(analysis.suggestedQuantities[0]) || positive(analysis.product.moq) || 1,
     moq: positive(analysis.product.moq),
     unitWeightKg: positive(analysis.product.packedWeightKg),
     unitVolumeCbm: positive(analysis.product.volumeCbm),
@@ -110,7 +112,6 @@ export function missingQuoteConfirmationFields(data: ProductConfirmationData): P
   const missing: ProductConfirmationMissingField[] = []
   if (!cleanText(data.originCountry)) missing.push({ id: 'originCountry', label: 'país de origen de la mercadería' })
   if (positive(data.unitPriceUsd) <= 0) missing.push({ id: 'unitPriceUsd', label: 'precio FOB unitario' })
-  if (positive(data.moq) <= 0) missing.push({ id: 'moq', label: 'MOQ/cantidad mínima' })
   if (positive(data.unitWeightKg) <= 0) missing.push({ id: 'unitWeightKg', label: 'peso unitario embalado' })
   if (resolvedProductVolumeCbm(data) <= 0) missing.push({ id: 'packageVolume', label: 'volumen o medidas del bulto unitario' })
   return missing
@@ -135,7 +136,7 @@ export function applyProductConfirmation(analysis: ProductAnalysisV2, data: Prod
   const originCountry = cleanText(data.originCountry, 120)
   const moq = positive(data.moq)
   const existingQuantities = analysis.suggestedQuantities.filter((value) => Number.isFinite(value) && value > 0)
-  const suggestedQuantities = [...new Set([moq, ...existingQuantities].filter((value) => value > 0))].sort((a, b) => a - b)
+  const suggestedQuantities = [...new Set([positive(data.quantity), moq, ...existingQuantities].filter((value) => value > 0))]
   const identityChanged = classificationIdentityChanged(analysis, data)
 
   return {

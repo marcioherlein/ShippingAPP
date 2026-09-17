@@ -114,12 +114,18 @@ test('new case and change intent clear persisted journey state', async ({ page }
   await expect.poll(() => new URL(page.url()).searchParams.has('journey')).toBe(false)
 })
 
-for (const width of [320, 390]) {
-  test(`product survives sign-in navigation and fits mobile at ${width}px`, async ({ page }, testInfo) => {
+for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
+  test(`product survives sign-in navigation and fits mobile at ${width}px with ${budgetMode} budget`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 844 })
     await page.goto('/')
     await completeOperation(page)
-    await completeBudget(page)
+    if (budgetMode === 'units') await completeBudget(page)
+    else {
+      await page.getByRole('radio', { name: /Todavía no sé/ }).click()
+      await page.getByRole('button', { name: /Seguir con el producto/ }).click()
+      await expect(page.getByRole('heading', { name: 'Elegí la forma más fácil.' })).toBeVisible()
+      await expect.poll(() => persistedStep(page)).toBe(3)
+    }
     // Exercise all the signed-in toolbar labels with the production stylesheet.
     await page.addStyleTag({ url: '/src/auth/auth.css' })
     await page.evaluate(() => {

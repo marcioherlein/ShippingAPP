@@ -200,7 +200,7 @@ function captureBudget() {
       budgetUsd: finitePositive(budget[1].replace(/\./g, '')),
     }
   }
-  if (completed.includes('por definir')) return { budgetMode: 'unknown' as const }
+  if (completed.includes('por definir') || completed.includes('sin cantidad definida')) return { budgetMode: 'unknown' as const }
   return {}
 }
 

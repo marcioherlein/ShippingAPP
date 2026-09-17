@@ -153,3 +153,7 @@ body { background: var(--ds-surface-subtle); }
   .owned-product-link-row input { flex-basis: auto; }
   .journey-app .owned-product-options { grid-template-columns: minmax(0, 1fr); }
 }
+/* An auto-sized grid child with auto margins used its product's intrinsic width. */
+.journey-workspace { grid-template-columns: minmax(0, 1fr); }
+.journey-conversation { width: min(100%, 820px); min-width: 0; }
+.journey-bubble > div { min-width: 0; overflow-wrap: anywhere; }

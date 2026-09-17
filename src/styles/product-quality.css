@@ -157,3 +157,6 @@ body { background: var(--ds-surface-subtle); }
 .journey-workspace { grid-template-columns: minmax(0, 1fr); }
 .journey-conversation { width: min(100%, 820px); min-width: 0; }
 .journey-bubble > div { min-width: 0; overflow-wrap: anywhere; }
+/* Product entry must paint immediately, including Safari's offscreen layers. */
+.journey-app .journey-product-surface,
+.journey-app .journey-bubble.assistant { animation: none; opacity: 1; transform: none; }

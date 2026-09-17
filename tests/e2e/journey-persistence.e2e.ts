@@ -139,7 +139,9 @@ for (const width of [320, 390]) {
         expect(box.overflow).toBe(false)
       }
     }
-    await page.screenshot({ path: testInfo.outputPath('product-mobile.png'), fullPage: true })
+    await expect(page.locator('.journey-product-surface')).toHaveCSS('opacity', '1')
+    await page.locator('.owned-product-intake').scrollIntoViewIfNeeded()
+    await page.screenshot({ path: testInfo.outputPath('product-mobile.png'), fullPage: true, animations: 'disabled' })
     await page.getByRole('button', { name: /Describir el producto/ }).click()
     const description = 'Raqueta de tenis de aluminio para adultos'
     await page.getByRole('textbox', { name: 'Descripción del producto' }).fill(description)

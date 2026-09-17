@@ -87,3 +87,23 @@
     text-overflow: ellipsis;
   }
 }
+
+/* Account actions belong in document flow; signed-in controls must wrap too. */
+.auth-account-control {
+  position: relative;
+  top: auto;
+  right: auto;
+  margin: 10px 16px 0 auto;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.auth-account-control > * { min-width: 0; max-width: 100%; }
+.auth-account-control button { min-height: 44px; white-space: normal; color: #172033; }
+.auth-account-control .auth-primary { color: #fff; }
+@media (max-width: 720px) {
+  .auth-account-control { margin: 8px; max-width: calc(100% - 16px); gap: 4px; }
+  .auth-account-control button { padding: 8px 10px; }
+}

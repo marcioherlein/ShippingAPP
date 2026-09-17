@@ -13,9 +13,8 @@ describe('browser quality gate contract', () => {
     expect(packageJson).toContain('"test:e2e": "playwright test"')
   })
 
-  it('runs Chromium accessibility gates in CI', () => {
-    expect(workflow).toContain('Install Chromium for browser quality gates')
-    expect(workflow).toContain('npx playwright install --with-deps chromium')
+  it('runs Chromium and WebKit quality gates in CI', () => {
+    expect(workflow).toContain('npx playwright install --with-deps chromium webkit')
     expect(workflow).toContain('Browser accessibility and UX gates')
     expect(workflow).toContain('npm run test:e2e')
   })

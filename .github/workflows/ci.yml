@@ -18,8 +18,8 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - name: Install Chromium for browser quality gates
-        run: npx playwright install --with-deps chromium
+      - name: Install Chromium and WebKit for browser quality gates
+        run: npx playwright install --with-deps chromium webkit
       - name: Unit and integration tests
         run: npx --yes vitest@3.2.4 run
       - name: Browser accessibility and UX gates

@@ -135,3 +135,28 @@ body { background: var(--ds-surface-subtle); }
 .skip-to-quote:not(:focus-visible) { clip-path: inset(50%); width: 1px; height: 1px; padding: 0; overflow: hidden; }
 @media (max-width: 640px) { .journey-landing-hero { padding: 3rem 1.25rem; } }
 .journey-bubble.user button { background: #fff; color: var(--ds-brand-strong); border-color: #fff; }
+
+/* Safari buttons otherwise retain platform sizing and unbreakable content. */
+.journey-app .owned-product-options > button {
+  display: block;
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--ds-text-primary, #172033);
+  appearance: none;
+  -webkit-appearance: none;
+}
+.journey-product-surface, .owned-product-entry, .owned-product-entry-head > div,
+.owned-product-options > button > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.owned-product-entry-head, .owned-product-entry-actions { overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .owned-product-link-row input { flex-basis: auto; }
+  .journey-app .owned-product-options { grid-template-columns: minmax(0, 1fr); }
+}
+/* An auto-sized grid child with auto margins used its product's intrinsic width. */
+.journey-workspace { grid-template-columns: minmax(0, 1fr); }
+.journey-conversation { width: min(100%, 820px); min-width: 0; }
+.journey-bubble > div { min-width: 0; overflow-wrap: anywhere; }
+/* Product entry must paint immediately, including Safari's offscreen layers. */
+.journey-app .journey-product-surface,
+.journey-app .journey-bubble.assistant { animation: none; opacity: 1; transform: none; }

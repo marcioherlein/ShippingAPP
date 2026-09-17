@@ -453,6 +453,7 @@ export function installJourneyPersistence() {
       }
 
       await restoreJourneyState(state)
+      window.dispatchEvent(new Event('shippingapp:journey-restored'))
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
       if (source === 'storage') writeState(state, 'replace')
       lastNavigationKey = navigationKey(state)

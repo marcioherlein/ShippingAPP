@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import { readProductDraft, writeProductDraft } from '../lib/productDraft'
+import React, { useEffect, useState } from 'react'
 import UiIcon from './UiIcon'
 import { isAlibabaUrl } from '../lib/productIntake'
 
@@ -10,11 +11,14 @@ type Props = {
 type Mode = 'link' | 'describe' | null
 
 export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }: Props) {
-  const [mode, setMode] = useState<Mode>(null)
-  const [link, setLink] = useState('')
-  const [description, setDescription] = useState('')
+  const [draft] = useState(() => readProductDraft<{ mode: Mode; link: string; description: string }>('entry'))
+  const [mode, setMode] = useState<Mode>(draft?.mode === 'link' || draft?.mode === 'describe' ? draft.mode : null)
+  const [link, setLink] = useState(draft?.link || '')
+  const [description, setDescription] = useState(draft?.description || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => { writeProductDraft('entry', { mode, link, description }) }, [mode, link, description])
 
   const submitLink = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -79,6 +83,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
       <div className="owned-product-link-row">
         <input
           type="url"
+          aria-label="Enlace de Alibaba"
           value={link}
           onChange={(event) => setLink(event.target.value.slice(0, 2200))}
           placeholder="https://www.alibaba.com/product-detail/..."
@@ -96,6 +101,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
         <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
       </div>
       <textarea
+        aria-label="Descripción del producto"
         value={description}
         onChange={(event) => setDescription(event.target.value.slice(0, 1200))}
         placeholder="Ej. Reloj de pulsera mecánico automático, caja de acero inoxidable, no es smartwatch."

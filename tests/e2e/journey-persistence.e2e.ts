@@ -113,3 +113,52 @@ test('new case and change intent clear persisted journey state', async ({ page }
   await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toBeVisible()
   await expect.poll(() => new URL(page.url()).searchParams.has('journey')).toBe(false)
 })
+
+for (const width of [320, 390]) {
+  test(`product survives sign-in navigation and fits mobile at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto('/')
+    await completeOperation(page)
+    await completeBudget(page)
+    // Exercise all the signed-in toolbar labels with the production stylesheet.
+    await page.addStyleTag({ url: '/src/auth/auth.css' })
+    await page.evaluate(() => {
+      const toolbar = document.createElement('div')
+      toolbar.className = 'auth-account-control'
+      toolbar.innerHTML = '<span class="auth-usage-badge">10 análisis disponibles</span><button>Emails</button><button>Seguimiento</button><button>Historial</button><button>Mi cuenta</button>'
+      document.querySelector('#root')!.prepend(toolbar)
+    })
+    for (const selector of ['.auth-account-control', '.owned-product-options > button']) {
+      const boxes = await page.locator(selector).evaluateAll(els => els.map(el => {
+        const r = el.getBoundingClientRect()
+        return { left: r.left, right: r.right, overflow: el.scrollWidth > el.clientWidth + 1 }
+      }))
+      for (const box of boxes) {
+        expect(box.left).toBeGreaterThanOrEqual(0)
+        expect(box.right).toBeLessThanOrEqual(width)
+        expect(box.overflow).toBe(false)
+      }
+    }
+    await page.screenshot({ path: testInfo.outputPath('product-mobile.png'), fullPage: true })
+    await page.getByRole('button', { name: /Describir el producto/ }).click()
+    const description = 'Raqueta de tenis de aluminio para adultos'
+    await page.getByRole('textbox', { name: 'Descripción del producto' }).fill(description)
+    await page.reload()
+    await expect(page.getByRole('textbox', { name: 'Descripción del producto' })).toHaveValue(description)
+    await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+    await expect(page.locator('#case-confirmation')).toBeVisible()
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:analysis'))).toContain(description)
+    const returnUrl = page.url()
+    expect(returnUrl).not.toContain('Raqueta')
+    // A redirect destroys React state, as OAuth sign-in does. Return with same tab storage.
+    await page.goto('about:blank')
+    await page.goto(returnUrl)
+    await expect(page.locator('#case-confirmation')).toBeVisible()
+    await expect(page.locator('#case-confirmation')).toContainText('Raqueta')
+    await expect(page.locator('.journey-calculator-section')).toHaveCount(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
+    await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
+    expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:analysis'))).toBeNull()
+  })
+}

@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react'
+import { readProductDraft, writeProductDraft, clearProductDraft } from './lib/productDraft'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { startImportAnalysis } from './lib/productAnalysis'
 import UrlAnalyzer from './components/UrlAnalyzer'
 import OwnedProductIntake from './components/OwnedProductIntake'
@@ -162,6 +163,22 @@ export default function App() {
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
 
+  useEffect(() => {
+    const restoreProduct = () => {
+      const saved = readProductDraft<{ intent: EntryIntent; analysis: ProductAnalysisV2 }>('analysis')
+      if (saved?.intent === intent && saved.analysis?.product && saved.analysis?.customs) {
+        setAnalysis(saved.analysis)
+        setCalculationStatus('confirm')
+      }
+    }
+    window.addEventListener('shippingapp:journey-restored', restoreProduct)
+    return () => window.removeEventListener('shippingapp:journey-restored', restoreProduct)
+  }, [intent])
+
+  useEffect(() => {
+    if (analysis && intent) writeProductDraft('analysis', { intent, analysis })
+  }, [analysis, intent])
+
   const operationAnswered = purpose !== null && entityType !== null && signature !== null && sensitiveCategory !== null
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
   const budgetAnswered = budgetMode !== null && budgetError === null
@@ -235,6 +252,7 @@ export default function App() {
   }
 
   const editSelectedProduct = () => {
+    clearProductDraft()
     resetPipeline()
     setStep(3)
     setAnalysis(null)
@@ -414,6 +432,7 @@ export default function App() {
   }
 
   const resetJourney = () => {
+    clearProductDraft()
     resetDialog.current?.close()
     window.dispatchEvent(new Event('shippingapp:journey-reset'))
     setIntent(null)

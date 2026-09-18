@@ -54,6 +54,32 @@ describe('apiFetch authentication and metering transport boundary', () => {
     expect(secondHeaders.get('authorization')).toBe('Bearer working-session-token')
   })
 
+  it('explains authentication failures and never reuses a rejected token', async () => {
+    const provider = vi.fn().mockResolvedValueOnce('rejected-token').mockRejectedValueOnce(new Error('storage unavailable'))
+    setApiTokenProvider(provider)
+    const fetchMock = vi.fn(async () => new Response('{"error":"Unauthorized."}', { status: 401 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(apiFetch('/api/opportunity-search', { method: 'POST' })).rejects.toThrow('Ingresá a tu cuenta para continuar')
+    await expect(apiFetch('/api/intake', { method: 'POST' })).rejects.toThrow('No pude validar tu sesión')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears cached authentication when the provider reports no session', async () => {
+    setApiTokenProvider(vi.fn().mockResolvedValueOnce('old-token').mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('storage unavailable')))
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await apiFetch('/api/me')
+    await apiFetch('/api/me')
+    await expect(apiFetch('/api/intake')).rejects.toThrow('No pude validar tu sesión')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves third-party authentication responses untouched', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Unauthorized', { status: 401 })))
+    expect((await apiFetch('https://example.com/api/products')).status).toBe(401)
+  })
+
   it('adds an opaque idempotency key to metered POSTs without trusting the browser for entitlement data', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

@@ -49,6 +49,6 @@ describe('Stage 6 email preferences client', () => {
 
   it('fails closed on non-success responses instead of inventing local preference state', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ code: 'unauthorized' }, { status: 401 })))
-    await expect(loadEmailPreferences()).rejects.toThrow('unauthorized')
+    await expect(loadEmailPreferences()).rejects.toThrow('Ingresá a tu cuenta para continuar')
   })
 })

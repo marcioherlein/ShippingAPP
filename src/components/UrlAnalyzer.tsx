@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { ingestAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import { createManualProductAnalysis } from '../lib/productConfirmation'
 import { isAlibabaUrl } from '../lib/productIntake'
@@ -44,14 +45,17 @@ function units(value?: number | null) {
 }
 
 export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mode = 'intake', deferCalculation = false }: Props) {
-  const [draft, setDraft] = useState('')
-  const [lastSearch, setLastSearch] = useState('')
+  const [savedSearch] = useState(() => readProductDraft<{ draft?: string; lastSearch?: string }>('search'))
+  const [draft, setDraft] = useState(() => typeof savedSearch?.draft === 'string' ? savedSearch.draft.slice(0, 1800) : '')
+  const [lastSearch, setLastSearch] = useState(() => typeof savedSearch?.lastSearch === 'string' ? savedSearch.lastSearch.slice(0, 1800) : '')
   const [messages, setMessages] = useState<ThreadMessage[]>([])
   const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(null)
   const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(null)
+
+  useEffect(() => { writeProductDraft('search', { draft, lastSearch }) }, [draft, lastSearch])
 
   const constraintChecks = useMemo(
     () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],
@@ -96,7 +100,10 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
     setMessages((current) => [...current, { role: 'user', content: value }])
     setLastSearch(value)
-    setDraft('')
+    setDraft(value)
+    // Save before the request can open sign-in or navigate away. Restoring text
+    // must never automatically repeat a metered search.
+    writeProductDraft('search', { draft: value, lastSearch: value })
     setLoading(true)
     setError('')
     setFailedSourceUrl(null)

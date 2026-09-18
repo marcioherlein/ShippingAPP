@@ -170,3 +170,39 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
     expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:analysis'))).toBeNull()
   })
 }
+
+ test('search survives an authentication failure and redirect without automatically retrying', async ({ page }) => {
+  let searches = 0
+  await page.route('**/api/opportunity-search', async route => {
+    searches += 1
+    await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Unauthorized.' }) })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: /Quiero buscarlo/ }).click()
+  await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
+  await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
+  await page.getByRole('radio', { name: 'Sí', exact: true }).click()
+  await page.locator('#journey-sensitive-category').selectOption('none')
+  await page.getByRole('button', { name: /Seguir con presupuesto/ }).click()
+  await page.getByRole('radio', { name: /Todavía no sé/ }).click()
+  await page.getByRole('button', { name: /Seguir con el producto/ }).click()
+  const query = 'Botellas térmicas de acero inoxidable hasta USD 10'
+  const input = page.getByRole('textbox', { name: 'Buscar productos en Alibaba' })
+  await input.fill(query)
+  await page.reload()
+  await expect(input).toHaveValue(query)
+  expect(searches).toBe(0)
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Ingresá a tu cuenta')
+  const returnUrl = page.url()
+  expect(returnUrl).not.toContain('Botellas')
+  await page.goto('about:blank')
+  await page.goto(returnUrl)
+  await expect(input).toHaveValue(query)
+  await expect(page.getByRole('button', { name: 'Buscar', exact: true })).toBeEnabled()
+  expect(searches).toBe(1)
+  await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
+  await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Quiero buscarlo/ })).toBeVisible()
+  expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:search'))).toBeNull()
+})

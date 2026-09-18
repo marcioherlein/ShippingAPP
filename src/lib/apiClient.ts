@@ -76,7 +76,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
     let token: string | null = null
     try {
       token = await tokenProvider()
-      if (token) lastUsableToken = token
+      lastUsableToken = token
     } catch {
       // Clerk/browser storage can fail transiently (Safari reports a cryptic DOMException:
       // "The string did not match the expected pattern"). Reuse only the in-memory token
@@ -91,7 +91,11 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   }
 
   const response = await fetch(input, { ...init, headers })
-  if (shouldAttach && response.status === 401) signalAuthenticationRequired()
+  if (shouldAttach && response.status === 401) {
+    lastUsableToken = null
+    signalAuthenticationRequired()
+    throw new Error('Ingresá a tu cuenta para continuar. Después, reintentá la operación.')
+  }
   if (shouldAttach) signalUsageUpdated(response)
   return response
 }

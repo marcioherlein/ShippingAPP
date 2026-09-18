@@ -337,9 +337,9 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
   if (request.method === 'POST' && url.pathname === '/api/analyze') {
     return overlayUserAnalysisResponse(response, '/api/analyze', env)
   }
-  if (request.method === 'POST' && url.pathname === '/api/intake') {
-    return overlayUserAnalysisResponse(response, '/api/intake', env)
-  }
+  // `/api/intake` is already hydrated by the router's conversational intake
+  // handler. Re-running the hybrid market benchmark here duplicated retailer
+  // discovery (and could push a Worker over its CPU/subrequest budget).
   return response
 }
 

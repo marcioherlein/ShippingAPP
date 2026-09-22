@@ -51,6 +51,29 @@ function product(input: {
 }
 
 describe('Argentina direct VTEX retailer discovery', () => {
+  it('releases oversized and HTTP-error bodies while retaining healthy store evidence', async () => {
+    const cancelLarge = vi.fn()
+    const cancelError = vi.fn()
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).includes('cetrogar')) return json({ products: [
+        product({ productName: 'Mouse inalámbrico', itemId: 'healthy', price: 18000 }),
+      ] })
+      if (String(input).includes('intelligent-search')) return new Response(new ReadableStream({ cancel: cancelLarge }), {
+        headers: { 'content-type': 'application/json', 'content-length': '9000000' },
+      })
+      return new Response(new ReadableStream({ cancel: cancelError }), { status: 503 })
+    })
+    const result = await createArgentinaDirectRetailerProvider({ fetchImpl, retailers: [
+      { id: 'other', name: 'Other', baseUrl: 'https://other.test' }, BASE_RETAILERS[1],
+    ] }).discover({ query: 'mouse', productName: 'Mouse inalámbrico', category: 'mouse' })
+    expect(cancelLarge).toHaveBeenCalledOnce()
+    expect(cancelError).toHaveBeenCalledOnce()
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0].priceArs).toBe(18000)
+    expect(result.sourceLabel).toBe('Retailers argentinos directos · Cetrogar')
+    expect(result.warnings.join(' ')).toContain('byte limit')
+  })
+
   it('tries legacy search when intelligent search has products but no buyable offers', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       if (String(input).includes('intelligent-search')) return json({ products: [

@@ -1,5 +1,6 @@
 import type { ArgentinaMarketCandidate } from './marketProviderContracts'
 import type { MlAttribute } from './marketTypes'
+import { readBoundedText } from './boundedResponse'
 
 const FRAVEGA_LANDING_URL = 'https://tyc.fravega.com/e/ofertas/mas-vendidos/'
 const DEFAULT_TTL_MS = 5 * 60 * 1000
@@ -108,8 +109,11 @@ async function fetchLanding(fetchImpl: typeof fetch, timeoutMs: number) {
       },
       signal: controller.signal,
     })
-    if (!response.ok) return { candidates: [] as ArgentinaMarketCandidate[], warning: `Frávega public landing returned HTTP ${response.status}.` }
-    const html = await response.text()
+    if (!response.ok) {
+      await response.body?.cancel()
+      return { candidates: [] as ArgentinaMarketCandidate[], warning: `Frávega public landing returned HTTP ${response.status}.` }
+    }
+    const html = await readBoundedText(response, MAX_HTML_BYTES)
     if (html.length > MAX_HTML_BYTES) return { candidates: [] as ArgentinaMarketCandidate[], warning: 'Frávega public landing exceeded the fail-closed HTML size limit.' }
     const candidates = parseFravegaLandingCandidates(html)
     return {

@@ -334,12 +334,11 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
   if (request.method === 'GET' && url.pathname === '/api/runtime-smoke') {
     return overlayRuntimeEmailStatus(response, env)
   }
-  if (request.method === 'POST' && url.pathname === '/api/analyze') {
-    return overlayUserAnalysisResponse(response, '/api/analyze', env)
+  if (request.method === 'POST' && (url.pathname === '/api/analyze' || url.pathname === '/api/intake')) {
+    return overlayUserAnalysisResponse(response, url.pathname, env)
   }
-  // `/api/intake` is already hydrated by the router's conversational intake
-  // handler. Re-running the hybrid market benchmark here duplicated retailer
-  // discovery (and could push a Worker over its CPU/subrequest budget).
+  // The inner router hydrates FX and legacy market metadata only. Both analysis
+  // routes need the authoritative hybrid overlay exactly once with the full env.
   return response
 }
 

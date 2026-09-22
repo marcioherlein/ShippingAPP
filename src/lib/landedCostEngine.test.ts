@@ -20,13 +20,38 @@ const base = {
 }
 
 describe('Valores landed cost engine', () => {
+  it('uses the actual 10 kg Courier tariff instead of interpolating endpoints', () => {
+    const result = calculateLandedCostMode('courier', { ...base, quantity: 1, unitWeightKg: 10, unitVolumeCbm: 0.001 }, lookupFreightRate('China'))
+    expect(result.freightCostUsd).toBe(413.66) // Tarifas Courier: zone 7, 299.75 * 1.38
+  })
+
+  it('uses workbook country zones and rounds up volumetric Courier weight', () => {
+    expect(lookupFreightRate('Colombia')?.courierZone).toBe(2)
+    expect(lookupFreightRate('Australia')?.courierZone).toBe(5)
+    const result = calculateLandedCostMode('courier', { ...base, quantity: 1, unitWeightKg: 1, unitVolumeCbm: 0.0101 }, lookupFreightRate('China'))
+    expect(result.chargeableUnits).toBe(3)
+    expect(result.freightCostUsd).toBe(216.19) // zone 7, 3 kg: 156.66 * 1.38
+  })
+
+  it('withholds Courier costs above the tariff range instead of charging the 50 kg row', () => {
+    const result = calculateLandedCostMode('courier', { ...base, quantity: 1, unitWeightKg: 50.001, unitVolumeCbm: 0.001 }, lookupFreightRate('China'))
+    expect(result.available).toBe(false)
+    expect(result.freightRate).toBeNull()
+    expect(result.freightCostUsd).toBe(0)
+  })
+
+  it('keeps the air rate and minimum from Flete Aereo without adding Courier fuel', () => {
+    const result = calculateLandedCostMode('air', { ...base, quantity: 1, unitWeightKg: 30, unitVolumeCbm: 0.006 }, lookupFreightRate('China'))
+    expect(result.freightCostUsd).toBe(240)
+    expect(result.freightMinimumUsd).toBe(150)
+  })
   it('loads China freight rates from the uploaded Valores workbook', () => {
     const rate = lookupFreightRate('china')
     expect(rate?.country).toBe('China')
     expect(rate?.fclContainerUsd).toBe(9600)
     expect(rate?.lclUsdPerWm).toBe(200)
-    expect(rate?.airUsdPerKg).toBe(101.14)
-    expect(rate?.airMinimumUsd).toBe(0)
+    expect(rate?.airUsdPerKg).toBe(8)
+    expect(rate?.airMinimumUsd).toBe(150)
   })
 
   it('calculates LCL CIF, taxes, fixed expenses and special add-ons', () => {
@@ -95,7 +120,7 @@ describe('Valores landed cost engine', () => {
   it('compares LCL vs air while keeping FCL as reference', () => {
     const comparison = compareLandedCost(base)
     expect(comparison.status).toBe('ok')
-    expect(comparison.modes.air.freightMinimumUsd).toBe(0)
+    expect(comparison.modes.air.freightMinimumUsd).toBe(150)
     expect(comparison.lclVsAir.cheaperMode).toBe('lcl')
     expect(['lcl', 'air', 'courier']).toContain(comparison.bestMode)
     expect(comparison.modes.air.totalCostUsd).toBeGreaterThan(comparison.modes.lcl.totalCostUsd)

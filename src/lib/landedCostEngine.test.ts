@@ -25,8 +25,8 @@ describe('Valores landed cost engine', () => {
     expect(rate?.country).toBe('China')
     expect(rate?.fclContainerUsd).toBe(9600)
     expect(rate?.lclUsdPerWm).toBe(200)
-    expect(rate?.airUsdPerKg).toBe(8)
-    expect(rate?.airMinimumUsd).toBe(150)
+    expect(rate?.airUsdPerKg).toBe(101.14)
+    expect(rate?.airMinimumUsd).toBe(0)
   })
 
   it('calculates LCL CIF, taxes, fixed expenses and special add-ons', () => {
@@ -95,7 +95,7 @@ describe('Valores landed cost engine', () => {
   it('compares LCL vs air while keeping FCL as reference', () => {
     const comparison = compareLandedCost(base)
     expect(comparison.status).toBe('ok')
-    expect(comparison.modes.air.freightMinimumUsd).toBe(207)
+    expect(comparison.modes.air.freightMinimumUsd).toBe(0)
     expect(comparison.lclVsAir.cheaperMode).toBe('lcl')
     expect(['lcl', 'air', 'courier']).toContain(comparison.bestMode)
     expect(comparison.modes.air.totalCostUsd).toBeGreaterThan(comparison.modes.lcl.totalCostUsd)

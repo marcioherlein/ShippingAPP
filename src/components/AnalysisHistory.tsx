@@ -122,7 +122,7 @@ export default function AnalysisHistory() {
           <span><small>NCM</small><b>{detailAnalysis?.customs?.ncmCandidate || '—'}</b></span>
         </div>
         <div className="analysis-history-detail-grid">
-          <div><small>Modo logístico</small><b>{detailPipeline?.selectedMode === 'lcl' ? 'Marítimo LCL' : detailPipeline?.selectedMode === 'air' ? 'Aéreo' : '—'}</b></div>
+          <div><small>Modo logístico</small><b>{detailPipeline?.selectedMode === 'lcl' ? 'Marítimo LCL' : detailPipeline?.selectedMode === 'air' ? 'Aéreo' : detailPipeline?.selectedMode === 'courier' ? 'Courier comercial' : '—'}</b></div>
           <div><small>Cantidad base</small><b>{typeof detailPipeline?.baseQuantity === 'number' ? `${detailPipeline.baseQuantity.toLocaleString('es-AR')} u.` : '—'}</b></div>
           <div><small>Origen</small><b>{detailAnalysis?.product?.originCountry || '—'}</b></div>
           <div><small>FOB unitario</small><b>{money(detailAnalysis?.product?.unitPriceUsd)}</b></div>

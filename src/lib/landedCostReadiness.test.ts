@@ -24,7 +24,7 @@ describe('freight origin resolution — acquisition → freight bridge', () => {
     // Alibaba extraction commonly returns "<Province>, China"; freight must still resolve.
     const rate = lookupFreightRate('Zhejiang, China')
     expect(rate?.country).toBe('China')
-    expect(rate?.airMinimumUsd).toBe(0)
+    expect(rate?.airMinimumUsd).toBe(150)
   })
 
   it('resolves another provincial form ("Guangdong, China")', () => {

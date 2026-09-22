@@ -1,5 +1,6 @@
 import { importFreightValues } from '../data/importFreightValues'
 import { airFreightRates } from '../data/airFreightRates'
+import { courierFuelMultiplier, courierZones, courierTariffs } from '../data/courierFreightRates'
 
 export type TransportMode = 'fcl' | 'lcl' | 'air' | 'courier'
 export type ImportPurpose = 'own_use' | 'resale' | 'unknown'
@@ -129,14 +130,14 @@ function normalize(value: string) {
 }
 
 const rateRows: FreightRateLookup[] = importFreightValues.rates.map((row) => ({
-  ...(() => { const air = airFreightRates[row[0]]; return { airUsdPerKg: air?.baseUsdPerKg ?? row[5], airMinimumUsd: 0 } })(),
+  airUsdPerKg: airFreightRates[row[0]].baseUsdPerKg,
+  airMinimumUsd: airFreightRates[row[0]].minimumUsd,
   country: row[0],
   capital: row[1],
   region: row[2],
   fclContainerUsd: row[3],
   lclUsdPerWm: row[4],
-  // Valores_v4 air has no separate minimum; bill the greater of real or volumetric kg.
-  courierZone: row[0] === 'China' ? 7 : row[2] === 'Europa' ? 4 : row[2] === 'América del Norte' ? 3 : row[2] === 'América del Sur' ? 1 : row[2] === 'África' ? 6 : 7,
+  courierZone: courierZones[row[0]],
 }))
 
 export function lookupFreightRate(originCountry: string): FreightRateLookup | null {
@@ -180,7 +181,7 @@ function chargeable(mode: TransportMode, input: LandedCostInput) {
     const billedWm = billedLclWm(rawWm)
     return { totalWeightKg, totalVolumeCbm, units: billedWm, basis: 'volume_or_weight_measurement' as const, lclRawWm: rawWm, lclBilledWm: billedWm }
   }
-  const volumetricWeightKg = totalVolumeCbm * (1000 / 6)
+  const volumetricWeightKg = totalVolumeCbm * (mode === 'courier' ? 200 : 1000 / 6)
   return { totalWeightKg, totalVolumeCbm, units: Math.max(totalWeightKg, volumetricWeightKg), basis: 'actual_or_volumetric_weight' as const }
 }
 
@@ -201,32 +202,24 @@ function freightCost(mode: TransportMode, rate: FreightRateLookup, input: Landed
   }
   if (mode === 'lcl') return { ...base, rate: rate.lclUsdPerWm, minimum: null as number | null, cost: base.units * rate.lclUsdPerWm }
   if (mode === 'courier') {
-    const chargeableKg = Math.max(base.totalWeightKg, base.totalVolumeCbm * 1000 / 5)
-    const zoneBase: Record<number, [number, number]> = {
-      1: [57.74, 354.29], 2: [74.95, 563.43], 3: [78.33, 541.71],
-      4: [101.14, 744], 5: [108.41, 1018.29], 6: [127.66, 1125.71], 7: [101.14, 549.1],
-    }
-    const [oneKg, fiftyKg] = zoneBase[rate.courierZone] || zoneBase[7]
-    const weight = Math.max(1, Math.min(50, Math.ceil(chargeableKg)))
-    const baseCost = oneKg + ((fiftyKg - oneKg) * (weight - 1) / 49)
-    const cost = baseCost * 1.38
-    return { ...base, units: chargeableKg, rate: cost / weight, minimum: null as number | null, cost }
+    const weight = Math.max(1, Math.ceil(base.units))
+    const cost = courierTariffs[weight][rate.courierZone - 1] * courierFuelMultiplier
+    return { ...base, units: weight, rate: cost / weight, minimum: null as number | null, cost }
   }
-  const airFuelMultiplier = 1.38
-  const variable = base.units * rate.airUsdPerKg * airFuelMultiplier
-  const minimum = rate.airMinimumUsd * airFuelMultiplier
-  return { ...base, rate: roundMoney(rate.airUsdPerKg * airFuelMultiplier), minimum: roundMoney(minimum), cost: Math.max(variable, minimum) }
+  const variable = base.units * rate.airUsdPerKg
+  return { ...base, rate: rate.airUsdPerKg, minimum: rate.airMinimumUsd, cost: Math.max(variable, rate.airMinimumUsd) }
 }
 
 export function calculateLandedCostMode(mode: TransportMode, input: LandedCostInput, rate: FreightRateLookup | null): ModeCostBreakdown {
   const qty = Math.max(0, input.quantity)
   const fobUsd = qty * Math.max(0, input.unitPriceUsd)
   const empty = chargeable(mode, input)
-  if (!rate || qty <= 0 || input.unitPriceUsd < 0) {
+  const courierUnavailable = mode === 'courier' && (!rate || empty.units <= 0 || empty.units > 50 || !courierTariffs[Math.max(1, Math.ceil(empty.units))]?.[rate.courierZone - 1])
+  if (!rate || qty <= 0 || input.unitPriceUsd < 0 || courierUnavailable) {
     return {
       mode,
       available: false,
-      reason: !rate ? 'No hay tarifa cargada para el origen.' : 'Cantidad/precio inválido.',
+      reason: !rate ? 'No hay tarifa cargada para el origen.' : courierUnavailable ? 'Courier requiere cotización: sin tarifa para este peso u origen.' : 'Cantidad/precio inválido.',
       freightRate: null,
       freightMinimumUsd: null,
       freightCostUsd: 0,

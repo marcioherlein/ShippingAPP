@@ -134,7 +134,7 @@ function buildVerdictSignals(summary: ImporterSummary, quote: ReturnType<typeof 
           ? { label: 'Rentabilidad', title: 'Margen ajustado', detail: `${margin.toFixed(0)}% antes de costos no modelados.`, tone: 'warning' }
           : { label: 'Rentabilidad', title: margin >= 35 ? 'Margen fuerte' : 'Margen viable', detail: `${margin.toFixed(0)}% de margen bruto estimado.`, tone: 'positive' }
 
-  const savings = quote.lclVsAir.savingsUsd
+  const savings = quote.bestMode === 'courier' ? null : quote.lclVsAir.savingsUsd
   const logistics: VerdictSignal = quote.bestMode
     ? { label: 'Logística', title: quote.bestMode === 'lcl' ? 'Conviene LCL' : quote.bestMode === 'air' ? 'Conviene aéreo' : 'Conviene Courier comercial', detail: savings ? `Ahorro estimado: ${usd(savings)} frente a la alternativa.` : 'Es la opción accionable de menor costo.', tone: 'positive' }
     : { label: 'Logística', title: 'Sin comparación', detail: 'Faltan peso, volumen u origen.', tone: 'neutral' }
@@ -383,6 +383,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
           <section className="table-card">
             <div className="table-title"><div><span className="eyebrow">Comparativa logística</span><h2>LCL, aéreo, Courier y referencia FCL</h2></div><small>{quote.origin ? `${quote.origin.region} · ${quote.origin.capital}` : quote.status}</small></div>
             <div className="table-scroll"><table><thead><tr><th>Modo</th><th>Flete</th><th>CIF</th><th>Impuestos</th><th>Gastos</th><th>Total</th><th>Unitario</th></tr></thead><tbody>{([lcl, air, courier, fcl] as const).map((mode) => {
+              if (!mode.available) return <tr key={mode.mode}><td>{modeLabels[mode.mode]}</td><td colSpan={6}>{mode.reason}</td></tr>
               const taxes = mode.dutyUsd + mode.statisticsUsd + mode.vatUsd + mode.vatAdditionalUsd + mode.gainsUsd + mode.iibbUsd
               const expenses = mode.fixedDestinationUsd + mode.noImporterSignatureUsd + mode.sensitiveCategoryUsd
               const selected = winner?.mode === mode.mode

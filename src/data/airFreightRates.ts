@@ -1,1164 +1,775 @@
-// Generated from Valores_v4.xlsx (Google Drive file 1qdvUA_sYcvkqquRJWbaoUWRdUOJMvvWa), modified 2026-09-06.
-// Air tariff is base USD/kg by zone; the engine applies the declared fuel multiplier.
-export type AirFreightRate = { zone: number; baseUsdPerKg: number; fuelMultiplier: number; totalUsdPerKg: number }
-export const airFreightRates: Record<string, AirFreightRate> = {
+// Valores_v4.xlsx, sheet Flete Aereo, modified 2026-09-06.
+export const airFreightRates: Record<string, { baseUsdPerKg: number; minimumUsd: number }> = {
   "Afganistán": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Albania": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Alemania": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 5,
+    "minimumUsd": 170.0
   },
   "Andorra": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Angola": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Antigua y Barbuda": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Arabia Saudita": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Argelia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Armenia": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Australia": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Austria": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Azerbaiyán": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Bahamas": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Bangladés": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Barbados": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Baréin": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Bélgica": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Belice": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Benín": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Bielorrusia": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Birmania (Myanmar)": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Bolivia": {
-    "zone": 1,
-    "baseUsdPerKg": 57.74,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 79.6812
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Bosnia y Herzegovina": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Botsuana": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Brasil": {
-    "zone": 1,
-    "baseUsdPerKg": 57.74,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 79.6812
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Brunéi": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Bulgaria": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Burkina Faso": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Burundi": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Bután": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Cabo Verde": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Camboya": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Camerún": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Canadá": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Catar": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Chad": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Chile": {
-    "zone": 1,
-    "baseUsdPerKg": 57.74,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 79.6812
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "China": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 150.0
   },
   "Chipre": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Ciudad del Vaticano": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Colombia": {
-    "zone": 2,
-    "baseUsdPerKg": 74.95,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 103.431
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Comoras": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Corea del Norte": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Corea del Sur": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Costa de Marfil": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Costa Rica": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Croacia": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Cuba": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Dinamarca": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Dominica": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Ecuador": {
-    "zone": 2,
-    "baseUsdPerKg": 74.95,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 103.431
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Egipto": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "El Salvador": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Emiratos Árabes Unidos": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Eritrea": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Eslovaquia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Eslovenia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "España": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 5,
+    "minimumUsd": 150.0
   },
   "Estados Unidos": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 5,
+    "minimumUsd": 100.0
   },
   "Estonia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Esuatini": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Etiopía": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Filipinas": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Finlandia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Fiyi": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Francia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Gabón": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Gambia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Georgia": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Ghana": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Granada": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Grecia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Guatemala": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Guinea": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Guinea Ecuatorial": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Guinea-Bisáu": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Guyana": {
-    "zone": 2,
-    "baseUsdPerKg": 74.95,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 103.431
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Haití": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Honduras": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Hungría": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "India": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Indonesia": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Irak": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Irán": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Irlanda": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Islandia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Islas Marshall": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Islas Salomón": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Israel": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Italia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 5,
+    "minimumUsd": 170.0
   },
   "Jamaica": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Japón": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Jordania": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Kazajistán": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Kenia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Kirguistán": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Kiribati": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Kuwait": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Laos": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Lesoto": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Letonia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Líbano": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Liberia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Libia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Liechtenstein": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Lituania": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Luxemburgo": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Macedonia del Norte": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Madagascar": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Malasia": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Malaui": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Maldivas": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Malí": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Malta": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Marruecos": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Mauricio": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Mauritania": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "México": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Micronesia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Moldavia": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Mónaco": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Mongolia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Montenegro": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Mozambique": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Namibia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Nauru": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Nepal": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Nicaragua": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Níger": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Nigeria": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Noruega": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Nueva Zelanda": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Omán": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Países Bajos": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Pakistán": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Palaos": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Panamá": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Papúa Nueva Guinea": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Paraguay": {
-    "zone": 1,
-    "baseUsdPerKg": 57.74,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 79.6812
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Perú": {
-    "zone": 2,
-    "baseUsdPerKg": 74.95,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 103.431
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Polonia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Portugal": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Reino Unido": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "República Centroafricana": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "República Checa": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "República del Congo": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "República Democrática del Congo": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "República Dominicana": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Ruanda": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Rumania": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Rusia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Samoa": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "San Cristóbal y Nieves": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "San Marino": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "San Vicente y las Granadinas": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Santa Lucía": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Santo Tomé y Príncipe": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Senegal": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Serbia": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Seychelles": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Sierra Leona": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Singapur": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Siria": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Somalia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Sri Lanka": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Sudáfrica": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Sudán": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Sudán del Sur": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Suecia": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Suiza": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Surinam": {
-    "zone": 2,
-    "baseUsdPerKg": 74.95,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 103.431
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Tailandia": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Tanzania": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Tayikistán": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Timor Oriental": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Togo": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Tonga": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Trinidad y Tobago": {
-    "zone": 3,
-    "baseUsdPerKg": 78.33,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 108.0954
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Túnez": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Turkmenistán": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Turquía": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Tuvalu": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Ucrania": {
-    "zone": 4,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Uganda": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Uruguay": {
-    "zone": 1,
-    "baseUsdPerKg": 57.74,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 79.6812
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Uzbekistán": {
-    "zone": 5,
-    "baseUsdPerKg": 108.41,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 149.6058
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Vanuatu": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Venezuela": {
-    "zone": 2,
-    "baseUsdPerKg": 74.95,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 103.431
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Vietnam": {
-    "zone": 7,
-    "baseUsdPerKg": 101.14,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 139.5732
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Yemen": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Yibuti": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Zambia": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   },
   "Zimbabue": {
-    "zone": 6,
-    "baseUsdPerKg": 127.66,
-    "fuelMultiplier": 1.38,
-    "totalUsdPerKg": 176.1708
+    "baseUsdPerKg": 8,
+    "minimumUsd": 170.0
   }
 }
-

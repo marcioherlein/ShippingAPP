@@ -19,7 +19,7 @@ export type CalculationPipelineStatus = 'confirm' | 'processing' | 'blocked' | '
 
 export type CalculationPipelineSummary = {
   baseQuantity: number
-  selectedMode: 'lcl' | 'air'
+  selectedMode: 'lcl' | 'air' | 'courier'
   unitCostUsd: number
   totalCostUsd: number
   freightCostUsd: number
@@ -51,7 +51,7 @@ const pipelineSteps = [
   },
   {
     title: 'Logística internacional',
-    description: 'Uso origen, peso y volumen confirmados para comparar la base de flete LCL y aéreo.',
+    description: 'Uso origen, peso y volumen confirmados para comparar LCL, aéreo y Courier comercial.',
   },
   {
     title: 'Costo puesto unitario',
@@ -97,7 +97,7 @@ function stageDetail(index: number, analysis: ProductAnalysisV2, prefill: QuoteP
   if (index === 2) {
     return `${prefill.originCountry} · ${prefill.unitWeightKg || 0} kg/u. · ${prefill.unitVolumeCbm || 0} m³/u.`
   }
-  if (summary) return `${summary.baseQuantity} u. base · ${summary.selectedMode === 'lcl' ? 'LCL' : 'Aéreo'} · ${usd(summary.unitCostUsd)}/u.`
+  if (summary) return `${summary.baseQuantity} u. base · ${summary.selectedMode === 'lcl' ? 'LCL' : summary.selectedMode === 'air' ? 'Aéreo' : 'Courier comercial'} · ${usd(summary.unitCostUsd)}/u.`
   return `Cantidad base: ${prefill.quantity || prefill.moq || 1} unidades`
 }
 
@@ -108,7 +108,7 @@ function pipelineStatusAnnouncement(status: CalculationPipelineStatus, activeSta
     return `Procesando: ${stage?.title || 'cálculo de importación'}.`
   }
   if (status === 'blocked') return `Cálculo detenido. ${blocker || 'Hay un dato que necesita revisión antes de continuar.'}`
-  if (summary) return `Cálculo completado. Modo ${summary.selectedMode === 'lcl' ? 'LCL' : 'aéreo'}. Costo puesto por unidad ${usd(summary.unitCostUsd)}.`
+  if (summary) return `Cálculo completado. Modo ${summary.selectedMode === 'lcl' ? 'LCL' : summary.selectedMode === 'air' ? 'aéreo' : 'Courier comercial'}. Costo puesto por unidad ${usd(summary.unitCostUsd)}.`
   return 'Cálculo completado.'
 }
 
@@ -391,7 +391,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
       {status === 'ready' && <button type="button" className="pipeline-secondary" onClick={onReviewProduct}>Modificar datos del producto</button>}
       {status === 'ready' && summary && <div className="pipeline-ready-strip" aria-label="Resumen del cálculo completado">
 
-        <div><span>Modo base</span><b>{summary.selectedMode === 'lcl' ? 'LCL' : 'Aéreo'}</b></div>
+        <div><span>Modo base</span><b>{summary.selectedMode === 'lcl' ? 'LCL' : summary.selectedMode === 'air' ? 'Aéreo' : 'Courier comercial'}</b></div>
         <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
         <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>
       </div>}

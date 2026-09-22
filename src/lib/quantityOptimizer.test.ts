@@ -45,7 +45,7 @@ describe('quantity optimizer', () => {
 
     expect(result.recommendation).not.toBeNull()
     expect(result.recommendation?.affordable).toBe(true)
-    expect(result.recommendation?.selectedMode === 'lcl' || result.recommendation?.selectedMode === 'air').toBe(true)
+    expect(['lcl', 'air', 'courier']).toContain(result.recommendation?.selectedMode)
     expect(result.recommendation?.comparison.modes.fcl).toBeDefined()
     expect(result.notes.join(' ')).toContain('FCL queda como referencia')
   })

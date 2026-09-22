@@ -14,6 +14,7 @@ export type VtexRetailerMarketProviderOptions = {
   fetchImpl?: typeof fetch
   retailers?: ArgentinaVtexRetailer[]
   requestTimeoutMs?: number
+  concurrency?: number
 }
 
 type VtexCommercialOffer = {
@@ -341,11 +342,19 @@ export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarke
     baseUrl: retailer.baseUrl.replace(/\/+$/, ''),
   }))
   const requestTimeoutMs = Math.max(1000, Math.min(12000, options.requestTimeoutMs ?? 5000))
+  // Cloudflare Workers limit simultaneous outgoing connections on the free
+  // plan. Keep a small, explicit fan-out so a market query does not exhaust
+  // that limit when several public VTEX stores are queried together.
+  const concurrency = Math.max(1, Math.min(5, Math.floor(options.concurrency ?? 5)))
 
   return {
     id: 'argentina-direct-retailers',
     async discover(context) {
-      const results = await Promise.all(retailers.map((retailer) => discoverRetailer(retailer, context.query, fetchImpl, requestTimeoutMs)))
+      const results: RetailerDiscovery[] = []
+      for (let index = 0; index < retailers.length; index += concurrency) {
+        const batch = retailers.slice(index, index + concurrency)
+        results.push(...await Promise.all(batch.map((retailer) => discoverRetailer(retailer, context.query, fetchImpl, requestTimeoutMs))))
+      }
       const candidates = results.flatMap((result) => result.candidates)
       const available = results.filter((result) => result.mode !== 'unavailable')
       if (!available.length) {

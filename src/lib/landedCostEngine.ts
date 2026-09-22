@@ -1,6 +1,6 @@
 import { importFreightValues } from '../data/importFreightValues'
 
-export type TransportMode = 'fcl' | 'lcl' | 'air'
+export type TransportMode = 'fcl' | 'lcl' | 'air' | 'courier'
 export type ImportPurpose = 'own_use' | 'resale' | 'unknown'
 export type ImportEntityType = 'company' | 'individual' | 'unknown'
 export type SensitiveProductCategory = 'none' | 'food' | 'toys' | 'cosmetics' | 'medicines' | 'supplements' | 'plants' | 'unknown'
@@ -37,6 +37,7 @@ export type FreightRateLookup = {
   lclUsdPerWm: number
   airUsdPerKg: number
   airMinimumUsd: number
+  courierZone: number
 }
 
 export type ModeCostBreakdown = {
@@ -95,7 +96,7 @@ export type LandedCostComparison = {
     blockers: string[]
   }
   modes: Record<TransportMode, ModeCostBreakdown>
-  bestMode: 'lcl' | 'air' | null
+  bestMode: 'lcl' | 'air' | 'courier' | null
   lclVsAir: {
     cheaperMode: 'lcl' | 'air' | null
     savingsUsd: number | null
@@ -134,6 +135,7 @@ const rateRows: FreightRateLookup[] = importFreightValues.rates.map((row) => ({
   lclUsdPerWm: row[4],
   airUsdPerKg: row[5],
   airMinimumUsd: row[6],
+  courierZone: row[0] === 'China' ? 7 : row[2] === 'Europa' ? 4 : row[2] === 'América del Norte' ? 3 : row[2] === 'América del Sur' ? 1 : row[2] === 'África' ? 6 : 7,
 }))
 
 export function lookupFreightRate(originCountry: string): FreightRateLookup | null {
@@ -153,6 +155,7 @@ function safePct(value: number | undefined, fallback: number) {
 }
 
 function expensesFor(mode: TransportMode) {
+  if (mode === 'courier') return { fixed: {}, extras: { noImporterSignature: 0, sensitiveProductCategory: 0 } }
   return importFreightValues.expenses[mode]
 }
 
@@ -196,8 +199,22 @@ function freightCost(mode: TransportMode, rate: FreightRateLookup, input: Landed
     return { ...base, rate: effectiveRate, minimum: null as number | null, cost: containers * effectiveRate, fclOptions }
   }
   if (mode === 'lcl') return { ...base, rate: rate.lclUsdPerWm, minimum: null as number | null, cost: base.units * rate.lclUsdPerWm }
-  const variable = base.units * rate.airUsdPerKg
-  return { ...base, rate: rate.airUsdPerKg, minimum: rate.airMinimumUsd, cost: Math.max(variable, rate.airMinimumUsd) }
+  if (mode === 'courier') {
+    const chargeableKg = Math.max(base.totalWeightKg, base.totalVolumeCbm * 1000 / 5)
+    const zoneBase: Record<number, [number, number]> = {
+      1: [57.74, 354.29], 2: [74.95, 563.43], 3: [78.33, 541.71],
+      4: [101.14, 744], 5: [108.41, 1018.29], 6: [127.66, 1125.71], 7: [101.14, 549.1],
+    }
+    const [oneKg, fiftyKg] = zoneBase[rate.courierZone] || zoneBase[7]
+    const weight = Math.max(1, Math.min(50, Math.ceil(chargeableKg)))
+    const baseCost = oneKg + ((fiftyKg - oneKg) * (weight - 1) / 49)
+    const cost = baseCost * 1.38
+    return { ...base, units: chargeableKg, rate: cost / weight, minimum: null as number | null, cost }
+  }
+  const airFuelMultiplier = 1.38
+  const variable = base.units * rate.airUsdPerKg * airFuelMultiplier
+  const minimum = rate.airMinimumUsd * airFuelMultiplier
+  return { ...base, rate: roundMoney(rate.airUsdPerKg * airFuelMultiplier), minimum: roundMoney(minimum), cost: Math.max(variable, minimum) }
 }
 
 export function calculateLandedCostMode(mode: TransportMode, input: LandedCostInput, rate: FreightRateLookup | null): ModeCostBreakdown {
@@ -230,7 +247,7 @@ export function calculateLandedCostMode(mode: TransportMode, input: LandedCostIn
       sensitiveCategoryUsd: 0,
       totalCostUsd: fobUsd,
       unitCostUsd: qty ? fobUsd / qty : 0,
-      source: importFreightValues.meta.source,
+      source: mode === 'courier' ? 'Valores_v4.xlsx · Courier comercial · fuel declarado 38%' : importFreightValues.meta.source,
     }
   }
 
@@ -245,7 +262,8 @@ export function calculateLandedCostMode(mode: TransportMode, input: LandedCostIn
   const vatAdditionalUsd = capitalGoodTreatment ? 0 : roundMoney(baseVatUsd * safePct(input.vatAdditionalRatePct, 20))
   const gainsUsd = capitalGoodTreatment || input.gainsExempt ? 0 : roundMoney(baseVatUsd * safePct(input.gainsRatePct, 6))
   const iibbUsd = capitalGoodTreatment ? 0 : roundMoney(baseVatUsd * safePct(input.iibbRatePct, 2.5))
-  const fixedDestinationUsd = roundMoney(fixedExpenseTotal(mode))
+  const courierAdditionalUsd = mode === 'courier' ? roundMoney(45 + dutyUsd * 0.02) : 0
+  const fixedDestinationUsd = roundMoney(mode === 'courier' ? courierAdditionalUsd : fixedExpenseTotal(mode))
   const noImporterSignatureUsd = input.hasImporterSignature === false ? Number(expensesFor(mode).extras.noImporterSignature || 0) : 0
   const sensitiveCategoryUsd = sensitiveCategories.has(input.sensitiveCategory) ? Number(expensesFor(mode).extras.sensitiveProductCategory || 0) : 0
   const totalCostUsd = roundMoney(baseVatUsd + vatUsd + vatAdditionalUsd + gainsUsd + iibbUsd + fixedDestinationUsd + noImporterSignatureUsd + sensitiveCategoryUsd)
@@ -277,13 +295,13 @@ export function calculateLandedCostMode(mode: TransportMode, input: LandedCostIn
     sensitiveCategoryUsd,
     totalCostUsd,
     unitCostUsd: qty ? roundMoney(totalCostUsd / qty) : 0,
-    source: importFreightValues.meta.source,
+    source: mode === 'courier' ? 'Valores_v4.xlsx · Courier comercial · fuel declarado 38%' : importFreightValues.meta.source,
   }
 }
 
 export function compareLandedCost(input: LandedCostInput): LandedCostComparison {
   if (input.quantity <= 0 || input.unitPriceUsd < 0) {
-    const emptyModes = ['fcl', 'lcl', 'air'].reduce((acc, mode) => {
+    const emptyModes = ['fcl', 'lcl', 'air', 'courier'].reduce((acc, mode) => {
       acc[mode as TransportMode] = calculateLandedCostMode(mode as TransportMode, input, null)
       return acc
     }, {} as Record<TransportMode, ModeCostBreakdown>)
@@ -294,11 +312,17 @@ export function compareLandedCost(input: LandedCostInput): LandedCostComparison 
     fcl: calculateLandedCostMode('fcl', input, origin),
     lcl: calculateLandedCostMode('lcl', input, origin),
     air: calculateLandedCostMode('air', input, origin),
+    courier: calculateLandedCostMode('courier', input, origin),
   }
   if (!origin) return { status: 'missing_origin', origin, checklist: checklistStatus(input), modes, bestMode: null, lclVsAir: { cheaperMode: null, savingsUsd: null, savingsPct: null }, notes: ['No encontramos el origen en la tabla Valores.xlsx.'] }
 
   const lcl = modes.lcl
   const air = modes.air
+  const courier = modes.courier
+  // The source Courier tariff only covers chargeable shipments up to 50 kg.
+  // Do not silently clamp heavier shipments to the 50 kg row and recommend it.
+  const actionable = [lcl, air, courier].filter((mode) => mode.available && (mode.mode !== 'courier' || mode.chargeableUnits <= 50))
+  const winner = actionable.length ? actionable.reduce((best, mode) => mode.totalCostUsd < best.totalCostUsd ? mode : best) : null
   const cheaperMode = lcl.totalCostUsd === air.totalCostUsd ? null : lcl.totalCostUsd < air.totalCostUsd ? 'lcl' : 'air'
   const savingsUsd = cheaperMode ? Math.abs(lcl.totalCostUsd - air.totalCostUsd) : null
   const higher = Math.max(lcl.totalCostUsd, air.totalCostUsd)
@@ -315,11 +339,12 @@ export function compareLandedCost(input: LandedCostInput): LandedCostComparison 
     origin,
     checklist: checklistStatus(input),
     modes,
-    bestMode: cheaperMode,
+    bestMode: winner && winner.mode !== 'fcl' ? winner.mode : null,
     lclVsAir: { cheaperMode, savingsUsd: savingsUsd === null ? null : roundMoney(savingsUsd), savingsPct },
     notes: [
       'FCL se calcula como referencia por contenedor(es) entero(s): 20\' ≈ 28 m³ y 40\' ≈ 58 m³ útiles. La tarifa de 20\' es una estimación del 65% de la tarifa de 40\' hasta cargar una cotización específica.',
       'El valor principal para oportunidad compara LCL vs aéreo.',
+      'Courier se modela como operación comercial: fuel declarado del 38%, entrega residencial USD 5, gestión aduanera USD 40 y anticipo de derechos del 2%. La elegibilidad regulatoria debe validarse para cada operación.',
       'FOB + flete internacional = CIF; derecho y tasa estadística se calculan sobre CIF; IVA/percepciones sobre base IVA.',
       taxNote,
     ],

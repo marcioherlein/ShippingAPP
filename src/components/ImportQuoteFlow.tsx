@@ -21,6 +21,7 @@ const modeLabels: Record<TransportMode, string> = {
   fcl: 'FCL referencia',
   lcl: 'LCL',
   air: 'Aéreo',
+  courier: 'Courier comercial',
 }
 
 const strategyLabels: Record<BuyStrategy, string> = {
@@ -64,13 +65,14 @@ function checklistSignal(ok: boolean, label: string) {
   return <span className={ok ? 'score-pill' : 'score-pill warning-pill'}>{ok ? 'OK' : label}</span>
 }
 
-function decisionCopy(mode: 'lcl' | 'air' | null, marginPct: number | null, blockers: string[]) {
+function decisionCopy(mode: 'lcl' | 'air' | 'courier' | null, marginPct: number | null, blockers: string[]) {
+  const label = mode === 'lcl' ? 'LCL' : mode === 'air' ? 'aéreo' : mode === 'courier' ? 'Courier comercial' : ''
   if (!mode) return { title: 'Completá datos', body: 'Faltan datos para comparar LCL contra aéreo.' }
   if (blockers.length) return { title: 'Faltan datos clave', body: 'El costo se calcula, pero la decisión queda abierta hasta cerrar checklist.' }
-  if (marginPct === null) return { title: `Menor costo logístico: ${mode === 'lcl' ? 'LCL' : 'aéreo'}`, body: 'Esta comparación sólo elige el flete más barato. Falta un precio argentino confiable para decidir si importar es rentable.' }
-  if (marginPct !== null && marginPct < 0) return { title: 'No conviene con estos datos', body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} es el menor costo logístico, pero el costo unitario supera el precio local cargado.` }
-  if (marginPct !== null && marginPct < 20) return { title: 'Margen débil', body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} gana por costo, pero el margen rápido queda bajo para absorber errores, demoras o gastos no modelados.` }
-  return { title: `Conviene ${mode === 'lcl' ? 'LCL' : 'aéreo'}`, body: `${mode === 'lcl' ? 'LCL' : 'Aéreo'} es el menor costo entre las opciones accionables. FCL queda sólo como referencia.` }
+  if (marginPct === null) return { title: `Menor costo logístico: ${label}`, body: 'Esta comparación sólo elige el flete más barato. Falta un precio argentino confiable para decidir si importar es rentable.' }
+  if (marginPct !== null && marginPct < 0) return { title: 'No conviene con estos datos', body: `${label} es el menor costo logístico, pero el costo unitario supera el precio local cargado.` }
+  if (marginPct !== null && marginPct < 20) return { title: 'Margen débil', body: `${label} gana por costo, pero el margen rápido queda bajo para absorber errores, demoras o gastos no modelados.` }
+  return { title: `Conviene ${label}`, body: `${label} es el menor costo entre las opciones accionables. FCL queda sólo como referencia.` }
 }
 
 function strategyCopy(strategy: BuyStrategy) {
@@ -134,7 +136,7 @@ function buildVerdictSignals(summary: ImporterSummary, quote: ReturnType<typeof 
 
   const savings = quote.lclVsAir.savingsUsd
   const logistics: VerdictSignal = quote.bestMode
-    ? { label: 'Logística', title: quote.bestMode === 'lcl' ? 'Conviene LCL' : 'Conviene aéreo', detail: savings ? `Ahorro estimado: ${usd(savings)} frente a la alternativa.` : 'Es la opción accionable de menor costo.', tone: 'positive' }
+    ? { label: 'Logística', title: quote.bestMode === 'lcl' ? 'Conviene LCL' : quote.bestMode === 'air' ? 'Conviene aéreo' : 'Conviene Courier comercial', detail: savings ? `Ahorro estimado: ${usd(savings)} frente a la alternativa.` : 'Es la opción accionable de menor costo.', tone: 'positive' }
     : { label: 'Logística', title: 'Sin comparación', detail: 'Faltan peso, volumen u origen.', tone: 'neutral' }
 
   const capital: VerdictSignal = budgetUsd <= 0
@@ -255,6 +257,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
 
   const lcl = quote.modes.lcl
   const air = quote.modes.air
+  const courier = quote.modes.courier
   const fcl = quote.modes.fcl
   const winner = quote.bestMode ? quote.modes[quote.bestMode] : null
   const marginPct = winner && localSellPriceUsd > 0 ? ((localSellPriceUsd - winner.unitCostUsd) / localSellPriceUsd) * 100 : null
@@ -346,7 +349,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
         </section>
 
         {winner && <section className="table-card unit-breakdown-card">
-          <div className="table-title"><div><span className="eyebrow">Costo puesto por unidad</span><h2>De FOB a tu costo final, punto por punto</h2></div><small>{winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · {quantity} u.</small></div>
+          <div className="table-title"><div><span className="eyebrow">Costo puesto por unidad</span><h2>De FOB a tu costo final, punto por punto</h2></div><small>{modeLabels[winner.mode]} · {quantity} u.</small></div>
           <div className="unit-breakdown-list">
             {breakdown.map(([label, value]) => <div key={label}><span>{label}</span><b>{usd(value)}</b></div>)}
             <div className="unit-breakdown-total"><span>Costo puesto final / unidad</span><b>{usd(winner.unitCostUsd)}</b></div>
@@ -373,17 +376,18 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
               <div><span className="eyebrow">Resultado base</span><strong>{winner ? `${usd(winner.unitCostUsd)} por unidad puesta` : decision.title}</strong></div>
               <div className="score"><span>Cantidad base</span><b>{quantity} u.</b></div>
             </div>
-            <p className="mode">{winner ? `${productName || 'Producto'} · ${originCountry} · ${winner.mode === 'lcl' ? 'LCL' : 'Aéreo'} · total de la operación ${usd(winner.totalCostUsd)}.` : decision.body}</p>
+            <p className="mode">{winner ? `${productName || 'Producto'} · ${originCountry} · ${modeLabels[winner.mode]} · total de la operación ${usd(winner.totalCostUsd)}.` : decision.body}</p>
             <p className="unit-result-explainer">Este valor es el costo de <b>una unidad dentro de una importación de {quantity} unidades</b>. No simula importar una unidad aislada, porque los mínimos de flete y gastos fijos distorsionarían la decisión.</p>
           </section>
 
           <section className="table-card">
-            <div className="table-title"><div><span className="eyebrow">Comparativa logística</span><h2>LCL, aéreo y referencia FCL</h2></div><small>{quote.origin ? `${quote.origin.region} · ${quote.origin.capital}` : quote.status}</small></div>
-            <div className="table-scroll"><table><thead><tr><th>Modo</th><th>Flete</th><th>CIF</th><th>Impuestos</th><th>Gastos</th><th>Total</th><th>Unitario</th></tr></thead><tbody>{([lcl, air, fcl] as const).map((mode) => {
+            <div className="table-title"><div><span className="eyebrow">Comparativa logística</span><h2>LCL, aéreo, Courier y referencia FCL</h2></div><small>{quote.origin ? `${quote.origin.region} · ${quote.origin.capital}` : quote.status}</small></div>
+            <div className="table-scroll"><table><thead><tr><th>Modo</th><th>Flete</th><th>CIF</th><th>Impuestos</th><th>Gastos</th><th>Total</th><th>Unitario</th></tr></thead><tbody>{([lcl, air, courier, fcl] as const).map((mode) => {
               const taxes = mode.dutyUsd + mode.statisticsUsd + mode.vatUsd + mode.vatAdditionalUsd + mode.gainsUsd + mode.iibbUsd
               const expenses = mode.fixedDestinationUsd + mode.noImporterSignatureUsd + mode.sensitiveCategoryUsd
               const selected = winner?.mode === mode.mode
-              return <tr key={mode.mode} className={selected ? 'selected-row' : undefined}><td><b>{modeLabels[mode.mode]}</b>{selected && <em>recomendado</em>}{mode.mode === 'fcl' && <em>referencia</em>}</td><td>{usd(mode.freightCostUsd)}<br /><small>{mode.chargeableUnits} {mode.mode === 'air' ? 'kg cobrables' : mode.mode === 'lcl' ? 'WM' : `cont. de ${mode.fclContainerSize === '20ft' ? '20′' : '40′'}`}</small>{mode.mode === 'fcl' && mode.fclOptions && <small className="fcl-options">{mode.fclOptions.map((option) => `${option.containers}×${option.size === '20ft' ? '20′ estimado' : '40′ cotizado'}: ${usd(option.freightCostUsd)}`).join(' · ')}</small>}</td><td>{usd(mode.cifUsd)}</td><td>{usd(taxes)}</td><td>{usd(expenses)}</td><td><b>{usd(mode.totalCostUsd)}</b></td><td><b>{usd(mode.unitCostUsd)}</b></td></tr>
+              const chargeableLabel = mode.mode === 'air' || mode.mode === 'courier' ? 'kg cobrables' : mode.mode === 'lcl' ? 'WM' : `cont. de ${mode.fclContainerSize === '20ft' ? '20′' : '40′'}`
+              return <tr key={mode.mode} className={selected ? 'selected-row' : undefined}><td><b>{modeLabels[mode.mode]}</b>{selected && <em>recomendado</em>}{mode.mode === 'fcl' && <em>referencia</em>}</td><td>{usd(mode.freightCostUsd)}<br /><small>{mode.chargeableUnits} {chargeableLabel}</small>{mode.mode === 'fcl' && mode.fclOptions ? <small className="fcl-options">{mode.fclOptions.map((option) => `${option.containers}×${option.size === '20ft' ? '20′ estimado' : '40′ cotizado'}: ${usd(option.freightCostUsd)}`).join(' · ')}</small> : null}</td><td>{usd(mode.cifUsd)}</td><td>{usd(taxes)}</td><td>{usd(expenses)}</td><td><b>{usd(mode.totalCostUsd)}</b></td><td><b>{usd(mode.unitCostUsd)}</b></td></tr>
             })}</tbody></table></div>
             <div className="analysis-banner" style={{ marginTop: 16 }}><b>LCL vs Aéreo:</b> {quote.lclVsAir.cheaperMode === 'lcl' ? `LCL ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs aéreo.` : quote.lclVsAir.cheaperMode === 'air' ? `Aéreo ahorra ${usd(quote.lclVsAir.savingsUsd || 0)} vs LCL.` : 'empate con los datos actuales.'} FCL queda como referencia de contenedor entero.</div>
           </section>
@@ -394,7 +398,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
           <p className="assumption-note">Primero fijamos el costo unitario de la operación base. Recién después probamos cantidades para encontrar dónde bajan flete/gastos por unidad sin romper presupuesto, MOQ o stock.</p>
           {quantityRecommendation && <>
             <div className="metric-grid">
-              <div><span>Modo recomendado</span><b>{quantityRecommendation.selectedMode === 'lcl' ? 'LCL' : quantityRecommendation.selectedMode === 'air' ? 'Aéreo' : '-'}</b></div>
+              <div><span>Modo recomendado</span><b>{quantityRecommendation.selectedMode === 'lcl' ? 'LCL' : quantityRecommendation.selectedMode === 'air' ? 'Aéreo' : quantityRecommendation.selectedMode === 'courier' ? 'Courier comercial' : '-'}</b></div>
               <div><span>Costo total</span><b>{usd(quantityRecommendation.totalCostUsd)}</b></div>
               <div><span>Costo unitario</span><b>{usd(quantityRecommendation.unitCostUsd)}</b></div>
               <div><span>Volumen estimado</span><b>{quantityRecommendation.totalVolumeCbm} m³</b></div>
@@ -407,7 +411,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
             <p className="assumption-note">{quantityRecommendation.affordable ? 'Entra dentro del presupuesto cargado.' : 'No entra dentro del presupuesto: es la opción menos mala encontrada desde el MOQ.'} {optimizer.notes[2]}</p>
             <button className="secondary" type="button" onClick={() => setQuantity(quantityRecommendation.quantity)}>Usar esta cantidad en la simulación</button>
           </>}
-          {topCandidates.length > 0 && <div className="table-scroll" style={{ marginTop: 14 }}><table><thead><tr><th>Cantidad</th><th>Modo</th><th>Total</th><th>Unitario</th><th>m³</th><th>Stock</th><th>Estado</th></tr></thead><tbody>{topCandidates.map((candidate) => <tr key={candidate.quantity} className={candidate.quantity === quantityRecommendation?.quantity ? 'selected-row' : undefined}><td><b>{candidate.quantity} u.</b></td><td>{candidate.selectedMode === 'lcl' ? 'LCL' : candidate.selectedMode === 'air' ? 'Aéreo' : '-'}</td><td>{usd(candidate.totalCostUsd)}</td><td>{usd(candidate.unitCostUsd)}</td><td>{candidate.totalVolumeCbm}</td><td>{candidate.monthsOfStock === null ? '-' : `${candidate.monthsOfStock}m`}</td><td>{candidate.affordable ? 'OK' : 'Fuera presupuesto'}</td></tr>)}</tbody></table></div>}
+          {topCandidates.length > 0 && <div className="table-scroll" style={{ marginTop: 14 }}><table><thead><tr><th>Cantidad</th><th>Modo</th><th>Total</th><th>Unitario</th><th>m³</th><th>Stock</th><th>Estado</th></tr></thead><tbody>{topCandidates.map((candidate) => <tr key={candidate.quantity} className={candidate.quantity === quantityRecommendation?.quantity ? 'selected-row' : undefined}><td><b>{candidate.quantity} u.</b></td><td>{candidate.selectedMode === 'lcl' ? 'LCL' : candidate.selectedMode === 'air' ? 'Aéreo' : candidate.selectedMode === 'courier' ? 'Courier' : '-'}</td><td>{usd(candidate.totalCostUsd)}</td><td>{usd(candidate.unitCostUsd)}</td><td>{candidate.totalVolumeCbm}</td><td>{candidate.monthsOfStock === null ? '-' : `${candidate.monthsOfStock}m`}</td><td>{candidate.affordable ? 'OK' : 'Fuera presupuesto'}</td></tr>)}</tbody></table></div>}
         </section>
 
         <section className="method-card journey-checklist-status">

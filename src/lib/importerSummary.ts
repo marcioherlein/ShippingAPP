@@ -26,7 +26,7 @@ export type ImporterSummary = {
   unitTotalCostUsd: number
 
   // Best mode
-  mode: 'lcl' | 'air' | null
+  mode: 'lcl' | 'air' | 'courier' | null
   modeLabel: string
   quantity: number
   totalCostUsd: number
@@ -48,9 +48,10 @@ function round2(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
 }
 
-function modeLabel(mode: 'lcl' | 'air' | null): string {
+function modeLabel(mode: 'lcl' | 'air' | 'courier' | null): string {
   if (mode === 'lcl') return 'barco (LCL)'
   if (mode === 'air') return 'aéreo'
+  if (mode === 'courier') return 'Courier comercial'
   return '-'
 }
 
@@ -74,7 +75,7 @@ function logisticsFactFor(breakdown: ModeCostBreakdown): string | null {
 }
 
 function verdictFor(
-  mode: 'lcl' | 'air' | null,
+  mode: 'lcl' | 'air' | 'courier' | null,
   marginPct: number | null,
   blockers: string[],
 ): { verdict: ImportVerdict; headline: string; detail: string } {

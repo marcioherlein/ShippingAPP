@@ -24,7 +24,7 @@ export type QuantityCandidate = {
   quantity: number
   unitPriceUsd: number
   comparison: LandedCostComparison
-  selectedMode: 'lcl' | 'air' | null
+  selectedMode: 'lcl' | 'air' | 'courier' | null
   selectedCost: ModeCostBreakdown | null
   totalCostUsd: number
   unitCostUsd: number

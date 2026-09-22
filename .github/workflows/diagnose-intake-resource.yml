@@ -9,41 +9,23 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: npm install --no-save --no-audit --no-fund wrangler@4
-      - name: Capture only probe outcome and resource metrics
-        shell: bash
+      - name: Read effective Workers limits
         run: |
-          set -euo pipefail
-          # Strip requests, headers, console messages and exception text before output.
-          timeout 230s node_modules/.bin/wrangler tail shippingapp --format json --header 'x-shippingapp-diagnostic: resource-probe' |
-            jq --unbuffered -c '{outcome, cpuTime, wallTime, exceptions: [.exceptions[]? | {name}], status: .event.response.status}' > /tmp/resource-summary.jsonl &
-          trace_pid=$!
-          trap 'kill "$trace_pid" 2>/dev/null || true' EXIT
-          sleep 12
-          probe_status=0
-          node --input-type=module <<'NODE' || probe_status=$?
-          import { installSmokeServiceFetch } from './scripts/smoke-auth.mjs'
-          if (!process.env.INTERNAL_API_TOKEN) throw new Error('Missing service authentication')
-          installSmokeServiceFetch()
-          const serviceFetch = globalThis.fetch
-          globalThis.fetch = (input, init = {}) => {
-            const headers = new Headers(init.headers)
-            headers.set('x-shippingapp-diagnostic', 'resource-probe')
-            return serviceFetch(input, { ...init, headers })
+          node --input-type=module <<'NODE'
+          const root = 'https://api.cloudflare.com/client/v4/accounts/' + process.env.CLOUDFLARE_ACCOUNT_ID
+          for (const path of ['/workers/account-settings', '/workers/scripts/shippingapp/settings', '/subscriptions']) {
+            const response = await fetch(root + path, { headers: { authorization: 'Bearer ' + process.env.CLOUDFLARE_API_TOKEN }, signal: AbortSignal.timeout(20000) })
+            const body = await response.json()
+            const r = body.result
+            console.log(JSON.stringify({ path, httpStatus: response.status, success: body.success,
+              defaultUsageModel: r?.default_usage_model, usageModel: r?.usage_model, limits: r?.limits,
+              workersPlans: Array.isArray(r) ? r.filter(s => /workers/i.test(JSON.stringify(s.rate_plan || {}))).map(s => ({ name: s.rate_plan?.public_name, id: s.rate_plan?.id })) : undefined,
+              errorCodes: body.errors?.map(e => e.code)
+            }))
           }
-          await import('./scripts/smoke-production-intake.mjs')
           NODE
-          sleep 8
-          cat /tmp/resource-summary.jsonl
-          test -s /tmp/resource-summary.jsonl
-          exit "$probe_status"

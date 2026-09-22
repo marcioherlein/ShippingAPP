@@ -1,4 +1,5 @@
 import { importFreightValues } from '../data/importFreightValues'
+import { airFreightRates } from '../data/airFreightRates'
 
 export type TransportMode = 'fcl' | 'lcl' | 'air' | 'courier'
 export type ImportPurpose = 'own_use' | 'resale' | 'unknown'
@@ -128,13 +129,13 @@ function normalize(value: string) {
 }
 
 const rateRows: FreightRateLookup[] = importFreightValues.rates.map((row) => ({
+  ...(() => { const air = airFreightRates[row[0]]; return { airUsdPerKg: air?.baseUsdPerKg ?? row[5], airMinimumUsd: 0 } })(),
   country: row[0],
   capital: row[1],
   region: row[2],
   fclContainerUsd: row[3],
   lclUsdPerWm: row[4],
-  airUsdPerKg: row[5],
-  airMinimumUsd: row[6],
+  // Valores_v4 air has no separate minimum; bill the greater of real or volumetric kg.
   courierZone: row[0] === 'China' ? 7 : row[2] === 'Europa' ? 4 : row[2] === 'América del Norte' ? 3 : row[2] === 'América del Sur' ? 1 : row[2] === 'África' ? 6 : 7,
 }))
 

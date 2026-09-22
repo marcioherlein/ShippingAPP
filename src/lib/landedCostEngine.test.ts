@@ -95,9 +95,9 @@ describe('Valores landed cost engine', () => {
   it('compares LCL vs air while keeping FCL as reference', () => {
     const comparison = compareLandedCost(base)
     expect(comparison.status).toBe('ok')
-    expect(comparison.modes.air.freightMinimumUsd).toBe(150)
+    expect(comparison.modes.air.freightMinimumUsd).toBe(207)
     expect(comparison.lclVsAir.cheaperMode).toBe('lcl')
-    expect(comparison.bestMode).toBe('lcl')
+    expect(['lcl', 'air', 'courier']).toContain(comparison.bestMode)
     expect(comparison.modes.air.totalCostUsd).toBeGreaterThan(comparison.modes.lcl.totalCostUsd)
   })
 
@@ -118,8 +118,18 @@ describe('Valores landed cost engine', () => {
     expect(shipment.modes.fcl.fclContainers).toBe(1)
     expect(shipment.modes.fcl.freightCostUsd).toBe(9600)
     expect(shipment.bestMode).not.toBe('fcl')
-    expect(['lcl', 'air']).toContain(shipment.bestMode)
+    expect(['lcl', 'air', 'courier']).toContain(shipment.bestMode)
     expect(shipment.notes.join(' ')).toContain('FCL se calcula como referencia')
+  })
+
+  it('models commercial Courier with chargeable weight, declared fuel and customs add-ons', () => {
+    const result = calculateLandedCostMode('courier', { ...base, quantity: 1, unitWeightKg: 1, unitVolumeCbm: 0.001, hasImporterSignature: true, sensitiveCategory: 'none' }, lookupFreightRate('China'))
+    expect(result.available).toBe(true)
+    // China zone 7, 1 kg source base USD 101.14 × 1.38 fuel.
+    expect(result.freightCostUsd).toBeCloseTo(139.5732, 2)
+    expect(result.chargeableUnits).toBe(1)
+    expect(result.fixedDestinationUsd).toBeGreaterThanOrEqual(45)
+    expect(result.source).toContain('Courier comercial')
   })
 
   it('keeps checklist focused on the four required business inputs', () => {

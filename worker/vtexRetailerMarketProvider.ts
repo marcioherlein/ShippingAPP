@@ -1,6 +1,9 @@
 import type { ArgentinaMarketCandidate, ArgentinaMarketDiscoveryProvider } from './marketProviderContracts'
 import type { MlAttribute } from './marketTypes'
 import { discoverFravegaLanding } from './fravegaLandingMarketProvider'
+import { readBoundedText } from './boundedResponse'
+
+const MAX_CATALOG_BYTES = 2_000_000
 
 export type ArgentinaVtexRetailer = {
   id: string
@@ -197,7 +200,9 @@ function candidatesFromProducts(retailer: ArgentinaVtexRetailer, products: VtexP
     const title = normalizeForRelevance(text(product.productName)).split(' ')
     return tokens.filter((token) => title.some((word) => word === token || word === `${token}s` || word === `${token}es`)).length
   }
-  const ranked = [...products].sort((a, b) => relevance(b) - relevance(a))
+  // Normalize each title once, rather than on every comparison in the sort.
+  const ranked = products.map((product) => ({ product, score: relevance(product) }))
+    .sort((a, b) => b.score - a.score).map(({ product }) => product)
   for (const product of ranked) {
     const attributes = attributesOf(product, retailer)
     for (const item of product.items || []) {
@@ -238,8 +243,16 @@ async function fetchJsonWithTimeout(fetchImpl: typeof fetch, url: string, reques
       },
       signal: controller.signal,
     })
-    if (!response.ok) return { ok: false as const, status: response.status, data: null }
-    return { ok: true as const, status: response.status, data: await response.json() as unknown }
+    if (!response.ok) {
+      await response.body?.cancel()
+      return { ok: false as const, status: response.status, data: null }
+    }
+    if (/text\/html/i.test(response.headers.get('content-type') || '')) {
+      await response.body?.cancel()
+      throw new Error('Storefront returned HTML instead of catalog JSON')
+    }
+    const body = await readBoundedText(response, MAX_CATALOG_BYTES)
+    return { ok: true as const, status: response.status, data: JSON.parse(body) as unknown }
   } finally {
     clearTimeout(timeout)
   }

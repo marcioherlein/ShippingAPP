@@ -15,6 +15,7 @@ import { syncClerkProfile } from './clerkProfile'
 import { digestRuntimeStatus, digestSchedulerDryRun } from './weeklyDigest'
 import { runWeeklyDigestSchedulerWithLease } from './weeklyDigestLease'
 import { productionIdentityStatus } from './productionIdentity'
+import { dispatchComputeRequest } from './freeCompute'
 
 const LEGACY_MARKET_ENV_KEYS = [
   'MERCADOLIBRE_ACCESS_TOKEN',
@@ -342,7 +343,7 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
   return response
 }
 
-export default {
+const application = {
   async fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
     return withRequestContext(request, env, async () => {
       const gate = await authorizeRequest(request, env)
@@ -376,4 +377,26 @@ export default {
   async scheduled(_controller: unknown, env: Record<string, unknown>, ctx: { waitUntil(promise: Promise<unknown>): void }) {
     ctx.waitUntil(runWeeklyDigestSchedulerWithLease(env as any))
   },
+}
+
+/** SQLite-backed for Workers Free eligibility. Request data is never persisted.
+ * Run the existing auth -> entitlement -> application pipeline here, once.
+ * This calls application directly, never the forwarding entrypoint.
+ */
+export class ShippingCompute {
+  constructor(_state: unknown, private env: Record<string, unknown>) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const response = await application.fetch(request, this.env)
+    const forwarded = new Response(response.body, response)
+    forwarded.headers.set('x-shippingapp-compute', 'durable-object')
+    return forwarded
+  }
+}
+
+export default {
+  fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
+    return dispatchComputeRequest(request, env, () => application.fetch(request, env))
+  },
+  scheduled: application.scheduled,
 }

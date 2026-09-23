@@ -78,6 +78,9 @@ async function postJson(path, payload, label) {
     throw new Error(`${label}: ${path} returned non-JSON HTTP ${response.status}: ${String(text).slice(0, 500)}`)
   }
   if (!response.ok) throw new Error(`${label}: ${path} failed HTTP ${response.status}: ${JSON.stringify(body).slice(0, 1000)}`)
+  if (process.env.REQUIRE_DURABLE_COMPUTE === 'true' && response.headers.get('x-shippingapp-compute') !== 'durable-object') {
+    throw new Error(`${label}: ${path} did not run in the required Durable Object compute boundary`)
+  }
   return body
 }
 

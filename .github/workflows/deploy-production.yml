@@ -280,4 +280,5 @@ jobs:
       - name: Production intake smoke test
         env:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+          REQUIRE_DURABLE_COMPUTE: 'true'
         run: node scripts/smoke-production-intake.mjs

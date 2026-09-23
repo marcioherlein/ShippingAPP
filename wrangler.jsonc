@@ -3,6 +3,7 @@
   "compatibility_date": "2026-08-13",
   "main": "./worker/entry.ts",
   "vars": {
+    "FREE_COMPUTE_ENABLED": "true",
     "AUTH_ENFORCEMENT": "true",
     "CLERK_AUTHORIZED_PARTIES": "https://shippingapp.marciofabrizio.workers.dev",
     "EMAIL_APP_NAME": "ShippingAPP",
@@ -21,6 +22,10 @@
   },
   "ai": { "binding": "AI" },
   "browser": { "binding": "BROWSER" },
+  "durable_objects": {
+    "bindings": [{ "name": "SHIPPING_COMPUTE", "class_name": "ShippingCompute" }]
+  },
+  "migrations": [{ "tag": "v1-shipping-compute", "new_sqlite_classes": ["ShippingCompute"] }],
   "d1_databases": [
     {
       "binding": "DB",

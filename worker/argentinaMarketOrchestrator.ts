@@ -7,13 +7,61 @@ import { createMercadoLibreMarketProviders } from './mercadoLibreMarketProvider'
 import type { ArgentinaMarketPriceResolver } from './marketProviderContracts'
 import type { ArgentinaMarketResult } from './marketTypes'
 import { withProgressiveFunctionalDiscovery } from './progressiveFunctionalDiscovery'
-import { createArgentinaDirectRetailerProvider } from './vtexRetailerMarketProvider'
+import {
+  createArgentinaDirectRetailerProvider,
+  DEFAULT_ARGENTINA_VTEX_RETAILERS,
+  SPECIALIZED_ARGENTINA_VTEX_RETAILERS,
+  type ArgentinaVtexRetailer,
+} from './vtexRetailerMarketProvider'
 
 export type ArgentinaMarketHybridOptions = {
   mercadoLibreAccessToken?: string | null
   googleShoppingApiKey?: string | null
   fetchImpl?: typeof fetch
   salePriceLookupLimit?: number
+}
+
+const FUNCTIONAL_RELAXED_CORE_IDS = new Set(['fravega', 'cetrogar', 'naldo', 'oncity', 'pardo'])
+
+function normalizeCategory(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Progressive discovery's second query is deliberately broader than the first,
+ * so it must not fan out to every configured storefront again. Keep the five
+ * historically productive generalists and add only category-relevant stores.
+ * The strict round still uses every retailer; this only bounds the relaxed
+ * category-only fallback.
+ */
+export function selectFunctionalRelaxedRetailers(category: string): ArgentinaVtexRetailer[] {
+  const normalized = normalizeCategory(category)
+  const selected = new Set(FUNCTIONAL_RELAXED_CORE_IDS)
+
+  if (/\b(?:paleta|padel|tenis|raqueta|mancuerna|deporte|fitness|gimnasia|zapatilla|calzado)\b/.test(normalized)) {
+    selected.add('sportline')
+  }
+  if (/\b(?:taladro|amoladora|hidrolavadora|herramienta|aspiradora|ventilador|termotanque|plancha|hogar)\b/.test(normalized)) {
+    selected.add('easy')
+  }
+  if (/\b(?:lavarropas|heladera|microondas|freidora|pava|licuadora|tostadora|cafetera|electrodomestico|electrodomesticos|cocina|hogar|termotanque)\b/.test(normalized)) {
+    selected.add('carrefour')
+  }
+  if (/\b(?:auricular|auriculares|parlante|audio|televisor|tv|camara|smartwatch|power bank|celular|notebook|router|impresora)\b/.test(normalized)) {
+    selected.add('coppel')
+  }
+  if (/\b(?:auricular|auriculares|audio|sony|televisor|tv)\b/.test(normalized)) {
+    selected.add('sony-official')
+  }
+
+  const all = [...DEFAULT_ARGENTINA_VTEX_RETAILERS, ...SPECIALIZED_ARGENTINA_VTEX_RETAILERS]
+  return all.filter((retailer) => selected.has(retailer.id)).slice(0, 7)
 }
 
 function isMercadoLibreItemId(value: string) {
@@ -47,7 +95,13 @@ async function analyzeDirectRetailers(
   const retailerBase = withFunctionalTraitEvidenceGuard(createArgentinaDirectRetailerProvider({
     fetchImpl: options.fetchImpl,
   }))
-  const retailerProvider = withProgressiveFunctionalDiscovery(retailerBase)
+  const relaxedRetailerBase = withFunctionalTraitEvidenceGuard(createArgentinaDirectRetailerProvider({
+    fetchImpl: options.fetchImpl,
+    retailers: selectFunctionalRelaxedRetailers(category),
+  }))
+  const retailerProvider = withProgressiveFunctionalDiscovery(retailerBase, {
+    relaxedProvider: relaxedRetailerBase,
+  })
   return runArgentinaMarketBenchmark(productName, category, retailerProvider)
 }
 

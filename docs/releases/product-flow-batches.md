@@ -1,20 +1,37 @@
 # ShippingAPP — pending delivery batches
 
-Updated September 23, 2026 from the owner's requested corrections.
+Updated September 26, 2026 from the owner's requested corrections.
 Budget: no paid services or plan upgrades. Clerk production cutover is deferred.
-Current main: 5aa4b6f. Never equate a successful build with production recovery.
+Verified production baseline: bed7d74 (#188). Never equate a successful build with production recovery.
 
-## Batch 1 — free compute recovery (in progress)
+## Batch 1 — free compute recovery (production gates passed)
 
 - Route API processing through SQLite-backed Durable Objects on Workers Free.
 - Preserve authentication, credits, requests and source-evidence requirements.
 - Pass CI, real Wrangler runtime, deployment, 20 intake + 20 NCM cases, local
   retailer comparisons and chat tests before closing the incident.
-- Current local evidence: 934 tests and production build passed. Wrangler bundle
-  dry-run passed. Local runtime blocked by uv_interface_addresses environment
-  error; CI must supply real runtime evidence. Not deployed yet.
+- PR #188 merged; production run 35910011942 passed deployment, intake,
+  classification and alternative-retailer market gates on September 23.
+- Mercado Libre is still unresolved: its non-blocking diagnostic reported
+  listing search blocked and no usable ARS catalog prices. A green workflow
+  does not mean this provider is healthy. Keep the retailer fallback and track
+  provider coverage independently.
 
 ## Batch 2 — extracted facts, currency and supplier confirmation
+
+### 2A — explicit review before quoting (implementation in review)
+
+- Require an unchecked acknowledgement before quoting the reviewed product, unit
+  USD price, supplier minimum and shipment data. Edits and refreshed analysis
+  clear the acknowledgement; the submit handler also guards it.
+- Show identity, source, description and known commercial facts together.
+  Missing MOQ is explicitly shown as not supplied and remains optional.
+- Browser regression covers blocked submit, explicit acknowledgement and price
+  changes invalidating acknowledgement at mobile and desktop widths.
+- This does not complete currency provenance/conversion, price tier/pack or
+  variant validation. Those remain pending in 2B below.
+
+### 2B — currency and supplier price evidence (pending)
 
 - Require an explicit user confirmation of ALL extracted facts before using them
   for a calculation: name/type, supplier URL, variant, price, original currency,

@@ -1,18 +1,21 @@
 # ShippingAPP — pending delivery batches
 
-Updated September 23, 2026 from the owner's requested corrections.
+Updated September 26, 2026 from the owner's requested corrections.
 Budget: no paid services or plan upgrades. Clerk production cutover is deferred.
-Current main: 5aa4b6f. Never equate a successful build with production recovery.
+Verified production baseline: bed7d74 (#188). Never equate a successful build with production recovery.
 
-## Batch 1 — free compute recovery (in progress)
+## Batch 1 — free compute recovery (production gates passed)
 
 - Route API processing through SQLite-backed Durable Objects on Workers Free.
 - Preserve authentication, credits, requests and source-evidence requirements.
 - Pass CI, real Wrangler runtime, deployment, 20 intake + 20 NCM cases, local
   retailer comparisons and chat tests before closing the incident.
-- Current local evidence: 934 tests and production build passed. Wrangler bundle
-  dry-run passed. Local runtime blocked by uv_interface_addresses environment
-  error; CI must supply real runtime evidence. Not deployed yet.
+- PR #188 merged; production run 35910011942 passed deployment, intake,
+  classification and alternative-retailer market gates on September 23.
+- Mercado Libre is still unresolved: its non-blocking diagnostic reported
+  listing search blocked and no usable ARS catalog prices. A green workflow
+  does not mean this provider is healthy. Keep the retailer fallback and track
+  provider coverage independently.
 
 ## Batch 2 — extracted facts, currency and supplier confirmation
 

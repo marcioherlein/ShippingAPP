@@ -37,3 +37,9 @@
 .constraint-fail { color: #991b1b; background: #fee2e2; }
 .constraint-pending { color: #854d0e; background: #fef3c7; }
 @media (max-width: 760px) { .intake-message { max-width: 94%; } .discovery-head { flex-direction: column; } .discovery-grid { grid-template-columns: 1fr; } .discovery-item-top { align-items: flex-start; } }
+
+.pipeline-facts-review { display: flex; align-items: flex-start; gap: 12px; padding: 16px; min-height: 44px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 12px; }
+.pipeline-facts-review input { flex: 0 0 auto; width: 20px; height: 20px; margin-top: 2px; }
+.pipeline-facts-review:focus-within { outline: 2px solid #2563eb; outline-offset: 3px; }
+.pipeline-review-source { overflow-wrap: anywhere; font-size: .875rem; }
+.pipeline-review-help { font-size: .875rem; color: #475569; }

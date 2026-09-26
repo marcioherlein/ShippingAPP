@@ -174,12 +174,14 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const [showCorrections, setShowCorrections] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
   const [clarification, setClarification] = useState('')
+  const [reviewedFacts, setReviewedFacts] = useState(false)
 
   useEffect(() => {
     // A refinement returns a new analysis with the same sourceUrl. Sync from the
     // complete analysis object so a previous clarification is never silently
     // dropped on the next round.
     setDraft(productConfirmationFromAnalysis(analysis))
+    setReviewedFacts(false)
     setShowCorrections(false)
     setShowAllQuoteFields(false)
     setClarification('')
@@ -209,9 +211,11 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
 
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
+    setReviewedFacts(false)
   }
 
   const submitConfirmation = () => {
+    if (!canConfirm || (classificationResolved && !reviewedFacts)) return
     const note = clarification.replace(/\s+/g, ' ').trim()
     const next = note
       ? applyClassificationClarification(draft, note, analysis.customs.missingFacts)
@@ -229,7 +233,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : 'Confirmación inteligente'}</span>
         <h2>{classificationResolved ? 'La NCM ya está resuelta. Sólo me falta cerrar la logística.' : 'Esto es lo que entendí. ¿Está bien?'}</h2>
         <p>{classificationResolved
-          ? 'No vuelvo a pedirte información técnica que ya usamos. Completá únicamente los datos comerciales o físicos que Alibaba no pudo confirmar.'
+          ? 'Revisá el precio unitario, el mínimo del proveedor y los datos de envío. Podés corregir cualquier dato antes de confirmar.'
           : 'Confirmá el producto que detecté. Si para clasificarlo falta un dato puntual, te hago una sola pregunta clara y seguimos.'}</p>
       </div>
 
@@ -246,7 +250,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
               {knownFact('Función', draft.functionText, 'function')}
               {knownFact('Origen', draft.originCountry, 'origin')}
               {knownFact('Precio proveedor', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
-              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+              {knownFact('Mínimo del proveedor', draft.moq > 0 ? `${draft.moq} u.` : 'No informado', 'moq')}
             </div>
             {draft.description && draft.description !== draft.productName && <details className="pipeline-source-detail"><summary>Ver detalle técnico leído</summary><p>{draft.description}</p></details>}
             <div className="pipeline-understood-actions">
@@ -297,11 +301,17 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>
 
           <div className="pipeline-understood-card quote-known-card">
-            <span className="eyebrow">Datos que ya tengo</span>
+            <span className="eyebrow">Datos para revisar</span>
+            <p><strong>{draft.productName}</strong></p>
+            {draft.description && <details className="pipeline-source-detail"><summary>Ver descripción y detalles del producto</summary><p>{draft.description}</p></details>}
+            {analysis.sourceUrl && <p className="pipeline-review-source">Fuente: {analysis.sourceUrl}</p>}
             <div className="pipeline-known-grid">
+              {knownFact('Tipo', draft.category, 'review-category')}
+              {knownFact('Material', draft.material, 'review-material')}
+              {knownFact('Función', draft.functionText, 'review-function')}
               {knownFact('Origen', draft.originCountry, 'origin')}
               {knownFact('FOB unitario', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
-              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+              {knownFact('Mínimo del proveedor', draft.moq > 0 ? `${draft.moq} u.` : 'No informado', 'moq')}
               {knownFact('Peso embalado', draft.unitWeightKg > 0 ? `${draft.unitWeightKg} kg/u.` : null, 'weight')}
               {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : null, 'volume')}
             </div>
@@ -342,8 +352,13 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <div><span>Siguiente</span><b>Flete → costo puesto → optimización</b></div>
           </div>
 
+          <label className="pipeline-facts-review">
+            <input type="checkbox" checked={reviewedFacts} onChange={event => setReviewedFacts(event.target.checked)} />
+            <span>Revisé el producto, el precio en USD por unidad, el mínimo del proveedor y los datos de envío.</span>
+          </label>
+          <p className="pipeline-review-help">Si modificás un dato, te pediremos confirmar nuevamente antes de cotizar.</p>
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>Cotizar con estos datos <span>→</span></button>
+            <button type="button" className="journey-primary-action" disabled={!canConfirm || !reviewedFacts} onClick={submitConfirmation}>Cotizar con estos datos <span>→</span></button>
             <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
           </div>
         </>}

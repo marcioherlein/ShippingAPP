@@ -16,6 +16,20 @@ Current main: 5aa4b6f. Never equate a successful build with production recovery.
 
 ## Batch 2 — extracted facts, currency and supplier confirmation
 
+### 2A — explicit review before quoting (implementation in review)
+
+- Require an unchecked acknowledgement before quoting the reviewed product, unit
+  USD price, supplier minimum and shipment data. Edits and refreshed analysis
+  clear the acknowledgement; the submit handler also guards it.
+- Show identity, source, description and known commercial facts together.
+  Missing MOQ is explicitly shown as not supplied and remains optional.
+- Browser regression covers blocked submit, explicit acknowledgement and price
+  changes invalidating acknowledgement at mobile and desktop widths.
+- This does not complete currency provenance/conversion, price tier/pack or
+  variant validation. Those remain pending in 2B below.
+
+### 2B — currency and supplier price evidence (pending)
+
 - Require an explicit user confirmation of ALL extracted facts before using them
   for a calculation: name/type, supplier URL, variant, price, original currency,
   price tier, unit/pack basis, MOQ, dimensions, packed weight, volume and origin.

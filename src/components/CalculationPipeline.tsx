@@ -1,3 +1,7 @@
+import { readProductDraft, writeProductDraft } from '../lib/productDraft'
+import { spanishProductText } from '../lib/productLanguage'
+import SupplierPriceReview from './SupplierPriceReview'
+import { supplierUnitUsd, supplierTierMatches, type SupplierPrice } from '../lib/supplierPrice'
 import ManualNcmPicker from './ManualNcmPicker'
 import type { CustomsProfile } from '../lib/customsClassification'
 import React, { useEffect, useMemo, useState } from 'react'
@@ -32,6 +36,10 @@ type Props = {
   activeStage: number
   summary?: CalculationPipelineSummary | null
   blocker?: string | null
+  authenticationRequired?: boolean
+  quantityRange?: { min: number; max: number }
+  budgetUsd?: number
+  proposeQuantity: (data: ProductConfirmationData) => { quantity: number; totalUsd: number } | null
   onConfirm: (product: ProductConfirmationData) => void
   onManualNcm: (customs: CustomsProfile, product: ProductConfirmationData) => void
   onEditProduct: () => void
@@ -165,21 +173,25 @@ function clarificationCopy(analysis: ProductAnalysisV2, target: ClassificationCl
   }
 }
 
-export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
+export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, authenticationRequired, quantityRange, budgetUsd, proposeQuantity, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
   const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
-  const [draft, setDraft] = useState<ProductConfirmationData>(() => productConfirmationFromAnalysis(analysis))
+  const [draft, setDraft] = useState<ProductConfirmationData>(() => { const saved = readProductDraft<{ source: string; draft: ProductConfirmationData }>('review'); return saved?.source === JSON.stringify(analysis) ? saved.draft : productConfirmationFromAnalysis(analysis) })
   const [showManualNcm, setShowManualNcm] = useState(false)
   const [showCorrections, setShowCorrections] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
   const [clarification, setClarification] = useState('')
+  const [reviewedFacts, setReviewedFacts] = useState(false)
 
   useEffect(() => {
     // A refinement returns a new analysis with the same sourceUrl. Sync from the
     // complete analysis object so a previous clarification is never silently
     // dropped on the next round.
-    setDraft(productConfirmationFromAnalysis(analysis))
+    const saved = readProductDraft<{ source: string; draft: ProductConfirmationData }>('review')
+    setDraft(saved?.source === JSON.stringify(analysis) ? saved.draft : productConfirmationFromAnalysis(analysis))
+    setReviewedFacts(false)
+    setShowManualNcm(!!analysis.classificationRefinement && analysis.classificationRefinement.attempt >= 2 && !analysis.customs.ncmCandidate)
     setShowCorrections(false)
     setShowAllQuoteFields(false)
     setClarification('')
@@ -193,30 +205,33 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     && analysis.customs.dutyRatePct !== null
     && analysis.customs.dutyRatePct !== undefined
   const refinement = analysis.classificationRefinement
-  const refinementExhausted = !classificationResolved
-    && refinement?.allowed === false
-    && refinement.maxAttempts > 0
-    && refinement.attempt >= refinement.maxAttempts
+  const refinementExhausted = !classificationResolved && !!refinement && (refinement.attempt >= 2 || (refinement.allowed === false && refinement.attempt >= refinement.maxAttempts))
   const identityEdited = !sameIdentity(draft, sourceDraft)
   const classifierAskedForMore = !classificationResolved && analysis.customs.missingFacts.length > 0
   const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
   const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
+  const priceEvidence: SupplierPrice = draft.supplierPrice || { amount: draft.unitPriceUsd, currency: '', unitsPerPack: 1, variant: '', minQuantity: 1 }
+  const convertedPrice = supplierUnitUsd(priceEvidence, analysis.fx)
+  const priceReady = !!convertedPrice && !!priceEvidence.variant.trim() && supplierTierMatches(priceEvidence, draft.quantity || 0)
+  const quantityProposal = budgetUsd && !draft.quantity && convertedPrice && quoteMissing.length === 0 ? proposeQuantity({ ...draft, unitPriceUsd: convertedPrice, supplierPrice: priceEvidence }) : null
   const canConfirm = classificationResolved && !identityEdited
-    ? quoteMissing.length === 0 && (draft.quantity ?? 0) > 0
+    ? quoteMissing.length === 0 && (draft.quantity ?? 0) > 0 && priceReady && (draft.quantity ?? 0) >= draft.moq
     : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied
   const volume = resolvedProductVolumeCbm(draft)
 
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
-    setDraft((current) => ({ ...current, [key]: value }))
+    setDraft((current) => { const next = { ...current, [key]: value }; writeProductDraft('review', { source: JSON.stringify(analysis), draft: next }); return next })
+    setReviewedFacts(false)
   }
 
   const submitConfirmation = () => {
+    if (!canConfirm || (classificationResolved && !reviewedFacts)) return
     const note = clarification.replace(/\s+/g, ' ').trim()
     const next = note
       ? applyClassificationClarification(draft, note, analysis.customs.missingFacts)
       : draft
-    onConfirm(next)
+    onConfirm(classificationResolved ? { ...next, unitPriceUsd: convertedPrice || 0, supplierPrice: priceEvidence } : next)
     setClarification('')
   }
 
@@ -229,24 +244,25 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : 'Confirmación inteligente'}</span>
         <h2>{classificationResolved ? 'La NCM ya está resuelta. Sólo me falta cerrar la logística.' : 'Esto es lo que entendí. ¿Está bien?'}</h2>
         <p>{classificationResolved
-          ? 'No vuelvo a pedirte información técnica que ya usamos. Completá únicamente los datos comerciales o físicos que Alibaba no pudo confirmar.'
+          ? 'Revisá el precio unitario, el mínimo del proveedor y los datos de envío. Podés corregir cualquier dato antes de confirmar.'
           : 'Confirmá el producto que detecté. Si para clasificarlo falta un dato puntual, te hago una sola pregunta clara y seguimos.'}</p>
       </div>
 
       <div className="pipeline-product-card progressive-product-card">
+        {spanishProductText(draft.productName) !== draft.productName && <details className="pipeline-source-detail"><summary>Ver título original del proveedor</summary><p>{draft.productName}</p><small>Traducción de términos conocidos; modelos, unidades y especificaciones se conservan.</small></details>}
         <button type="button" className="pipeline-secondary" aria-expanded={showManualNcm} onClick={() => setShowManualNcm(value => !value)}>Buscar o cambiar posición en el nomenclador</button>
         {showManualNcm && <ManualNcmPicker customs={analysis.customs} onSelect={customs => { onManualNcm(customs, draft); setShowManualNcm(false) }} />}
         {!classificationResolved ? <>
           <div className="pipeline-understood-card">
             <span className="eyebrow">Producto detectado</span>
-            <p className="pipeline-understood-sentence"><strong>“{draft.productName || 'todavía no identificado'}”</strong></p>
+            <p className="pipeline-understood-sentence"><strong>“{spanishProductText(draft.productName) || 'todavía no identificado'}”</strong></p>
             <div className="pipeline-known-grid">
               {knownFact('Tipo / categoría', draft.category, 'category')}
               {knownFact('Material', draft.material, 'material')}
               {knownFact('Función', draft.functionText, 'function')}
               {knownFact('Origen', draft.originCountry, 'origin')}
               {knownFact('Precio proveedor', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
-              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+              {knownFact('Mínimo del proveedor', draft.moq > 0 ? `${draft.moq} u.` : 'No informado', 'moq')}
             </div>
             {draft.description && draft.description !== draft.productName && <details className="pipeline-source-detail"><summary>Ver detalle técnico leído</summary><p>{draft.description}</p></details>}
             <div className="pipeline-understood-actions">
@@ -297,11 +313,17 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>
 
           <div className="pipeline-understood-card quote-known-card">
-            <span className="eyebrow">Datos que ya tengo</span>
+            <span className="eyebrow">Datos para revisar</span>
+            <p><strong>{spanishProductText(draft.productName)}</strong></p>
+            {draft.description && <details className="pipeline-source-detail"><summary>Ver descripción y detalles del producto</summary><p>{draft.description}</p></details>}
+            {analysis.sourceUrl && <p className="pipeline-review-source">Fuente: {analysis.sourceUrl}</p>}
             <div className="pipeline-known-grid">
+              {knownFact('Tipo', draft.category, 'review-category')}
+              {knownFact('Material', draft.material, 'review-material')}
+              {knownFact('Función', draft.functionText, 'review-function')}
               {knownFact('Origen', draft.originCountry, 'origin')}
               {knownFact('FOB unitario', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
-              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+              {knownFact('Mínimo del proveedor', draft.moq > 0 ? `${draft.moq} u.` : 'No informado', 'moq')}
               {knownFact('Peso embalado', draft.unitWeightKg > 0 ? `${draft.unitWeightKg} kg/u.` : null, 'weight')}
               {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : null, 'volume')}
             </div>
@@ -316,11 +338,18 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <label className="pipeline-confirm-field wide"><span>Descripción</span><textarea value={draft.description} onChange={event => update('description', event.target.value)} /></label>
             {identityEdited && <p>Al cambiar el producto volveremos a validar su clasificación.</p>}
           </div>}
+          <SupplierPriceReview value={priceEvidence} fx={analysis.fx} sourceUrl={analysis.sourceUrl} onChange={value => { setDraft(current => { const next = { ...current, supplierPrice: value, unitPriceUsd: supplierUnitUsd(value, analysis.fx) || 0 }; writeProductDraft('review', { source: JSON.stringify(analysis), draft: next }); return next }); setReviewedFacts(false) }} />
+          {!!draft.quantity && draft.moq > draft.quantity && <p role="alert">La cantidad elegida es menor al mínimo confirmado del proveedor.</p>}
+          {draft.quantity && !supplierTierMatches(priceEvidence, draft.quantity) ? <p role="alert">La cantidad elegida no corresponde al tramo de precio o a las unidades por pack. Revisá el precio con el proveedor y confirmalo de nuevo.</p> : null}
           <div className="pipeline-progressive-fields quote-missing-fields">
             <div className="pipeline-progressive-title"><b>{quoteMissing.length ? `Me ${quoteMissing.length === 1 ? 'falta' : 'faltan'} ${quoteMissing.length} ${quoteMissing.length === 1 ? 'dato' : 'datos'} para cotizar.` : 'Ya tengo todo para cotizar.'}</b><small>Pedimos sólo lo que interviene en compra o flete.</small></div>
-            <label className="pipeline-confirm-field"><span>Cantidad a cotizar (unidades)</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} /></label>
+            {quantityRange && !draft.quantity && <p>Elegiste entre {quantityRange.min} y {quantityRange.max} unidades. Confirmá la cantidad exacta para este cálculo.</p>}
+            {quantityProposal && <button type="button" className="pipeline-secondary" onClick={() => update('quantity', quantityProposal.quantity)}>Usar propuesta: {quantityProposal.quantity} unidades · costo estimado {usd(quantityProposal.totalUsd)}</button>}
+            {budgetUsd && !draft.quantity && <p>Tu presupuesto total es {usd(budgetUsd)}. Elegí una cantidad inicial; compararemos el costo completo con ese presupuesto.</p>}
+            {!draft.quantity && !quantityRange && !budgetUsd && draft.moq > 0 && <button type="button" className="pipeline-secondary" onClick={() => update('quantity', draft.moq)}>Usar el mínimo del proveedor: {draft.moq} unidades</button>}
+            {draft.quantity && !showAllQuoteFields ? <p>Cantidad elegida: <strong>{draft.quantity} unidades</strong> <button type="button" className="pipeline-secondary" onClick={() => setShowAllQuoteFields(true)}>Cambiar cantidad</button></p> : <label className="pipeline-confirm-field"><span>Cantidad a cotizar (unidades)</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('originCountry')) && <label className="pipeline-confirm-field"><span>País de origen de la mercadería</span><input value={draft.originCountry} onChange={(event) => update('originCountry', event.target.value)} placeholder="Ej. China" /></label>}
-            {(showAllQuoteFields || quoteFieldMissing('unitPriceUsd')) && <label className="pipeline-confirm-field"><span>Precio FOB unitario (USD)</span><input type="number" min="0" step="0.01" value={draft.unitPriceUsd || ''} onChange={(event) => update('unitPriceUsd', numberValue(event.target.value))} /></label>}
+
             {(showAllQuoteFields || quoteFieldMissing('moq')) && <label className="pipeline-confirm-field"><span>MOQ / cantidad mínima (opcional)</span><input type="number" min="0" step="1" value={draft.moq || ''} onChange={(event) => update('moq', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('unitWeightKg')) && <label className="pipeline-confirm-field"><span>Peso de una unidad embalada (kg)</span><input type="number" min="0" step="0.001" value={draft.unitWeightKg || ''} onChange={(event) => update('unitWeightKg', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('packageVolume')) && <div className="pipeline-volume-entry wide">
@@ -342,8 +371,13 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <div><span>Siguiente</span><b>Flete → costo puesto → optimización</b></div>
           </div>
 
+          <label className="pipeline-facts-review">
+            <input type="checkbox" checked={reviewedFacts} onChange={event => setReviewedFacts(event.target.checked)} />
+            <span>Revisé el producto, el precio y su moneda original, variante, tramo, unidades por pack, mínimo del proveedor y datos de envío.</span>
+          </label>
+          <p className="pipeline-review-help">Si modificás un dato, te pediremos confirmar nuevamente antes de cotizar.</p>
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>Cotizar con estos datos <span>→</span></button>
+            <button type="button" className="journey-primary-action" disabled={!canConfirm || !reviewedFacts} onClick={submitConfirmation}>Cotizar con estos datos <span>→</span></button>
             <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
           </div>
         </>}
@@ -379,11 +413,12 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
       </div>
 
       {status === 'blocked' && <div className="pipeline-blocker" role="alert" aria-atomic="true">
-        <b>No voy a completar el costo con un supuesto inventado.</b>
+        <b>{authenticationRequired ? 'Tu producto está guardado. Falta iniciar sesión.' : 'Revisemos el siguiente paso.'}</b>
         <p>{blocker || 'La clasificación o un dato necesario para el cálculo necesita revisión.'}</p>
-        {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
+        {!authenticationRequired && analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
         <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <span>→</span></button>
+          {authenticationRequired && <button type="button" className="pipeline-secondary" onClick={() => window.dispatchEvent(new CustomEvent('shippingapp:auth-required'))}>Ingresar</button>}
+          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{authenticationRequired ? 'Ya ingresé: retomar mi producto' : refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <span>→</span></button>
           <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
         </div>
       </div>}

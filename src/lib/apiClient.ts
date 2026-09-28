@@ -1,3 +1,8 @@
+export class AuthenticationRequiredError extends Error {
+  readonly code = 'authentication_required'
+  constructor() { super('Ingresá a tu cuenta para continuar. Conservamos tu producto y los datos confirmados.'); this.name = 'AuthenticationRequiredError' }
+}
+
 export type ApiTokenProvider = () => Promise<string | null>
 
 let tokenProvider: ApiTokenProvider | null = null
@@ -84,7 +89,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
       token = lastUsableToken
       if (!token) {
         signalAuthenticationRequired()
-        throw new Error('No pude validar tu sesión. Volvé a ingresar y reintentá; no se consumió ningún análisis.')
+        throw new AuthenticationRequiredError()
       }
     }
     if (token) headers.set('authorization', `Bearer ${token}`)
@@ -94,7 +99,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   if (shouldAttach && response.status === 401) {
     lastUsableToken = null
     signalAuthenticationRequired()
-    throw new Error('Ingresá a tu cuenta para continuar. Después, reintentá la operación.')
+    throw new AuthenticationRequiredError()
   }
   if (shouldAttach) signalUsageUpdated(response)
   return response

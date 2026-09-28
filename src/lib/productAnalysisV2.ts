@@ -1,3 +1,5 @@
+import type { SupplierPrice } from './supplierPrice'
+import { AuthenticationRequiredError } from './apiClient'
 import { analyzeAlibabaUrl, applyAnalysis, readAlibabaProduct, startImportAnalysis, type ProductAnalysis } from './productAnalysis'
 import { customsProfileFor, type CustomsProfile } from './customsClassification'
 import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
@@ -5,6 +7,8 @@ import type { FullNcmApiResult } from './fullNcmClient'
 import type { Inputs } from './types'
 
 export type ProductAnalysisV2 = Omit<ProductAnalysis, 'usageReservationId'> & {
+  supplierPrice?: SupplierPrice
+  purchaseQuantity?: number
   customs: CustomsProfile
   /** Ephemeral only while the same paid case is still allowed to refine NCM. */
   usageReservationId?: string
@@ -66,7 +70,8 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
         maxAttempts: Number(full.refinement.maxAttempts) || 0,
       }
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof AuthenticationRequiredError) throw error
     customs = {
       ...localCustoms,
       source: `${localCustoms.source} Full-catalog retrieval no disponible; fallback seed fail-closed.`,
@@ -88,6 +93,8 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
   // a valid local-market observation that is still useful to the user.
   return {
     ...cleanBase,
+    ...('supplierPrice' in base ? { supplierPrice: base.supplierPrice as SupplierPrice } : {}),
+    ...('purchaseQuantity' in base ? { purchaseQuantity: Number(base.purchaseQuantity) || undefined } : {}),
     ...(keepReservation ? { usageReservationId } : {}),
     ...(refinement ? { classificationRefinement: refinement } : {}),
     customs,

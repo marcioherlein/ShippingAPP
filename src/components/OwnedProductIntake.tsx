@@ -77,7 +77,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
 
     {mode === 'link' && <form className="owned-product-entry" onSubmit={(event) => void submitLink(event)}>
       <div className="owned-product-entry-head">
-        <div><b>Pegá la publicación de Alibaba</b><small>ShippingAPP intenta lectura propia primero; Browser Run y Parse.bot quedan como respaldo. Esta lectura no consume un análisis.</small></div>
+        <div><b>Pegá la publicación de Alibaba</b><small>Leemos los datos disponibles. Podés revisarlos y corregirlos antes de continuar.</small></div>
         <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
       </div>
       <div className="owned-product-link-row">
@@ -92,7 +92,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
         />
         <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : 'Leer producto'} <UiIcon name="arrow-right" size={16} /></button>
       </div>
-      {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
+      {loading && <p className="owned-product-progress" role="status">Leyendo la publicación. Enseguida podrás revisar los datos encontrados.</p>}
     </form>}
 
     {mode === 'describe' && <form className="owned-product-entry" onSubmit={submitDescription}>

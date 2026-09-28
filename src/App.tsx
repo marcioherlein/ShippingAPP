@@ -1,3 +1,5 @@
+import { proposePurchase } from './lib/purchaseProposal'
+import { AuthenticationRequiredError } from './lib/apiClient'
 import { readProductDraft, writeProductDraft, clearProductDraft } from './lib/productDraft'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { startImportAnalysis } from './lib/productAnalysis'
@@ -17,6 +19,7 @@ import {
   missingClassificationConfirmationFields,
   missingQuoteConfirmationFields,
   productConfirmationFromAnalysis,
+  resolvedProductVolumeCbm,
   type ProductConfirmationData,
 } from './lib/productConfirmation'
 
@@ -87,7 +90,7 @@ function makeAnalysisPrefill(
       priceArs: Number(item.priceArs),
       ...(item.permalink?.startsWith('https://') ? { permalink: item.permalink } : {}),
     }))
-  const confirmedQuantity = analysis.suggestedQuantities[0] || analysis.product.moq || 0
+  const confirmedQuantity = analysis.purchaseQuantity || 0
   return {
     productName: analysis.product.name,
     originCountry: analysis.product.originCountry || '',
@@ -160,6 +163,7 @@ export default function App() {
   const [calculationStatus, setCalculationStatus] = useState<CalculationPipelineStatus>('confirm')
   const [pipelineStage, setPipelineStage] = useState(0)
   const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
+  const [authenticationRequired, setAuthenticationRequired] = useState(false)
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
 
@@ -207,7 +211,7 @@ export default function App() {
 
   const quoteSetup = useMemo<JourneyQuoteSetup>(() => ({
     budgetUsd: budgetMode === 'budget' ? budgetUsd : 0,
-    quantity: budgetMode === 'units' ? Math.max(unitsMin, Math.round((unitsMin + unitsMax) / 2)) : undefined,
+    quantity: budgetMode === 'units' && unitsMin === unitsMax ? unitsMin : undefined,
     purpose: purpose || 'unknown',
     entityType: entityType || 'unknown',
     hasImporterSignature: signature || 'unknown',
@@ -221,6 +225,7 @@ export default function App() {
     setPipelineStage(0)
     setPipelineSummary(null)
     setPipelineBlocker(null)
+    setAuthenticationRequired(false)
     setCalculationInputKey(null)
   }
 
@@ -232,7 +237,7 @@ export default function App() {
   }
 
   const handleAnalysis = (next: ProductAnalysisV2) => {
-    setAnalysis({ ...next, suggestedQuantities: quoteSetup.quantity ? [quoteSetup.quantity, ...next.suggestedQuantities] : next.suggestedQuantities })
+    setAnalysis({ ...next, purchaseQuantity: quoteSetup.quantity, suggestedQuantities: quoteSetup.quantity ? [quoteSetup.quantity, ...next.suggestedQuantities] : next.suggestedQuantities })
     resetPipeline()
     setStep(3)
     window.setTimeout(() => scrollElementIntoView(document.getElementById('case-confirmation')), 0)
@@ -268,6 +273,7 @@ export default function App() {
     setPipelineStage(0)
     setPipelineSummary(null)
     setPipelineBlocker(null)
+    setAuthenticationRequired(false)
     setCalculationInputKey(null)
     window.setTimeout(() => scrollElementIntoView(document.getElementById('case-confirmation')), 0)
   }
@@ -285,20 +291,23 @@ export default function App() {
 
     const runInputKey = currentCalculationInputKey
     const confirmedAnalysis = applyProductConfirmation(analysis, confirmedProduct)
+    writeProductDraft('analysis', { intent, analysis: confirmedAnalysis })
     setAnalysis(confirmedAnalysis)
     setCalculationInputKey(runInputKey)
     setCalculationStatus('processing')
     setPipelineStage(0)
     setPipelineSummary(null)
     setPipelineBlocker(null)
+    setAuthenticationRequired(false)
 
     try {
       const manualSelection = confirmedAnalysis.customs.source.includes('selección confirmada por el usuario')
-      const refreshed = manualSelection && !confirmedAnalysis.usageReservationId && !confirmedAnalysis.fx
+      const remoteAnalysis = manualSelection && !confirmedAnalysis.usageReservationId && !confirmedAnalysis.fx
         ? { ...await startImportAnalysis(confirmedAnalysis), customs: confirmedAnalysis.customs }
         : hasUsableClassification(confirmedAnalysis)
           ? confirmedAnalysis
           : await enrichProductAnalysisV2(confirmedAnalysis)
+      const refreshed = { ...remoteAnalysis, purchaseQuantity: confirmedAnalysis.purchaseQuantity, supplierPrice: confirmedAnalysis.supplierPrice }
       setAnalysis(refreshed)
 
       if (!refreshed.customs.ncmCandidate || refreshed.customs.classificationConfidence === 'missing') {
@@ -324,6 +333,10 @@ export default function App() {
         return
       }
 
+      if (!hasUsableClassification(confirmedAnalysis)) {
+        setCalculationStatus('confirm')
+        return
+      }
       const quoteMissing = missingQuoteConfirmationFields(productConfirmationFromAnalysis(refreshed))
       if (quoteMissing.length > 0) {
         setPipelineStage(2)
@@ -336,7 +349,7 @@ export default function App() {
       await nextPaint()
       setPipelineStage(2)
 
-      const baseQuantity = confirmedProduct.quantity ?? quoteSetup.quantity ?? (prefill.quantity || prefill.moq)
+      const baseQuantity = confirmedProduct.quantity ?? quoteSetup.quantity
       if (!baseQuantity || baseQuantity <= 0) {
         setPipelineBlocker('Necesito una cantidad base positiva para distribuir flete y gastos por unidad.')
         setCalculationStatus('blocked')
@@ -387,6 +400,7 @@ export default function App() {
         setPipelineStage(0)
         setPipelineSummary(null)
         setPipelineBlocker(null)
+    setAuthenticationRequired(false)
         return
       }
 
@@ -417,6 +431,12 @@ export default function App() {
       setStep(4)
       window.setTimeout(() => scrollElementIntoView(document.getElementById('calculator')), 80)
     } catch (error) {
+      setAuthenticationRequired(error instanceof AuthenticationRequiredError)
+      if (error instanceof AuthenticationRequiredError) {
+        const preserved = { ...confirmedAnalysis, customs: { ...confirmedAnalysis.customs, missingFacts: [] } }
+        setAnalysis(preserved)
+        writeProductDraft('analysis', { intent, analysis: preserved })
+      }
       setPipelineBlocker(error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.')
       setCalculationStatus('blocked')
     }
@@ -617,6 +637,18 @@ export default function App() {
         activeStage={pipelineStage}
         summary={pipelineSummary}
         blocker={pipelineBlocker}
+        authenticationRequired={authenticationRequired}
+        quantityRange={budgetMode === 'units' ? { min: unitsMin, max: unitsMax } : undefined}
+        proposeQuantity={(data) => proposePurchase({
+          originCountry: data.originCountry, unitPriceUsd: data.unitPriceUsd, unitWeightKg: data.unitWeightKg,
+          unitVolumeCbm: resolvedProductVolumeCbm(data), dutyRatePct: analysis.customs.dutyRatePct ?? 0,
+          statisticsRatePct: analysis.customs.statisticsRatePct, vatRatePct: analysis.customs.vatRatePct,
+          vatAdditionalRatePct: analysis.customs.vatAdditionalRatePct, gainsRatePct: analysis.customs.gainsRatePct,
+          iibbRatePct: analysis.customs.iibbRatePct, purpose: purpose || 'unknown', entityType: entityType || 'unknown',
+          hasImporterSignature: signature === 'unknown' || signature === null ? null : signature === 'yes',
+          sensitiveCategory: sensitiveCategory || 'unknown', capitalGoodEligible: analysis.customs.capitalGoodEligible ?? false,
+        }, budgetUsd, Math.max(data.moq || 1, data.supplierPrice?.minQuantity || 1), data.supplierPrice?.maxQuantity || 100000, data.supplierPrice?.unitsPerPack || 1)}
+        budgetUsd={budgetMode === 'budget' ? budgetUsd : undefined}
         onConfirm={(product) => void confirmAndCalculate(product)}
         onManualNcm={(customs, product) => {
           setAnalysis({ ...applyProductConfirmation(analysis, product), customs })

@@ -118,3 +118,13 @@ describe('progressive product confirmation', () => {
     expect(missingProductConfirmationFields(draft).length).toBeGreaterThan(0)
   })
 })
+
+it('does not turn supplier MOQ or suggested quantities into a purchase decision', () => {
+  const analysis = createManualProductAnalysis('manual://product', 'Botella de acero inoxidable')
+  analysis.product.moq = 50
+  analysis.suggestedQuantities = [100, 200]
+  expect(productConfirmationFromAnalysis(analysis).quantity).toBeUndefined()
+  const confirmed = applyProductConfirmation(analysis, { ...productConfirmationFromAnalysis(analysis), quantity: 75 })
+  expect(productConfirmationFromAnalysis(confirmed).quantity).toBe(75)
+  expect(confirmed.product.moq).toBe(50)
+})

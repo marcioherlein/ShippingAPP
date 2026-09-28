@@ -1,20 +1,37 @@
 # ShippingAPP — pending delivery batches
 
-Updated September 23, 2026 from the owner's requested corrections.
+Updated September 28, 2026 from the owner's requested corrections.
 Budget: no paid services or plan upgrades. Clerk production cutover is deferred.
-Current main: 5aa4b6f. Never equate a successful build with production recovery.
+Verified production baseline: bed7d74 (#188). Never equate a successful build with production recovery.
 
-## Batch 1 — free compute recovery (in progress)
+## Batch 1 — free compute recovery (production gates passed)
 
 - Route API processing through SQLite-backed Durable Objects on Workers Free.
 - Preserve authentication, credits, requests and source-evidence requirements.
 - Pass CI, real Wrangler runtime, deployment, 20 intake + 20 NCM cases, local
   retailer comparisons and chat tests before closing the incident.
-- Current local evidence: 934 tests and production build passed. Wrangler bundle
-  dry-run passed. Local runtime blocked by uv_interface_addresses environment
-  error; CI must supply real runtime evidence. Not deployed yet.
+- PR #188 merged; production run 35910011942 passed deployment, intake,
+  classification and alternative-retailer market gates on September 23.
+- Mercado Libre is still unresolved: its non-blocking diagnostic reported
+  listing search blocked and no usable ARS catalog prices. A green workflow
+  does not mean this provider is healthy. Keep the retailer fallback and track
+  provider coverage independently.
 
 ## Batch 2 — extracted facts, currency and supplier confirmation
+
+### 2A — explicit review before quoting (implementation in review)
+
+- Require an unchecked acknowledgement before quoting the reviewed product, unit
+  USD price, supplier minimum and shipment data. Edits and refreshed analysis
+  clear the acknowledgement; the submit handler also guards it.
+- Show identity, source, description and known commercial facts together.
+  Missing MOQ is explicitly shown as not supplied and remains optional.
+- Browser regression covers blocked submit, explicit acknowledgement and price
+  changes invalidating acknowledgement at mobile and desktop widths.
+- This does not complete currency provenance/conversion, price tier/pack or
+  variant validation. Those remain pending in 2B below.
+
+### 2B — currency and supplier price evidence (pending)
 
 - Require an explicit user confirmation of ALL extracted facts before using them
   for a calculation: name/type, supplier URL, variant, price, original currency,
@@ -85,3 +102,25 @@ Record each batch's PR/commit, test results, production deployment and live case
 results here. No batch is complete merely because its implementation is present.
 Keep external-provider coverage gaps visible; never lower comparable-product
 quality thresholds just to make a gate green.
+
+## September 28 implementation — awaiting release verification
+
+- Typed authentication recovery preserves confirmed identity, quantity and supplier
+  review across a 401; stale classification missing-facts are not presented as an
+  authentication recovery action. No automatic metered retry.
+- One review of original price/currency, variant, pack size, volume tier, MOQ and
+  physical facts. Ambiguous currency blocks quoting; USD is unchanged, ARS uses
+  the existing dated BCRA A3500 evidence, and supported cross currencies use the
+  free ECB Frankfurter endpoint. Missing/stale evidence blocks conversion.
+- Explicit purchase quantity is separate from supplier MOQ and suggestions.
+  Ranges require a choice; budget proposals use complete landed costs and stay
+  within the confirmed price tier. Accepting MOQ is an explicit action.
+- Deterministic Spanish vocabulary preserves original titles, models and units;
+  the same vocabulary improves local-market queries without guessing specs.
+- After one classification clarification, repeated failure points to the existing
+  validated manual nomenclature picker. No forced restart.
+- Responsive supplier review and Chromium/mobile WebKit coverage added.
+- Local browser binaries could not be downloaded (corrupt upstream archive).
+  Remote browser and production gates remain required before closing batches.
+- Vocabulary translation covers known terms only; unknown supplier terms remain
+  visible verbatim for correction. No new paid service or plan change.

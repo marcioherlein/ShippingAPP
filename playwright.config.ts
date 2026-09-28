@@ -18,7 +18,7 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile-webkit',
-      testMatch: '**/journey-persistence.e2e.ts',
+      testMatch: ['**/journey-persistence.e2e.ts', '**/intake-recovery.e2e.ts'],
       use: { ...devices['iPhone 13'] },
     },
     {

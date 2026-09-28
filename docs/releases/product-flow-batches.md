@@ -1,6 +1,6 @@
 # ShippingAPP — pending delivery batches
 
-Updated September 26, 2026 from the owner's requested corrections.
+Updated September 28, 2026 from the owner's requested corrections.
 Budget: no paid services or plan upgrades. Clerk production cutover is deferred.
 Verified production baseline: bed7d74 (#188). Never equate a successful build with production recovery.
 
@@ -102,3 +102,25 @@ Record each batch's PR/commit, test results, production deployment and live case
 results here. No batch is complete merely because its implementation is present.
 Keep external-provider coverage gaps visible; never lower comparable-product
 quality thresholds just to make a gate green.
+
+## September 28 implementation — awaiting release verification
+
+- Typed authentication recovery preserves confirmed identity, quantity and supplier
+  review across a 401; stale classification missing-facts are not presented as an
+  authentication recovery action. No automatic metered retry.
+- One review of original price/currency, variant, pack size, volume tier, MOQ and
+  physical facts. Ambiguous currency blocks quoting; USD is unchanged, ARS uses
+  the existing dated BCRA A3500 evidence, and supported cross currencies use the
+  free ECB Frankfurter endpoint. Missing/stale evidence blocks conversion.
+- Explicit purchase quantity is separate from supplier MOQ and suggestions.
+  Ranges require a choice; budget proposals use complete landed costs and stay
+  within the confirmed price tier. Accepting MOQ is an explicit action.
+- Deterministic Spanish vocabulary preserves original titles, models and units;
+  the same vocabulary improves local-market queries without guessing specs.
+- After one classification clarification, repeated failure points to the existing
+  validated manual nomenclature picker. No forced restart.
+- Responsive supplier review and Chromium/mobile WebKit coverage added.
+- Local browser binaries could not be downloaded (corrupt upstream archive).
+  Remote browser and production gates remain required before closing batches.
+- Vocabulary translation covers known terms only; unknown supplier terms remain
+  visible verbatim for correction. No new paid service or plan change.

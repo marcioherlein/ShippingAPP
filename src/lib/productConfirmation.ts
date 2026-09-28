@@ -1,7 +1,9 @@
+import type { SupplierPrice } from './supplierPrice'
 import { customsProfileFor } from './customsClassification'
 import type { ProductAnalysisV2 } from './productAnalysisV2'
 
 export type ProductConfirmationData = {
+  supplierPrice?: SupplierPrice
   productName: string
   category: string
   description: string
@@ -76,6 +78,7 @@ export function resolvedProductVolumeCbm(data: ProductConfirmationData) {
 
 export function productConfirmationFromAnalysis(analysis: ProductAnalysisV2): ProductConfirmationData {
   return {
+    supplierPrice: analysis.supplierPrice,
     productName: cleanText(analysis.product.name, 500),
     category: cleanText(analysis.product.category, 300),
     description: cleanText(analysis.product.description, 1200),
@@ -83,7 +86,7 @@ export function productConfirmationFromAnalysis(analysis: ProductAnalysisV2): Pr
     functionText: cleanText(analysis.product.functionText, 500),
     originCountry: cleanText(analysis.product.originCountry, 120),
     unitPriceUsd: positive(analysis.product.unitPriceUsd),
-    quantity: positive(analysis.suggestedQuantities[0]) || positive(analysis.product.moq) || 1,
+    quantity: positive(analysis.purchaseQuantity) || undefined,
     moq: positive(analysis.product.moq),
     unitWeightKg: positive(analysis.product.packedWeightKg),
     unitVolumeCbm: positive(analysis.product.volumeCbm),
@@ -154,6 +157,9 @@ export function applyProductConfirmation(analysis: ProductAnalysisV2, data: Prod
       packedWeightKg: positive(data.unitWeightKg),
       volumeCbm: resolvedProductVolumeCbm(data),
     },
+    supplierPrice: data.supplierPrice,
+    fx: data.supplierPrice?.officialFx || analysis.fx,
+    purchaseQuantity: positive(data.quantity) || undefined,
     suggestedQuantities,
     // Logistics/commercial corrections do not invalidate an already-resolved
     // NCM. Any change to product identity does invalidate it and forces rerun.

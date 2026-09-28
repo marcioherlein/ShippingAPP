@@ -43,3 +43,12 @@
 .pipeline-facts-review:focus-within { outline: 2px solid #2563eb; outline-offset: 3px; }
 .pipeline-review-source { overflow-wrap: anywhere; font-size: .875rem; }
 .pipeline-review-help { font-size: .875rem; color: #475569; }
+
+/* Supplier review stays within the mobile viewport, including long source URLs. */
+.supplier-price-review { min-width: 0; margin: 20px 0; padding: 16px; border: 1px solid var(--border, #dce0e8); border-radius: 16px; }
+.supplier-price-review legend { font-weight: 650; padding: 0 6px; }
+.supplier-price-review input, .supplier-price-review select { width: 100%; min-width: 0; min-height: 44px; font: inherit; }
+.supplier-price-review button { min-height: 44px; }
+.supplier-price-review a, .pipeline-review-source { overflow-wrap: anywhere; }
+.supplier-price-review p { line-height: 1.5; }
+@media (max-width: 600px) { .supplier-price-review { padding: 12px; } .supplier-price-review .pipeline-progressive-fields { grid-template-columns: minmax(0, 1fr); } }

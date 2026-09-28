@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch, setApiTokenProvider } from './apiClient'
+import { AuthenticationRequiredError, apiFetch, setApiTokenProvider } from './apiClient'
 
 describe('apiFetch authentication and metering transport boundary', () => {
   afterEach(() => {
@@ -61,7 +61,7 @@ describe('apiFetch authentication and metering transport boundary', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(apiFetch('/api/opportunity-search', { method: 'POST' })).rejects.toThrow('Ingresá a tu cuenta para continuar')
-    await expect(apiFetch('/api/intake', { method: 'POST' })).rejects.toThrow('No pude validar tu sesión')
+    await expect(apiFetch('/api/intake', { method: 'POST' })).rejects.toBeInstanceOf(AuthenticationRequiredError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -71,7 +71,7 @@ describe('apiFetch authentication and metering transport boundary', () => {
     vi.stubGlobal('fetch', fetchMock)
     await apiFetch('/api/me')
     await apiFetch('/api/me')
-    await expect(apiFetch('/api/intake')).rejects.toThrow('No pude validar tu sesión')
+    await expect(apiFetch('/api/intake')).rejects.toBeInstanceOf(AuthenticationRequiredError)
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 

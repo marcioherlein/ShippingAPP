@@ -1,3 +1,4 @@
+import { spanishProductText } from '../src/lib/productLanguage'
 import { EXCLUDED_LISTING_TERMS, HIGH_BRAND_EQUITY } from './catalogRules'
 import type { MlAttribute, MlResult } from './marketTypes'
 
@@ -44,7 +45,7 @@ const SEARCH_TRANSLATIONS: Record<string, string> = {
   blender: 'licuadora',
   headphones: 'auriculares',
   speaker: 'parlante',
-  racket: 'paleta',
+  racket: 'raqueta',
   'padel racket': 'paleta padel',
 }
 
@@ -366,7 +367,7 @@ export function buildMarketQuery(productName: string, category: string) {
   }
 
   const translatedCategory = SEARCH_TRANSLATIONS[cleanText(category)] || cleanText(category)
-  const source = [...tokens(productName), ...tokens(translatedCategory)]
+  const source = [...tokens(spanishProductText(productName)), ...tokens(spanishProductText(translatedCategory))]
   const unique: string[] = []
   for (const token of source) {
     if (!unique.includes(token)) unique.push(token)

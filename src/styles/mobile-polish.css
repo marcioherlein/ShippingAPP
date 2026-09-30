@@ -1,4 +1,3 @@
-html { scroll-behavior: smooth; }
 body { background: radial-gradient(circle at top left, rgba(38, 212, 218, .16), transparent 34%), linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%); }
 .mobile-app-shell { max-width: 1220px; padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 .mobile-topbar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); background: rgba(248, 251, 255, .78); border-bottom: 1px solid rgba(167, 181, 207, .28); }

@@ -156,7 +156,7 @@ function captureOperation() {
   const entity = selectedRadioCopy('¿Quién importa?') || completed[1] || ''
   const signature = selectedRadioCopy('¿Tenés firma/importador para operar?') || completed[2] || ''
   const sensitive = completed[3] || ''
-  const selectedSensitive = document.querySelector<HTMLSelectElement>('#journey-sensitive-category')?.value
+  const selectedSensitive = document.getElementById('journey-sensitive-category')?.getAttribute('data-value') || undefined
 
   return {
     purpose: mapByPrefix(purpose, purposeByCopy),
@@ -316,13 +316,22 @@ function dispatchControlledChange(element: HTMLInputElement | HTMLSelectElement,
   element.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
+// Drive a DsSelect (custom listbox) the way a user would: open the trigger, then
+// click the option carrying the target data-value. Mirrors the radio replay.
+async function selectDsOption(triggerId: string, value: string) {
+  const trigger = await waitFor(() => document.getElementById(triggerId) as HTMLButtonElement | null)
+  if (trigger.getAttribute('data-value') === value) return
+  if (trigger.getAttribute('aria-expanded') !== 'true') trigger.click()
+  const option = await waitFor(() => document.querySelector<HTMLElement>(`#${triggerId}-listbox [data-value="${value}"]`))
+  option.click()
+}
+
 async function restoreOperation(state: PersistedJourneyState) {
   await selectRadio('¿Para qué lo traés?', state.purpose ? purposeCopy[state.purpose] : undefined)
   await selectRadio('¿Quién importa?', state.entityType ? entityCopy[state.entityType] : undefined)
   await selectRadio('¿Tenés firma/importador para operar?', state.signature ? signatureCopy[state.signature] : undefined)
   if (state.sensitiveCategory) {
-    const select = await waitFor(() => document.querySelector<HTMLSelectElement>('#journey-sensitive-category'))
-    if (select.value !== state.sensitiveCategory) dispatchControlledChange(select, state.sensitiveCategory)
+    await selectDsOption('journey-sensitive-category', state.sensitiveCategory)
   }
 }
 
@@ -478,7 +487,7 @@ export function installJourneyPersistence() {
     subtree: true,
     childList: true,
     attributes: true,
-    attributeFilter: ['class', 'aria-checked'],
+    attributeFilter: ['class', 'aria-checked', 'data-value'],
   })
 
   const initial = readInitialState()

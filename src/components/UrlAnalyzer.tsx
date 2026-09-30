@@ -6,6 +6,7 @@ import { isAlibabaUrl } from '../lib/productIntake'
 import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
 import { buildDiscoveryQuery, isGenericAlibabaSearchRequest } from '../lib/searchIntent'
+import { translateProductLabel } from '../lib/productTranslation'
 
 type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
@@ -236,9 +237,17 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       </div> : <div className="customs-note"><b>Sin resultados utilizables</b><span>Probá con nombre + material + uso, o pegá directamente una publicación de Alibaba.</span></div>}
     </section>}
 
-    {analysis && !loading && <div className="extraction-card">
+    {analysis && !loading && (() => {
+      const productLabel = analysis.product.name ? translateProductLabel(analysis.product.name) : null
+      const showSpanish = Boolean(productLabel?.fromEnglish && productLabel.translated)
+      return <div className="extraction-card">
       <div className="extraction-top">
-        <div><span className="eyebrow">Producto seleccionado</span><h2>{analysis.product.name || 'Necesito que me digas qué producto es'}</h2><p>{readLabel(analysis)}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div>
+        <div>
+          <span className="eyebrow">Producto seleccionado</span>
+          <h2>{analysis.product.name || 'Necesito que me digas qué producto es'}</h2>
+          {showSpanish && <p className="extraction-translation" title="Traducción para orientarte; el nombre original del proveedor se mantiene arriba.">En español: {productLabel!.text}</p>}
+          <p>{readLabel(analysis)}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p>
+        </div>
         {analysis.confidence.overall > 0 && <span className="confidence">{analysis.confidence.overall}% detectado</span>}
       </div>
       <div className="fact-grid">
@@ -249,6 +258,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       </div>
       <p className="assumption-note">Siguiente paso: revisá lo detectado abajo. La app sólo te va a pedir los campos imprescindibles que falten.</p>
       {constraintChecks.length > 0 && <div className="constraint-checks">{constraintChecks.map((check) => <span key={check.id} className={check.status === 'pass' ? 'score-pill' : 'score-pill warning-pill'} title={check.detail}>{check.status === 'pass' ? 'OK' : check.status === 'fail' ? 'No cumple' : 'Falta verificar'} · {check.label}</span>)}</div>}
-    </div>}
+    </div>
+    })()}
   </section>
 }

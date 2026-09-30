@@ -11,6 +11,7 @@ import { enrichProductAnalysisV2, ingestAlibabaUrlV2, type ProductAnalysisV2 } f
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
 import { getJourneyBudgetError } from './lib/journeyValidation'
 import { scrollElementIntoView, scrollWindowToTop } from './lib/motionPreference'
+import { translateProductLabel } from './lib/productTranslation'
 import {
   applyProductConfirmation,
   createManualProductAnalysis,
@@ -596,6 +597,12 @@ export default function App() {
         <div className="journey-summary-sticky">
           <span className="eyebrow">Caso en construcción</span>
           <h2>{analysisPrefill?.productName || (intent === 'have_product' ? 'Tu producto' : 'Nueva importación')}</h2>
+          {(() => {
+            const label = analysisPrefill?.productName ? translateProductLabel(analysisPrefill.productName) : null
+            return label?.fromEnglish && label.translated
+              ? <p className="journey-summary-translation">En español: {label.text}</p>
+              : null
+          })()}
           <div className="journey-summary-list">
             <div><span>Objetivo</span><b>{intent === 'have_product' ? 'Cotizar producto propio' : intent === 'search_product' ? 'Buscar + cotizar' : intent === 'discover' ? 'Explorar + cotizar' : 'Sin elegir'}</b></div>
             <div><span>Uso</span><b>{purposeLabel(purpose)}</b></div>

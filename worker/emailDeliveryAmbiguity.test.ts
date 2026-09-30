@@ -65,8 +65,8 @@ function env(db: D1DatabaseLike) {
     DB: db,
     EMAIL_SENDING_ENABLED: 'true',
     EMAIL_DELIVERY_MODE: 'all',
-    EMAIL_FROM: 'ShippingAPP <onboarding@resend.dev>',
-    EMAIL_APP_NAME: 'ShippingAPP',
+    EMAIL_FROM: 'GlobalShipping <onboarding@resend.dev>',
+    EMAIL_APP_NAME: 'GlobalShipping',
   }
 }
 

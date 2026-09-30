@@ -29,11 +29,5 @@
 .discovery-actions a { color: #344054; background: #eef2f6; text-decoration: none; }
 .discovery-actions button { color: #fff; background: #172033; }
 .discovery-actions button:disabled { opacity: .55; cursor: not-allowed; }
-.constraint-checks { margin-top: 16px; padding: 13px; border-radius: 13px; background: #f7f9fc; border: 1px solid #e1e6ef; }
-.constraint-checks > b { display: block; font-size: 12px; margin-bottom: 9px; }
-.constraint-checks > div { display: flex; flex-wrap: wrap; gap: 7px; }
-.constraint-checks span { padding: 6px 9px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .03em; }
-.constraint-pass { color: #166534; background: #dcfce7; }
-.constraint-fail { color: #991b1b; background: #fee2e2; }
-.constraint-pending { color: #854d0e; background: #fef3c7; }
+.constraint-checks { margin-top: 16px; padding: 14px; border-radius: var(--ds-radius-md); background: var(--ds-surface-subtle); border: 1px solid var(--ds-border-soft); display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 760px) { .intake-message { max-width: 94%; } .discovery-head { flex-direction: column; } .discovery-grid { grid-template-columns: 1fr; } .discovery-item-top { align-items: flex-start; } }

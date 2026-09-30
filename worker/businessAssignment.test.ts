@@ -175,7 +175,7 @@ describe('business assignment golden cases', () => {
     expect(body.product.packedWeightKg).toBe(0.58)
     expect(body.product.volumeCbm).toBe(0.006)
     expect(body.market.estimatedPriceArs).toBe(220000)
-    expect(body.market.source).toBe('ShippingAPP category benchmark')
+    expect(body.market.source).toBe('GlobalShipping category benchmark')
     expect(body.suggestedQuantities).toEqual([100, 150, 200, 300])
     expect(body.confidence.market).toBe('benchmark')
   })

@@ -45,7 +45,7 @@ describe('MercadoLibre benchmark endpoints', () => {
     const body = await response.text()
 
     expect(body).toContain('abc123')
-    expect(body).toContain('MercadoLibre autorizó ShippingAPP')
+    expect(body).toContain('MercadoLibre autorizó GlobalShipping')
     expect(body).not.toContain('access_token')
     expect(body).not.toContain('client_secret')
   })

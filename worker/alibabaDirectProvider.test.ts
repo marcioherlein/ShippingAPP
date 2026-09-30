@@ -7,7 +7,7 @@ function htmlWithProduct(product: Record<string, unknown>) {
   return `<!doctype html><html><head><meta property="og:title" content="${String(product.productTitle || 'Alibaba product')}"></head><body><script>window.__PRODUCT__ = ${JSON.stringify({ product })};</script>${'product detail supplier wholesale '.repeat(30)}</body></html>`
 }
 
-describe('ShippingAPP direct Alibaba provider', () => {
+describe('GlobalShipping direct Alibaba provider', () => {
   it('returns ready when all seven core quotation signals are explicit', async () => {
     const fetchImpl = vi.fn(async () => new Response(htmlWithProduct({
       productId: '1601666174891',

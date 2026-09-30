@@ -3,8 +3,8 @@ import { corroborateAlibabaPublicListing, type AlibabaPublicCorroborationResult 
 import { corroborateAlibabaHighSignalRoutes } from './alibabaHighSignalCorroboration'
 
 export type DirectAlibabaResult =
-  | { status: 'ready' | 'partial'; source: 'ShippingAPP direct Alibaba'; facts: AlibabaDirectFacts; httpStatus: number; warnings: string[] }
-  | { status: 'unavailable'; source: 'ShippingAPP direct Alibaba'; facts: null; httpStatus: number | null; warnings: string[] }
+  | { status: 'ready' | 'partial'; source: 'GlobalShipping direct Alibaba'; facts: AlibabaDirectFacts; httpStatus: number; warnings: string[] }
+  | { status: 'unavailable'; source: 'GlobalShipping direct Alibaba'; facts: null; httpStatus: number | null; warnings: string[] }
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 type CorroborationReader = (
@@ -205,14 +205,14 @@ export async function extractAlibabaDirectHttp(
     })
   } catch (error) {
     return {
-      status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: null,
+      status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: null,
       warnings: [`Direct Alibaba fetch failed: ${error instanceof Error ? error.message : 'unknown error'}`],
     }
   }
 
   if (!response.ok) {
     return {
-      status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: response.status,
+      status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: response.status,
       warnings: [`Direct Alibaba fetch returned HTTP ${response.status}.`],
     }
   }
@@ -220,14 +220,14 @@ export async function extractAlibabaDirectHttp(
   let html = ''
   try { html = await response.text() } catch {
     return {
-      status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: response.status,
+      status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: response.status,
       warnings: ['Direct Alibaba response could not be read as text.'],
     }
   }
 
   if (!html || html.length < 80) {
     return {
-      status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: response.status,
+      status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: response.status,
       warnings: ['Direct Alibaba response was empty or too small to contain product evidence.'],
     }
   }
@@ -266,17 +266,17 @@ export async function extractAlibabaDirectHttp(
   const identity = Boolean(facts.name || facts.category)
   if (!identity || facts.evidence.length < 2) {
     return {
-      status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: response.status,
+      status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: response.status,
       warnings: ['Direct Alibaba HTML/public listings did not expose enough trustworthy product evidence.', ...corroborationWarnings],
     }
   }
 
   const warnings: string[] = [...corroborationWarnings]
   if (facts.evidence.includes('url_slug_title') && !extracted.name) {
-    warnings.push('Alibaba bloqueó o no expuso el título en HTML; ShippingAPP preservó como identidad provisional el título explícito del URL. El usuario debe confirmarlo antes de NCM.')
+    warnings.push('Alibaba bloqueó o no expuso el título en HTML; GlobalShipping preservó como identidad provisional el título explícito del URL. El usuario debe confirmarlo antes de NCM.')
   }
   if (facts.evidence.some((item) => item.startsWith('public_listing:'))) {
-    warnings.push('ShippingAPP corroboró datos comerciales en una superficie pública de Alibaba usando el mismo product_id; siguen sujetos a confirmación obligatoria antes de NCM/economics.')
+    warnings.push('GlobalShipping corroboró datos comerciales en una superficie pública de Alibaba usando el mismo product_id; siguen sujetos a confirmación obligatoria antes de NCM/economics.')
   }
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por la lectura pública directa.')
   if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por la lectura pública directa.')
@@ -286,7 +286,7 @@ export async function extractAlibabaDirectHttp(
 
   return {
     status: signals >= 7 ? 'ready' : 'partial',
-    source: 'ShippingAPP direct Alibaba',
+    source: 'GlobalShipping direct Alibaba',
     facts,
     httpStatus: response.status,
     warnings,

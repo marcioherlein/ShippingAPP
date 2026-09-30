@@ -77,7 +77,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onDescribeProduct }:
 
     {mode === 'link' && <form className="owned-product-entry" onSubmit={(event) => void submitLink(event)}>
       <div className="owned-product-entry-head">
-        <div><b>Pegá la publicación de Alibaba</b><small>ShippingAPP intenta lectura propia primero; Browser Run y Parse.bot quedan como respaldo. Esta lectura no consume un análisis.</small></div>
+        <div><b>Pegá la publicación de Alibaba</b><small>GlobalShipping intenta lectura propia primero; Browser Run y Parse.bot quedan como respaldo. Esta lectura no consume un análisis.</small></div>
         <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
       </div>
       <div className="owned-product-link-row">

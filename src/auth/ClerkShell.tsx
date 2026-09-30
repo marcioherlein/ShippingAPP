@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Show, SignInButton, SignUpButton, UserButton, useAuth, useClerk } from '@clerk/react'
 import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
 import { saveCompletedAnalysis } from '../lib/analysisHistory'
@@ -77,6 +77,18 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
     window.addEventListener('shippingapp:auth-required', requestSignIn)
     return () => window.removeEventListener('shippingapp:auth-required', requestSignIn)
   }, [clerk])
+
+  // Announce the sign-in transition so a search interrupted by the sign-in
+  // modal can resume where the user left off. Only the signed-out → signed-in
+  // edge fires it, so an already-signed-in reload never re-runs a metered call.
+  const wasSignedIn = useRef(false)
+  useEffect(() => {
+    if (!isLoaded) return
+    if (isSignedIn && !wasSignedIn.current) {
+      window.dispatchEvent(new CustomEvent('shippingapp:auth-resolved'))
+    }
+    wasSignedIn.current = !!isSignedIn
+  }, [isLoaded, isSignedIn])
 
   const accountLabel = accountSync === 'ready'
     ? historySave === 'saving'

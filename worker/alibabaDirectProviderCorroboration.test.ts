@@ -28,7 +28,7 @@ function publicWatch(): AlibabaPublicCorroborationResult {
   }
 }
 
-describe('ShippingAPP direct provider public-listing corroboration', () => {
+describe('GlobalShipping direct provider public-listing corroboration', () => {
   it('recovers watch category, price and MOQ for the exact id before Parse.bot or Browser Run', async () => {
     const productFetch = vi.fn(async () => new Response(sparseProductPage(), { status: 200 }))
     const corroboration = vi.fn(async () => publicWatch())

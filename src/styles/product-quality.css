@@ -49,8 +49,9 @@ body { background: var(--ds-surface-subtle); }
   margin: .75rem auto; font-size: clamp(1.75rem, 4vw, 2.5rem);
   font-weight: 650; letter-spacing: -.035em; line-height: 1.15; text-wrap: balance;
 }
-.journey-app:has(.journey-bubble.user) :is(.journey-landing-hero, .journey-how-it-works, .journey-trust-strip) { display: none; }
 .journey-app:has(.journey-bubble.user) .journey-task-title { margin-inline: 0; }
+/* Land JS scroll targets below the sticky top bar, not underneath it. */
+#case-confirmation, #calculator, .journey-product-surface, .journey-pipeline-section { scroll-margin-top: 92px; }
 .journey-conversation, .journey-calculator-section, .calculation-pipeline {
   background: var(--ds-surface); border: 1px solid var(--ds-border-soft);
   box-shadow: var(--ds-shadow-1); backdrop-filter: none; -webkit-backdrop-filter: none;

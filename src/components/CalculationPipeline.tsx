@@ -1,9 +1,12 @@
 import ManualNcmPicker from './ManualNcmPicker'
+import DsSelect from './DsSelect'
+import UiIcon from './UiIcon'
 import type { CustomsProfile } from '../lib/customsClassification'
 import React, { useEffect, useMemo, useState } from 'react'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { usd } from '../lib/format'
+import { convertToUsd, CURRENCY_LABELS, type CurrencyCode } from '../lib/currency'
 import {
   applyClassificationClarification,
   classificationClarificationTarget,
@@ -165,6 +168,26 @@ function clarificationCopy(analysis: ProductAnalysisV2, target: ClassificationCl
   }
 }
 
+/**
+ * Actionable guidance shown when the automatic NCM classifier cannot resolve a
+ * confident position (audit item #2: "guía al usuario si el nomenclador falla").
+ * Turns a dead-end into concrete next steps instead of just reporting failure.
+ */
+function NomencladorGuidance({ onManualSearch }: { onManualSearch?: () => void }) {
+  return <div className="pipeline-ncm-guidance">
+    <div className="pipeline-ncm-guidance-head">
+      <span className="eyebrow">No te quedes trabado</span>
+      <b>Cómo seguir si no puedo clasificarlo solo</b>
+      <small>La clasificación NCM depende de material, función y uso. Cuando esos datos no alcanzan, tenés tres caminos y ninguno reinicia el caso.</small>
+    </div>
+    <ol className="pipeline-ncm-guidance-steps">
+      <li><b>Describilo con otras palabras.</b> Sumá material, para qué se usa y qué lo diferencia. Muchas veces el nombre comercial solo no alcanza para elegir la posición.</li>
+      <li><b>Buscá la posición vos mismo.</b> Abrí el nomenclador, buscá por producto o código y validamos que exista y tenga aranceles antes de usarla.{onManualSearch && <> <button type="button" className="pipeline-link-action" onClick={onManualSearch}>Abrir el buscador del nomenclador</button></>}</li>
+      <li><b>Usá una posición que ya conocés.</b> Si tenés el NCM de una importación anterior o de tu despachante, cargalo directo en el buscador y confirmalo.</li>
+    </ol>
+  </div>
+}
+
 export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
@@ -174,6 +197,12 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const [showCorrections, setShowCorrections] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
   const [clarification, setClarification] = useState('')
+  // Currency of the extracted supplier price. Alibaba defaults to USD, but a
+  // ¥/€ price must be converted to official dollars before the engine uses it
+  // (audit item #1). Kept as UI state so confirming does not mutate the shape
+  // of ProductConfirmationData.
+  const [priceCurrency, setPriceCurrency] = useState<CurrencyCode>('USD')
+  const [fxRateInput, setFxRateInput] = useState('')
 
   useEffect(() => {
     // A refinement returns a new analysis with the same sourceUrl. Sync from the
@@ -183,6 +212,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     setShowCorrections(false)
     setShowAllQuoteFields(false)
     setClarification('')
+    setPriceCurrency('USD')
+    setFxRateInput('')
   }, [analysis])
 
   const sourceDraft = useMemo(() => productConfirmationFromAnalysis(analysis), [analysis])
@@ -206,6 +237,13 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     ? quoteMissing.length === 0 && (draft.quantity ?? 0) > 0
     : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied
   const volume = resolvedProductVolumeCbm(draft)
+  // Quantity is only a real question when nothing in the analysis implies it.
+  // A supplier MOQ or a suggested quantity already answers "how many"; asking
+  // again is the redundant prompt the UX audit called out.
+  const quantitySignal = (analysis.suggestedQuantities?.[0] ?? 0) > 0 || (analysis.product.moq ?? 0) > 0
+  const minimumQuantity = Math.max(1, Math.floor(analysis.product.moq || draft.moq || 1))
+  const fxRate = fxRateInput.trim() ? Number(fxRateInput) : null
+  const priceConversion = convertToUsd(draft.unitPriceUsd, priceCurrency, fxRate)
 
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -221,6 +259,13 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   }
 
   const quoteFieldMissing = (id: string) => quoteMissing.some((item) => item.id === id)
+
+  const applyCurrencyConversion = () => {
+    if (priceCurrency === 'USD') return
+    update('unitPriceUsd', priceConversion.amountUsd)
+    setPriceCurrency('USD')
+    setFxRateInput('')
+  }
 
   return <section className="calculation-pipeline" id="case-confirmation" aria-busy={status === 'processing'}>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>
@@ -285,15 +330,16 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
 
           {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Todavía no puedo clasificarlo.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
           {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No pude cerrar una clasificación confiable.</b><span>Se usaron {refinement?.attempt} de {refinement?.maxAttempts} intentos de aclaración. Podés buscar y confirmar una posición en el nomenclador sin iniciar otro caso.</span></div>}
+          {refinementExhausted && <NomencladorGuidance onManualSearch={() => setShowManualNcm(true)} />}
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <span>→</span></button>}
+            {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <UiIcon name="arrow-right" size={16} /></button>}
             <button type="button" className="pipeline-secondary" onClick={onEditProduct}>{refinementExhausted ? 'Revisar / cambiar producto' : 'Cambiar producto'}</button>
           </div>
         </> : <>
           <div className="pipeline-classification-ready">
             <div><span className="eyebrow">Clasificación lista</span><h3>NCM {analysis.customs.ncmCandidate}</h3><p>Confianza {confidenceLabel(analysis.customs.classificationConfidence)} · derecho {analysis.customs.dutyRatePct}%</p></div>
-            <span aria-hidden="true">✓</span>
+            <span className="pipeline-classification-check" aria-hidden="true"><UiIcon name="check" size={18} /></span>
           </div>
 
           <div className="pipeline-understood-card quote-known-card">
@@ -304,9 +350,34 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
               {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
               {knownFact('Peso embalado', draft.unitWeightKg > 0 ? `${draft.unitWeightKg} kg/u.` : null, 'weight')}
               {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : null, 'volume')}
+              {quantitySignal && knownFact('Cantidad', draft.quantity ? `${draft.quantity} u.` : null, 'quantity')}
             </div>
             <button type="button" className="pipeline-secondary" aria-expanded={showAllQuoteFields} onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Mostrar sólo faltantes' : 'Corregir un dato detectado'}</button>
           </div>
+
+          {draft.unitPriceUsd > 0 && <div className="pipeline-currency-confirm">
+            <div className="pipeline-currency-head"><b>Confirmá el precio y la cantidad mínima</b><small>Reviso lo que extraje. Si el proveedor expresa el precio en otra moneda, pasalo a dólares oficiales antes de calcular.</small></div>
+            <div className="pipeline-currency-facts">
+              <div><span>Precio FOB detectado</span><b>{priceCurrency === 'USD' ? usd(draft.unitPriceUsd) : `${draft.unitPriceUsd} ${priceCurrency}`}</b></div>
+              <div><span>Cantidad mínima (MOQ)</span><b>{draft.moq > 0 ? `${draft.moq} u.` : 'Sin dato'}</b></div>
+            </div>
+            <div className="pipeline-currency-grid">
+              <label className="pipeline-confirm-field"><span>Moneda del precio del proveedor</span>
+                <DsSelect
+                  ariaLabel="Moneda del precio del proveedor"
+                  value={priceCurrency}
+                  onChange={(value) => setPriceCurrency(value as CurrencyCode)}
+                  options={(Object.keys(CURRENCY_LABELS) as CurrencyCode[]).map((code) => ({ value: code, label: `${code} · ${CURRENCY_LABELS[code]}` }))}
+                />
+              </label>
+              {priceCurrency !== 'USD' && <label className="pipeline-confirm-field"><span>Tipo de cambio (USD por 1 {priceCurrency})</span><input type="number" min="0" step="0.0001" value={fxRateInput} onChange={(event) => setFxRateInput(event.target.value)} placeholder={`${priceConversion.usdPerUnit}`} /></label>}
+            </div>
+            {priceCurrency !== 'USD' && <div className="pipeline-currency-preview" role="status">
+              <span>{draft.unitPriceUsd} {priceCurrency} → <b>{usd(priceConversion.amountUsd)}</b> por unidad</span>
+              <small>{priceConversion.note}</small>
+              <button type="button" className="journey-primary-action" onClick={applyCurrencyConversion}>Convertir el precio a USD <UiIcon name="arrow-right" size={16} /></button>
+            </div>}
+          </div>}
 
           {showAllQuoteFields && <div className="pipeline-progressive-fields">
             <label className="pipeline-confirm-field"><span>Nombre del producto</span><input value={draft.productName} onChange={event => update('productName', event.target.value)} /></label>
@@ -318,7 +389,14 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>}
           <div className="pipeline-progressive-fields quote-missing-fields">
             <div className="pipeline-progressive-title"><b>{quoteMissing.length ? `Me ${quoteMissing.length === 1 ? 'falta' : 'faltan'} ${quoteMissing.length} ${quoteMissing.length === 1 ? 'dato' : 'datos'} para cotizar.` : 'Ya tengo todo para cotizar.'}</b><small>Pedimos sólo lo que interviene en compra o flete.</small></div>
-            <label className="pipeline-confirm-field"><span>Cantidad a cotizar (unidades)</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} /></label>
+            {!quantitySignal && !showAllQuoteFields && <div className="pipeline-quantity-prompt">
+              <div className="pipeline-quantity-copy"><b>¿Con cuántas unidades arrancamos?</b><small>No necesito un número exacto ahora. Si todavía no lo definiste, arrancamos con la cantidad mínima y la optimización después prueba otras cantidades sin pasarte del presupuesto.</small></div>
+              <div className="pipeline-quantity-choice">
+                <button type="button" className={`pipeline-quantity-option${draft.quantity === minimumQuantity ? ' is-active' : ''}`} onClick={() => update('quantity', minimumQuantity)}><span>Traer la cantidad mínima</span><em>{minimumQuantity} u.</em></button>
+                <label className="pipeline-confirm-field"><span>O indicá una cantidad</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} placeholder={`${minimumQuantity}`} /></label>
+              </div>
+            </div>}
+            {showAllQuoteFields && <label className="pipeline-confirm-field"><span>Cantidad a cotizar (unidades)</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('originCountry')) && <label className="pipeline-confirm-field"><span>País de origen de la mercadería</span><input value={draft.originCountry} onChange={(event) => update('originCountry', event.target.value)} placeholder="Ej. China" /></label>}
             {(showAllQuoteFields || quoteFieldMissing('unitPriceUsd')) && <label className="pipeline-confirm-field"><span>Precio FOB unitario (USD)</span><input type="number" min="0" step="0.01" value={draft.unitPriceUsd || ''} onChange={(event) => update('unitPriceUsd', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('moq')) && <label className="pipeline-confirm-field"><span>MOQ / cantidad mínima (opcional)</span><input type="number" min="0" step="1" value={draft.moq || ''} onChange={(event) => update('moq', numberValue(event.target.value))} /></label>}
@@ -343,7 +421,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>Cotizar con estos datos <span>→</span></button>
+            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>Cotizar con estos datos <UiIcon name="arrow-right" size={16} /></button>
             <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
           </div>
         </>}
@@ -367,7 +445,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         {pipelineSteps.map((item, index) => {
           const state = stageState(index, status, activeStage)
           return <div className={`pipeline-step-row ${state}`} aria-current={state === 'active' ? 'step' : undefined} key={item.title}>
-            <span className="pipeline-step-icon" aria-hidden="true">{state === 'done' ? '✓' : state === 'blocked' ? '!' : index + 1}</span>
+            <span className="pipeline-step-icon" aria-hidden="true">{state === 'done' ? <UiIcon name="check" size={17} /> : state === 'blocked' ? <UiIcon name="warning" size={16} /> : index + 1}</span>
             <div className="pipeline-step-copy">
               <div><b>{item.title}</b><small>{state === 'active' ? 'Procesando' : state === 'done' ? 'Completo' : state === 'blocked' ? 'Revisión necesaria' : 'Pendiente'}</small></div>
               <p>{item.description}</p>
@@ -382,8 +460,9 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <b>No voy a completar el costo con un supuesto inventado.</b>
         <p>{blocker || 'La clasificación o un dato necesario para el cálculo necesita revisión.'}</p>
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
+        <NomencladorGuidance onManualSearch={onReviewProduct} />
         <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <span>→</span></button>
+          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <UiIcon name="arrow-right" size={16} /></button>
           <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
         </div>
       </div>}

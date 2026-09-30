@@ -56,7 +56,7 @@ export function buildRegulatoryChecks(analysis: ProductAnalysis, client: ClientP
     },
     {
       id: 'ncm', group: 'customs', status: 'verify', title: ncm ? `NCM candidato ${ncm}` : 'Determinar posición NCM',
-      detail: ncm ? 'Candidato para una raqueta de pádel. Debe validarse contra ficha técnica y Arancel Integrado antes de declarar; ShippingAPP no lo presenta como clasificación definitiva.' : 'No hay todavía una posición candidata con suficiente confianza.',
+      detail: ncm ? 'Candidato para una raqueta de pádel. Debe validarse contra ficha técnica y Arancel Integrado antes de declarar; GlobalShipping no lo presenta como clasificación definitiva.' : 'No hay todavía una posición candidata con suficiente confianza.',
       sourceIds: ['tariff'], financialEffect: 'both',
     },
     {

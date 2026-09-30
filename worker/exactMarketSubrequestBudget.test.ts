@@ -10,7 +10,7 @@ function json(body: unknown, status = 200) {
 // orchestrator walks the full fallback chain (ML predict+search+sale_price → 10 direct
 // retailers → Google Shopping). This test PINS the total provider-fetch count so a future
 // change (extra retailer, larger hydration limit) that inflates the per-request subrequest
-// fan-out is caught. ShippingAPP runs on Workers Paid (Browser Rendering + Workers AI require
+// fan-out is caught. GlobalShipping runs on Workers Paid (Browser Rendering + Workers AI require
 // it → 1000-subrequest ceiling), so this budget has ample headroom; the guard exists so the
 // number can never silently drift back toward the free-tier 50 ceiling unnoticed.
 describe('exact-mode Argentina market subrequest budget', () => {

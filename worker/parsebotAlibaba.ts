@@ -513,7 +513,7 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
       source: 'Parse.bot',
       facts: null,
       httpStatus: lastStatus,
-      warnings: [`Parse.bot did not return usable product facts (${failures.slice(0, 5).join('; ')}); ShippingAPP will fall back to Browser Run.`],
+      warnings: [`Parse.bot did not return usable product facts (${failures.slice(0, 5).join('; ')}); GlobalShipping will fall back to Browser Run.`],
     }
   } catch (error) {
     return {
@@ -521,7 +521,7 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
       source: 'Parse.bot',
       facts: null,
       httpStatus: lastStatus,
-      warnings: [error instanceof Error ? `Parse.bot failed: ${error.message}` : 'Parse.bot failed; ShippingAPP will fall back to Browser Run.'],
+      warnings: [error instanceof Error ? `Parse.bot failed: ${error.message}` : 'Parse.bot failed; GlobalShipping will fall back to Browser Run.'],
     }
   }
 }

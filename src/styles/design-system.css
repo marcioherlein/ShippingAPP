@@ -40,6 +40,11 @@
   --ds-brand-soft: #eef1ff;
   --ds-success: #15803d;
   --ds-warning: #92400e;
+  --ds-danger: #b42318;
+  --ds-success-soft: rgba(21, 128, 61, 0.10);
+  --ds-warning-soft: rgba(146, 64, 14, 0.10);
+  --ds-danger-soft: rgba(180, 35, 24, 0.09);
+  --ds-neutral-soft: rgba(100, 116, 139, 0.10);
   --ds-border: rgba(203, 213, 225, 0.72);
   --ds-border-soft: rgba(226, 232, 240, 0.80);
   --ds-surface: #ffffff;
@@ -235,4 +240,52 @@
   .journey-hero h1 {
     font-size: clamp(2.5rem, 12vw, 3.25rem);
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Semantic status pill (Apple HIG): one shared component for every checklist
+   / readiness signal. Soft tinted background, matching text, a small leading
+   icon, sentence-case ~13px medium. Replaces the flat-blue score-pill and the
+   never-defined warning-pill so pass / verify / fail read as distinct states.
+   --------------------------------------------------------------------------- */
+.ds-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--ds-radius-pill);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.ds-status-pill svg {
+  flex: none;
+}
+
+.ds-status-pill.is-pass {
+  color: var(--ds-success);
+  background: var(--ds-success-soft);
+  border-color: rgba(21, 128, 61, 0.20);
+}
+
+.ds-status-pill.is-warn {
+  color: var(--ds-warning);
+  background: var(--ds-warning-soft);
+  border-color: rgba(146, 64, 14, 0.20);
+}
+
+.ds-status-pill.is-fail {
+  color: var(--ds-danger);
+  background: var(--ds-danger-soft);
+  border-color: rgba(180, 35, 24, 0.20);
+}
+
+.ds-status-pill.is-neutral {
+  color: var(--ds-text-muted);
+  background: var(--ds-neutral-soft);
+  border-color: var(--ds-border-soft);
 }

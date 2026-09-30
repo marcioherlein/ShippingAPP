@@ -299,7 +299,7 @@ export async function corroborateAlibabaPublicListing(
     warnings: [
       `Matched exact Alibaba product_id ${productId} on a public listing surface.`,
       best.priceRangeUsd && best.priceRangeUsd.min !== best.priceRangeUsd.max
-        ? `Alibaba public card showed USD ${best.priceRangeUsd.min}-${best.priceRangeUsd.max}; ShippingAPP prefills the conservative high end and still requires user confirmation.`
+        ? `Alibaba public card showed USD ${best.priceRangeUsd.min}-${best.priceRangeUsd.max}; GlobalShipping prefills the conservative high end and still requires user confirmation.`
         : 'Public listing facts remain confirmation inputs, not autonomous supplier truth.',
     ],
   }

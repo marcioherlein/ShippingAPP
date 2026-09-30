@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useMemo, useState } from 'react'
 import { manualNcmProfile, searchManualNcm, type ManualNcmIndex } from '../lib/manualNcm'
 import type { CustomsProfile } from '../lib/customsClassification'
+import DsSelect from './DsSelect'
 export default function ManualNcmPicker({ customs, onSelect }: { customs: CustomsProfile; onSelect: (value: CustomsProfile) => void }) {
   const selectionName = useId()
   const [index, setIndex] = useState<ManualNcmIndex | null>(null)
@@ -27,15 +28,20 @@ export default function ManualNcmPicker({ customs, onSelect }: { customs: Custom
     <h3>Buscar en el nomenclador</h3>
     <p>Buscá por producto o código y filtrá por capítulo. Validamos que la posición exista y tenga aranceles; revisá que la descripción corresponda a tu producto.</p>
     {!index && !error && <p role="status">Cargando nomenclador…</p>}
-    {error && <p role="alert">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Reintentar</button></p>}
+    {!index && error && <div className="manual-ncm-load-error" role="alert">
+      <b>{error}</b>
+      <p>El buscador del nomenclador no está disponible en este momento. Podés reintentar; si sigue fallando, guardá el NCM que uses habitualmente o el que te pase tu despachante y cargalo cuando vuelva el servicio.</p>
+      <button type="button" className="pipeline-secondary" onClick={() => setRetry(value => value + 1)}>Reintentar</button>
+    </div>}
     {index && <>
       <label>Producto o código NCM<input value={query} onChange={event => { setQuery(event.target.value); setSelected(''); setConfirmed(false) }} type="search" autoComplete="off" placeholder="Ej. crema, raquetas, 3304" /></label>
-      <label>Capítulo<select value={chapter} onChange={event => { setChapter(event.target.value); setSelected(''); setConfirmed(false) }}><option value="">Todos los capítulos</option>{chapters.map(value => <option key={value} value={value}>Capítulo {value}</option>)}</select></label>
+      <label>Capítulo<DsSelect ariaLabel="Capítulo del nomenclador" value={chapter} onChange={value => { setChapter(value); setSelected(''); setConfirmed(false) }} options={[{ value: '', label: 'Todos los capítulos' }, ...chapters.map(value => ({ value, label: `Capítulo ${value}` }))]} /></label>
       <p role="status">{results.length === 60 ? 'Primeras 60 posiciones. Agregá palabras para acotar.' : `${results.length} posiciones encontradas.`}</p>
       <div className="manual-ncm-results" role="group" aria-label="Posiciones del nomenclador">{results.map(([code, label]) => <label key={code}><input type="radio" name={selectionName} checked={selected === code} onChange={() => { setSelected(code); setConfirmed(false) }} /><span><b>{code}</b> {label}</span></label>)}</div>
       {results.length === 0 && <p className="manual-ncm-empty">No encontramos coincidencias. Probá con el nombre general del producto o elegí otro capítulo.</p>}
       {selected && <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />Revisé la descripción y corresponde a mi producto.</label>}
       <p id={`${selectionName}-help`} className="manual-ncm-selection-help">{!selected ? 'Elegí una posición para continuar.' : !confirmed ? 'Confirmá que la descripción corresponde a tu producto.' : 'Posición elegida. Podés continuar.'}</p>
+      {error && <p className="manual-ncm-selection-error" role="alert">{error}</p>}
       <button type="button" aria-describedby={`${selectionName}-help`} className="journey-primary-action" disabled={!selected || !confirmed} onClick={() => { try { onSelect(manualNcmProfile(customs, index, selected)) } catch (error) { setError((error as Error).message) } }}>Usar esta posición</button>
     </>}
   </section>

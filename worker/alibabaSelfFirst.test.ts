@@ -9,7 +9,7 @@ const env: any = { BROWSER: { quickAction: async () => new Response('{}') } }
 
 function direct(overrides: Record<string, unknown> = {}): DirectAlibabaResult {
   return {
-    status: 'ready', source: 'ShippingAPP direct Alibaba', httpStatus: 200, warnings: [],
+    status: 'ready', source: 'GlobalShipping direct Alibaba', httpStatus: 200, warnings: [],
     facts: {
       name: 'Fully Automatic Mechanical Watches 42.5MM Stainless Steel Wristwatch',
       category: 'Mechanical Watches',
@@ -91,7 +91,7 @@ describe('Alibaba self-scrape-first orchestration', () => {
     expect(result.confidence.productSource).toContain('direct')
   })
 
-  it('uses ShippingAPP Browser Run before Parse.bot when the direct read is incomplete', async () => {
+  it('uses GlobalShipping Browser Run before Parse.bot when the direct read is incomplete', async () => {
     const partial = direct({ packedWeightKg: null, volumeCbm: null, evidence: ['title', 'category', 'price', 'moq', 'origin'] })
     ;(partial as any).status = 'partial'
     const parsebotReader = vi.fn(async () => parsebot())
@@ -157,7 +157,7 @@ describe('Alibaba self-scrape-first orchestration', () => {
 
   it('preserves the supplied watch identity even when every provider is unavailable', async () => {
     const directOut: DirectAlibabaResult = {
-      status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: 403, warnings: ['blocked'],
+      status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: 403, warnings: ['blocked'],
     }
     const result = await resolveAlibabaSelfFirst(url, env, {
       directReader: async () => directOut,

@@ -82,7 +82,7 @@ export function applyHybridMarketToAnalysis(
     },
     assumptions: [
       ...priorAssumptions,
-      'Mercado local no confirmado por el benchmark híbrido: ShippingAPP no reutiliza un precio histórico ni fabrica un precio alternativo.',
+      'Mercado local no confirmado por el benchmark híbrido: GlobalShipping no reutiliza un precio histórico ni fabrica un precio alternativo.',
     ],
   }
 }

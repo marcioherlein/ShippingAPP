@@ -5,12 +5,15 @@ import UrlAnalyzer from './components/UrlAnalyzer'
 import OwnedProductIntake from './components/OwnedProductIntake'
 import CalculationPipeline, { type CalculationPipelineStatus, type CalculationPipelineSummary } from './components/CalculationPipeline'
 import ImportQuoteFlow, { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
+import Landing from './components/Landing'
+import DsSelect from './components/DsSelect'
 import UiIcon from './components/UiIcon'
 import type { QuotePrefill } from './lib/hotProducts'
 import { enrichProductAnalysisV2, ingestAlibabaUrlV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
 import { getJourneyBudgetError } from './lib/journeyValidation'
-import { scrollElementIntoView, scrollWindowToTop } from './lib/motionPreference'
+import { scrollIntoViewIfNeeded, scrollWindowToTop } from './lib/motionPreference'
+import { translateProductLabel } from './lib/productTranslation'
 import {
   applyProductConfirmation,
   createManualProductAnalysis,
@@ -115,7 +118,7 @@ function makeAnalysisPrefill(
       ? 'Producto descripto por el usuario'
       : analysis.sourceUrl.startsWith('chat://')
         ? 'Datos aportados en conversación'
-        : 'Producto leído por ShippingAPP',
+        : 'Producto leído por GlobalShipping',
     ncmCode: analysis.customs.ncmCandidate,
     simCode: analysis.customs.simOpeningCandidate?.code ?? null,
     classificationConfidence: analysis.customs.classificationConfidence,
@@ -144,6 +147,39 @@ function hasUsableClassification(analysis: ProductAnalysisV2) {
     && analysis.customs.dutyRatePct !== undefined
 }
 
+const ENTERED_KEY = 'shippingapp:entered'
+const JOURNEY_STORAGE_KEY = 'shippingapp:journey:v1'
+const ANALYSIS_DRAFT_KEY = 'shippingapp:product-draft:analysis'
+
+// A saved journey URL or storage entry means work is in flight — those users
+// land straight in the app, not on the marketing screen.
+function hasPendingRestore() {
+  if (typeof window === 'undefined') return false
+  try {
+    if (new URL(window.location.href).searchParams.has('journey')) return true
+    if (localStorage.getItem(JOURNEY_STORAGE_KEY)) return true
+  } catch { /* storage may be unavailable */ }
+  return false
+}
+
+function readInitialEntered() {
+  if (typeof window === 'undefined') return false
+  try {
+    if (localStorage.getItem(ENTERED_KEY) === '1') return true
+  } catch { /* storage may be unavailable */ }
+  try {
+    if (sessionStorage.getItem(ANALYSIS_DRAFT_KEY)) return true
+  } catch { /* storage may be unavailable */ }
+  return hasPendingRestore()
+}
+
+type PipelineDraft = {
+  status: 'ready'
+  pipelineSummary: CalculationPipelineSummary
+  pipelineStage: number
+  calculationInputKey: string
+}
+
 export default function App() {
   const resetDialog = useRef<HTMLDialogElement>(null)
   const [intent, setIntent] = useState<EntryIntent>(null)
@@ -162,22 +198,57 @@ export default function App() {
   const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
+  const [entered, setEntered] = useState<boolean>(readInitialEntered)
+
+  // True while the persistence layer replays a saved journey, so the reveal
+  // scrolls below don't yank the page during restore/popstate.
+  const restoringRef = useRef(hasPendingRestore())
+
+  useEffect(() => {
+    try { localStorage.setItem(ENTERED_KEY, entered ? '1' : '0') } catch { /* storage may be unavailable */ }
+  }, [entered])
 
   useEffect(() => {
     const restoreProduct = () => {
       const saved = readProductDraft<{ intent: EntryIntent; analysis: ProductAnalysisV2 }>('analysis')
       if (saved?.intent === intent && saved.analysis?.product && saved.analysis?.customs) {
         setAnalysis(saved.analysis)
-        setCalculationStatus('confirm')
+        // Bring back a finished quote when the saved inputs still match what the
+        // replayed answers produced; otherwise fall back to the review step.
+        const pipe = readProductDraft<PipelineDraft>('pipeline')
+        if (pipe?.status === 'ready' && pipe.calculationInputKey === currentCalculationInputKeyRef.current) {
+          setPipelineSummary(pipe.pipelineSummary)
+          setPipelineStage(pipe.pipelineStage ?? 3)
+          setCalculationInputKey(pipe.calculationInputKey)
+          setCalculationStatus('ready')
+          setStep(4)
+        } else {
+          setCalculationStatus('confirm')
+        }
+        setEntered(true)
       }
+      restoringRef.current = false
     }
     window.addEventListener('shippingapp:journey-restored', restoreProduct)
     return () => window.removeEventListener('shippingapp:journey-restored', restoreProduct)
   }, [intent])
 
+  // Clear the restore guard even if no journey-restored event ever arrives.
+  useEffect(() => {
+    if (!restoringRef.current) return
+    const timer = window.setTimeout(() => { restoringRef.current = false }, 1200)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   useEffect(() => {
     if (analysis && intent) writeProductDraft('analysis', { intent, analysis })
   }, [analysis, intent])
+
+  useEffect(() => {
+    if (calculationStatus === 'ready' && pipelineSummary && calculationInputKey) {
+      writeProductDraft('pipeline', { status: 'ready', pipelineSummary, pipelineStage, calculationInputKey } satisfies PipelineDraft)
+    }
+  }, [calculationStatus, pipelineSummary, pipelineStage, calculationInputKey])
 
   const operationAnswered = purpose !== null && entityType !== null && signature !== null && sensitiveCategory !== null
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
@@ -216,6 +287,18 @@ export default function App() {
 
   const progressStep = effectiveCalculationStatus === 'ready' ? 4 : step
 
+  // Reveal a freshly shown card, but never during a persistence replay.
+  const revealSection = (target: Element | null | undefined) => {
+    if (restoringRef.current) return
+    scrollIntoViewIfNeeded(target)
+  }
+
+  const enterApp = () => {
+    setEntered(true)
+    // Instant top — the landing→app switch must not smooth-scroll (the "salto").
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }
+
   const resetPipeline = () => {
     setCalculationStatus('confirm')
     setPipelineStage(0)
@@ -235,7 +318,7 @@ export default function App() {
     setAnalysis({ ...next, suggestedQuantities: quoteSetup.quantity ? [quoteSetup.quantity, ...next.suggestedQuantities] : next.suggestedQuantities })
     resetPipeline()
     setStep(3)
-    window.setTimeout(() => scrollElementIntoView(document.getElementById('case-confirmation')), 0)
+    revealSection(document.getElementById('case-confirmation'))
   }
 
   const handleManualFallback = (sourceUrl?: string) => {
@@ -257,10 +340,10 @@ export default function App() {
     setStep(3)
     setAnalysis(null)
     if (intent === 'have_product') {
-      window.setTimeout(() => scrollElementIntoView(document.querySelector('.owned-product-intake')), 0)
+      revealSection(document.querySelector('.owned-product-intake'))
       return
     }
-    window.setTimeout(() => scrollElementIntoView(document.querySelector('.journey-product-surface')), 0)
+    revealSection(document.querySelector('.journey-product-surface'))
   }
 
   const reviewProductData = () => {
@@ -269,7 +352,7 @@ export default function App() {
     setPipelineSummary(null)
     setPipelineBlocker(null)
     setCalculationInputKey(null)
-    window.setTimeout(() => scrollElementIntoView(document.getElementById('case-confirmation')), 0)
+    revealSection(document.getElementById('case-confirmation'))
   }
 
   const confirmAndCalculate = async (confirmedProduct: ProductConfirmationData) => {
@@ -319,7 +402,7 @@ export default function App() {
       setPipelineStage(1)
 
       if (refreshed.customs.dutyRatePct === null || refreshed.customs.dutyRatePct === undefined) {
-        setPipelineBlocker('La NCM no tiene un derecho utilizable confirmado en el motor. ShippingAPP detiene la cotización antes de inventar un arancel.')
+        setPipelineBlocker('La NCM no tiene un derecho utilizable confirmado en el motor. GlobalShipping detiene la cotización antes de inventar un arancel.')
         setCalculationStatus('blocked')
         return
       }
@@ -415,7 +498,7 @@ export default function App() {
       await nextPaint(120)
       setCalculationStatus('ready')
       setStep(4)
-      window.setTimeout(() => scrollElementIntoView(document.getElementById('calculator')), 80)
+      revealSection(document.getElementById('calculator'))
     } catch (error) {
       setPipelineBlocker(error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.')
       setCalculationStatus('blocked')
@@ -456,6 +539,8 @@ export default function App() {
     ? effectiveCalculationStatus === 'ready' ? 'Calculado' : effectiveCalculationStatus === 'processing' ? 'Procesando' : effectiveCalculationStatus === 'blocked' ? 'Falta una respuesta' : 'Listo para revisar'
     : step >= 3 ? 'Elegí o cargá un producto' : 'Todavía no elegido'
 
+  if (!entered) return <Landing onStart={enterApp} />
+
   return <main className="journey-app" id="home">
     <a className="skip-to-quote" href="#cotizador">Ir al cotizador</a>
     <dialog ref={resetDialog} className="journey-reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
@@ -467,53 +552,16 @@ export default function App() {
       </div>
     </dialog>
     <header className="journey-topbar">
-      <a className="journey-brand" href="#home"><span className="journey-brand-mark">S</span><span>Shipping<b>APP</b></span></a>
+      <a className="journey-brand" href="#home"><span className="journey-brand-mark">G</span><span>Global<b>Shipping</b></span></a>
       <div className="journey-top-actions"><span className="journey-live-dot">Motor de importación activo</span><button type="button" onClick={requestReset}>Nuevo caso</button></div>
     </header>
-
-    <section className="journey-landing-hero">
-      <h1 className="journey-landing-headline">Recib&#xED; el valor real de tu producto <em>puesto en Argentina.</em></h1>
-      <p className="journey-landing-sub">Pod&#xE9;s calcular flete, impuestos y gastos en destino en menos de 2 minutos.</p>
-      <div className="journey-landing-cta-row">
-        <a className="journey-landing-cta-primary" href="#cotizador">Calcul&#xE1; ahora &#x2192;</a>
-        <a className="journey-landing-cta-secondary" href="#como-funciona">Ver c&#xF3;mo funciona</a>
-      </div>
-    </section>
-
-    <section className="journey-how-it-works" id="como-funciona">
-      <h2 className="journey-how-it-works-title">Consegu&#xED; en 3 pasos tu costo real</h2>
-      <div className="journey-how-steps">
-        <div className="journey-how-step">
-          <div className="journey-how-step-number">1</div>
-          <b>Describ&#xED; tu producto</b>
-          <p>Peg&#xE1; el link del proveedor, escrib&#xED; el nombre o cont&#xE1;nos qu&#xE9; quer&#xE9;s importar. Con eso arrancamos.</p>
-        </div>
-        <div className="journey-how-step">
-          <div className="journey-how-step-number">2</div>
-          <b>Clasificamos el NCM</b>
-          <p>ShippingAPP identifica el c&#xF3;digo arancelario y busca los derechos, IVA e impuestos que aplican espec&#xED;ficamente a ese producto.</p>
-        </div>
-        <div className="journey-how-step">
-          <div className="journey-how-step-number">3</div>
-          <b>Obt&#xE9;n el costo puesto</b>
-          <p>Precio de compra + arancel + IVA importaci&#xF3;n + Ingresos Brutos + flete estimado LCL/a&#xE9;reo. Todo visible, nada inventado.</p>
-        </div>
-      </div>
-    </section>
-
-    <div className="journey-trust-strip">
-      <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>Basado en NCM del MERCOSUR</span>
-      <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>Fletes Internacionales Reales</span>
-      <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>+1.000 categor&#xED;as arancelarias</span>
-      <span className="journey-trust-chip"><span className="journey-trust-chip-check">&#x2713;</span>C&#xE1;lculo en tiempo real</span>
-    </div>
 
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
       <div className="journey-orb journey-orb-one" aria-hidden="true" />
       <div className="journey-orb journey-orb-two" aria-hidden="true" />
       <span className="eyebrow">Motor de costo de importaci&#xF3;n</span>
-      <h2 className="journey-task-title">Tu cotización, paso a paso</h2>
-      <p>Del link del proveedor al costo unitario puesto en Argentina. ShippingAPP clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p>
+      <h1 className="journey-task-title">Tu cotización, paso a paso</h1>
+      <p>Del link del proveedor al costo unitario puesto en Argentina. GlobalShipping clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p>
       <div className="journey-stepper" role="region" aria-label="Progreso de la cotización" tabIndex={0}>
         {stepLabels.map((label, index) => <div className={`journey-step${index < progressStep ? ' done' : ''}${index === progressStep ? ' active' : ''}`} key={label} aria-current={index === progressStep ? 'step' : undefined}>
           <span>{index < progressStep ? <UiIcon name="check" size={16} /> : index + 1}</span><small>{label}</small>
@@ -523,22 +571,22 @@ export default function App() {
 
     <section className="journey-workspace">
       <div className="journey-conversation">
-        <div className="journey-thread-label"><span>ShippingAPP</span><small>Tu caso se arma mientras conversamos</small></div>
+        <div className="journey-thread-label"><span>GlobalShipping</span><small>Tu caso se arma mientras conversamos</small></div>
 
         <div className="journey-bubble assistant">
-          <span className="journey-avatar">S</span>
+          <span className="journey-avatar">G</span>
           <div><b>Primero: ¿desde dónde arrancamos?</b><p>No necesito que sepas de aduana. Elegí lo que mejor describe tu situación.</p></div>
         </div>
 
         {intent === null ? <div className="journey-choice-grid three">
           <button type="button" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Tengo una publicación, proveedor o sé qué quiero traer.</small></button>
-          <button type="button" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y ShippingAPP busca opciones reales en Alibaba.</small></button>
+          <button type="button" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y GlobalShipping busca opciones reales en Alibaba.</small></button>
           <button type="button" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Buscá ideas de producto usando la misma búsqueda real, sin catálogo cacheado.</small></button>
         </div> : <div className="journey-bubble user"><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
 
         {intent && <>
           <div className="journey-bubble assistant">
-            <span className="journey-avatar">S</span>
+            <span className="journey-avatar">G</span>
             <div><b>Antes de cotizar necesito entender cómo vas a importar.</b><p>Estas respuestas pueden cambiar impuestos, gastos y requisitos. Si algo no lo sabés, marcá “No sé”.</p></div>
           </div>
 
@@ -548,14 +596,14 @@ export default function App() {
               <div><label>¿Para qué lo traés?</label><div className="journey-chip-row"><button className={purpose === 'resale' ? 'selected' : ''} onClick={() => setPurpose('resale')} type="button">Reventa</button><button className={purpose === 'own_use' ? 'selected' : ''} onClick={() => setPurpose('own_use')} type="button">Uso propio</button><button className={purpose === 'unknown' ? 'selected' : ''} onClick={() => setPurpose('unknown')} type="button">No sé</button></div></div>
               <div><label>¿Quién importa?</label><div className="journey-chip-row"><button className={entityType === 'company' ? 'selected' : ''} onClick={() => setEntityType('company')} type="button">Empresa</button><button className={entityType === 'individual' ? 'selected' : ''} onClick={() => setEntityType('individual')} type="button">Persona</button><button className={entityType === 'unknown' ? 'selected' : ''} onClick={() => setEntityType('unknown')} type="button">No sé</button></div></div>
               <div><label>¿Tenés firma/importador para operar?</label><div className="journey-chip-row"><button className={signature === 'yes' ? 'selected' : ''} onClick={() => setSignature('yes')} type="button">Sí</button><button className={signature === 'no' ? 'selected' : ''} onClick={() => setSignature('no')} type="button">No</button><button className={signature === 'unknown' ? 'selected' : ''} onClick={() => setSignature('unknown')} type="button">No sé</button></div></div>
-              <div><label htmlFor="journey-sensitive-category">¿Qué tipo de producto es?</label><small>Esto sirve para detectar si hay intervención especial. Si no sabés, elegí “No sé”.</small><select id="journey-sensitive-category" value={sensitiveCategory || ''} onChange={(event) => setSensitiveCategory(event.target.value as SensitiveProductCategory)}><option value="" disabled>Elegir una opción</option><option value="none">Ninguna de estas categorías</option><option value="food">Alimentos</option><option value="toys">Juguetes</option><option value="cosmetics">Cosméticos</option><option value="medicines">Medicamentos</option><option value="supplements">Suplementos</option><option value="plants">Plantas / Flores</option><option value="unknown">No sé</option></select></div>
+              <div><label htmlFor="journey-sensitive-category">¿Qué tipo de producto es?</label><small>Esto sirve para detectar si hay intervención especial. Si no sabés, elegí “No sé”.</small><DsSelect id="journey-sensitive-category" ariaLabel="¿Qué tipo de producto es?" placeholder="Elegir una opción" value={sensitiveCategory || ''} onChange={(value) => setSensitiveCategory(value as SensitiveProductCategory)} options={[{ value: 'none', label: 'Ninguna de estas categorías' }, { value: 'food', label: 'Alimentos' }, { value: 'toys', label: 'Juguetes' }, { value: 'cosmetics', label: 'Cosméticos' }, { value: 'medicines', label: 'Medicamentos' }, { value: 'supplements', label: 'Suplementos' }, { value: 'plants', label: 'Plantas / Flores' }, { value: 'unknown', label: 'No sé' }]} /></div>
               <button className="journey-primary-action" type="button" disabled={!operationAnswered} onClick={continueOperation}>Seguir con presupuesto <span><UiIcon name="arrow-right" size={18} /></span></button>
             </div> : <div className="journey-complete-row"><span>{purposeLabel(purpose)}</span><span>{entityLabel(entityType)}</span><span>{signatureLabel(signature)}</span><span>{sensitiveLabel(sensitiveCategory)}</span></div>}
           </section>
 
           {step >= 2 && <>
             <div className="journey-bubble assistant">
-              <span className="journey-avatar">S</span>
+              <span className="journey-avatar">G</span>
               <div><b>Ahora definamos el tamaño posible de la operación.</b><p>Podés darme presupuesto, rango de unidades o decir que todavía no lo sabés.</p></div>
             </div>
             <section className={`journey-question-card${step === 2 ? ' active' : ''}`}>
@@ -576,7 +624,7 @@ export default function App() {
 
           {step >= 3 && <>
             <div className="journey-bubble assistant">
-              <span className="journey-avatar">S</span>
+              <span className="journey-avatar">G</span>
               <div>
                 <b>{intent === 'have_product' ? '¿Tenés el link o preferís contarme qué producto es?' : '¿Qué producto querés buscar?'}</b>
                 <p>{intent === 'have_product'
@@ -596,6 +644,12 @@ export default function App() {
         <div className="journey-summary-sticky">
           <span className="eyebrow">Caso en construcción</span>
           <h2>{analysisPrefill?.productName || (intent === 'have_product' ? 'Tu producto' : 'Nueva importación')}</h2>
+          {(() => {
+            const label = analysisPrefill?.productName ? translateProductLabel(analysisPrefill.productName) : null
+            return label?.fromEnglish && label.translated
+              ? <p className="journey-summary-translation">En español: {label.text}</p>
+              : null
+          })()}
           <div className="journey-summary-list">
             <div><span>Objetivo</span><b>{intent === 'have_product' ? 'Cotizar producto propio' : intent === 'search_product' ? 'Buscar + cotizar' : intent === 'discover' ? 'Explorar + cotizar' : 'Sin elegir'}</b></div>
             <div><span>Uso</span><b>{purposeLabel(purpose)}</b></div>
@@ -634,8 +688,8 @@ export default function App() {
 
     <footer className="journey-footer">
       <div className="journey-footer-left">
-        <a className="journey-footer-brand" href="#home"><span className="journey-brand-mark" style={{ width: '26px', height: '26px', fontSize: '13px', borderRadius: '8px' }}>S</span><span>Shipping<b>APP</b></span></a>
-        <p className="journey-footer-copy">&#xA9; {new Date().getFullYear()} ShippingAPP. Calculadora de costos de importaci&#xF3;n.</p>
+        <a className="journey-footer-brand" href="#home"><span className="journey-brand-mark" style={{ width: '26px', height: '26px', fontSize: '13px', borderRadius: '8px' }}>G</span><span>Global<b>Shipping</b></span></a>
+        <p className="journey-footer-copy">&#xA9; {new Date().getFullYear()} GlobalShipping. Calculadora de costos de importaci&#xF3;n.</p>
       </div>
       <nav className="journey-footer-links" aria-label="P&#xE1;ginas legales">
         <a href="/privacidad.html">Pol&#xED;tica de Privacidad</a>

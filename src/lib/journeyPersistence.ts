@@ -156,7 +156,7 @@ function captureOperation() {
   const entity = selectedRadioCopy('¿Quién importa?') || completed[1] || ''
   const signature = selectedRadioCopy('¿Tenés firma/importador para operar?') || completed[2] || ''
   const sensitive = completed[3] || ''
-  const selectedSensitive = document.querySelector<HTMLSelectElement>('#journey-sensitive-category')?.value
+  const selectedSensitive = document.getElementById('journey-sensitive-category')?.getAttribute('data-value') || undefined
 
   return {
     purpose: mapByPrefix(purpose, purposeByCopy),
@@ -316,13 +316,22 @@ function dispatchControlledChange(element: HTMLInputElement | HTMLSelectElement,
   element.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
+// Drive a DsSelect (custom listbox) the way a user would: open the trigger, then
+// click the option carrying the target data-value. Mirrors the radio replay.
+async function selectDsOption(triggerId: string, value: string) {
+  const trigger = await waitFor(() => document.getElementById(triggerId) as HTMLButtonElement | null)
+  if (trigger.getAttribute('data-value') === value) return
+  if (trigger.getAttribute('aria-expanded') !== 'true') trigger.click()
+  const option = await waitFor(() => document.querySelector<HTMLElement>(`#${triggerId}-listbox [data-value="${value}"]`))
+  option.click()
+}
+
 async function restoreOperation(state: PersistedJourneyState) {
   await selectRadio('¿Para qué lo traés?', state.purpose ? purposeCopy[state.purpose] : undefined)
   await selectRadio('¿Quién importa?', state.entityType ? entityCopy[state.entityType] : undefined)
   await selectRadio('¿Tenés firma/importador para operar?', state.signature ? signatureCopy[state.signature] : undefined)
   if (state.sensitiveCategory) {
-    const select = await waitFor(() => document.querySelector<HTMLSelectElement>('#journey-sensitive-category'))
-    if (select.value !== state.sensitiveCategory) dispatchControlledChange(select, state.sensitiveCategory)
+    await selectDsOption('journey-sensitive-category', state.sensitiveCategory)
   }
 }
 
@@ -369,8 +378,14 @@ export async function restoreJourneyState(state: PersistedJourneyState) {
   if (state.step === 1) return
 
   if (currentStep() === 1) {
-    const next = await waitFor(() => buttonContaining('Seguir con presupuesto'))
-    if (!next.disabled) next.click()
+    // Wait for the gate to become enabled — selecting the sensitive-category
+    // DsSelect option re-renders React asynchronously, so the button may still
+    // read disabled the instant restoreOperation resolves. Poll until ready.
+    const next = await waitFor(() => {
+      const button = buttonContaining('Seguir con presupuesto')
+      return button && !button.disabled ? button : null
+    })
+    next.click()
   }
 
   await waitFor(() => textOf(document.querySelector('.journey-question-card.active .journey-question-head > span')) === '02'
@@ -378,8 +393,11 @@ export async function restoreJourneyState(state: PersistedJourneyState) {
   await restoreBudget(state)
   if (state.step === 2) return
 
-  const next = await waitFor(() => buttonContaining('Seguir con el producto'))
-  if (!next.disabled) next.click()
+  const next = await waitFor(() => {
+    const button = buttonContaining('Seguir con el producto')
+    return button && !button.disabled ? button : null
+  })
+  next.click()
   await waitFor(() => document.querySelector('.journey-product-surface'))
 }
 
@@ -389,6 +407,7 @@ export function installJourneyPersistence() {
   let restoring = false
   let scheduled = false
   let lastNavigationKey: string | null = null
+  let restoreChain: Promise<void> = Promise.resolve()
 
   const syncState = () => {
     if (restoring) return
@@ -441,25 +460,39 @@ export function installJourneyPersistence() {
 
   const onFieldChange = () => scheduleSync()
 
-  const restore = async (state: PersistedJourneyState | null, source: InitialSource | 'history' = 'history') => {
-    restoring = true
-    try {
-      await waitFor(() => document.querySelector('.journey-app'))
-      if (!state) {
-        buttonContaining('Nuevo caso')?.click()
-        localStorage.removeItem(STORAGE_KEY)
-        lastNavigationKey = null
-        return
-      }
-
-      await restoreJourneyState(state)
-      window.dispatchEvent(new Event('shippingapp:journey-restored'))
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-      if (source === 'storage') writeState(state, 'replace')
-      lastNavigationKey = navigationKey(state)
-    } finally {
-      restoring = false
+  const runRestore = async (state: PersistedJourneyState | null, source: InitialSource | 'history') => {
+    await waitFor(() => document.querySelector('.journey-app'))
+    if (!state) {
+      buttonContaining('Nuevo caso')?.click()
+      localStorage.removeItem(STORAGE_KEY)
+      lastNavigationKey = null
+      return
     }
+
+    await restoreJourneyState(state)
+    window.dispatchEvent(new Event('shippingapp:journey-restored'))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    if (source === 'storage') writeState(state, 'replace')
+    lastNavigationKey = navigationKey(state)
+  }
+
+  // Serialize restores. popstate can fire again before the previous restore has
+  // settled — on slower CI machines especially — and two restores running
+  // concurrently interleave their DOM-replay clicks and land on the wrong step.
+  // Chain them so each replay starts from the fully-settled DOM of the last, and
+  // hold `restoring` across the whole chain so persistence never re-enters mid-replay.
+  let pendingRestores = 0
+  const restore = (state: PersistedJourneyState | null, source: InitialSource | 'history' = 'history') => {
+    pendingRestores += 1
+    restoring = true
+    restoreChain = restoreChain
+      .then(() => runRestore(state, source))
+      .catch(() => undefined)
+      .finally(() => {
+        pendingRestores -= 1
+        if (pendingRestores === 0) restoring = false
+      })
+    return restoreChain
   }
 
   const onPopState = () => {
@@ -478,7 +511,7 @@ export function installJourneyPersistence() {
     subtree: true,
     childList: true,
     attributes: true,
-    attributeFilter: ['class', 'aria-checked'],
+    attributeFilter: ['class', 'aria-checked', 'data-value'],
   })
 
   const initial = readInitialState()

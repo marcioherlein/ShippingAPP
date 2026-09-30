@@ -49,7 +49,7 @@ function validIdempotencyKey(value: unknown) {
 
 function branding(env: EmailEnv) {
   return {
-    appName: textEnv(env, 'EMAIL_APP_NAME', 80) ?? 'ShippingAPP',
+    appName: textEnv(env, 'EMAIL_APP_NAME', 80) ?? 'GlobalShipping',
     supportEmail: validEmail(textEnv(env, 'EMAIL_SUPPORT_EMAIL') ?? ''),
   }
 }

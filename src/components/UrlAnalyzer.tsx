@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { ingestAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import { createManualProductAnalysis } from '../lib/productConfirmation'
@@ -6,6 +6,8 @@ import { isAlibabaUrl } from '../lib/productIntake'
 import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
 import { buildDiscoveryQuery, isGenericAlibabaSearchRequest } from '../lib/searchIntent'
+import { translateProductLabel } from '../lib/productTranslation'
+import UiIcon from './UiIcon'
 
 type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
@@ -154,6 +156,22 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     void submitValue(draft)
   }
 
+  // Resume a metered search after sign-in. A signed-out metered search makes
+  // apiClient dispatch `shippingapp:auth-required`; ClerkShell then dispatches
+  // `shippingapp:auth-resolved` once the user is signed in. Only that explicit
+  // event re-runs the search — plain text restore never repeats it on its own.
+  const submitValueRef = useRef(submitValue)
+  submitValueRef.current = submitValue
+  useEffect(() => {
+    const onAuthResolved = () => {
+      const pending = readProductDraft<{ lastSearch?: string }>('search')
+      const query = pending?.lastSearch?.trim()
+      if (query) void submitValueRef.current(query)
+    }
+    window.addEventListener('shippingapp:auth-resolved', onAuthResolved)
+    return () => window.removeEventListener('shippingapp:auth-resolved', onAuthResolved)
+  }, [])
+
   const modeClass = mode === 'discovery' ? ' discovery-search-mode' : ' search-first-mode'
 
   return <section className={`url-analyzer${modeClass}`}>
@@ -169,10 +187,10 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
     {messages.length > 0 && <div className="intake-thread" aria-live="polite">
       {messages.slice(-6).map((message, index) => <div key={`${index}-${message.content}`} className={`intake-message ${message.role}`}>
-        <span>{message.role === 'user' ? 'Vos' : 'ShippingAPP'}</span>
+        <span>{message.role === 'user' ? 'Vos' : 'GlobalShipping'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Consultando publicaciones y comprobando los datos…</p><div className="search-loading-bar" role="progressbar" aria-label="Buscando productos"><span /></div></div>}
+      {loading && <div className="intake-message assistant"><span>GlobalShipping</span><p>Consultando publicaciones y comprobando los datos…</p><div className="search-loading-bar" role="progressbar" aria-label="Buscando productos"><span /></div></div>}
     </div>}
 
     <form className="url-form" onSubmit={submit}>
@@ -236,9 +254,17 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       </div> : <div className="customs-note"><b>Sin resultados utilizables</b><span>Probá con nombre + material + uso, o pegá directamente una publicación de Alibaba.</span></div>}
     </section>}
 
-    {analysis && !loading && <div className="extraction-card">
+    {analysis && !loading && (() => {
+      const productLabel = analysis.product.name ? translateProductLabel(analysis.product.name) : null
+      const showSpanish = Boolean(productLabel?.fromEnglish && productLabel.translated)
+      return <div className="extraction-card">
       <div className="extraction-top">
-        <div><span className="eyebrow">Producto seleccionado</span><h2>{analysis.product.name || 'Necesito que me digas qué producto es'}</h2><p>{readLabel(analysis)}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p></div>
+        <div>
+          <span className="eyebrow">Producto seleccionado</span>
+          <h2>{analysis.product.name || 'Necesito que me digas qué producto es'}</h2>
+          {showSpanish && <p className="extraction-translation" title="Traducción para orientarte; el nombre original del proveedor se mantiene arriba.">En español: {productLabel!.text}</p>}
+          <p>{readLabel(analysis)}{analysis.product.originCountry ? ` · ${analysis.product.originCountry}` : ''}</p>
+        </div>
         {analysis.confidence.overall > 0 && <span className="confidence">{analysis.confidence.overall}% detectado</span>}
       </div>
       <div className="fact-grid">
@@ -248,7 +274,12 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         {analysis.product.volumeCbm && analysis.product.volumeCbm > 0 ? <div><span>Volumen unitario</span><b>{analysis.product.volumeCbm} m³</b></div> : null}
       </div>
       <p className="assumption-note">Siguiente paso: revisá lo detectado abajo. La app sólo te va a pedir los campos imprescindibles que falten.</p>
-      {constraintChecks.length > 0 && <div className="constraint-checks">{constraintChecks.map((check) => <span key={check.id} className={check.status === 'pass' ? 'score-pill' : 'score-pill warning-pill'} title={check.detail}>{check.status === 'pass' ? 'OK' : check.status === 'fail' ? 'No cumple' : 'Falta verificar'} · {check.label}</span>)}</div>}
-    </div>}
+      {constraintChecks.length > 0 && <div className="constraint-checks">{constraintChecks.map((check) => {
+        const tone = check.status === 'pass' ? 'is-pass' : check.status === 'fail' ? 'is-fail' : 'is-warn'
+        const text = check.status === 'pass' ? 'OK' : check.status === 'fail' ? 'No cumple' : 'Falta verificar'
+        return <span key={check.id} className={`ds-status-pill ${tone}`} title={check.detail}><UiIcon name={check.status === 'pass' ? 'check' : 'warning'} size={14} />{text} · {check.label}</span>
+      })}</div>}
+    </div>
+    })()}
   </section>
 }

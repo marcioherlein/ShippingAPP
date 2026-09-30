@@ -21,7 +21,7 @@ function base(mode = 'partial', overrides: Record<string, unknown> = {}) {
 
 function direct(status: 'ready' | 'partial' = 'ready', overrides: Record<string, unknown> = {}): DirectAlibabaResult {
   return {
-    status, source: 'ShippingAPP direct Alibaba', httpStatus: 200, warnings: [],
+    status, source: 'GlobalShipping direct Alibaba', httpStatus: 200, warnings: [],
     facts: {
       name: 'Mechanical Wristwatch', category: 'Mechanical Wristwatch', categoryPath: ['Timepieces', 'Watches', 'Mechanical Watches'],
       unitPriceUsd: 71.5, moq: 5, packedWeightKg: 0.18, volumeCbm: 0.00096, unitSize: '12x10x8 cm',
@@ -50,7 +50,7 @@ const nativeUnavailable: NativeAlibabaResult = {
 }
 
 const directUnavailable: DirectAlibabaResult = {
-  status: 'unavailable', source: 'ShippingAPP direct Alibaba', facts: null, httpStatus: 403, warnings: ['direct blocked'],
+  status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: 403, warnings: ['direct blocked'],
 }
 
 describe('Alibaba staged fallback orchestration', () => {

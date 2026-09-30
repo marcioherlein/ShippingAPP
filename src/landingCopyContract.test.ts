@@ -2,14 +2,15 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+const landing = readFileSync(new URL('./components/Landing.tsx', import.meta.url), 'utf8')
 const journeyCss = readFileSync(new URL('./styles/journey.css', import.meta.url), 'utf8')
 
 describe('landing copy contract', () => {
   it('renders the approved hero, steps and freight messages', () => {
-    expect(app).toContain('Recib&#xED; el valor real de tu producto <em>puesto en Argentina.</em>')
-    expect(app).toContain('Pod&#xE9;s calcular flete, impuestos y gastos en destino en menos de 2 minutos.')
-    expect(app).toContain('Consegu&#xED; en 3 pasos tu costo real')
-    expect(app).toContain('Fletes Internacionales Reales')
+    expect(landing).toContain('Recib&#xED; el valor real de tu producto <em>puesto en Argentina.</em>')
+    expect(landing).toContain('Pod&#xE9;s calcular flete, impuestos y gastos en destino en menos de 2 minutos.')
+    expect(landing).toContain('Consegu&#xED; en 3 pasos tu costo real')
+    expect(landing).toContain('Fletes Internacionales Reales')
     expect(app).toContain('y te da la mejor alternativa para tu importaci&#xF3;n.')
   })
 
@@ -24,6 +25,7 @@ describe('landing copy contract', () => {
       'journey-faq',
     ]) {
       expect(app).not.toContain(obsolete)
+      expect(landing).not.toContain(obsolete)
     }
     expect(journeyCss).not.toContain('journey-faq')
   })

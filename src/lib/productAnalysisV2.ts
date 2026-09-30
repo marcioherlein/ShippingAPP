@@ -24,7 +24,7 @@ function unclassifiedCustoms(originCountry?: string | null): CustomsProfile {
 
 export async function ingestAlibabaUrlV2(url: string): Promise<ProductAnalysis & { customs: CustomsProfile }> {
   // Reading/prefilling the supplier ficha is free. The paid analysis begins only
-  // after the user confirms the product and asks ShippingAPP to analyze it.
+  // after the user confirms the product and asks GlobalShipping to analyze it.
   const base = await readAlibabaProduct(url)
   return { ...base, customs: unclassifiedCustoms(base.product.originCountry) }
 }

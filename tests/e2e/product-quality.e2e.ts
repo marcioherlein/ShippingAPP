@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 for (const width of [390, 1280]) {
   test(`design quality and reversible reset at ${width}px`, async ({ page }, testInfo) => {

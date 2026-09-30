@@ -114,7 +114,7 @@ export function auditImportUserPath(input: ImportUxFacts): ImportUxAudit {
       : 'La app revisa qué falta y te pide sólo el próximo dato necesario.',
     nextAction,
     steps,
-    ncmExplanation: 'El nomenclador no se calcula automáticamente cuando faltan datos técnicos del producto. La clasificación NCM depende de material, función, uso y presentación. ShippingAPP debe pedir esos datos antes de sugerir una posición.',
+    ncmExplanation: 'El nomenclador no se calcula automáticamente cuando faltan datos técnicos del producto. La clasificación NCM depende de material, función, uso y presentación. GlobalShipping debe pedir esos datos antes de sugerir una posición.',
     canCalculate,
     progressPct,
   }

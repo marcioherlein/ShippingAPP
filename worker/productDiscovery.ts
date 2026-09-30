@@ -132,7 +132,7 @@ export function buildAlibabaSearchUrl(query: string) {
  * Alibaba exposes public, search-engine-facing category/showroom pages that are
  * materially more cacheable than /trade/search. They are used only as a free,
  * read-only discovery fallback; every returned item still needs a real Alibaba
- * product-detail URL before ShippingAPP treats it as evidence.
+ * product-detail URL before GlobalShipping treats it as evidence.
  */
 export function buildAlibabaSeoSearchUrls(query: string) {
   const tokens = slugTokens(query)
@@ -319,6 +319,6 @@ export async function discoverAlibabaProducts(
   return {
     status: 'unavailable', mode: 'unavailable', query: normalized,
     results: [], browserAttempted: Boolean(browser), browserMsUsed: rendered.ms,
-    note: `Alibaba no expuso resultados de producto verificables después de trade search, ${seo.attempted} superficies SEO públicas y Browser Run. ShippingAPP no genera una lista sintética.`,
+    note: `Alibaba no expuso resultados de producto verificables después de trade search, ${seo.attempted} superficies SEO públicas y Browser Run. GlobalShipping no genera una lista sintética.`,
   }
 }

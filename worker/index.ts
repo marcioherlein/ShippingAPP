@@ -31,7 +31,7 @@ function normalizeAlibabaUrl(raw: string) {
   const url = new URL(raw)
   const host = url.hostname.toLowerCase()
   if (url.protocol !== 'https:' || !(host === 'alibaba.com' || host.endsWith('.alibaba.com'))) {
-    throw new Error('Por ahora ShippingAPP acepta links de Alibaba.')
+    throw new Error('Por ahora GlobalShipping acepta links de Alibaba.')
   }
   return url
 }
@@ -189,7 +189,7 @@ function analysisFromParsebot(url: URL, parsebot: Extract<ParsebotAlibabaResult,
   const volumeCbm = facts.volumeCbm || b.volumeCbm
   const originCountry = facts.originCountry || ''
   const assumptions: string[] = [
-    'Producto estructurado con Parse.bot API; ShippingAPP usa Browser Run sólo como fallback cuando Parse.bot no entrega datos útiles.',
+    'Producto estructurado con Parse.bot API; GlobalShipping usa Browser Run sólo como fallback cuando Parse.bot no entrega datos útiles.',
   ]
 
   if (!facts.category && category) assumptions.push(`Categoría detectada por reglas del título/descripción: ${category}.`)
@@ -203,7 +203,7 @@ function analysisFromParsebot(url: URL, parsebot: Extract<ParsebotAlibabaResult,
   if (!moq) assumptions.push('MOQ no verificado; no se generan cantidades de escenario hasta contar con una hipótesis explícita.')
   if (b.marketPriceArs) assumptions.push(`Precio argentino inicial estimado con benchmark de categoría: ARS ${b.marketPriceArs.toLocaleString('es-AR')}.`)
   else assumptions.push('Precio de mercado argentino aún no estimado para esta categoría.')
-  if (!originCountry) assumptions.push('País de origen no verificado; ShippingAPP no presume China ni aplica preferencias por origen.')
+  if (!originCountry) assumptions.push('País de origen no verificado; GlobalShipping no presume China ni aplica preferencias por origen.')
   assumptions.push('Demanda mensual no observada: debe ser informada explícitamente por el usuario antes de recomendar cantidad.')
 
   const verifiedCount = [!!facts.name, !!unitPriceUsd, !!detectedMoq, !!facts.packedWeightKg, !!facts.category, !!originCountry, !!facts.imageUrl].filter(Boolean).length
@@ -237,7 +237,7 @@ function analysisFromParsebot(url: URL, parsebot: Extract<ParsebotAlibabaResult,
     market: {
       estimatedPriceArs: b.marketPriceArs || null,
       estimatedMonthlyDemand: 0,
-      source: b.key === 'generic' ? 'Sin benchmark específico' : 'ShippingAPP category benchmark',
+      source: b.key === 'generic' ? 'Sin benchmark específico' : 'GlobalShipping category benchmark',
     },
     suggestedQuantities: quantitiesFromMoq(moq),
     confidence: {
@@ -293,7 +293,7 @@ async function analyze(rawUrl: string, env: Env) {
   if (!moq) assumptions.push('MOQ no verificado; no se generan cantidades de escenario hasta contar con una hipótesis explícita.')
   if (b.marketPriceArs) assumptions.push(`Precio argentino inicial estimado con benchmark de categoría: ARS ${b.marketPriceArs.toLocaleString('es-AR')}.`)
   else assumptions.push('Precio de mercado argentino aún no estimado para esta categoría.')
-  if (!originCountry) assumptions.push('País de origen no verificado; ShippingAPP no presume China ni aplica preferencias por origen.')
+  if (!originCountry) assumptions.push('País de origen no verificado; GlobalShipping no presume China ni aplica preferencias por origen.')
   assumptions.push('Demanda mensual no observada: debe ser informada explícitamente por el usuario antes de recomendar cantidad.')
 
   const strongSourceRead = sourceRead.mode === 'direct' || sourceRead.mode === 'browser'
@@ -325,7 +325,7 @@ async function analyze(rawUrl: string, env: Env) {
     market: {
       estimatedPriceArs: b.marketPriceArs || null,
       estimatedMonthlyDemand: 0,
-      source: b.key === 'generic' ? 'Sin benchmark específico' : 'ShippingAPP category benchmark',
+      source: b.key === 'generic' ? 'Sin benchmark específico' : 'GlobalShipping category benchmark',
     },
     suggestedQuantities: quantitiesFromMoq(moq),
     confidence: {

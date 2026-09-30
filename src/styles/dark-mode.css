@@ -1,0 +1,270 @@
+/**
+ * First-class dark mode (Apple HIG master prompt §Dark Mode).
+ *
+ * Dark mode is a *token swap*, not a separate design. This sheet is imported
+ * last so its equal-specificity rules win, and it is driven by the OS setting
+ * via `prefers-color-scheme` — no toggle, no flash, respects the user.
+ *
+ * Strategy: (1) swap the semantic --ds-* tokens so every tokenised surface
+ * adapts automatically; (2) re-map the concrete hardcoded white surfaces and
+ * dark-slate text that predate the token system, using their real selectors.
+ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    color: #e6ecf7;
+    background: #080c17;
+
+    /* Semantic token swap — one place, whole app follows. */
+    --ds-text-strong: #f2f6ff;
+    --ds-text: #cdd7ea;
+    --ds-text-secondary: #b4c0d6;
+    --ds-text-muted: #8b97b0;
+    --ds-brand: #8b96ff;
+    --ds-brand-strong: #a2acff;
+    --ds-brand-soft: rgba(112, 126, 246, 0.18);
+    --ds-success: #4ade80;
+    --ds-warning: #fbbf24;
+    --ds-border: rgba(148, 163, 210, 0.20);
+    --ds-border-soft: rgba(148, 163, 210, 0.14);
+    --ds-surface: #121829;
+    --ds-surface-subtle: #0d1322;
+    --ds-surface-glass: rgba(24, 31, 51, 0.72);
+    --ds-surface-glass-strong: rgba(28, 36, 58, 0.86);
+
+    --ds-shadow-1: 0 10px 28px rgba(0, 0, 0, 0.40);
+    --ds-shadow-2: 0 18px 46px rgba(0, 0, 0, 0.48);
+    --ds-shadow-3: 0 28px 80px rgba(0, 0, 0, 0.55);
+    --ds-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  body { background: #080c17; color: #e6ecf7; }
+
+  /* Global canvas: mirror the light radial gradient in a deep night palette. */
+  .journey-app {
+    background:
+      radial-gradient(circle at 12% 4%, rgba(91, 110, 255, 0.16), transparent 26%),
+      radial-gradient(circle at 88% 10%, rgba(56, 189, 248, 0.12), transparent 26%),
+      linear-gradient(180deg, #0a0f1e 0%, #090d1a 52%, #070b15 100%);
+    color: #e6ecf7;
+  }
+
+  /* Form controls. */
+  input, textarea,
+  .analyst-form input,
+  .journey-question-fields select,
+  .readiness-field select, .readiness-field input,
+  .url-input-wrap {
+    background: #10172a;
+    color: #e6ecf7;
+    border-color: rgba(148, 163, 210, 0.24);
+  }
+  input::placeholder, textarea::placeholder { color: #6b7690; }
+  input:focus, textarea:focus {
+    border-color: #7d8bff;
+    box-shadow: 0 0 0 3px rgba(125, 139, 255, 0.22);
+  }
+
+  .eyebrow { color: #8b97b0; }
+
+  /* Elevated glass containers. */
+  .journey-conversation,
+  .journey-summary-sticky,
+  .journey-calculator-section,
+  .journey-output-explainer,
+  .calculation-pipeline {
+    background: rgba(20, 27, 46, 0.74);
+    border-color: rgba(148, 163, 210, 0.16);
+  }
+
+  /* White cards → elevated dark surfaces. */
+  .extraction-card,
+  .partial-card,
+  .discovery-card,
+  .regulatory-card,
+  .regulatory-section,
+  .panel, .product-name, .recommendation, .table-card, .method-card,
+  .analyst-grounded,
+  .analyst-message.assistant,
+  .unit-breakdown-list > div,
+  .fact-grid > div,
+  .customs-note,
+  .discovery-item {
+    background: #121829;
+    border-color: rgba(148, 163, 210, 0.18);
+    color: #cdd7ea;
+  }
+
+  /* Secondary/ghost buttons and chips. */
+  .secondary,
+  .pipeline-secondary,
+  .skip-to-quote,
+  .analyst-suggestions button,
+  .intake-suggestions button,
+  .journey-chip-row button,
+  .journey-question-fields select {
+    background: #161d31;
+    color: #cdd7ea;
+    border-color: rgba(148, 163, 210, 0.22);
+  }
+
+  .journey-choice-grid > button {
+    background: rgba(28, 36, 58, 0.72);
+    color: #e6ecf7;
+    border-color: rgba(148, 163, 210, 0.20);
+  }
+  .journey-choice-grid > button:hover,
+  .journey-choice-grid > button.selected {
+    background: rgba(36, 46, 74, 0.9);
+    border-color: rgba(139, 150, 255, 0.55);
+  }
+
+  .journey-chip-row button.selected {
+    color: #b6bdff;
+    background: rgba(112, 126, 246, 0.20);
+    border-color: rgba(139, 150, 255, 0.5);
+  }
+
+  /* Assistant bubble. */
+  .journey-bubble.assistant > div {
+    background: rgba(20, 27, 46, 0.86);
+    border-color: rgba(148, 163, 210, 0.16);
+  }
+
+  /* Dark-slate text → light. */
+  .journey-app,
+  .journey-brand,
+  .journey-footer-brand,
+  .journey-bubble b,
+  .journey-choice-grid > button,
+  .journey-how-it-works-title,
+  .journey-how-step b,
+  .journey-selection-status b,
+  .journey-summary-list b,
+  .journey-question-fields select,
+  .quote-assumptions > summary b,
+  .quote-customs-facts b,
+  .unit-breakdown-list b,
+  .market-comparables b,
+  .market-comparables > a, .market-comparables > div,
+  .market-price-range b,
+  .mobile-discover-panel > summary,
+  .mobile-step-strip b,
+  .hot-product-card h3,
+  .hot-product-metrics b,
+  .importer-primary-numbers strong,
+  .guided-agent-next b,
+  .guided-step a,
+  .guided-step-body b,
+  .brand,
+  .extraction-top h2,
+  .discovery-item h3 {
+    color: #f2f6ff;
+  }
+
+  /* Brand-tinted accents stay legible on dark. */
+  .confidence { background: rgba(112, 126, 246, 0.20); color: #b6bdff; }
+
+  /* Elements added during this audit. */
+  .extraction-translation,
+  .journey-summary-translation { color: #a2acff !important; }
+
+  .pipeline-currency-confirm,
+  .pipeline-quantity-prompt,
+  .pipeline-ncm-guidance,
+  .manual-ncm-load-error {
+    background: #121829;
+    border-color: rgba(148, 163, 210, 0.18);
+    color: #cdd7ea;
+  }
+  .pipeline-quantity-choice .pipeline-quantity-option {
+    background: #161d31;
+    border-color: rgba(148, 163, 210, 0.22);
+    color: #e6ecf7;
+  }
+  .pipeline-quantity-choice .pipeline-quantity-option.is-active {
+    border-color: rgba(139, 150, 255, 0.55);
+    background: rgba(112, 126, 246, 0.18);
+  }
+
+  /* Landing: hero is already night-toned; adapt the light sections below it. */
+  .journey-how-step {
+    background: rgba(20, 27, 46, 0.68);
+    border-color: rgba(148, 163, 210, 0.16);
+  }
+  .journey-how-step b { color: #eef2ff; }
+  .journey-how-step p { color: #9aa6c0; }
+  .journey-how-step-number {
+    background: linear-gradient(145deg, rgba(112, 126, 246, 0.30), rgba(78, 93, 225, 0.22));
+    color: #b6bdff;
+  }
+
+  .journey-trust-chip {
+    background: rgba(20, 27, 46, 0.62);
+    border-color: rgba(148, 163, 210, 0.16);
+    color: #b4c0d6;
+  }
+  .journey-trust-chip-check { color: #4ade80; }
+
+  /* Custom dropdown (DsSelect): input-like trigger + frosted popover. */
+  .ds-select-trigger {
+    background: #10172a;
+    color: #e6ecf7;
+    border-color: rgba(148, 163, 210, 0.24);
+  }
+  .ds-select-trigger:hover:not(:disabled) { border-color: rgba(139, 150, 255, 0.55); }
+  .ds-select-trigger:focus-visible,
+  .ds-select[data-open] .ds-select-trigger {
+    border-color: #7d8bff;
+    box-shadow: 0 0 0 3px rgba(125, 139, 255, 0.22);
+  }
+  .ds-select-popover {
+    background: rgba(20, 27, 46, 0.92);
+    border-color: rgba(148, 163, 210, 0.20);
+  }
+  .ds-select-option { color: #e6ecf7; }
+  .ds-select-option[data-active='true'] { background: rgba(112, 126, 246, 0.20); }
+
+  /* Semantic status pills adapt to the dark palette. */
+  .ds-status-pill.is-pass {
+    color: #6ee7a0;
+    background: rgba(74, 222, 128, 0.14);
+    border-color: rgba(74, 222, 128, 0.28);
+  }
+  .ds-status-pill.is-warn {
+    color: #fcd34d;
+    background: rgba(251, 191, 36, 0.14);
+    border-color: rgba(251, 191, 36, 0.28);
+  }
+  .ds-status-pill.is-fail {
+    color: #fca5a5;
+    background: rgba(248, 113, 113, 0.14);
+    border-color: rgba(248, 113, 113, 0.30);
+  }
+  .ds-status-pill.is-neutral {
+    color: #b4c0d6;
+    background: rgba(148, 163, 210, 0.12);
+    border-color: rgba(148, 163, 210, 0.20);
+  }
+
+  /* Sticky top bar: the frosted light strip (product-quality.css) reads as a
+     washed-out band on dark. Re-tone it to the night surface, keep the blur. */
+  .journey-topbar {
+    background: rgba(12, 17, 30, 0.80);
+    border-bottom-color: rgba(148, 163, 210, 0.14);
+  }
+  .journey-top-actions button {
+    background: #161d31;
+    color: #cdd7ea;
+    border-color: rgba(148, 163, 210, 0.22);
+  }
+  .journey-live-dot { color: #8b97b0; }
+}
+
+/* When the OS also asks for reduced transparency, product-quality.css swaps the
+   bar to an opaque light #f5f5f7 — give it an opaque dark equivalent so the
+   header stays coherent without any blur. */
+@media (prefers-color-scheme: dark) and (prefers-reduced-transparency: reduce) {
+  .journey-topbar { background: #0c111e; }
+}

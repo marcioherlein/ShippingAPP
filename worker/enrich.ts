@@ -48,7 +48,7 @@ function mercadoLibreOAuthCallbackPage(url: URL) {
     return html(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>MercadoLibre OAuth</title><main style="font-family:system-ui;padding:32px;max-width:760px;margin:auto"><h1>Falta el code de MercadoLibre</h1><p>Esta URL funciona como callback, pero MercadoLibre todavía no devolvió el parámetro <code>code</code>.</p></main>`, 400)
   }
   const safeCode = escapeHtml(code)
-  return html(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>MercadoLibre OAuth code</title><main style="font-family:system-ui;padding:32px;max-width:760px;margin:auto"><h1>MercadoLibre autorizó ShippingAPP</h1><p>Copiá este <b>code</b>. No es el client secret ni el access token.</p><pre style="white-space:pre-wrap;word-break:break-all;background:#f4f4f5;border:1px solid #ddd;border-radius:12px;padding:16px">${safeCode}</pre><p>Después pegalo donde vayas a ejecutar el intercambio por tokens. El code vence rápido.</p></main>`)
+  return html(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>MercadoLibre OAuth code</title><main style="font-family:system-ui;padding:32px;max-width:760px;margin:auto"><h1>MercadoLibre autorizó GlobalShipping</h1><p>Copiá este <b>code</b>. No es el client secret ni el access token.</p><pre style="white-space:pre-wrap;word-break:break-all;background:#f4f4f5;border:1px solid #ddd;border-radius:12px;padding:16px">${safeCode}</pre><p>Después pegalo donde vayas a ejecutar el intercambio por tokens. El code vence rápido.</p></main>`)
 }
 
 async function mercadoLibreNotifications(request: Request) {
@@ -58,11 +58,11 @@ async function mercadoLibreNotifications(request: Request) {
   }
   return json({
     status: 'ok',
-    service: 'ShippingAPP MercadoLibre notifications webhook',
+    service: 'GlobalShipping MercadoLibre notifications webhook',
     accepted: request.method === 'POST',
     receivedAt: new Date().toISOString(),
     payloadSeen: Boolean(payload),
-    note: 'Webhook endpoint acknowledged. ShippingAPP does not process MercadoLibre notifications yet.',
+    note: 'Webhook endpoint acknowledged. GlobalShipping does not process MercadoLibre notifications yet.',
   })
 }
 
@@ -261,7 +261,7 @@ async function hydrateMarketAndFx(data: any, env: Env) {
     data.assumptions = [
       ...prior,
       market.status === 'configuration_required'
-        ? 'Mercado local bloqueado: falta configurar la autenticación oficial de Mercado Libre; ShippingAPP no promueve un precio público no autenticado a economics.'
+        ? 'Mercado local bloqueado: falta configurar la autenticación oficial de Mercado Libre; GlobalShipping no promueve un precio público no autenticado a economics.'
         : 'Mercado local no confirmado: no se reutiliza el benchmark histórico.',
     ]
   } else {
@@ -315,7 +315,7 @@ export function conversationalAnalysis(intake: Awaited<ReturnType<typeof runConv
       market: 'pending',
     },
     assumptions: [
-      'Producto y datos comerciales estructurados desde una conversación del usuario; ShippingAPP no los verificó contra una publicación o proforma.',
+      'Producto y datos comerciales estructurados desde una conversación del usuario; GlobalShipping no los verificó contra una publicación o proforma.',
       'La confidence del producto conversacional está limitada hasta corroborar los datos comerciales con una fuente de proveedor.',
       ...intake.assumptions,
       ...(facts.originCountry ? [] : ['País de origen no verificado; no se presume China ni tratamiento preferencial.']),
@@ -472,7 +472,7 @@ export default {
       } catch (error) {
         console.error(JSON.stringify({ event: 'ncm_classify.failed', error: error instanceof Error ? error.message : String(error) }))
         return json({
-          error: 'No pudimos consultar el índice NCM completo. ShippingAPP debe degradar al clasificador local sin inventar una posición.',
+          error: 'No pudimos consultar el índice NCM completo. GlobalShipping debe degradar al clasificador local sin inventar una posición.',
           detail: error instanceof Error ? error.message.slice(0, 300) : 'unknown error',
         }, 503)
       }

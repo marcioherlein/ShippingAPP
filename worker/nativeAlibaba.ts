@@ -344,7 +344,7 @@ async function extractRenderedHtml(url: URL, browser: BrowserRun) {
       facts,
       ms,
       status: response.status,
-      warnings: [`ShippingAPP recovered ${coreFichaSignals(facts)}/7 required ficha signals from rendered Alibaba HTML before structured extraction.`],
+      warnings: [`GlobalShipping recovered ${coreFichaSignals(facts)}/7 required ficha signals from rendered Alibaba HTML before structured extraction.`],
     }
   } catch (error) {
     return {
@@ -389,7 +389,7 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
 
     if (response.status === 422) {
       usedPromptOnly422Fallback = true
-      warnings.push('Browser Run rechazó el JSON Schema con HTTP 422; ShippingAPP reintentó una sola vez con extracción prompt-only simplificada y mantiene los mismos controles de confianza.')
+      warnings.push('Browser Run rechazó el JSON Schema con HTTP 422; GlobalShipping reintentó una sola vez con extracción prompt-only simplificada y mantiene los mismos controles de confianza.')
       response = await browser.quickAction('json', browserPromptOnlyRequest(url))
       structuredMs = combinedBrowserMs(structuredMs, browserMs(response))
       if (response.status === 429) {
@@ -447,12 +447,12 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
   const structuredSafe = { ...structured, unitPriceUsd: structuredPrice }
 
   if (!renderedPrice && isolatedStructuredPrice && !tierPrice) {
-    warnings.push('Browser Run expuso un unit_price sin precio determinístico ni tier con cantidad; ShippingAPP lo retuvo como no corroborado y solicita confirmación del proveedor.')
+    warnings.push('Browser Run expuso un unit_price sin precio determinístico ni tier con cantidad; GlobalShipping lo retuvo como no corroborado y solicita confirmación del proveedor.')
   } else if (renderedPrice && isolatedStructuredPrice && !pricesAgree(renderedPrice, isolatedStructuredPrice)) {
-    warnings.push('Browser Run unit_price contradijo el precio determinístico del producto; ShippingAPP conservó la evidencia determinística y descartó el importe estructurado.')
+    warnings.push('Browser Run unit_price contradijo el precio determinístico del producto; GlobalShipping conservó la evidencia determinística y descartó el importe estructurado.')
   }
   if (renderedPrice && tierPrice && !pricesAgree(renderedPrice, tierPrice)) {
-    warnings.push('El tier de precio estructurado contradijo el precio determinístico; ShippingAPP conservó el precio determinístico y reportó la inconsistencia.')
+    warnings.push('El tier de precio estructurado contradijo el precio determinístico; GlobalShipping conservó el precio determinístico y reportó la inconsistencia.')
   }
 
   const facts = mergeFacts(rendered.facts, structuredSafe)

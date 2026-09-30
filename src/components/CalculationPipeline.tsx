@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { usd } from '../lib/format'
+import { convertToUsd, CURRENCY_LABELS, type CurrencyCode } from '../lib/currency'
 import {
   applyClassificationClarification,
   classificationClarificationTarget,
@@ -174,6 +175,12 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const [showCorrections, setShowCorrections] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
   const [clarification, setClarification] = useState('')
+  // Currency of the extracted supplier price. Alibaba defaults to USD, but a
+  // ¥/€ price must be converted to official dollars before the engine uses it
+  // (audit item #1). Kept as UI state so confirming does not mutate the shape
+  // of ProductConfirmationData.
+  const [priceCurrency, setPriceCurrency] = useState<CurrencyCode>('USD')
+  const [fxRateInput, setFxRateInput] = useState('')
 
   useEffect(() => {
     // A refinement returns a new analysis with the same sourceUrl. Sync from the
@@ -183,6 +190,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     setShowCorrections(false)
     setShowAllQuoteFields(false)
     setClarification('')
+    setPriceCurrency('USD')
+    setFxRateInput('')
   }, [analysis])
 
   const sourceDraft = useMemo(() => productConfirmationFromAnalysis(analysis), [analysis])
@@ -211,6 +220,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   // again is the redundant prompt the UX audit called out.
   const quantitySignal = (analysis.suggestedQuantities?.[0] ?? 0) > 0 || (analysis.product.moq ?? 0) > 0
   const minimumQuantity = Math.max(1, Math.floor(analysis.product.moq || draft.moq || 1))
+  const fxRate = fxRateInput.trim() ? Number(fxRateInput) : null
+  const priceConversion = convertToUsd(draft.unitPriceUsd, priceCurrency, fxRate)
 
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -226,6 +237,13 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   }
 
   const quoteFieldMissing = (id: string) => quoteMissing.some((item) => item.id === id)
+
+  const applyCurrencyConversion = () => {
+    if (priceCurrency === 'USD') return
+    update('unitPriceUsd', priceConversion.amountUsd)
+    setPriceCurrency('USD')
+    setFxRateInput('')
+  }
 
   return <section className="calculation-pipeline" id="case-confirmation" aria-busy={status === 'processing'}>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>
@@ -313,6 +331,27 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             </div>
             <button type="button" className="pipeline-secondary" aria-expanded={showAllQuoteFields} onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Mostrar sólo faltantes' : 'Corregir un dato detectado'}</button>
           </div>
+
+          {draft.unitPriceUsd > 0 && <div className="pipeline-currency-confirm">
+            <div className="pipeline-currency-head"><b>Confirmá el precio y la cantidad mínima</b><small>Reviso lo que extraje. Si el proveedor expresa el precio en otra moneda, pasalo a dólares oficiales antes de calcular.</small></div>
+            <div className="pipeline-currency-facts">
+              <div><span>Precio FOB detectado</span><b>{priceCurrency === 'USD' ? usd(draft.unitPriceUsd) : `${draft.unitPriceUsd} ${priceCurrency}`}</b></div>
+              <div><span>Cantidad mínima (MOQ)</span><b>{draft.moq > 0 ? `${draft.moq} u.` : 'Sin dato'}</b></div>
+            </div>
+            <div className="pipeline-currency-grid">
+              <label className="pipeline-confirm-field"><span>Moneda del precio del proveedor</span>
+                <select value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value as CurrencyCode)}>
+                  {(Object.keys(CURRENCY_LABELS) as CurrencyCode[]).map((code) => <option key={code} value={code}>{code} · {CURRENCY_LABELS[code]}</option>)}
+                </select>
+              </label>
+              {priceCurrency !== 'USD' && <label className="pipeline-confirm-field"><span>Tipo de cambio (USD por 1 {priceCurrency})</span><input type="number" min="0" step="0.0001" value={fxRateInput} onChange={(event) => setFxRateInput(event.target.value)} placeholder={`${priceConversion.usdPerUnit}`} /></label>}
+            </div>
+            {priceCurrency !== 'USD' && <div className="pipeline-currency-preview" role="status">
+              <span>{draft.unitPriceUsd} {priceCurrency} → <b>{usd(priceConversion.amountUsd)}</b> por unidad</span>
+              <small>{priceConversion.note}</small>
+              <button type="button" className="journey-primary-action" onClick={applyCurrencyConversion}>Convertir el precio a USD <span>→</span></button>
+            </div>}
+          </div>}
 
           {showAllQuoteFields && <div className="pipeline-progressive-fields">
             <label className="pipeline-confirm-field"><span>Nombre del producto</span><input value={draft.productName} onChange={event => update('productName', event.target.value)} /></label>

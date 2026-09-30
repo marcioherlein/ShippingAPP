@@ -402,6 +402,92 @@
   }
 }
 
+/* Extracted price / currency confirmation (audit item #1). */
+.pipeline-currency-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4, 1rem);
+  margin-top: var(--ds-space-4, 1rem);
+  padding: var(--ds-space-5, 1.25rem);
+  border: 1px solid var(--ds-border-soft, rgba(226, 232, 240, 0.8));
+  border-radius: var(--ds-radius-lg, 1.125rem);
+  background: var(--ds-surface-glass, rgba(255, 255, 255, 0.72));
+}
+
+.pipeline-currency-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipeline-currency-head b {
+  font-size: 1rem;
+  color: var(--ds-text-strong, #0f172a);
+}
+
+.pipeline-currency-head small {
+  color: var(--ds-text-muted, #64748b);
+  line-height: 1.5;
+}
+
+.pipeline-currency-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ds-space-3, 0.75rem);
+}
+
+.pipeline-currency-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--ds-space-3, 0.75rem);
+  border-radius: var(--ds-radius-md, 0.875rem);
+  background: var(--ds-surface-subtle, #f8fafc);
+}
+
+.pipeline-currency-facts span {
+  font-size: 0.78rem;
+  color: var(--ds-text-muted, #64748b);
+}
+
+.pipeline-currency-facts b {
+  font-size: 1.05rem;
+  color: var(--ds-text-strong, #0f172a);
+}
+
+.pipeline-currency-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ds-space-3, 0.75rem);
+}
+
+.pipeline-currency-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-2, 0.5rem);
+  padding: var(--ds-space-4, 1rem);
+  border-radius: var(--ds-radius-md, 0.875rem);
+  background: var(--ds-brand-soft, #eef1ff);
+}
+
+.pipeline-currency-preview span {
+  font-size: 1rem;
+  color: var(--ds-text-strong, #0f172a);
+}
+
+.pipeline-currency-preview b {
+  color: var(--ds-brand-strong, #4454dc);
+}
+
+.pipeline-currency-preview small {
+  color: var(--ds-text-muted, #64748b);
+  line-height: 1.5;
+}
+
+.pipeline-currency-preview .journey-primary-action {
+  align-self: flex-start;
+}
+
 @media (max-width: 700px) {
   .owned-product-intake {
     padding: 18px;
@@ -440,6 +526,11 @@
   }
 
   .pipeline-quantity-choice {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline-currency-facts,
+  .pipeline-currency-grid {
     grid-template-columns: 1fr;
   }
 }

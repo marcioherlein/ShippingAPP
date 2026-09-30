@@ -206,4 +206,24 @@
     color: #b4c0d6;
   }
   .journey-trust-chip-check { color: #4ade80; }
+
+  /* Sticky top bar: the frosted light strip (product-quality.css) reads as a
+     washed-out band on dark. Re-tone it to the night surface, keep the blur. */
+  .journey-topbar {
+    background: rgba(12, 17, 30, 0.80);
+    border-bottom-color: rgba(148, 163, 210, 0.14);
+  }
+  .journey-top-actions button {
+    background: #161d31;
+    color: #cdd7ea;
+    border-color: rgba(148, 163, 210, 0.22);
+  }
+  .journey-live-dot { color: #8b97b0; }
+}
+
+/* When the OS also asks for reduced transparency, product-quality.css swaps the
+   bar to an opaque light #f5f5f7 — give it an opaque dark equivalent so the
+   header stays coherent without any blur. */
+@media (prefers-color-scheme: dark) and (prefers-reduced-transparency: reduce) {
+  .journey-topbar { background: #0c111e; }
 }

@@ -206,6 +206,11 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     ? quoteMissing.length === 0 && (draft.quantity ?? 0) > 0
     : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied
   const volume = resolvedProductVolumeCbm(draft)
+  // Quantity is only a real question when nothing in the analysis implies it.
+  // A supplier MOQ or a suggested quantity already answers "how many"; asking
+  // again is the redundant prompt the UX audit called out.
+  const quantitySignal = (analysis.suggestedQuantities?.[0] ?? 0) > 0 || (analysis.product.moq ?? 0) > 0
+  const minimumQuantity = Math.max(1, Math.floor(analysis.product.moq || draft.moq || 1))
 
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -304,6 +309,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
               {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
               {knownFact('Peso embalado', draft.unitWeightKg > 0 ? `${draft.unitWeightKg} kg/u.` : null, 'weight')}
               {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : null, 'volume')}
+              {quantitySignal && knownFact('Cantidad', draft.quantity ? `${draft.quantity} u.` : null, 'quantity')}
             </div>
             <button type="button" className="pipeline-secondary" aria-expanded={showAllQuoteFields} onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Mostrar sólo faltantes' : 'Corregir un dato detectado'}</button>
           </div>
@@ -318,7 +324,14 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>}
           <div className="pipeline-progressive-fields quote-missing-fields">
             <div className="pipeline-progressive-title"><b>{quoteMissing.length ? `Me ${quoteMissing.length === 1 ? 'falta' : 'faltan'} ${quoteMissing.length} ${quoteMissing.length === 1 ? 'dato' : 'datos'} para cotizar.` : 'Ya tengo todo para cotizar.'}</b><small>Pedimos sólo lo que interviene en compra o flete.</small></div>
-            <label className="pipeline-confirm-field"><span>Cantidad a cotizar (unidades)</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} /></label>
+            {!quantitySignal && !showAllQuoteFields && <div className="pipeline-quantity-prompt">
+              <div className="pipeline-quantity-copy"><b>¿Con cuántas unidades arrancamos?</b><small>No necesito un número exacto ahora. Si todavía no lo definiste, arrancamos con la cantidad mínima y la optimización después prueba otras cantidades sin pasarte del presupuesto.</small></div>
+              <div className="pipeline-quantity-choice">
+                <button type="button" className={`pipeline-quantity-option${draft.quantity === minimumQuantity ? ' is-active' : ''}`} onClick={() => update('quantity', minimumQuantity)}><span>Traer la cantidad mínima</span><em>{minimumQuantity} u.</em></button>
+                <label className="pipeline-confirm-field"><span>O indicá una cantidad</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} placeholder={`${minimumQuantity}`} /></label>
+              </div>
+            </div>}
+            {showAllQuoteFields && <label className="pipeline-confirm-field"><span>Cantidad a cotizar (unidades)</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('originCountry')) && <label className="pipeline-confirm-field"><span>País de origen de la mercadería</span><input value={draft.originCountry} onChange={(event) => update('originCountry', event.target.value)} placeholder="Ej. China" /></label>}
             {(showAllQuoteFields || quoteFieldMissing('unitPriceUsd')) && <label className="pipeline-confirm-field"><span>Precio FOB unitario (USD)</span><input type="number" min="0" step="0.01" value={draft.unitPriceUsd || ''} onChange={(event) => update('unitPriceUsd', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('moq')) && <label className="pipeline-confirm-field"><span>MOQ / cantidad mínima (opcional)</span><input type="number" min="0" step="1" value={draft.moq || ''} onChange={(event) => update('moq', numberValue(event.target.value))} /></label>}

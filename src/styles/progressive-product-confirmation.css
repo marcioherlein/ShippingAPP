@@ -313,6 +313,95 @@
   margin-top: 0;
 }
 
+/* Quantity prompt — shown only when nothing in the analysis implies "how many".
+   Offers the supplier minimum as a one-tap default instead of re-asking. */
+.pipeline-quantity-prompt {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-4, 1rem);
+  padding: var(--ds-space-5, 1.25rem);
+  border: 1px solid var(--ds-border-soft, rgba(226, 232, 240, 0.8));
+  border-radius: var(--ds-radius-lg, 1.125rem);
+  background: var(--ds-brand-soft, #eef1ff);
+}
+
+.pipeline-quantity-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipeline-quantity-copy b {
+  font-size: 1rem;
+  color: var(--ds-text-strong, #0f172a);
+}
+
+.pipeline-quantity-copy small {
+  color: var(--ds-text-muted, #64748b);
+  line-height: 1.5;
+}
+
+.pipeline-quantity-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--ds-space-3, 0.75rem);
+  align-items: end;
+}
+
+.pipeline-quantity-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 48px;
+  padding: var(--ds-space-3, 0.75rem) var(--ds-space-4, 1rem);
+  text-align: left;
+  border: 1px solid var(--ds-border, rgba(203, 213, 225, 0.72));
+  border-radius: var(--ds-radius-md, 0.875rem);
+  background: var(--ds-surface, #fff);
+  color: var(--ds-text, #334155);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform var(--ds-motion-fast, 160ms) var(--ds-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+    border-color var(--ds-motion-fast, 160ms) var(--ds-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+    box-shadow var(--ds-motion-fast, 160ms) var(--ds-ease, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+
+.pipeline-quantity-option em {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ds-brand-strong, #4454dc);
+}
+
+.pipeline-quantity-option:hover {
+  transform: translateY(-1px);
+  border-color: var(--ds-brand, #4f5de4);
+  box-shadow: 0 6px 18px rgba(79, 93, 228, 0.12);
+}
+
+.pipeline-quantity-option.is-active {
+  border-color: var(--ds-brand, #4f5de4);
+  box-shadow: 0 0 0 2px var(--ds-brand-soft, #eef1ff);
+}
+
+.pipeline-quantity-option:focus-visible {
+  outline: none;
+  border-color: var(--ds-brand, #4f5de4);
+  box-shadow: 0 0 0 3px rgba(79, 93, 228, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-quantity-option {
+    transition: none;
+  }
+  .pipeline-quantity-option:hover {
+    transform: none;
+  }
+}
+
 @media (max-width: 700px) {
   .owned-product-intake {
     padding: 18px;
@@ -347,6 +436,10 @@
   }
 
   .pipeline-dimensions {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline-quantity-choice {
     grid-template-columns: 1fr;
   }
 }

@@ -187,4 +187,23 @@
     border-color: rgba(139, 150, 255, 0.55);
     background: rgba(112, 126, 246, 0.18);
   }
+
+  /* Landing: hero is already night-toned; adapt the light sections below it. */
+  .journey-how-step {
+    background: rgba(20, 27, 46, 0.68);
+    border-color: rgba(148, 163, 210, 0.16);
+  }
+  .journey-how-step b { color: #eef2ff; }
+  .journey-how-step p { color: #9aa6c0; }
+  .journey-how-step-number {
+    background: linear-gradient(145deg, rgba(112, 126, 246, 0.30), rgba(78, 93, 225, 0.22));
+    color: #b6bdff;
+  }
+
+  .journey-trust-chip {
+    background: rgba(20, 27, 46, 0.62);
+    border-color: rgba(148, 163, 210, 0.16);
+    color: #b4c0d6;
+  }
+  .journey-trust-chip-check { color: #4ade80; }
 }

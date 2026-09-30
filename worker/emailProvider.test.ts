@@ -3,7 +3,7 @@ import { EmailProviderError, ResendEmailProvider } from './emailProvider'
 
 const API_KEY = 're_stage6_test_key_0000000000000000000000000000'
 const MESSAGE = {
-  from: 'ShippingAPP <onboarding@resend.dev>',
+  from: 'GlobalShipping <onboarding@resend.dev>',
   to: 'owner@example.com',
   subject: 'Prueba segura',
   html: '<p>Hola</p>',

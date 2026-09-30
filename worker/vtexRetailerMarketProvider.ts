@@ -383,7 +383,7 @@ export function createArgentinaDirectRetailerProvider(options: VtexRetailerMarke
         categoryHint: null,
         warnings: [
           'Discovery uses public retailer storefront evidence only; no checkout automation, account login, or private API credentials are used.',
-          'Retailer prices are treated as ARS because the configured storefronts are Argentine storefronts; every candidate still passes ShippingAPP deterministic product matching before economics.',
+          'Retailer prices are treated as ARS because the configured storefronts are Argentine storefronts; every candidate still passes GlobalShipping deterministic product matching before economics.',
           ...results.flatMap((result) => result.warnings),
         ],
       }

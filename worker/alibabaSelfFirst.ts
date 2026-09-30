@@ -114,7 +114,7 @@ export function requiredSelfFirstSignals(data: any) {
 
 // Derive a safe normalized category from the evidence already gathered when the supplier did
 // not expose one. This avoids asking the user a silly "¿qué categoría?" question about a
-// product whose material/function are already clear. It is explicitly a ShippingAPP-DERIVED
+// product whose material/function are already clear. It is explicitly a GlobalShipping-DERIVED
 // normalization (categorySource='derived'), never presented as a supplier assertion, and it
 // fails closed (leaves 'Sin clasificar') when the evidence does not clearly describe a
 // product. Supplier-provided categories are tagged categorySource='supplier'.
@@ -149,11 +149,11 @@ function applyDerivedCategory(data: any) {
     derivedCategory: {
       value: derived,
       basis: concepts.concepts,
-      note: 'Categoría normalizada derivada por ShippingAPP a partir de la evidencia; NO es una afirmación del proveedor.',
+      note: 'Categoría normalizada derivada por GlobalShipping a partir de la evidencia; NO es una afirmación del proveedor.',
     },
   }
   data.assumptions = [
-    `Categoría normalizada "${derived}" derivada por ShippingAPP desde la evidencia del producto (material/función); no es un dato declarado por el proveedor y puede corregirse.`,
+    `Categoría normalizada "${derived}" derivada por GlobalShipping desde la evidencia del producto (material/función); no es un dato declarado por el proveedor y puede corregirse.`,
     ...(data.assumptions || []),
   ]
   return data
@@ -230,7 +230,7 @@ function mergeDirect(data: any, direct: Exclude<DirectAlibabaResult, { status: '
   }
   const signals = requiredSelfFirstSignals({ product: merged })
   const notes = [
-    `ShippingAPP leyó Alibaba directamente por HTTPS/JSON embebido: ${facts.evidence.length} señales explícitas.`,
+    `GlobalShipping leyó Alibaba directamente por HTTPS/JSON embebido: ${facts.evidence.length} señales explícitas.`,
     facts.categoryPath.length ? `Alibaba category path: ${facts.categoryPath.join(' > ')}.` : null,
     facts.hsCode ? `HS informado por Alibaba/proveedor: ${facts.hsCode}; se conserva como evidencia y no sustituye la NCM argentina.` : null,
     facts.unitSize ? `Dimensiones logísticas extraídas: ${facts.unitSize}.` : null,
@@ -246,7 +246,7 @@ function mergeDirect(data: any, direct: Exclude<DirectAlibabaResult, { status: '
       directStatus: direct.httpStatus,
       browserAttempted: false,
       browserMsUsed: null,
-      reason: 'ShippingAPP intentó primero su extractor propio de Alibaba. No se consumieron créditos de Parse.bot.',
+      reason: 'GlobalShipping intentó primero su extractor propio de Alibaba. No se consumieron créditos de Parse.bot.',
     },
     suggestedQuantities: quantitiesFromMoq(finalMoq),
     confidence: {
@@ -301,7 +301,7 @@ function mergeParsebot(data: any, parsebot: Extract<ParsebotAlibabaResult, { sta
 function mergeNative(data: any, native: Extract<NativeAlibabaResult, { status: 'ready' }>) {
   const merged = mergeCommonFacts(data, native.facts, {
     source: 'browser',
-    reason: 'La lectura HTTPS propia no completó la ficha; ShippingAPP usó Browser Run propio antes de considerar Parse.bot.',
+    reason: 'La lectura HTTPS propia no completó la ficha; GlobalShipping usó Browser Run propio antes de considerar Parse.bot.',
     browserAttempted: true,
     browserMsUsed: native.browserMsUsed,
   })
@@ -338,7 +338,7 @@ export async function resolveAlibabaSelfFirst(
   else data.assumptions = [...direct.warnings, ...(data.assumptions || [])]
 
   // Fill a safe derived category from evidence already gathered. Category is the only one of
-  // the seven signals ShippingAPP can supply without a provider call, so deriving it here
+  // the seven signals GlobalShipping can supply without a provider call, so deriving it here
   // avoids spending Browser Run / Parse.bot merely to obtain a generic category label when
   // every other signal is already present. Genuinely-missing numeric facts still gate below.
   data = applyDerivedCategory(data)
@@ -360,7 +360,7 @@ export async function resolveAlibabaSelfFirst(
     data = applyDerivedCategory(data)
   }
 
-  // Parse.bot is a last-resort supplement only. ShippingAPP remains operational
+  // Parse.bot is a last-resort supplement only. GlobalShipping remains operational
   // without a key, without credits, or while Parse.bot is unavailable.
   if (requiredSelfFirstSignals(data) < 7) {
     const parsebot = await parsebotReader(url, env)
@@ -372,7 +372,7 @@ export async function resolveAlibabaSelfFirst(
   if (requiredSelfFirstSignals(data) < 7) {
     data.sourceRead = {
       ...data.sourceRead,
-      reason: 'Los scrapers propios y cualquier suplemento opcional no completaron la ficha; ShippingAPP solicita al usuario sólo los datos faltantes.',
+      reason: 'Los scrapers propios y cualquier suplemento opcional no completaron la ficha; GlobalShipping solicita al usuario sólo los datos faltantes.',
     }
     data.assumptions = [
       'No se inventan precio, MOQ, peso, volumen ni origen. La ficha obligatoria queda abierta hasta que el usuario complete los faltantes.',

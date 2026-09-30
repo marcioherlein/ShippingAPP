@@ -71,7 +71,7 @@ function incompleteDecision(analysis: ProductAnalysisV2 | null, missing: string[
     result: null,
     robustCandidate: null,
     reasons: [],
-    warnings: ['ShippingAPP no completa estos campos con defaults de otro producto.'],
+    warnings: ['GlobalShipping no completa estos campos con defaults de otro producto.'],
     nextActions: ['Completar o verificar la evidencia faltante y volver a calcular.'],
   }
 }
@@ -167,7 +167,7 @@ function robustDecision(analysis: ProductAnalysisV2, inputs: Inputs, context: Sc
   if (excessiveInventory) warnings.push('El downside supera 9 meses de inventario.')
   if (capitalBlocked) warnings.push('Ningún escenario robusto entra en el capital informado.')
   if (!hasCapital) warnings.push('Capital no informado: el Robust Decision no evalúa factibilidad financiera ni affordability.')
-  warnings.push('La demanda ingresada es una hipótesis del usuario, no ventas observadas por ShippingAPP.')
+  warnings.push('La demanda ingresada es una hipótesis del usuario, no ventas observadas por GlobalShipping.')
 
   const label = verdict === 'attractive'
     ? hasCapital ? 'ATTRACTIVE' : 'ATTRACTIVE · CAPITAL UNCHECKED'

@@ -342,7 +342,7 @@ export const API_ROUTE_POLICIES: readonly RoutePolicy[] = [
     targetAccess: 'authenticated',
     targetMetered: true,
     costRisk: 'high',
-    externalProviders: ['Parse.bot / Alibaba', 'ShippingAPP direct Alibaba', 'Cloudflare Browser', 'Cloudflare Workers AI', 'Mercado Libre', 'BCRA'],
+    externalProviders: ['Parse.bot / Alibaba', 'GlobalShipping direct Alibaba', 'Cloudflare Browser', 'Cloudflare Workers AI', 'Mercado Libre', 'BCRA'],
     notes: 'Starts the one-credit import-analysis reservation only after product confirmation. For legacy callers it can still ingest Alibaba directly; the primary journey uses /api/product-read first, then submits confirmed product facts here. The same reservation covers NCM continuation and clarifications.',
   },
 ] as const

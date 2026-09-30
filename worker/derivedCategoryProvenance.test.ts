@@ -11,7 +11,7 @@ const env: any = { BROWSER: { quickAction: async () => new Response('{}') } }
 // signal EXCEPT a generic category. The user should not be asked "¿qué categoría?".
 function plasticBottleDirect(): DirectAlibabaResult {
   return {
-    status: 'ready', source: 'ShippingAPP direct Alibaba', httpStatus: 200, warnings: [],
+    status: 'ready', source: 'GlobalShipping direct Alibaba', httpStatus: 200, warnings: [],
     facts: {
       name: 'Large Capacity Sport Water Bottle Gym',
       category: null,
@@ -54,9 +54,9 @@ describe('derived category normalization with provenance', () => {
     expect(result.product.categorySource).toBe('derived')
     expect(requiredSelfFirstSignals(result)).toBe(7)
 
-    // Provenance preserved: it must be labelled as ShippingAPP-derived, not a supplier fact.
+    // Provenance preserved: it must be labelled as GlobalShipping-derived, not a supplier fact.
     expect(result.sourceEvidence.derivedCategory).toBeTruthy()
-    expect(result.assumptions.join(' ')).toMatch(/derivada por ShippingAPP/)
+    expect(result.assumptions.join(' ')).toMatch(/derivada por GlobalShipping/)
     // It must NOT claim insulation the product explicitly denies.
     expect(result.product.category).not.toMatch(/isotérmico|[Tt]ermo/)
 

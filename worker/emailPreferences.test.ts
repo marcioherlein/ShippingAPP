@@ -175,7 +175,7 @@ describe('Stage 6 email preference and unsubscribe boundary', () => {
       RESEND_API_KEY: 're_secret_never_return_me',
       EMAIL_UNSUBSCRIBE_SECRET: SECRET,
       EMAIL_PUBLIC_BASE_URL: 'https://shippingapp.test',
-      EMAIL_FROM: 'ShippingAPP <onboarding@resend.dev>',
+      EMAIL_FROM: 'GlobalShipping <onboarding@resend.dev>',
     })
     expect(response.status).toBe(200)
     const text = await response.text()

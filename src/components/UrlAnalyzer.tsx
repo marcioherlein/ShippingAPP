@@ -170,10 +170,10 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
     {messages.length > 0 && <div className="intake-thread" aria-live="polite">
       {messages.slice(-6).map((message, index) => <div key={`${index}-${message.content}`} className={`intake-message ${message.role}`}>
-        <span>{message.role === 'user' ? 'Vos' : 'ShippingAPP'}</span>
+        <span>{message.role === 'user' ? 'Vos' : 'GlobalShipping'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>ShippingAPP</span><p>Consultando publicaciones y comprobando los datos…</p><div className="search-loading-bar" role="progressbar" aria-label="Buscando productos"><span /></div></div>}
+      {loading && <div className="intake-message assistant"><span>GlobalShipping</span><p>Consultando publicaciones y comprobando los datos…</p><div className="search-loading-bar" role="progressbar" aria-label="Buscando productos"><span /></div></div>}
     </div>}
 
     <form className="url-form" onSubmit={submit}>

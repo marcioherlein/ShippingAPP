@@ -38,7 +38,7 @@ export type SemanticConcepts = {
   concepts: string[]
   // Human-readable exclusion reasons (observability, never chain-of-thought).
   exclusions: string[]
-  // A safe, ShippingAPP-derived normalized product category (never a supplier assertion).
+  // A safe, GlobalShipping-derived normalized product category (never a supplier assertion).
   derivedCategory: string | null
 }
 
@@ -349,7 +349,7 @@ export function deriveSemanticConcepts(facts: NcmProductFactsLike): SemanticConc
 
 /**
  * Derive a safe, human-readable normalized product category from evidence. This is an
- * explicitly ShippingAPP-DERIVED classification, never a supplier assertion — callers must
+ * explicitly GlobalShipping-DERIVED classification, never a supplier assertion — callers must
  * tag its provenance accordingly. Returns null when the evidence does not clearly describe
  * a product (fail-closed: better to ask than to invent).
  */

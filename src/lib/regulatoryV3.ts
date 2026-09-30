@@ -89,7 +89,7 @@ export function buildRegulatoryChecksV3(analysis: ProductAnalysis, client: Clien
 
   const stats: RegulatoryCheck = {
     id: 'statistics-v3', group: 'tax', status: 'info', title: 'Tasa de estadística: modelar 3% con topes; preferencias sólo tras validación',
-    detail: 'ShippingAPP aplica la tasa general y sus topes hasta que una preferencia/exención por origen o régimen haya sido verificada con la posición, reglas de origen y documentación correspondiente. El país declarado por el proveedor no activa una exención automática.',
+    detail: 'GlobalShipping aplica la tasa general y sus topes hasta que una preferencia/exención por origen o régimen haya sido verificada con la posición, reglas de origen y documentación correspondiente. El país declarado por el proveedor no activa una exención automática.',
     sourceIds: ['statistics', 'vuce'], financialEffect: 'economic_cost',
   }
 
@@ -98,7 +98,7 @@ export function buildRegulatoryChecksV3(analysis: ProductAnalysis, client: Clien
     title: client.gainsExempt === 'yes' ? 'Exento Ganancias aplicado por usuario' : client.gainsExempt === 'no' ? 'Percepción Ganancias aplicada' : 'Confirmar si está exento de Ganancias',
     detail: client.gainsExempt === 'yes'
       ? 'El motor modela la percepción de Ganancias en 0%. Debe existir certificado/condición fiscal aplicable; no se asume automáticamente por producto.'
-      : 'Si el importador no informa exención, ShippingAPP conserva la percepción de Ganancias de la tabla NCM_APP o el valor de fallback.',
+      : 'Si el importador no informa exención, GlobalShipping conserva la percepción de Ganancias de la tabla NCM_APP o el valor de fallback.',
     sourceIds: ['statistics'], financialEffect: 'cash_only',
   }
 
@@ -150,7 +150,7 @@ export function buildRegulatoryChecksV3(analysis: ProductAnalysis, client: Clien
 
   const fx: RegulatoryCheck = {
     id: 'fx-v3', group: 'fx', status: 'verify', title: 'Validar pago exterior con banco contra normativa BCRA vigente',
-    detail: 'El momento y condiciones de acceso al mercado de cambios dependen del tipo de pago, condición de la importación, documentación, NCM y normativa vigente. La condición MiPyME puede modificar el encuadre, pero ShippingAPP no presume una fecha automática de pago; la entidad interviniente debe validarla.',
+    detail: 'El momento y condiciones de acceso al mercado de cambios dependen del tipo de pago, condición de la importación, documentación, NCM y normativa vigente. La condición MiPyME puede modificar el encuadre, pero GlobalShipping no presume una fecha automática de pago; la entidad interviniente debe validarla.',
     sourceIds: ['bcra'], financialEffect: 'cash_only',
   }
 

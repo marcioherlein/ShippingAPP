@@ -6,7 +6,7 @@ const iconSource = readFileSync(new URL('./components/UiIcon.tsx', import.meta.u
 const intakeSource = readFileSync(new URL('./components/OwnedProductIntake.tsx', import.meta.url), 'utf8')
 const mainSource = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8')
 
-describe('ShippingAPP design system contract', () => {
+describe('GlobalShipping design system contract', () => {
   it('defines stable typography, spacing, shape, color, elevation and motion tokens', () => {
     for (const token of [
       '--ds-font-sans',

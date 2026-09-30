@@ -22,7 +22,7 @@ export function buildRegulatoryChecksV2(analysis: ProductAnalysis, client: Clien
   const arcaDocs: RegulatoryCheck = {
     id: 'arca-supporting-docs', group: 'client', status: 'verify',
     title: 'Verificar documentación complementaria del Perfil ARCA',
-    detail: 'La guía vigente de ARCA incluye certificado de antecedentes penales mediante SITA; para personas jurídicas indica la documentación de todos los socios. ShippingAPP no solicita ni almacena ese documento.',
+    detail: 'La guía vigente de ARCA incluye certificado de antecedentes penales mediante SITA; para personas jurídicas indica la documentación de todos los socios. GlobalShipping no solicita ni almacena ese documento.',
     sourceIds: ['arcaProfile'], financialEffect: 'none',
   }
 

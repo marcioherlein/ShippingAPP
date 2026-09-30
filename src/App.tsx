@@ -116,7 +116,7 @@ function makeAnalysisPrefill(
       ? 'Producto descripto por el usuario'
       : analysis.sourceUrl.startsWith('chat://')
         ? 'Datos aportados en conversación'
-        : 'Producto leído por ShippingAPP',
+        : 'Producto leído por GlobalShipping',
     ncmCode: analysis.customs.ncmCandidate,
     simCode: analysis.customs.simOpeningCandidate?.code ?? null,
     classificationConfidence: analysis.customs.classificationConfidence,
@@ -320,7 +320,7 @@ export default function App() {
       setPipelineStage(1)
 
       if (refreshed.customs.dutyRatePct === null || refreshed.customs.dutyRatePct === undefined) {
-        setPipelineBlocker('La NCM no tiene un derecho utilizable confirmado en el motor. ShippingAPP detiene la cotización antes de inventar un arancel.')
+        setPipelineBlocker('La NCM no tiene un derecho utilizable confirmado en el motor. GlobalShipping detiene la cotización antes de inventar un arancel.')
         setCalculationStatus('blocked')
         return
       }
@@ -468,7 +468,7 @@ export default function App() {
       </div>
     </dialog>
     <header className="journey-topbar">
-      <a className="journey-brand" href="#home"><span className="journey-brand-mark">S</span><span>Shipping<b>APP</b></span></a>
+      <a className="journey-brand" href="#home"><span className="journey-brand-mark">G</span><span>Global<b>Shipping</b></span></a>
       <div className="journey-top-actions"><span className="journey-live-dot">Motor de importación activo</span><button type="button" onClick={requestReset}>Nuevo caso</button></div>
     </header>
 
@@ -492,7 +492,7 @@ export default function App() {
         <div className="journey-how-step">
           <div className="journey-how-step-number">2</div>
           <b>Clasificamos el NCM</b>
-          <p>ShippingAPP identifica el c&#xF3;digo arancelario y busca los derechos, IVA e impuestos que aplican espec&#xED;ficamente a ese producto.</p>
+          <p>GlobalShipping identifica el c&#xF3;digo arancelario y busca los derechos, IVA e impuestos que aplican espec&#xED;ficamente a ese producto.</p>
         </div>
         <div className="journey-how-step">
           <div className="journey-how-step-number">3</div>
@@ -514,7 +514,7 @@ export default function App() {
       <div className="journey-orb journey-orb-two" aria-hidden="true" />
       <span className="eyebrow">Motor de costo de importaci&#xF3;n</span>
       <h2 className="journey-task-title">Tu cotización, paso a paso</h2>
-      <p>Del link del proveedor al costo unitario puesto en Argentina. ShippingAPP clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p>
+      <p>Del link del proveedor al costo unitario puesto en Argentina. GlobalShipping clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p>
       <div className="journey-stepper" role="region" aria-label="Progreso de la cotización" tabIndex={0}>
         {stepLabels.map((label, index) => <div className={`journey-step${index < progressStep ? ' done' : ''}${index === progressStep ? ' active' : ''}`} key={label} aria-current={index === progressStep ? 'step' : undefined}>
           <span>{index < progressStep ? <UiIcon name="check" size={16} /> : index + 1}</span><small>{label}</small>
@@ -524,22 +524,22 @@ export default function App() {
 
     <section className="journey-workspace">
       <div className="journey-conversation">
-        <div className="journey-thread-label"><span>ShippingAPP</span><small>Tu caso se arma mientras conversamos</small></div>
+        <div className="journey-thread-label"><span>GlobalShipping</span><small>Tu caso se arma mientras conversamos</small></div>
 
         <div className="journey-bubble assistant">
-          <span className="journey-avatar">S</span>
+          <span className="journey-avatar">G</span>
           <div><b>Primero: ¿desde dónde arrancamos?</b><p>No necesito que sepas de aduana. Elegí lo que mejor describe tu situación.</p></div>
         </div>
 
         {intent === null ? <div className="journey-choice-grid three">
           <button type="button" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Tengo una publicación, proveedor o sé qué quiero traer.</small></button>
-          <button type="button" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y ShippingAPP busca opciones reales en Alibaba.</small></button>
+          <button type="button" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y GlobalShipping busca opciones reales en Alibaba.</small></button>
           <button type="button" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Buscá ideas de producto usando la misma búsqueda real, sin catálogo cacheado.</small></button>
         </div> : <div className="journey-bubble user"><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
 
         {intent && <>
           <div className="journey-bubble assistant">
-            <span className="journey-avatar">S</span>
+            <span className="journey-avatar">G</span>
             <div><b>Antes de cotizar necesito entender cómo vas a importar.</b><p>Estas respuestas pueden cambiar impuestos, gastos y requisitos. Si algo no lo sabés, marcá “No sé”.</p></div>
           </div>
 
@@ -556,7 +556,7 @@ export default function App() {
 
           {step >= 2 && <>
             <div className="journey-bubble assistant">
-              <span className="journey-avatar">S</span>
+              <span className="journey-avatar">G</span>
               <div><b>Ahora definamos el tamaño posible de la operación.</b><p>Podés darme presupuesto, rango de unidades o decir que todavía no lo sabés.</p></div>
             </div>
             <section className={`journey-question-card${step === 2 ? ' active' : ''}`}>
@@ -577,7 +577,7 @@ export default function App() {
 
           {step >= 3 && <>
             <div className="journey-bubble assistant">
-              <span className="journey-avatar">S</span>
+              <span className="journey-avatar">G</span>
               <div>
                 <b>{intent === 'have_product' ? '¿Tenés el link o preferís contarme qué producto es?' : '¿Qué producto querés buscar?'}</b>
                 <p>{intent === 'have_product'
@@ -641,8 +641,8 @@ export default function App() {
 
     <footer className="journey-footer">
       <div className="journey-footer-left">
-        <a className="journey-footer-brand" href="#home"><span className="journey-brand-mark" style={{ width: '26px', height: '26px', fontSize: '13px', borderRadius: '8px' }}>S</span><span>Shipping<b>APP</b></span></a>
-        <p className="journey-footer-copy">&#xA9; {new Date().getFullYear()} ShippingAPP. Calculadora de costos de importaci&#xF3;n.</p>
+        <a className="journey-footer-brand" href="#home"><span className="journey-brand-mark" style={{ width: '26px', height: '26px', fontSize: '13px', borderRadius: '8px' }}>G</span><span>Global<b>Shipping</b></span></a>
+        <p className="journey-footer-copy">&#xA9; {new Date().getFullYear()} GlobalShipping. Calculadora de costos de importaci&#xF3;n.</p>
       </div>
       <nav className="journey-footer-links" aria-label="P&#xE1;ginas legales">
         <a href="/privacidad.html">Pol&#xED;tica de Privacidad</a>

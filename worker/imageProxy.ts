@@ -61,7 +61,7 @@ export async function fetchAllowedImage(source: string): Promise<AllowedImageFet
     const response = await fetch(current.toString(), {
       headers: {
         accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-        'user-agent': 'Mozilla/5.0 ShippingAPP image proxy',
+        'user-agent': 'Mozilla/5.0 GlobalShipping image proxy',
         referer: 'https://www.alibaba.com/',
       },
       // Redirects are followed manually so every hop is revalidated against the allowlist.

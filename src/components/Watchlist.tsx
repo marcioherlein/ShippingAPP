@@ -122,7 +122,7 @@ export default function Watchlist() {
       <div className="watchlist-head">
         <div>
           <b>{detail ? detail.title : 'Productos seguidos'}</b>
-          <small>{detail ? 'Snapshots generados por ShippingAPP.' : 'Separado del historial automático.'}</small>
+          <small>{detail ? 'Snapshots generados por GlobalShipping.' : 'Separado del historial automático.'}</small>
         </div>
         <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar seguimiento">×</button>
       </div>

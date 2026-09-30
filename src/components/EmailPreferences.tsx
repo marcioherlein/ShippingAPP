@@ -85,7 +85,7 @@ export default function EmailPreferences() {
             <input type="checkbox" checked={preferences.alertsEnabled} onChange={(event) => update({ alertsEnabled: event.target.checked })} />
           </label>
           <label className="email-pref-row">
-            <span><strong>Novedades de ShippingAPP</strong><small>Comunicaciones opcionales de producto. Desactivadas por defecto.</small></span>
+            <span><strong>Novedades de GlobalShipping</strong><small>Comunicaciones opcionales de producto. Desactivadas por defecto.</small></span>
             <input type="checkbox" checked={preferences.marketingEnabled} onChange={(event) => update({ marketingEnabled: event.target.checked })} />
           </label>
 

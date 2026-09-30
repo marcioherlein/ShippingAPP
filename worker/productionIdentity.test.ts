@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { productionIdentityStatus } from './productionIdentity'
 
 const READY = {
-  EMAIL_APP_NAME: 'ShippingAPP',
+  EMAIL_APP_NAME: 'GlobalShipping',
   EMAIL_PUBLIC_BASE_URL: 'https://app.shippingapp.com.ar',
   CLERK_AUTHORIZED_PARTIES: 'http://localhost:5173,https://app.shippingapp.com.ar',
   RESEND_API_KEY: 're_test_stage8',
-  EMAIL_FROM: 'ShippingAPP <noreply@shippingapp.com.ar>',
+  EMAIL_FROM: 'GlobalShipping <noreply@shippingapp.com.ar>',
   EMAIL_REPLY_TO: 'soporte@shippingapp.com.ar',
   EMAIL_SUPPORT_EMAIL: 'soporte@shippingapp.com.ar',
   EMAIL_UNSUBSCRIBE_SECRET: 'x'.repeat(48),
@@ -51,7 +51,7 @@ describe('Stage 8 production identity readiness', () => {
   it('rejects sender/reply/support identities on unrelated domains', () => {
     const status = productionIdentityStatus({
       ...READY,
-      EMAIL_FROM: 'ShippingAPP <noreply@attacker.example>',
+      EMAIL_FROM: 'GlobalShipping <noreply@attacker.example>',
       EMAIL_REPLY_TO: 'reply@attacker.example',
       EMAIL_SUPPORT_EMAIL: 'support@attacker.example',
     })
@@ -69,7 +69,7 @@ describe('Stage 8 production identity readiness', () => {
     const status = productionIdentityStatus({
       ...READY,
       EMAIL_PUBLIC_BASE_URL: 'javascript:alert(1)',
-      EMAIL_FROM: 'ShippingAPP <noreply@shippingapp.com.ar>\r\nBcc:evil@example.com',
+      EMAIL_FROM: 'GlobalShipping <noreply@shippingapp.com.ar>\r\nBcc:evil@example.com',
     })
     expect(status.publicOrigin).toBeNull()
     expect(status.finalDomainConfigured).toBe(false)

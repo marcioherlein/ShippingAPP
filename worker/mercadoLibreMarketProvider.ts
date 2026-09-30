@@ -283,7 +283,7 @@ async function catalogSearchFallback(
     const catalog = await mercadoLibreGet<CatalogProductSearch>(fetchImpl, path, accessToken, 'authenticated')
     const rawProducts = Array.isArray(catalog.results) ? catalog.results : []
     const hydratedProducts = await hydrateCatalogProducts(fetchImpl, rawProducts, accessToken, warnings)
-    warnings.push('MercadoLibre listing search endpoint was blocked for this app; ShippingAPP used official catalog discovery plus product-detail buy-box hydration instead.')
+    warnings.push('MercadoLibre listing search endpoint was blocked for this app; GlobalShipping used official catalog discovery plus product-detail buy-box hydration instead.')
     return {
       data: catalogProductsToSearch({ ...catalog, results: hydratedProducts }, productName, category),
       prediction: null,
@@ -375,7 +375,7 @@ export function createMercadoLibreMarketProviders(options: MercadoLibreMarketPro
         warnings.push('MercadoLibre token was validated through /users/me, but listing search used a public retry after Bearer was rejected for that endpoint.')
       }
       if (!candidates.length && search.searchMode.includes('blocked')) {
-        warnings.push('MercadoLibre search access is blocked for this app; ShippingAPP keeps the market section as insufficient instead of promoting a fake benchmark.')
+        warnings.push('MercadoLibre search access is blocked for this app; GlobalShipping keeps the market section as insufficient instead of promoting a fake benchmark.')
       }
 
       return {

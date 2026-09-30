@@ -105,7 +105,7 @@ export function mergeDirectFacts(data: any, direct: DirectReady) {
 
   const signalCount = requiredAlibabaSignalCount({ product })
   const evidenceNotes = [
-    `ShippingAPP obtuvo ${facts.evidence.length} señales desde HTML/JSON de Alibaba mediante fetch HTTPS propio.`,
+    `GlobalShipping obtuvo ${facts.evidence.length} señales desde HTML/JSON de Alibaba mediante fetch HTTPS propio.`,
     facts.categoryPath.length ? `Alibaba category path: ${facts.categoryPath.join(' > ')}.` : null,
     facts.hsCode ? `HS informado por Alibaba/proveedor: ${facts.hsCode}. Se conserva como evidencia; no sustituye la NCM argentina.` : null,
     facts.unitSize ? `Dimensiones logísticas extraídas: ${facts.unitSize}.` : null,
@@ -122,8 +122,8 @@ export function mergeDirectFacts(data: any, direct: DirectReady) {
       browserAttempted: false,
       browserMsUsed: 0,
       reason: trustPrior
-        ? 'Parse.bot fue complementado por el fetch HTTPS directo de ShippingAPP; Browser Run todavía no fue necesario.'
-        : 'ShippingAPP recuperó evidencia directamente de Alibaba mediante fetch HTTPS y JSON/HTML embebido, sin Parse.bot ni Browser Run.',
+        ? 'Parse.bot fue complementado por el fetch HTTPS directo de GlobalShipping; Browser Run todavía no fue necesario.'
+        : 'GlobalShipping recuperó evidencia directamente de Alibaba mediante fetch HTTPS y JSON/HTML embebido, sin Parse.bot ni Browser Run.',
     },
     product,
     suggestedQuantities: quantitiesFromMoq(finalMoq),
@@ -184,7 +184,7 @@ export function mergeNativeFacts(data: any, native: NativeReady) {
       directStatus: data.sourceRead?.directStatus ?? null,
       browserAttempted: true,
       browserMsUsed: native.browserMsUsed,
-      reason: 'El fetch directo no completó la ficha; ShippingAPP usó un único Browser Run JSON para recuperar la evidencia faltante.',
+      reason: 'El fetch directo no completó la ficha; GlobalShipping usó un único Browser Run JSON para recuperar la evidencia faltante.',
     },
     product,
     suggestedQuantities: quantitiesFromMoq(usableNumber(product.moq) ? product.moq : null),
@@ -321,7 +321,7 @@ export default {
 
     // The legacy analyzer still performs the Parse.bot call and direct HTTP read,
     // but its Browser binding is deliberately suppressed here. Browser credits are
-    // spent only once, below, after ShippingAPP's deterministic direct extractor has
+    // spent only once, below, after GlobalShipping's deterministic direct extractor has
     // had a chance to complete the product ficha.
     const baseEnv = alibabaUrl ? { ...env, BROWSER: noBrowserDuringBaseAnalysis } : env
     const response = await enrichWorker.fetch(request, baseEnv as any)

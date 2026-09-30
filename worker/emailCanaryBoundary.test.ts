@@ -53,7 +53,7 @@ function env(db: NodeDatabase, mode: 'off' | 'canary' | 'all', canaryIds = '') {
     EMAIL_SENDING_ENABLED: mode === 'off' ? 'false' : 'true',
     EMAIL_DELIVERY_MODE: mode,
     EMAIL_CANARY_USER_IDS: canaryIds,
-    EMAIL_FROM: 'ShippingAPP <mail@example.com>',
+    EMAIL_FROM: 'GlobalShipping <mail@example.com>',
     EMAIL_PUBLIC_BASE_URL: 'https://app.example.com',
     EMAIL_UNSUBSCRIBE_SECRET: 'stage8-canary-unsubscribe-secret-0000000000000000',
   }

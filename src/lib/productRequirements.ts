@@ -16,13 +16,13 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
   if (!ncm) {
     return [{
       id: 'classification-first', status: 'blocker', title: 'Resolver clasificación arancelaria antes de cerrar requisitos',
-      explanation: 'Intervenciones, alícuotas, prohibiciones, preferencias y parte de los reglamentos técnicos dependen de la posición arancelaria. Sin NCM candidata suficiente, ShippingAPP no extrapola requisitos desde otro producto.',
+      explanation: 'Intervenciones, alícuotas, prohibiciones, preferencias y parte de los reglamentos técnicos dependen de la posición arancelaria. Sin NCM candidata suficiente, GlobalShipping no extrapola requisitos desde otro producto.',
       nextStep: 'Completar los datos faltantes del producto o usar Expert Override con una NCM trazable.', source: 'VUCE',
     }]
   }
 
   const tariffExplanation = customs.classificationConfidence === 'low'
-    ? 'Existe un candidato NCM, pero su confianza es LOW. ShippingAPP retiene deliberadamente la alícuota del cálculo económico hasta fortalecer la clasificación o recibir evidencia manual; no es ausencia de tasa, es un gate de confianza.'
+    ? 'Existe un candidato NCM, pero su confianza es LOW. GlobalShipping retiene deliberadamente la alícuota del cálculo económico hasta fortalecer la clasificación o recibir evidencia manual; no es ausencia de tasa, es un gate de confianza.'
     : customs.dutyRatePct === null
       ? 'La clasificación candidata no tiene una alícuota utilizable en la evidencia cargada; no se completa con un porcentaje genérico.'
       : `El screening usa ${customs.dutyRatePct}% como derecho candidato. La alícuota final puede depender de actualización normativa, origen, régimen o preferencia aplicable.`
@@ -34,7 +34,7 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
   const simRequirement: ProductRequirement = simCandidate
     ? {
         id: 'sim-opening', status: 'verify', title: `Confirmar apertura SIM candidata ${simCandidate.code}`,
-        explanation: `ShippingAPP encontró una apertura oficial dentro de la NCM ${ncm}: ${simCandidate.description}. Confidence ${simConfidence.toUpperCase()}. La apertura SIM mejora la precisión declarativa y de intervenciones, pero la salida automática no constituye una clasificación vinculante.`,
+        explanation: `GlobalShipping encontró una apertura oficial dentro de la NCM ${ncm}: ${simCandidate.description}. Confidence ${simConfidence.toUpperCase()}. La apertura SIM mejora la precisión declarativa y de intervenciones, pero la salida automática no constituye una clasificación vinculante.`,
         nextStep: simUsableForLookup
           ? 'Contrastar la apertura con la ficha técnica y la nomenclatura vigente antes de oficializar la destinación o resolver intervenciones asociadas.'
           : 'La apertura puede mostrarse como hipótesis, pero por su baja confianza no se usa como referencia automática más específica; fortalecer evidencia antes de apoyarse en el sufijo.',
@@ -43,7 +43,7 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
     : {
         id: 'sim-opening', status: 'verify', title: 'Confirmar si corresponde una apertura SIM más específica',
         explanation: simConfidence === 'low'
-          ? `La NCM ${ncm} se conserva, pero ShippingAPP detectó conflicto o evidencia insuficiente entre aperturas SIM. No se eligió un sufijo automático para evitar falsa precisión.`
+          ? `La NCM ${ncm} se conserva, pero GlobalShipping detectó conflicto o evidencia insuficiente entre aperturas SIM. No se eligió un sufijo automático para evitar falsa precisión.`
           : `La NCM ${ncm} está identificada, pero no quedó una apertura SIM automática suficientemente sustentada. Esto no invalida la NCM; significa que el detalle declarativo debe revisarse por separado.`,
         nextStep: 'Revisar las aperturas SIM oficiales de la NCM y aportar las características técnicas que permitan distinguirlas.', source: 'ARCA',
       }
@@ -62,7 +62,7 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
     },
     {
       id: 'prohibitions', status: 'verify', title: 'Revisar prohibiciones y restricciones asociadas',
-      explanation: 'CIVUCE informa normativa sobre prohibiciones potencialmente asociada a la mercadería. ShippingAPP no interpreta “sin dato” como “sin prohibición”.',
+      explanation: 'CIVUCE informa normativa sobre prohibiciones potencialmente asociada a la mercadería. GlobalShipping no interpreta “sin dato” como “sin prohibición”.',
       nextStep: `Revisar prohibiciones de importación vinculadas a ${customsLookupCode} y su alcance material.`, source: 'CIVUCE',
     },
     {
@@ -92,7 +92,7 @@ export function buildProductRequirements(customs: CustomsProfile, originCountry:
   } else {
     requirements.push({
       id: 'origin', status: 'info', title: `Origen usado para screening: ${origin}`,
-      explanation: 'ShippingAPP no aplicó automáticamente una preferencia por el solo país informado.',
+      explanation: 'GlobalShipping no aplicó automáticamente una preferencia por el solo país informado.',
       nextStep: 'Revalidar origen si cambia proveedor, fábrica o ruta de abastecimiento.', source: 'CIVUCE',
     })
   }

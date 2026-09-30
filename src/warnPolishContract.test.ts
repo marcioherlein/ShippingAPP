@@ -8,7 +8,7 @@ const polish = fs.readFileSync(new URL('./styles/p2-semantic-polish.css', import
 describe('UI audit WARN cleanup contract', () => {
   it('routes application scrolling through the reduced-motion helper', () => {
     expect(app).toContain("from './lib/motionPreference'")
-    expect(app).toContain('scrollElementIntoView(')
+    expect(app).toContain('scrollIntoViewIfNeeded(')
     expect(app).toContain('scrollWindowToTop()')
     expect(app).not.toContain("behavior: 'smooth'")
     expect(motion).toContain("'(prefers-reduced-motion: reduce)'")

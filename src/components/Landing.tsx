@@ -21,12 +21,15 @@ export default function Landing({ onStart }: Props) {
     </header>
 
     <section className="journey-landing-hero">
+      <span className="journey-landing-eyebrow">Calculadora de costo de importaci&#xF3;n</span>
       <h1 className="journey-landing-headline">Recib&#xED; el valor real de tu producto <em>puesto en Argentina.</em></h1>
       <p className="journey-landing-sub">Pod&#xE9;s calcular flete, impuestos y gastos en destino en menos de 2 minutos.</p>
       <div className="journey-landing-cta-row">
         <button type="button" className="journey-landing-cta-primary" onClick={onStart}>Calcul&#xE1; ahora <span aria-hidden="true">&#x2192;</span></button>
         <button type="button" className="journey-landing-cta-secondary" onClick={scrollToHow}>Ver c&#xF3;mo funciona</button>
       </div>
+
+      <DemoPreview onStart={onStart} />
     </section>
 
     <section className="journey-how-it-works" id="como-funciona">
@@ -71,4 +74,47 @@ export default function Landing({ onStart }: Props) {
       </nav>
     </footer>
   </main>
+}
+
+/**
+ * A calm, static preview of a finished quote — the "demo" that shows a visitor
+ * what they get before they start. Pure markup (no data), styled to mirror the
+ * app's result surface so the landing and the tool feel like one product.
+ */
+function DemoPreview({ onStart }: { onStart: () => void }) {
+  return (
+    <button type="button" className="journey-demo" onClick={onStart} aria-label="Ver un ejemplo de c&#xE1;lculo y empezar">
+      <div className="journey-demo-chrome">
+        <span className="journey-demo-dot" /><span className="journey-demo-dot" /><span className="journey-demo-dot" />
+        <span className="journey-demo-chrome-label">globalshipping.app / cotizaci&#xF3;n</span>
+      </div>
+      <div className="journey-demo-body">
+        <div className="journey-demo-head">
+          <div className="journey-demo-thumb" aria-hidden="true">&#x1F3A7;</div>
+          <div className="journey-demo-head-text">
+            <b>Auriculares Bluetooth</b>
+            <small>NCM 8518.30.00 &middot; 100 unidades</small>
+          </div>
+          <span className="journey-demo-badge">C&#xE1;lculo completo</span>
+        </div>
+
+        <div className="journey-demo-progress"><span /></div>
+
+        <ul className="journey-demo-lines">
+          <li><span>Precio FOB</span><b>USD 12,00</b></li>
+          <li><span>Arancel de importaci&#xF3;n</span><b>USD 2,16</b></li>
+          <li><span>IVA importaci&#xF3;n</span><b>USD 2,98</b></li>
+          <li><span>Flete LCL + gastos</span><b>USD 3,40</b></li>
+        </ul>
+
+        <div className="journey-demo-total">
+          <div>
+            <small>Costo unitario puesto en Argentina</small>
+            <b>USD 20,54</b>
+          </div>
+          <span className="journey-demo-cta" aria-hidden="true">Probarlo &#x2192;</span>
+        </div>
+      </div>
+    </button>
+  )
 }

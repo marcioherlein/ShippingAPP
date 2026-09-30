@@ -378,8 +378,14 @@ export async function restoreJourneyState(state: PersistedJourneyState) {
   if (state.step === 1) return
 
   if (currentStep() === 1) {
-    const next = await waitFor(() => buttonContaining('Seguir con presupuesto'))
-    if (!next.disabled) next.click()
+    // Wait for the gate to become enabled — selecting the sensitive-category
+    // DsSelect option re-renders React asynchronously, so the button may still
+    // read disabled the instant restoreOperation resolves. Poll until ready.
+    const next = await waitFor(() => {
+      const button = buttonContaining('Seguir con presupuesto')
+      return button && !button.disabled ? button : null
+    })
+    next.click()
   }
 
   await waitFor(() => textOf(document.querySelector('.journey-question-card.active .journey-question-head > span')) === '02'
@@ -387,8 +393,11 @@ export async function restoreJourneyState(state: PersistedJourneyState) {
   await restoreBudget(state)
   if (state.step === 2) return
 
-  const next = await waitFor(() => buttonContaining('Seguir con el producto'))
-  if (!next.disabled) next.click()
+  const next = await waitFor(() => {
+    const button = buttonContaining('Seguir con el producto')
+    return button && !button.disabled ? button : null
+  })
+  next.click()
   await waitFor(() => document.querySelector('.journey-product-surface'))
 }
 

@@ -1,4 +1,6 @@
 import ManualNcmPicker from './ManualNcmPicker'
+import DsSelect from './DsSelect'
+import UiIcon from './UiIcon'
 import type { CustomsProfile } from '../lib/customsClassification'
 import React, { useEffect, useMemo, useState } from 'react'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
@@ -331,13 +333,13 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           {refinementExhausted && <NomencladorGuidance onManualSearch={() => setShowManualNcm(true)} />}
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <span>→</span></button>}
+            {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <UiIcon name="arrow-right" size={16} /></button>}
             <button type="button" className="pipeline-secondary" onClick={onEditProduct}>{refinementExhausted ? 'Revisar / cambiar producto' : 'Cambiar producto'}</button>
           </div>
         </> : <>
           <div className="pipeline-classification-ready">
             <div><span className="eyebrow">Clasificación lista</span><h3>NCM {analysis.customs.ncmCandidate}</h3><p>Confianza {confidenceLabel(analysis.customs.classificationConfidence)} · derecho {analysis.customs.dutyRatePct}%</p></div>
-            <span aria-hidden="true">✓</span>
+            <span className="pipeline-classification-check" aria-hidden="true"><UiIcon name="check" size={18} /></span>
           </div>
 
           <div className="pipeline-understood-card quote-known-card">
@@ -361,16 +363,19 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             </div>
             <div className="pipeline-currency-grid">
               <label className="pipeline-confirm-field"><span>Moneda del precio del proveedor</span>
-                <select value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value as CurrencyCode)}>
-                  {(Object.keys(CURRENCY_LABELS) as CurrencyCode[]).map((code) => <option key={code} value={code}>{code} · {CURRENCY_LABELS[code]}</option>)}
-                </select>
+                <DsSelect
+                  ariaLabel="Moneda del precio del proveedor"
+                  value={priceCurrency}
+                  onChange={(value) => setPriceCurrency(value as CurrencyCode)}
+                  options={(Object.keys(CURRENCY_LABELS) as CurrencyCode[]).map((code) => ({ value: code, label: `${code} · ${CURRENCY_LABELS[code]}` }))}
+                />
               </label>
               {priceCurrency !== 'USD' && <label className="pipeline-confirm-field"><span>Tipo de cambio (USD por 1 {priceCurrency})</span><input type="number" min="0" step="0.0001" value={fxRateInput} onChange={(event) => setFxRateInput(event.target.value)} placeholder={`${priceConversion.usdPerUnit}`} /></label>}
             </div>
             {priceCurrency !== 'USD' && <div className="pipeline-currency-preview" role="status">
               <span>{draft.unitPriceUsd} {priceCurrency} → <b>{usd(priceConversion.amountUsd)}</b> por unidad</span>
               <small>{priceConversion.note}</small>
-              <button type="button" className="journey-primary-action" onClick={applyCurrencyConversion}>Convertir el precio a USD <span>→</span></button>
+              <button type="button" className="journey-primary-action" onClick={applyCurrencyConversion}>Convertir el precio a USD <UiIcon name="arrow-right" size={16} /></button>
             </div>}
           </div>}
 
@@ -416,7 +421,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>Cotizar con estos datos <span>→</span></button>
+            <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>Cotizar con estos datos <UiIcon name="arrow-right" size={16} /></button>
             <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
           </div>
         </>}
@@ -440,7 +445,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         {pipelineSteps.map((item, index) => {
           const state = stageState(index, status, activeStage)
           return <div className={`pipeline-step-row ${state}`} aria-current={state === 'active' ? 'step' : undefined} key={item.title}>
-            <span className="pipeline-step-icon" aria-hidden="true">{state === 'done' ? '✓' : state === 'blocked' ? '!' : index + 1}</span>
+            <span className="pipeline-step-icon" aria-hidden="true">{state === 'done' ? <UiIcon name="check" size={17} /> : state === 'blocked' ? <UiIcon name="warning" size={16} /> : index + 1}</span>
             <div className="pipeline-step-copy">
               <div><b>{item.title}</b><small>{state === 'active' ? 'Procesando' : state === 'done' ? 'Completo' : state === 'blocked' ? 'Revisión necesaria' : 'Pendiente'}</small></div>
               <p>{item.description}</p>
@@ -457,7 +462,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
         <NomencladorGuidance onManualSearch={onReviewProduct} />
         <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <span>→</span></button>
+          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <UiIcon name="arrow-right" size={16} /></button>
           <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
         </div>
       </div>}

@@ -5,6 +5,8 @@ import { optimizeQuantity, type BuyStrategy } from '../lib/quantityOptimizer'
 import { buildImporterSummary, type ImporterSummary } from '../lib/importerSummary'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { ars, usd } from '../lib/format'
+import DsSelect from './DsSelect'
+import UiIcon from './UiIcon'
 
 const interventionLabels: Record<SensitiveProductCategory, string> = {
   unknown: 'No sé todavía',
@@ -62,7 +64,7 @@ function NumberField({ label, hint, value, min = 0, step = 1, suffix, onChange }
 }
 
 function checklistSignal(ok: boolean, label: string) {
-  return <span className={ok ? 'score-pill' : 'score-pill warning-pill'}>{ok ? 'OK' : label}</span>
+  return <span className={`ds-status-pill ${ok ? 'is-pass' : 'is-warn'}`}><UiIcon name={ok ? 'check' : 'warning'} size={14} />{ok ? 'OK' : label}</span>
 }
 
 function decisionCopy(mode: 'lcl' | 'air' | 'courier' | null, marginPct: number | null, blockers: string[]) {
@@ -294,7 +296,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
         <section className="panel">
           <div className="section-heading"><span>01</span><div><h2>Producto y proveedor</h2><p>Base física y comercial usada para la simulación.</p></div></div>
           <label className="field field-wide"><span>Producto</span><input placeholder="Ej. paleta de pádel carbono" value={productName} onChange={(e) => setProductName(e.target.value)} /></label>
-          <label className="field field-wide"><span>Origen</span><select value={originCountry} onChange={(e) => setOriginCountry(e.target.value)}>{originCountries.map((country) => <option key={country} value={country}>{country}</option>)}</select></label>
+          <label className="field field-wide"><span>Origen</span><DsSelect ariaLabel="País de origen" value={originCountry} onChange={setOriginCountry} options={originCountries.map((country) => ({ value: country, label: country }))} /></label>
           <div className="field-grid">
             <NumberField label="Cantidad base" hint="El costo unitario de arriba corresponde a esta cantidad, no a importar literalmente 1 unidad." value={quantity} onChange={setQuantity} suffix="u." />
             <NumberField label="Precio FOB unitario" value={unitPriceUsd} onChange={setUnitPriceUsd} step={0.01} suffix="USD" />
@@ -306,11 +308,11 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
         <section className="panel journey-profile-panel">
           <div className="section-heading"><span>02</span><div><h2>Tu operación</h2><p>Viene del diálogo inicial y sigue siendo editable.</p></div></div>
           <div className="field-grid">
-            <label className="field"><span>Uso</span><select value={purpose} onChange={(e) => setPurpose(e.target.value as ImportPurpose)}><option value="resale">Reventa</option><option value="own_use">Uso propio</option><option value="unknown">No sé</option></select></label>
-            <label className="field"><span>Importa como</span><select value={entityType} onChange={(e) => setEntityType(e.target.value as ImportEntityType)}><option value="company">Empresa</option><option value="individual">Persona humana</option><option value="unknown">No sé</option></select></label>
-            <label className="field"><span>Firma/importador</span><select value={hasImporterSignature} onChange={(e) => setHasImporterSignature(e.target.value as 'yes' | 'no' | 'unknown')}><option value="yes">Tiene firma</option><option value="no">No tiene firma</option><option value="unknown">No sé</option></select></label>
-            <label className="field"><span>Grupo con intervención</span><small>Alimentos, juguetes, cosméticos, medicamentos y suplementos suman automáticamente {usd(interventionFeeUsd)} por trámite a la operación.</small><select value={sensitiveCategory} onChange={(e) => setSensitiveCategory(e.target.value as SensitiveProductCategory)}>{(Object.keys(interventionLabels) as SensitiveProductCategory[]).map((key) => <option key={key} value={key}>{interventionLabels[key]}</option>)}</select></label>
-            {capitalGoodEligible && <label className="field"><span>NCM marcada Bien de Uso</span><small>Esto puede llevar tasa estadística y percepciones a 0 en el modelo.</small><select value={capitalGoodUse ? 'yes' : 'no'} onChange={(e) => setCapitalGoodUse(e.target.value === 'yes')}><option value="no">No aplicar tratamiento</option><option value="yes">Sí, se usará como Bien de Uso</option></select></label>}
+            <label className="field"><span>Uso</span><DsSelect ariaLabel="Uso" value={purpose} onChange={(v) => setPurpose(v as ImportPurpose)} options={[{ value: 'resale', label: 'Reventa' }, { value: 'own_use', label: 'Uso propio' }, { value: 'unknown', label: 'No sé' }]} /></label>
+            <label className="field"><span>Importa como</span><DsSelect ariaLabel="Importa como" value={entityType} onChange={(v) => setEntityType(v as ImportEntityType)} options={[{ value: 'company', label: 'Empresa' }, { value: 'individual', label: 'Persona humana' }, { value: 'unknown', label: 'No sé' }]} /></label>
+            <label className="field"><span>Firma/importador</span><DsSelect ariaLabel="Firma de importador" value={hasImporterSignature} onChange={(v) => setHasImporterSignature(v as 'yes' | 'no' | 'unknown')} options={[{ value: 'yes', label: 'Tiene firma' }, { value: 'no', label: 'No tiene firma' }, { value: 'unknown', label: 'No sé' }]} /></label>
+            <label className="field"><span>Grupo con intervención</span><small>Alimentos, juguetes, cosméticos, medicamentos y suplementos suman automáticamente {usd(interventionFeeUsd)} por trámite a la operación.</small><DsSelect ariaLabel="Grupo con intervención" value={sensitiveCategory} onChange={(v) => setSensitiveCategory(v as SensitiveProductCategory)} options={(Object.keys(interventionLabels) as SensitiveProductCategory[]).map((key) => ({ value: key, label: interventionLabels[key] }))} /></label>
+            {capitalGoodEligible && <label className="field"><span>NCM marcada Bien de Uso</span><small>Esto puede llevar tasa estadística y percepciones a 0 en el modelo.</small><DsSelect ariaLabel="NCM marcada Bien de Uso" value={capitalGoodUse ? 'yes' : 'no'} onChange={(v) => setCapitalGoodUse(v === 'yes')} options={[{ value: 'no', label: 'No aplicar tratamiento' }, { value: 'yes', label: 'Sí, se usará como Bien de Uso' }]} /></label>}
           </div>
         </section>
 
@@ -333,7 +335,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
             <NumberField label="MOQ proveedor" value={moq} onChange={setMoq} min={1} suffix="u." />
             <NumberField label="Demanda mensual" hint="Opcional; 0 si no sabés" value={monthlyDemand} onChange={setMonthlyDemand} suffix="u./mes" />
             <NumberField label="Precio venta local (USD)" hint="Se precarga desde el benchmark argentino cuando hay tipo de cambio disponible; podés reemplazarlo." value={localSellPriceUsd} onChange={setLocalSellPriceUsd} step={0.01} suffix="USD" />
-            <label className="field"><span>Estrategia</span><small>{strategyCopy(strategy)}</small><select value={strategy} onChange={(e) => setStrategy(e.target.value as BuyStrategy)}>{(Object.keys(strategyLabels) as BuyStrategy[]).map((key) => <option key={key} value={key}>{strategyLabels[key]}</option>)}</select></label>
+            <label className="field"><span>Estrategia</span><small>{strategyCopy(strategy)}</small><DsSelect ariaLabel="Estrategia de compra" value={strategy} onChange={(v) => setStrategy(v as BuyStrategy)} options={(Object.keys(strategyLabels) as BuyStrategy[]).map((key) => ({ value: key, label: strategyLabels[key] }))} /></label>
           </div>
         </section>
       </details>
@@ -407,7 +409,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
               <div><span>Score</span><b>{quantityRecommendation.score}/100</b></div>
             </div>
             {quantityRecommendation.reasons.filter((r) => r.includes('m³')).map((r) => (
-              <p key={r} className="assumption-note importer-logistics-signal">💡 {r}</p>
+              <p key={r} className="assumption-note importer-logistics-signal"><UiIcon name="info" size={15} /> {r}</p>
             ))}
             <p className="assumption-note">{quantityRecommendation.affordable ? 'Entra dentro del presupuesto cargado.' : 'No entra dentro del presupuesto: es la opción menos mala encontrada desde el MOQ.'} {optimizer.notes[2]}</p>
             <button className="secondary" type="button" onClick={() => setQuantity(quantityRecommendation.quantity)}>Usar esta cantidad en la simulación</button>

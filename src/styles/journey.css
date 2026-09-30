@@ -378,9 +378,10 @@
 }
 .journey-summary-sticky h2 { margin: 7px 0 18px; font-size: 23px; letter-spacing: -.04em; }
 .journey-summary-list { display: grid; gap: 0; }
-.journey-summary-list > div { padding: 11px 0; display: flex; justify-content: space-between; gap: 14px; border-bottom: 1px solid rgba(226,232,240,.8); }
-.journey-summary-list span { color: #94a3b8; font-size: 11px; }
-.journey-summary-list b { color: #334155; text-align: right; font-size: 11px; }
+.journey-summary-list > div { padding: 12px 0; display: flex; justify-content: space-between; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--ds-border-soft); }
+.journey-summary-list > div:last-child { border-bottom: 0; }
+.journey-summary-list span { color: var(--ds-text-muted); font-size: 13px; }
+.journey-summary-list b { color: var(--ds-text); text-align: right; font-size: 13px; font-weight: 600; }
 .journey-summary-note { margin-top: 18px; padding: 14px; border-radius: 16px; background: linear-gradient(145deg, #f1f4ff, #f8faff); }
 .journey-summary-note span { color: #5363ed; font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
 .journey-summary-note p { margin: 6px 0 0; color: #64748b; font-size: 12px; line-height: 1.5; }

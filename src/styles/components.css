@@ -40,7 +40,8 @@
 .tax-breakdown-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:12px; }
 .tax-breakdown-grid span { display:grid; gap:4px; padding:10px; border-radius:10px; background:rgba(255,255,255,.05); color:#aeb8d0; font-size:10px; }
 .tax-breakdown-grid b { color:#fff; font-size:12px; }
-.tax-assumptions { margin:12px 0 0; padding-left:18px; color:#aeb8d0; font-size:10px; line-height:1.5; }
+.tax-assumptions { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.tax-assumptions li { padding: 10px 14px; border-radius: var(--ds-radius-sm); background: var(--ds-warning-soft); color: var(--ds-text); font-size: 13px; line-height: 1.45; border-left: 3px solid var(--ds-warning); }
 .table-card, .method-card { padding: 20px; }
 .table-title { display: flex; justify-content: space-between; align-items: end; margin-bottom: 12px; }
 .table-title h2 { margin: 0; font-size: 17px; }
@@ -51,7 +52,6 @@ th { text-align: left; color: #7d879a; font-size: 10px; text-transform: uppercas
 td { padding: 12px 10px; border-bottom: 1px solid #edf0f4; white-space: nowrap; }
 .selected-row { background: #f0f2ff; }
 td em { display: block; color: #5468ff; font-style: normal; font-size: 9px; font-weight: 800; }
-.score-pill { display: inline-grid; place-items: center; min-width: 34px; padding: 5px 7px; border-radius: 999px; background: #eef0ff; color: #4456d9; font-weight: 900; }
 .method-card { color: #667188; font-size: 12px; line-height: 1.6; }
 .method-card h3 { color: #263149; margin-bottom: 6px; }
 .method-card p:last-child { margin-bottom: 0; }

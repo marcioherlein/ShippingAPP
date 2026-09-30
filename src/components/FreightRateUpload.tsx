@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { applyFreightRate, parseFreightRateCsv, selectFreightRate, type FreightImportResult } from '../lib/freightRateImport'
 import type { Inputs } from '../lib/types'
+import DsSelect from './DsSelect'
 
 type Props = { inputs: Inputs; setInputs: React.Dispatch<React.SetStateAction<Inputs>> }
 
@@ -38,7 +39,7 @@ export default function FreightRateUpload({ inputs, setInputs }: Props) {
     <div className="readiness-grid" style={{ marginTop: 12 }}>
       <label className="readiness-field"><span>Origen exacto</span><small>Debe coincidir con el lane del archivo.</small><input value={origin} onChange={(e) => setOrigin(e.target.value)} /></label>
       <label className="readiness-field"><span>Destino exacto</span><small>Sin matching difuso en MVP 0.7.</small><input value={destination} onChange={(e) => setDestination(e.target.value)} /></label>
-      <label className="readiness-field"><span>Modo</span><small>La unidad debe ser compatible.</small><select value={mode} onChange={(e) => setMode(e.target.value as 'air' | 'sea_lcl')}><option value="air">Aéreo · USD/kg</option><option value="sea_lcl">Marítimo LCL · USD/W/M</option></select></label>
+      <label className="readiness-field"><span>Modo</span><small>La unidad debe ser compatible.</small><DsSelect ariaLabel="Modo de transporte" value={mode} onChange={(value) => setMode(value as 'air' | 'sea_lcl')} options={[{ value: 'air', label: 'Aéreo · USD/kg' }, { value: 'sea_lcl', label: 'Marítimo LCL · USD/W/M' }]} /></label>
       <label className="readiness-field"><span>Fecha de cálculo</span><small>Sólo se consideran rates vigentes.</small><input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} /></label>
       <label className="readiness-field"><span>Archivo CSV</span><small>USD únicamente. Quotes tienen prioridad sobre rate sheets y benchmarks.</small><input type="file" accept=".csv,text/csv" onChange={(e) => void onFile(e.target.files?.[0])} /></label>
       <div className="readiness-field"><span>Plantilla</span><small>Columnas normalizadas para el MVP.</small><a href="/freight-rate-template.csv">Abrir plantilla CSV ↗</a></div>

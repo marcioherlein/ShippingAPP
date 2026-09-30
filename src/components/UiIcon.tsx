@@ -1,6 +1,6 @@
 import React from 'react'
 
-export type UiIconName = 'product' | 'search' | 'sparkles' | 'external-link' | 'edit' | 'arrow-right' | 'check' | 'warning'
+export type UiIconName = 'product' | 'search' | 'sparkles' | 'external-link' | 'edit' | 'arrow-right' | 'check' | 'warning' | 'chevron-down' | 'info'
 
 type Props = {
   name: UiIconName
@@ -17,6 +17,8 @@ const paths: Record<UiIconName, React.ReactNode> = {
   'arrow-right': <><path d="M5 12h14"/><path d="m14 7 5 5-5 5"/></>,
   check: <path d="m5 12 4 4L19 6"/>,
   warning: <><path d="M12 4 21 20H3z"/><path d="M12 9v5M12 17.2v.1"/></>,
+  'chevron-down': <path d="m6 9 6 6 6-6"/>,
+  info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8v.1"/></>,
 }
 
 export default function UiIcon({ name, size = 18, className }: Props) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useMemo, useState } from 'react'
 import { manualNcmProfile, searchManualNcm, type ManualNcmIndex } from '../lib/manualNcm'
 import type { CustomsProfile } from '../lib/customsClassification'
+import DsSelect from './DsSelect'
 export default function ManualNcmPicker({ customs, onSelect }: { customs: CustomsProfile; onSelect: (value: CustomsProfile) => void }) {
   const selectionName = useId()
   const [index, setIndex] = useState<ManualNcmIndex | null>(null)
@@ -34,7 +35,7 @@ export default function ManualNcmPicker({ customs, onSelect }: { customs: Custom
     </div>}
     {index && <>
       <label>Producto o código NCM<input value={query} onChange={event => { setQuery(event.target.value); setSelected(''); setConfirmed(false) }} type="search" autoComplete="off" placeholder="Ej. crema, raquetas, 3304" /></label>
-      <label>Capítulo<select value={chapter} onChange={event => { setChapter(event.target.value); setSelected(''); setConfirmed(false) }}><option value="">Todos los capítulos</option>{chapters.map(value => <option key={value} value={value}>Capítulo {value}</option>)}</select></label>
+      <label>Capítulo<DsSelect ariaLabel="Capítulo del nomenclador" value={chapter} onChange={value => { setChapter(value); setSelected(''); setConfirmed(false) }} options={[{ value: '', label: 'Todos los capítulos' }, ...chapters.map(value => ({ value, label: `Capítulo ${value}` }))]} /></label>
       <p role="status">{results.length === 60 ? 'Primeras 60 posiciones. Agregá palabras para acotar.' : `${results.length} posiciones encontradas.`}</p>
       <div className="manual-ncm-results" role="group" aria-label="Posiciones del nomenclador">{results.map(([code, label]) => <label key={code}><input type="radio" name={selectionName} checked={selected === code} onChange={() => { setSelected(code); setConfirmed(false) }} /><span><b>{code}</b> {label}</span></label>)}</div>
       {results.length === 0 && <p className="manual-ncm-empty">No encontramos coincidencias. Probá con el nombre general del producto o elegí otro capítulo.</p>}

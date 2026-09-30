@@ -166,6 +166,26 @@ function clarificationCopy(analysis: ProductAnalysisV2, target: ClassificationCl
   }
 }
 
+/**
+ * Actionable guidance shown when the automatic NCM classifier cannot resolve a
+ * confident position (audit item #2: "guía al usuario si el nomenclador falla").
+ * Turns a dead-end into concrete next steps instead of just reporting failure.
+ */
+function NomencladorGuidance({ onManualSearch }: { onManualSearch?: () => void }) {
+  return <div className="pipeline-ncm-guidance">
+    <div className="pipeline-ncm-guidance-head">
+      <span className="eyebrow">No te quedes trabado</span>
+      <b>Cómo seguir si no puedo clasificarlo solo</b>
+      <small>La clasificación NCM depende de material, función y uso. Cuando esos datos no alcanzan, tenés tres caminos y ninguno reinicia el caso.</small>
+    </div>
+    <ol className="pipeline-ncm-guidance-steps">
+      <li><b>Describilo con otras palabras.</b> Sumá material, para qué se usa y qué lo diferencia. Muchas veces el nombre comercial solo no alcanza para elegir la posición.</li>
+      <li><b>Buscá la posición vos mismo.</b> Abrí el nomenclador, buscá por producto o código y validamos que exista y tenga aranceles antes de usarla.{onManualSearch && <> <button type="button" className="pipeline-link-action" onClick={onManualSearch}>Abrir el buscador del nomenclador</button></>}</li>
+      <li><b>Usá una posición que ya conocés.</b> Si tenés el NCM de una importación anterior o de tu despachante, cargalo directo en el buscador y confirmalo.</li>
+    </ol>
+  </div>
+}
+
 export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
@@ -308,6 +328,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
 
           {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Todavía no puedo clasificarlo.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
           {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No pude cerrar una clasificación confiable.</b><span>Se usaron {refinement?.attempt} de {refinement?.maxAttempts} intentos de aclaración. Podés buscar y confirmar una posición en el nomenclador sin iniciar otro caso.</span></div>}
+          {refinementExhausted && <NomencladorGuidance onManualSearch={() => setShowManualNcm(true)} />}
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
             {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <span>→</span></button>}
@@ -434,6 +455,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <b>No voy a completar el costo con un supuesto inventado.</b>
         <p>{blocker || 'La clasificación o un dato necesario para el cálculo necesita revisión.'}</p>
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
+        <NomencladorGuidance onManualSearch={onReviewProduct} />
         <div className="pipeline-confirm-actions">
           <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <span>→</span></button>
           <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>

@@ -407,6 +407,7 @@ export function installJourneyPersistence() {
   let restoring = false
   let scheduled = false
   let lastNavigationKey: string | null = null
+  let restoreChain: Promise<void> = Promise.resolve()
 
   const syncState = () => {
     if (restoring) return
@@ -459,25 +460,39 @@ export function installJourneyPersistence() {
 
   const onFieldChange = () => scheduleSync()
 
-  const restore = async (state: PersistedJourneyState | null, source: InitialSource | 'history' = 'history') => {
-    restoring = true
-    try {
-      await waitFor(() => document.querySelector('.journey-app'))
-      if (!state) {
-        buttonContaining('Nuevo caso')?.click()
-        localStorage.removeItem(STORAGE_KEY)
-        lastNavigationKey = null
-        return
-      }
-
-      await restoreJourneyState(state)
-      window.dispatchEvent(new Event('shippingapp:journey-restored'))
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-      if (source === 'storage') writeState(state, 'replace')
-      lastNavigationKey = navigationKey(state)
-    } finally {
-      restoring = false
+  const runRestore = async (state: PersistedJourneyState | null, source: InitialSource | 'history') => {
+    await waitFor(() => document.querySelector('.journey-app'))
+    if (!state) {
+      buttonContaining('Nuevo caso')?.click()
+      localStorage.removeItem(STORAGE_KEY)
+      lastNavigationKey = null
+      return
     }
+
+    await restoreJourneyState(state)
+    window.dispatchEvent(new Event('shippingapp:journey-restored'))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    if (source === 'storage') writeState(state, 'replace')
+    lastNavigationKey = navigationKey(state)
+  }
+
+  // Serialize restores. popstate can fire again before the previous restore has
+  // settled — on slower CI machines especially — and two restores running
+  // concurrently interleave their DOM-replay clicks and land on the wrong step.
+  // Chain them so each replay starts from the fully-settled DOM of the last, and
+  // hold `restoring` across the whole chain so persistence never re-enters mid-replay.
+  let pendingRestores = 0
+  const restore = (state: PersistedJourneyState | null, source: InitialSource | 'history' = 'history') => {
+    pendingRestores += 1
+    restoring = true
+    restoreChain = restoreChain
+      .then(() => runRestore(state, source))
+      .catch(() => undefined)
+      .finally(() => {
+        pendingRestores -= 1
+        if (pendingRestores === 0) restoring = false
+      })
+    return restoreChain
   }
 
   const onPopState = () => {

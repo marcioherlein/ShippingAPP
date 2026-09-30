@@ -18,6 +18,7 @@ import './styles/accessibility.css'
 import './styles/ncm-clarification.css'
 import './styles/output-redesign.css'
 import './styles/product-quality.css'
+import './styles/dark-mode.css'
 
 const root = document.getElementById('root')
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.trim()

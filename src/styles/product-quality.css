@@ -42,7 +42,7 @@ body { background: var(--ds-surface-subtle); }
 }
 .journey-top-actions button { font-size: .875rem; font-weight: 600; box-shadow: none; }
 .journey-brand-mark, .journey-avatar { box-shadow: none; background: var(--ds-brand); }
-.journey-landing-headline { letter-spacing: -.045em; font-weight: 700; text-wrap: balance; }
+.journey-landing-headline { letter-spacing: -.022em; font-weight: 600; text-wrap: balance; }
 .journey-landing-sub { max-width: 38rem; margin-inline: auto; text-wrap: pretty; }
 .journey-orb { display: none; }
 .journey-task-title {
@@ -68,7 +68,7 @@ body { background: var(--ds-surface-subtle); }
 }
 .journey-app .journey-primary-action, .journey-landing-cta-primary {
   background: var(--ds-brand-strong); color: #fff; min-height: 48px;
-  font-weight: 600; box-shadow: none; border-radius: var(--ds-radius-md);
+  font-weight: 600; box-shadow: none; border-radius: 999px;
 }
 .journey-step small { font-size: .8125rem; line-height: 1.35; }
 .journey-summary-list b, .unit-context-grid b { font-variant-numeric: tabular-nums; }
@@ -120,8 +120,8 @@ body { background: var(--ds-surface-subtle); }
 .journey-step:is(.active, .done) small { color: var(--ds-brand-strong); }
 /* Content is readable from first paint; decoration must never hide a section. */
 .journey-landing-hero {
-  min-height: 0; padding: clamp(3.5rem, 8vw, 6rem) 1.5rem;
-  background: var(--ds-surface); border-bottom: 1px solid var(--ds-border-soft);
+  min-height: 0; padding: clamp(40px, 7vw, 88px) 0 clamp(48px, 6vw, 72px);
+  background: transparent; border-bottom: 0;
 }
 .journey-landing-hero::before, .journey-landing-hero::after { display: none; }
 .journey-landing-headline { color: var(--ds-text-strong); font-size: clamp(2.5rem, 6vw, 4.5rem); line-height: 1.05; }
@@ -134,7 +134,7 @@ body { background: var(--ds-surface-subtle); }
 .journey-bubble.user > div { background: var(--ds-brand-strong); box-shadow: none; }
 .journey-step:is(.active, .done) > span { box-shadow: none; }
 .skip-to-quote:not(:focus-visible) { clip-path: inset(50%); width: 1px; height: 1px; padding: 0; overflow: hidden; }
-@media (max-width: 640px) { .journey-landing-hero { padding: 3rem 1.25rem; } }
+@media (max-width: 640px) { .journey-landing-hero { padding: clamp(32px, 8vw, 48px) 0; } }
 .journey-bubble.user button { background: #fff; color: var(--ds-brand-strong); border-color: #fff; }
 
 /* Safari buttons otherwise retain platform sizing and unbreakable content. */

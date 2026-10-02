@@ -152,10 +152,26 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
     await page.screenshot({ path: testInfo.outputPath('product-mobile.png'), fullPage: true, animations: 'disabled' })
     await page.getByRole('button', { name: /Describir el producto/ }).click()
     const description = 'Raqueta de tenis de aluminio para adultos'
-    await page.getByRole('textbox', { name: 'Descripción del producto' }).fill(description)
+    // Step 1/5: product name (text input, aria-label is the question)
+    await page.getByLabel('¿Cómo se llama el producto?').fill(description)
     await page.reload()
-    await expect(page.getByRole('textbox', { name: 'Descripción del producto' })).toHaveValue(description)
-    await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+    // Chatbot state (mode + chatInput) persists across reload
+    await expect(page.getByLabel('¿Cómo se llama el producto?')).toHaveValue(description)
+    await page.getByRole('button', { name: 'Continuar' }).click()
+    // Step 2/5: price
+    await page.getByLabel('¿Cuánto vale al proveedor? (FOB)').fill('5.50')
+    await page.getByRole('button', { name: 'Continuar' }).click()
+    // Step 3/5: origin
+    await page.getByLabel('¿De dónde viene?').fill('China')
+    await page.getByRole('button', { name: 'Continuar' }).click()
+    // Step 4/5: weight
+    await page.getByLabel('¿Cuánto pesa por unidad?').fill('0.30')
+    await page.getByRole('button', { name: 'Continuar' }).click()
+    // Step 5/5: moq
+    await page.getByLabel('¿Cuál es el mínimo del proveedor?').fill('100')
+    await page.getByRole('button', { name: 'Continuar' }).click()
+    // Volume (optional) — skip
+    await page.getByRole('button', { name: 'No sé / omitir' }).click()
     await expect(page.locator('#case-confirmation')).toBeVisible()
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:analysis'))).toContain(description)
     const returnUrl = page.url()

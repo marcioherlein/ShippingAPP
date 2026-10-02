@@ -57,19 +57,21 @@ function validateChatInput(step: ChatStep, value: string): boolean {
   return Number.isFinite(n) && n > 0
 }
 
+type EntryDraft = { mode: Mode; link: string; chatStep?: ChatStep; chatAnswers?: Partial<Record<ChatStep, string>>; chatInput?: string }
+
 export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: Props) {
-  const [draft] = useState(() => readProductDraft<{ mode: Mode; link: string }>('entry'))
-  const [mode, setMode] = useState<Mode>(draft?.mode === 'link' ? 'link' : null)
+  const [draft] = useState(() => readProductDraft<EntryDraft>('entry'))
+  const [mode, setMode] = useState<Mode>(draft?.mode === 'link' ? 'link' : draft?.mode === 'describe' ? 'describe' : null)
   const [link, setLink] = useState(draft?.link || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const [chatStep, setChatStep] = useState<ChatStep>('name')
-  const [chatAnswers, setChatAnswers] = useState<Partial<Record<ChatStep, string>>>({})
-  const [chatInput, setChatInput] = useState('')
+  const [chatStep, setChatStep] = useState<ChatStep>(draft?.chatStep || 'name')
+  const [chatAnswers, setChatAnswers] = useState<Partial<Record<ChatStep, string>>>(draft?.chatAnswers || {})
+  const [chatInput, setChatInput] = useState(draft?.chatInput || '')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { writeProductDraft('entry', { mode, link }) }, [mode, link])
+  useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput }) }, [mode, link, chatStep, chatAnswers, chatInput])
 
   useEffect(() => {
     if (mode === 'describe') {

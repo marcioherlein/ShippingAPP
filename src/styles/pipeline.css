@@ -16,9 +16,9 @@
 .pipeline-confirm-head h2,
 .pipeline-run-head h2 {
   margin: 8px 0 9px;
-  font-size: clamp(28px, 4vw, 44px);
-  letter-spacing: -.045em;
-  line-height: 1.05;
+  font-size: 18px;
+  letter-spacing: -.02em;
+  line-height: 1.35;
 }
 .pipeline-confirm-head p { margin: 0; color: #64748b; line-height: 1.65; }
 
@@ -42,7 +42,7 @@
 
 .pipeline-product-title { justify-content: space-between; }
 .pipeline-product-title span:first-child { display: block; color: #94a3b8; font-size: 11px; font-weight: 750; }
-.pipeline-product-title h3 { margin: 5px 0 3px; font-size: 22px; letter-spacing: -.03em; }
+.pipeline-product-title h3 { margin: 5px 0 3px; font-size: 16px; letter-spacing: -.02em; }
 .pipeline-product-title small { color: #64748b; }
 .pipeline-confidence {
   flex: 0 0 auto;
@@ -212,7 +212,7 @@
   border-radius: 20px;
   background: linear-gradient(145deg, #f7f8ff, #fff);
 }
-.quote-customs-evidence h3 { margin: 6px 0; font-size: 22px; letter-spacing: -.03em; }
+.quote-customs-evidence h3 { margin: 6px 0; font-size: 16px; letter-spacing: -.02em; }
 .quote-customs-evidence p { margin: 0; color: #64748b; font-size: 11px; line-height: 1.5; }
 .quote-customs-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .quote-customs-facts span { padding: 10px; border-radius: 12px; background: rgba(255,255,255,.88); border: 1px solid #e8ecf4; }

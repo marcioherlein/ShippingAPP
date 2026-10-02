@@ -16,6 +16,18 @@ export type NcmTariffProfile = {
   capitalGoodEligible: boolean
 }
 
+export type NcmDisambiguationQuestion = {
+  id: string
+  prompt: string
+  attribute: 'material' | 'uso' | 'motor' | 'electrico' | 'construccion' | 'otro'
+  options: Array<{ label: string; value: string; note?: string }>
+}
+
+export type NcmDisambiguationData = {
+  candidates: Array<{ code: string; label: string; plainLabel: string; score: number }>
+  questions: NcmDisambiguationQuestion[]
+}
+
 export type CustomsProfile = {
   ncmCandidate: string | null
   simOpeningCandidate?: NcmSimOpening | null
@@ -42,6 +54,16 @@ export type CustomsProfile = {
   rationale: string[]
   catalogScope: string
   catalogSourceDate: string
+  // Best-effort sibling fields (additive). Never substitute for a confirmed classification:
+  // dutyRatePct/dutyRateStatus/classificationConfidence stay fail-closed. These let the UI
+  // proceed with a clearly-labeled conservative estimate instead of dead-ending.
+  provisional?: boolean
+  provisionalDutyRatePct?: number | null
+  provisionalTariff?: NcmTariffProfile | null
+  provisionalCode?: string | null
+  provisionalLabel?: string | null
+  provisionalBasis?: string | null
+  disambiguation?: NcmDisambiguationData | null
 }
 
 const REVIEWED_AT = '2026-08-14'
@@ -92,6 +114,16 @@ export function customsProfileFor(
       rationale: classification.rationale,
       catalogScope: classification.catalog.coverage,
       catalogSourceDate: classification.catalog.sourceObservedAt,
+      // When confidence is LOW the seed duty does not alimentar economics (usableDuty is null
+      // above), but it is a legitimate conservative estimate — carry it so the UI can proceed
+      // provisionally even fully offline. For high/medium the real duty is already applied.
+      provisional: !confidenceAllowsEconomics && classification.top.dutyRatePct != null,
+      provisionalDutyRatePct: confidenceAllowsEconomics ? null : classification.top.dutyRatePct,
+      provisionalCode: confidenceAllowsEconomics ? null : classification.top.code,
+      provisionalLabel: confidenceAllowsEconomics ? null : classification.top.description,
+      provisionalBasis: confidenceAllowsEconomics || classification.top.dutyRatePct == null
+        ? null
+        : `Estimado del catálogo seed: derecho ${classification.top.dutyRatePct}% para la posición candidata ${classification.top.code}. Verificá antes de operar.`,
     }
   }
 

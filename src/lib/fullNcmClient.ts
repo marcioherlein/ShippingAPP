@@ -1,6 +1,7 @@
-import type { CustomsProfile, NcmTariffProfile, SimEvidenceConfidence } from './customsClassification'
+import type { CustomsProfile, NcmDisambiguationData, NcmDisambiguationQuestion, NcmTariffProfile, SimEvidenceConfidence } from './customsClassification'
 import type { NcmCandidate } from './ncmClassifier'
 import type { NcmSimOpening } from './ncmCatalog'
+export type { NcmDisambiguationData, NcmDisambiguationQuestion } from './customsClassification'
 
 export type FullSimApiResult = {
   status: 'candidate' | 'single' | 'missing' | 'not_found' | 'unavailable'
@@ -29,6 +30,13 @@ export type FullNcmApiResult = {
   retrievalMode: 'ai_reranked' | 'deterministic_fallback' | 'missing'
   tariff?: NcmTariffProfile | null
   sim?: FullSimApiResult | null
+  // Best-effort sibling fields (additive). Mirror worker FullNcmClassification.
+  provisional?: boolean
+  provisionalCode?: string | null
+  provisionalLabel?: string | null
+  provisionalTariff?: NcmTariffProfile | null
+  provisionalBasis?: string | null
+  disambiguation?: NcmDisambiguationData | null
 }
 
 export type FullNcmFacts = {
@@ -57,6 +65,26 @@ function apiAlternatives(result: FullNcmApiResult): NcmCandidate[] {
 function addUniqueAlternative(items: NcmCandidate[], candidate: NcmCandidate | null) {
   if (!candidate || items.some((item) => item.code === candidate.code)) return items
   return [...items, candidate]
+}
+
+/**
+ * Copy the worker's best-effort sibling fields onto a profile WITHOUT touching the fail-closed
+ * contract (dutyRatePct / dutyRateStatus / classificationConfidence stay as the branch left
+ * them). provisionalDutyRatePct is derived from the conservative tariff so the UI can proceed
+ * with a clearly-labeled estimate. Used only on the weak (missing/LOW/conflict) branches.
+ */
+function withProvisional(base: CustomsProfile, full: FullNcmApiResult): CustomsProfile {
+  const provisionalTariff = full.provisionalTariff ?? null
+  return {
+    ...base,
+    provisional: !!full.provisional && provisionalTariff != null,
+    provisionalDutyRatePct: provisionalTariff?.diePct ?? null,
+    provisionalTariff,
+    provisionalCode: full.provisionalCode ?? null,
+    provisionalLabel: full.provisionalLabel ?? null,
+    provisionalBasis: full.provisionalBasis ?? null,
+    disambiguation: full.disambiguation ?? null,
+  }
 }
 
 function validSimForNcm(code: string, ncmCode: string) {
@@ -169,13 +197,13 @@ function applySimEvidence(base: CustomsProfile, full: FullNcmApiResult): Customs
 
 export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiResult): CustomsProfile {
   if (full.status !== 'candidate' || !full.code || !full.label) {
-    return {
+    return withProvisional({
       ...local,
       source: `${local.source} Full-catalog retrieval no produjo candidato suficiente; se conserva el clasificador seed sin ampliar certeza.`,
       rationale: [...local.rationale, ...full.rationale],
       catalogScope: `${local.catalogScope} · Full ARCA snapshot consulted: ${full.catalogRecordCount} records`,
       catalogSourceDate: full.sourceDate || local.catalogSourceDate,
-    }
+    }, full)
   }
 
   // Defense in depth: even if the worker regresses and returns a tariff-bearing LOW
@@ -189,7 +217,7 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
       reasons: ['Candidato full-catalog LOW retenido; no apto para economics.'],
       simOpening: null,
     } : null
-    return {
+    return withProvisional({
       ...local,
       alternatives: addUniqueAlternative([...local.alternatives], lowAlternative).slice(0, 4),
       missingFacts: [...new Set([...local.missingFacts, ...full.missingFacts, 'Validar candidato full-catalog LOW antes de usar aranceles'])],
@@ -198,7 +226,7 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
       catalogScope: `Full ARCA snapshot (${full.catalogRecordCount} NCM) + ${local.catalogScope}`,
       catalogSourceDate: full.sourceDate || local.catalogSourceDate,
       reviewedAt: full.sourceDate || local.reviewedAt,
-    }
+    }, full)
   }
 
   const localStrong = !!local.ncmCandidate && strong(local.classificationConfidence)
@@ -209,7 +237,7 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
       code: full.code, description: full.label, dutyRatePct: null, score: 0,
       reasons: ['Conflicto entre clasificador seed especializado y retrieval full-catalog.'], simOpening: null,
     }
-    return {
+    return withProvisional({
       ...local,
       classificationConfidence: 'low', dutyRatePct: null, dutyRateStatus: 'missing', simOpeningCandidate: null,
       simOpeningConfidence: 'missing', simAlternatives: [], simSource: 'SIM no evaluada por conflicto NCM.',
@@ -220,7 +248,7 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
       catalogScope: `Full ARCA snapshot (${full.catalogRecordCount} NCM) + seed especializado`,
       catalogSourceDate: full.sourceDate,
       reviewedAt: full.sourceDate,
-    }
+    }, full)
   }
 
   if (localStrong && (!fullStrong || local.ncmCandidate !== full.code)) {

@@ -1,4 +1,5 @@
 import ManualNcmPicker from './ManualNcmPicker'
+import NcmDisambiguation from './NcmDisambiguation'
 import DsSelect from './DsSelect'
 import UiIcon from './UiIcon'
 import type { CustomsProfile } from '../lib/customsClassification'
@@ -88,12 +89,21 @@ function stageState(index: number, status: CalculationPipelineStatus, activeStag
 
 function stageDetail(index: number, analysis: ProductAnalysisV2, prefill: QuotePrefill, summary?: CalculationPipelineSummary | null) {
   if (index === 0) {
-    return analysis.customs.ncmCandidate
-      ? `NCM ${analysis.customs.ncmCandidate} · confianza ${confidenceLabel(analysis.customs.classificationConfidence)}`
-      : 'NCM pendiente de resolución'
+    if (analysis.customs.ncmCandidate) {
+      return `NCM ${analysis.customs.ncmCandidate} · confianza ${confidenceLabel(analysis.customs.classificationConfidence)}`
+    }
+    if (analysis.customs.provisional && analysis.customs.provisionalDutyRatePct != null) {
+      return 'Clasificación estimada — verificá antes de operar'
+    }
+    return 'NCM pendiente de resolución'
   }
   if (index === 1) {
-    if (analysis.customs.dutyRatePct === null || analysis.customs.dutyRatePct === undefined) return 'Derecho retenido hasta resolver clasificación'
+    if (analysis.customs.dutyRatePct === null || analysis.customs.dutyRatePct === undefined) {
+      if (analysis.customs.provisional && analysis.customs.provisionalDutyRatePct != null) {
+        return `DIE estimado ${analysis.customs.provisionalDutyRatePct}% (conservador) · verificá antes de operar`
+      }
+      return 'Derecho retenido hasta resolver clasificación'
+    }
     const intervention = hasInterventionFee(prefill) ? ' · Trámite intervención USD 200' : ''
     return `DIE ${analysis.customs.dutyRatePct}% · TE ${analysis.customs.statisticsRatePct}% · IVA ${analysis.customs.vatRatePct ?? 21}%${intervention}`
   }
@@ -223,17 +233,26 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     && (analysis.customs.classificationConfidence === 'high' || analysis.customs.classificationConfidence === 'medium')
     && analysis.customs.dutyRatePct !== null
     && analysis.customs.dutyRatePct !== undefined
+  // Best-effort (Decision 1): a conservative tariff estimate exists even when the exact 8-digit
+  // position isn't confirmed. We never dead-end — the user can proceed with a clearly-labeled
+  // estimate, so for gating purposes classification is "ready" when confirmed OR provisional.
+  const provisionalAvailable = analysis.customs.provisional === true
+    && analysis.customs.provisionalDutyRatePct !== null
+    && analysis.customs.provisionalDutyRatePct !== undefined
+  const classificationReady = classificationResolved || provisionalAvailable
+  const disambiguation = analysis.customs.disambiguation ?? null
+  const hasDisambiguation = !!disambiguation && (disambiguation.candidates.length > 0 || disambiguation.questions.length > 0)
   const refinement = analysis.classificationRefinement
   const refinementExhausted = !classificationResolved
     && refinement?.allowed === false
     && refinement.maxAttempts > 0
     && refinement.attempt >= refinement.maxAttempts
   const identityEdited = !sameIdentity(draft, sourceDraft)
-  const classifierAskedForMore = !classificationResolved && analysis.customs.missingFacts.length > 0
+  const classifierAskedForMore = !classificationReady && analysis.customs.missingFacts.length > 0
   const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
   const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
-  const canConfirm = classificationResolved && !identityEdited
+  const canConfirm = classificationReady && !identityEdited
     ? quoteMissing.length === 0 && (draft.quantity ?? 0) > 0
     : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied
   const volume = resolvedProductVolumeCbm(draft)
@@ -258,6 +277,18 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     setClarification('')
   }
 
+  // Decision 2: a structured disambiguation answer re-runs the classifier through the SAME
+  // refinement path as the free-text clarification (still counts against the 3-attempt budget).
+  const submitDisambiguationAnswer = (note: string) => {
+    onConfirm(applyClassificationClarification(draft, note, analysis.customs.missingFacts))
+    setClarification('')
+  }
+  // A direct candidate pick resolves to a confirmed profile and routes through the existing
+  // manual-NCM path (same as ManualNcmPicker), so economics use validated tariffs.
+  const pickDisambiguationCandidate = (customs: CustomsProfile) => {
+    onManualNcm(customs, draft)
+  }
+
   const quoteFieldMissing = (id: string) => quoteMissing.some((item) => item.id === id)
 
   const applyCurrencyConversion = () => {
@@ -271,17 +302,23 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>
     {status === 'confirm' ? <>
       <div className="pipeline-confirm-head progressive-confirm-head">
-        <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : 'Confirmación inteligente'}</span>
-        <h2>{classificationResolved ? 'La NCM ya está resuelta. Sólo me falta cerrar la logística.' : 'Esto es lo que entendí. ¿Está bien?'}</h2>
+        <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : provisionalAvailable ? 'Estimado listo para cotizar' : 'Confirmación inteligente'}</span>
+        <h2>{classificationResolved
+          ? 'La NCM ya está resuelta. Sólo me falta cerrar la logística.'
+          : provisionalAvailable
+            ? 'Tengo un estimado de la clasificación. Completá la logística y verificá la posición antes de operar.'
+            : 'Esto es lo que entendí. ¿Está bien?'}</h2>
         <p>{classificationResolved
           ? 'No vuelvo a pedirte información técnica que ya usamos. Completá únicamente los datos comerciales o físicos que Alibaba no pudo confirmar.'
-          : 'Confirmá el producto que detecté. Si para clasificarlo falta un dato puntual, te hago una sola pregunta clara y seguimos.'}</p>
+          : provisionalAvailable
+            ? 'Apliqué un arancel estimado conservador para que puedas avanzar. Si querés, afiná la clasificación con las opciones de abajo; si no, seguimos con el estimado.'
+            : 'Confirmá el producto que detecté. Si para clasificarlo falta un dato puntual, te hago una sola pregunta clara y seguimos.'}</p>
       </div>
 
       <div className="pipeline-product-card progressive-product-card">
         <button type="button" className="pipeline-secondary" aria-expanded={showManualNcm} onClick={() => setShowManualNcm(value => !value)}>Buscar o cambiar posición en el nomenclador</button>
         {showManualNcm && <ManualNcmPicker customs={analysis.customs} onSelect={customs => { onManualNcm(customs, draft); setShowManualNcm(false) }} />}
-        {!classificationResolved ? <>
+        {!classificationReady ? <>
           <div className="pipeline-understood-card">
             <span className="eyebrow">Producto detectado</span>
             <p className="pipeline-understood-sentence"><strong>“{draft.productName || 'todavía no identificado'}”</strong></p>
@@ -308,7 +345,14 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <label className="pipeline-confirm-field wide"><span>Detalle técnico útil</span><textarea value={draft.description} onChange={(event) => update('description', event.target.value)} placeholder="Modelo, tecnología, composición o cualquier característica que diferencie el producto." rows={3} /></label>
           </div>}
 
-          {classifierAskedForMore && !refinementExhausted && <div className="pipeline-clarification-card">
+          {hasDisambiguation && !refinementExhausted && <NcmDisambiguation
+            disambiguation={disambiguation!}
+            customs={analysis.customs}
+            onPickCandidate={pickDisambiguationCandidate}
+            onAnswer={submitDisambiguationAnswer}
+          />}
+
+          {classifierAskedForMore && !refinementExhausted && !(refinement && refinement.attempt > 0 && clarificationTarget === 'functionText') && <div className="pipeline-clarification-card">
             <span className="eyebrow">Una pregunta para terminar</span>
             <div className="pipeline-clarification-copy">
               <h3>{clarificationUi.question}</h3>
@@ -337,10 +381,28 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <button type="button" className="pipeline-secondary" onClick={onEditProduct}>{refinementExhausted ? 'Revisar / cambiar producto' : 'Cambiar producto'}</button>
           </div>
         </> : <>
-          <div className="pipeline-classification-ready">
+          {classificationResolved ? <div className="pipeline-classification-ready">
             <div><span className="eyebrow">Clasificación lista</span><h3>NCM {analysis.customs.ncmCandidate}</h3><p>Confianza {confidenceLabel(analysis.customs.classificationConfidence)} · derecho {analysis.customs.dutyRatePct}%</p></div>
             <span className="pipeline-classification-check" aria-hidden="true"><UiIcon name="check" size={18} /></span>
-          </div>
+          </div> : <div className="pipeline-classification-ready is-provisional">
+            <div>
+              <span className="eyebrow">Estimado — verificá antes de operar</span>
+              <h3>Derecho estimado {analysis.customs.provisionalDutyRatePct}%</h3>
+              <p>{analysis.customs.provisionalLabel || 'Posición no confirmada'}</p>
+              {analysis.customs.provisionalBasis && <small>{analysis.customs.provisionalBasis}</small>}
+            </div>
+            <span className="pipeline-classification-check is-provisional" aria-hidden="true"><UiIcon name="warning" size={18} /></span>
+          </div>}
+
+          {!classificationResolved && hasDisambiguation && <details className="pipeline-disambiguation-details">
+            <summary>¿Querés afinar la clasificación? (opcional)</summary>
+            <NcmDisambiguation
+              disambiguation={disambiguation!}
+              customs={analysis.customs}
+              onPickCandidate={pickDisambiguationCandidate}
+              onAnswer={submitDisambiguationAnswer}
+            />
+          </details>}
 
           <div className="pipeline-understood-card quote-known-card">
             <span className="eyebrow">Datos que ya tengo</span>
@@ -426,9 +488,24 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>
         </>}
       </div>
-    </> : <>
+    </> : status === 'ready' ? <div className="pipeline-ready-collapsed">
+      <div className="pipeline-ready-collapsed-head">
+        <div>
+          <span className="eyebrow">Caso calculado</span>
+          <h2>Tu costo de importación está listo.</h2>
+          {!classificationResolved && provisionalAvailable && <small className="pipeline-ready-provisional-note">Clasificación estimada — verificá la posición antes de operar.</small>}
+        </div>
+        <button type="button" className="pipeline-secondary" onClick={onReviewProduct}>Modificar datos del producto</button>
+      </div>
+      {summary && <div className="pipeline-ready-strip" aria-label="Resumen del cálculo completado">
+        <div><span>Modo base</span><b>{summary.selectedMode === 'lcl' ? 'LCL' : summary.selectedMode === 'air' ? 'Aéreo' : 'Courier comercial'}</b></div>
+        <div><span>Clasificación</span><b>{classificationResolved ? `NCM ${analysis.customs.ncmCandidate}` : 'Estimada'}</b></div>
+        <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
+        <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>
+      </div>}
+    </div> : <>
       <div className="pipeline-run-head">
-        <div><span className="eyebrow">Motor de cálculo</span><h2>{status === 'ready' ? 'Caso calculado.' : status === 'blocked' ? 'Necesito resolver un dato antes de seguir.' : 'Construyendo tu costo de importación.'}</h2></div>
+        <div><span className="eyebrow">Motor de cálculo</span><h2>{status === 'blocked' ? 'Necesito resolver un dato antes de seguir.' : 'Construyendo tu costo de importación.'}</h2></div>
         <strong aria-hidden="true">{Math.round(progress)}%</strong>
       </div>
       <div
@@ -465,14 +542,6 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <UiIcon name="arrow-right" size={16} /></button>
           <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
         </div>
-      </div>}
-
-      {status === 'ready' && <button type="button" className="pipeline-secondary" onClick={onReviewProduct}>Modificar datos del producto</button>}
-      {status === 'ready' && summary && <div className="pipeline-ready-strip" aria-label="Resumen del cálculo completado">
-
-        <div><span>Modo base</span><b>{summary.selectedMode === 'lcl' ? 'LCL' : summary.selectedMode === 'air' ? 'Aéreo' : 'Courier comercial'}</b></div>
-        <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
-        <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>
       </div>}
     </>}
   </section>

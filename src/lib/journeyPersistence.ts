@@ -243,19 +243,28 @@ function writeState(state: PersistedJourneyState | null, mode: HistoryMode) {
 
 function readInitialState(): { state: PersistedJourneyState; source: InitialSource } | null {
   const fromUrl = decodeState(new URL(window.location.href).searchParams.get(URL_KEY))
-  if (fromUrl) return { state: fromUrl, source: 'url' }
+  let fromStorage: PersistedJourneyState | null = null
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as PersistedJourneyState
-    if (parsed.v !== 1 || !parsed.intent) return null
-    return {
-      state: { ...parsed, step: parsed.step >= 3 ? 3 : parsed.step === 2 ? 2 : 1 },
-      source: 'storage',
+    if (raw) {
+      const parsed = JSON.parse(raw) as PersistedJourneyState
+      if (parsed.v === 1 && parsed.intent) {
+        fromStorage = { ...parsed, step: parsed.step >= 3 ? 3 : parsed.step === 2 ? 2 : 1 }
+      }
     }
-  } catch {
-    return null
+  } catch { /* ignore */ }
+
+  // When both URL and storage are present for the same intent, prefer the one
+  // with the higher step. This handles the race where a fast reload prevents
+  // window.history.pushState from updating the URL before navigation (browsers
+  // silently drop pushState calls during pagehide / page unload), while the
+  // synchronous localStorage write in flushSync reliably captures the latest step.
+  if (fromUrl && fromStorage && fromUrl.intent === fromStorage.intent && fromStorage.step > fromUrl.step) {
+    return { state: fromStorage, source: 'storage' }
   }
+  if (fromUrl) return { state: fromUrl, source: 'url' }
+  if (fromStorage) return { state: fromStorage, source: 'storage' }
+  return null
 }
 
 function waitFor<T extends Element>(resolver: () => T | null, timeoutMs = 3000) {
@@ -500,10 +509,22 @@ export function installJourneyPersistence() {
     void restore(state)
   }
 
+  // scheduleSync debounces by 30ms, so a reload/navigation that happens within
+  // that window (e.g. advancing to the product step and immediately reloading)
+  // would persist a stale earlier step and restore to the wrong card. Flush the
+  // pending capture synchronously on pagehide so the saved URL + storage always
+  // match what is on screen at navigation time.
+  const flushSync = () => {
+    if (restoring) return
+    scheduled = false
+    syncState()
+  }
+
   document.addEventListener('click', onClick, true)
   document.addEventListener('change', onFieldChange, true)
   document.addEventListener('input', onFieldChange, true)
   window.addEventListener('popstate', onPopState)
+  window.addEventListener('pagehide', flushSync)
   window.addEventListener('shippingapp:journey-reset', clearToNewCase)
 
   const observer = new MutationObserver(scheduleSync)
@@ -523,6 +544,7 @@ export function installJourneyPersistence() {
     document.removeEventListener('change', onFieldChange, true)
     document.removeEventListener('input', onFieldChange, true)
     window.removeEventListener('popstate', onPopState)
+    window.removeEventListener('pagehide', flushSync)
     window.removeEventListener('shippingapp:journey-reset', clearToNewCase)
   }
 }

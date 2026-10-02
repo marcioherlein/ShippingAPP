@@ -9,7 +9,7 @@ import Landing from './components/Landing'
 import DsSelect from './components/DsSelect'
 import UiIcon from './components/UiIcon'
 import type { QuotePrefill } from './lib/hotProducts'
-import { enrichProductAnalysisV2, ingestAlibabaUrlV2, type ProductAnalysisV2 } from './lib/productAnalysisV2'
+import { enrichProductAnalysisV2, ingestAlibabaUrlV2, hasConfirmedClassification, hasProvisionalClassification, effectiveDutyRatePct, effectiveTariffProfile, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
 import { getJourneyBudgetError } from './lib/journeyValidation'
 import { scrollIntoViewIfNeeded, scrollWindowToTop } from './lib/motionPreference'
@@ -17,9 +17,11 @@ import { translateProductLabel } from './lib/productTranslation'
 import {
   applyProductConfirmation,
   createManualProductAnalysis,
+  createPrefilledAnalysis,
   missingClassificationConfirmationFields,
   missingQuoteConfirmationFields,
   productConfirmationFromAnalysis,
+  type ManualProductChatData,
   type ProductConfirmationData,
 } from './lib/productConfirmation'
 
@@ -122,17 +124,21 @@ function makeAnalysisPrefill(
     ncmCode: analysis.customs.ncmCandidate,
     simCode: analysis.customs.simOpeningCandidate?.code ?? null,
     classificationConfidence: analysis.customs.classificationConfidence,
-    dutyRatePct: analysis.customs.dutyRatePct,
-    statisticsRatePct: analysis.customs.statisticsRatePct,
-    vatRatePct: analysis.customs.vatRatePct ?? null,
-    vatAdditionalRatePct: analysis.customs.vatAdditionalRatePct ?? null,
-    gainsRatePct: analysis.customs.gainsRatePct ?? null,
-    iibbRatePct: analysis.customs.iibbRatePct ?? null,
-    capitalGoodEligible: analysis.customs.capitalGoodEligible ?? false,
+    dutyRatePct: effectiveDutyRatePct(analysis.customs),
+    statisticsRatePct: analysis.customs.statisticsRatePct ?? effectiveTariffProfile(analysis.customs)?.tePct ?? null,
+    vatRatePct: analysis.customs.vatRatePct ?? effectiveTariffProfile(analysis.customs)?.vatPct ?? null,
+    vatAdditionalRatePct: analysis.customs.vatAdditionalRatePct ?? effectiveTariffProfile(analysis.customs)?.vatAdditionalPct ?? null,
+    gainsRatePct: analysis.customs.gainsRatePct ?? effectiveTariffProfile(analysis.customs)?.gainsPct ?? null,
+    iibbRatePct: analysis.customs.iibbRatePct ?? effectiveTariffProfile(analysis.customs)?.iibbPct ?? null,
+    capitalGoodEligible: analysis.customs.capitalGoodEligible ?? effectiveTariffProfile(analysis.customs)?.capitalGoodEligible ?? false,
     customsSource: analysis.customs.source,
     customsSourceDate: analysis.customs.catalogSourceDate || analysis.customs.reviewedAt,
     customsMissingFacts: analysis.customs.missingFacts,
     customsRationale: analysis.customs.rationale,
+    provisional: !hasConfirmedClassification(analysis.customs) && hasProvisionalClassification(analysis.customs),
+    provisionalBasis: analysis.customs.provisionalBasis ?? null,
+    provisionalCode: analysis.customs.provisionalCode ?? null,
+    provisionalLabel: analysis.customs.provisionalLabel ?? null,
   }
 }
 
@@ -141,10 +147,9 @@ function nextPaint(ms = 180) {
 }
 
 function hasUsableClassification(analysis: ProductAnalysisV2) {
-  return !!analysis.customs.ncmCandidate
-    && (analysis.customs.classificationConfidence === 'high' || analysis.customs.classificationConfidence === 'medium')
-    && analysis.customs.dutyRatePct !== null
-    && analysis.customs.dutyRatePct !== undefined
+  // Confirmed OR provisional both count as "usable" so a second confirm (e.g. after filling
+  // quote fields) reuses the analysis instead of re-running the classifier for the same product.
+  return hasConfirmedClassification(analysis.customs) || hasProvisionalClassification(analysis.customs)
 }
 
 const ENTERED_KEY = 'shippingapp:entered'
@@ -334,6 +339,10 @@ export default function App() {
     handleAnalysis(createManualProductAnalysis('manual://product', description))
   }
 
+  const handleManualProductData = (data: ManualProductChatData) => {
+    handleAnalysis(createPrefilledAnalysis(data))
+  }
+
   const editSelectedProduct = () => {
     clearProductDraft()
     resetPipeline()
@@ -384,16 +393,20 @@ export default function App() {
           : await enrichProductAnalysisV2(confirmedAnalysis)
       setAnalysis(refreshed)
 
-      if (!refreshed.customs.ncmCandidate || refreshed.customs.classificationConfidence === 'missing') {
-        setPipelineStage(0)
-        setPipelineBlocker('No pude cerrar una NCM con la identidad disponible. Te voy a pedir únicamente el detalle técnico que permita distinguir la posición correcta.')
-        setCalculationStatus('blocked')
-        return
-      }
+      const confirmedClassification = hasConfirmedClassification(refreshed.customs)
+      const provisionalClassification = hasProvisionalClassification(refreshed.customs)
+      const duty = effectiveDutyRatePct(refreshed.customs)
+      const effectiveTariff = effectiveTariffProfile(refreshed.customs)
 
-      if (refreshed.customs.classificationConfidence === 'low') {
+      // Dead-end ONLY when there is neither a confirmed position NOR a conservative estimate.
+      // Otherwise we proceed best-effort (Decision 1) with a clearly-labeled provisional tariff;
+      // the confirm view still offers disambiguation (Decision 2) so the user can tighten it.
+      if (!confirmedClassification && !provisionalClassification) {
         setPipelineStage(0)
-        setPipelineBlocker('La clasificación quedó con confianza baja. Necesito una aclaración concreta antes de aceptar la NCM; no voy a cotizar con una posición dudosa.')
+        const noCandidate = !refreshed.customs.ncmCandidate || refreshed.customs.classificationConfidence === 'missing'
+        setPipelineBlocker(noCandidate
+          ? 'No pude cerrar una NCM con la identidad disponible. Elegí la descripción que más se parezca a tu producto o sumá un detalle técnico que distinga la posición.'
+          : 'La clasificación quedó con confianza baja y sin un estimado seguro. Elegí la descripción que más se parezca o sumá un detalle técnico antes de cotizar.')
         setCalculationStatus('blocked')
         return
       }
@@ -401,8 +414,8 @@ export default function App() {
       await nextPaint()
       setPipelineStage(1)
 
-      if (refreshed.customs.dutyRatePct === null || refreshed.customs.dutyRatePct === undefined) {
-        setPipelineBlocker('La NCM no tiene un derecho utilizable confirmado en el motor. GlobalShipping detiene la cotización antes de inventar un arancel.')
+      if (duty === null) {
+        setPipelineBlocker('La NCM no tiene un derecho utilizable (confirmado ni estimado) en el motor. GlobalShipping detiene la cotización antes de inventar un arancel.')
         setCalculationStatus('blocked')
         return
       }
@@ -410,7 +423,10 @@ export default function App() {
       const quoteMissing = missingQuoteConfirmationFields(productConfirmationFromAnalysis(refreshed))
       if (quoteMissing.length > 0) {
         setPipelineStage(2)
-        setPipelineBlocker(`La NCM ya quedó resuelta. Para cotizar sólo falta: ${quoteMissing.map((item) => item.label).join(', ')}.`)
+        const classificationNote = confirmedClassification
+          ? 'La NCM ya quedó resuelta.'
+          : 'Apliqué un arancel estimado (verificá la posición antes de operar).'
+        setPipelineBlocker(`${classificationNote} Para cotizar sólo falta: ${quoteMissing.map((item) => item.label).join(', ')}.`)
         setCalculationStatus('blocked')
         return
       }
@@ -432,17 +448,17 @@ export default function App() {
         unitPriceUsd: prefill.unitPriceUsd,
         unitWeightKg: prefill.unitWeightKg,
         unitVolumeCbm: prefill.unitVolumeCbm,
-        dutyRatePct: refreshed.customs.dutyRatePct,
-        statisticsRatePct: refreshed.customs.statisticsRatePct,
-        vatRatePct: refreshed.customs.vatRatePct,
-        vatAdditionalRatePct: refreshed.customs.vatAdditionalRatePct,
-        gainsRatePct: refreshed.customs.gainsRatePct,
-        iibbRatePct: refreshed.customs.iibbRatePct,
+        dutyRatePct: duty,
+        statisticsRatePct: effectiveTariff?.tePct ?? refreshed.customs.statisticsRatePct,
+        vatRatePct: effectiveTariff?.vatPct ?? refreshed.customs.vatRatePct,
+        vatAdditionalRatePct: effectiveTariff?.vatAdditionalPct ?? refreshed.customs.vatAdditionalRatePct,
+        gainsRatePct: effectiveTariff?.gainsPct ?? refreshed.customs.gainsRatePct,
+        iibbRatePct: effectiveTariff?.iibbPct ?? refreshed.customs.iibbRatePct,
         purpose: purpose || 'unknown',
         entityType: entityType || 'unknown',
         hasImporterSignature: signature === null || signature === 'unknown' ? null : signature === 'yes',
         sensitiveCategory: sensitiveCategory || 'unknown',
-        capitalGoodEligible: refreshed.customs.capitalGoodEligible ?? false,
+        capitalGoodEligible: effectiveTariff?.capitalGoodEligible ?? refreshed.customs.capitalGoodEligible ?? false,
         capitalGoodUse: false,
       })
 
@@ -633,7 +649,7 @@ export default function App() {
               </div>
             </div>
 
-            {intent === 'have_product' && !analysis && <div className="journey-product-surface"><OwnedProductIntake onAlibabaLink={handleOwnedProductLink} onDescribeProduct={handleOwnedProductDescription} /></div>}
+            {intent === 'have_product' && !analysis && <div className="journey-product-surface"><OwnedProductIntake onAlibabaLink={handleOwnedProductLink} onDescribeProduct={handleOwnedProductDescription} onStructuredData={handleManualProductData} /></div>}
 
             {(intent === 'search_product' || intent === 'discover') && <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode={intent === 'discover' ? 'discovery' : 'intake'} onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>}
           </>}

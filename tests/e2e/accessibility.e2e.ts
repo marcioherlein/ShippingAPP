@@ -2,7 +2,21 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from './fixtures'
 import type { Locator, Page } from '@playwright/test'
 
+// Step cards fade in via the `step-enter` keyframe (opacity 0 → 1, 0.28s). axe
+// computes contrast against the *current* frame, so sampling mid-fade blends
+// every foreground toward the background and reports false contrast failures
+// (e.g. #62626d muted text appears as #7d7d87). Wait for all running
+// animations/transitions to finish so axe sees the settled, user-visible state.
+async function waitForAnimationsToSettle(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
+    ).then(() => undefined),
+  )
+}
+
 async function expectNoSeriousAxeViolations(page: Page) {
+  await waitForAnimationsToSettle(page)
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze()

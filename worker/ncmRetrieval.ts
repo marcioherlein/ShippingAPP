@@ -1,5 +1,11 @@
 import { ncmAppTariffOverride } from './ncmTariffOverrides'
-import { deriveClarifications, deriveSemanticConcepts, type SemanticConcepts } from './semanticConcepts'
+import {
+  deriveClarifications,
+  deriveDisambiguationQuestions,
+  deriveSemanticConcepts,
+  type DisambiguationQuestion,
+  type SemanticConcepts,
+} from './semanticConcepts'
 
 export type NcmIndexRecord = [
   code: string,
@@ -86,6 +92,19 @@ export type NcmProductFacts = {
   description?: string | null
 }
 
+export type NcmDisambiguationCandidate = {
+  code: string
+  label: string
+  // Leaf of the hierarchy in plain Spanish; the user never sees the raw code.
+  plainLabel: string
+  score: number
+}
+
+export type NcmDisambiguation = {
+  candidates: NcmDisambiguationCandidate[]
+  questions: DisambiguationQuestion[]
+}
+
 export type FullNcmClassification = {
   status: 'candidate' | 'missing'
   code: string | null
@@ -101,6 +120,19 @@ export type FullNcmClassification = {
   retrievalMode: 'ai_reranked' | 'deterministic_fallback' | 'missing'
   tariff: NcmTariff | null
   diagnostics?: ClassificationDiagnostics
+  // --- Best-effort sibling fields (additive) ---------------------------------
+  // The fail-closed contract above is unchanged: on weak evidence code/tariff
+  // stay null and confidence stays low/missing. These carry a CONSERVATIVE
+  // estimate so the UI can proceed with a clearly-labeled provisional cost
+  // instead of dead-ending. Never read as a confirmed classification.
+  provisional?: boolean
+  provisionalCode?: string | null
+  provisionalLabel?: string | null
+  provisionalTariff?: NcmTariff | null
+  provisionalBasis?: string | null
+  // Plain-Spanish candidate positions + yes/no/no-sé questions to narrow down
+  // the position without the user ever seeing or typing an NCM code.
+  disambiguation?: NcmDisambiguation | null
 }
 
 type AI = { run: (model: string, input: unknown) => Promise<unknown> }
@@ -204,6 +236,63 @@ function tariffForCode(index: NcmSearchIndex, code: string | null | undefined) {
   if (!code) return null
   const rowTariff = tariffFromRecord(index.records.find((record) => record[0] === code))
   return rowTariff ?? ncmAppTariffOverride(code)
+}
+
+// Generic MERCOSUR leaf labels ("Los demás", "Otros") carry no meaning on their own, so
+// plainSpanishLabel prepends the parent segment when the leaf is one of them.
+const GENERIC_LEAF = /^(los|las)\s+dem[aá]s$|^otr[oa]s?$|^dem[aá]s$/i
+
+/**
+ * Reduce an NCM hierarchy label ("Aparatos … — Recipientes isotérmicos — Los demás") to the
+ * plain-Spanish leaf a non-expert can recognise. Labels use the ` — ` em-dash separator; when
+ * the leaf is generic we qualify it with its parent so "Los demás" doesn't stand alone.
+ */
+export function plainSpanishLabel(label: string): string {
+  const parts = label.split('—').map((part) => part.trim()).filter(Boolean)
+  if (!parts.length) return label.trim()
+  const leaf = parts[parts.length - 1]
+  if (GENERIC_LEAF.test(leaf) && parts.length >= 2) {
+    return `${parts[parts.length - 2]} (${leaf.toLowerCase()})`
+  }
+  return leaf
+}
+
+/**
+ * The CONSERVATIVE provisional tariff: among the top shortlisted candidates, pick the one with
+ * the highest `diePct` (the most expensive import duty the importer could face). This never
+ * confirms a position — it bounds the tax exposure so a best-effort cost can be shown with a
+ * clear "verificá antes de operar" warning. Returns null when no candidate resolves a tariff.
+ */
+function conservativeProvisionalTariff(index: NcmSearchIndex, ordered: NcmRetrievalCandidate[]) {
+  let best: { code: string; label: string; tariff: NcmTariff } | null = null
+  for (const candidate of ordered.slice(0, 4)) {
+    const tariff = tariffForCode(index, candidate.code)
+    if (!tariff) continue
+    if (!best || tariff.diePct > best.tariff.diePct) {
+      best = { code: candidate.code, label: candidate.label, tariff }
+    }
+  }
+  return best
+}
+
+/**
+ * Build the plain-Spanish disambiguation payload from the already-ranked shortlist plus the
+ * product's semantic concepts. Candidates expose a plainLabel (never the code); questions are
+ * the yes/no/no-sé gates that would move the classification. Returns null when there is nothing
+ * useful to disambiguate (no candidates).
+ */
+function buildDisambiguation(
+  ordered: NcmRetrievalCandidate[],
+  concepts: SemanticConcepts,
+): NcmDisambiguation | null {
+  const candidates = ordered.slice(0, 4).map((candidate) => ({
+    code: candidate.code,
+    label: candidate.label,
+    plainLabel: plainSpanishLabel(candidate.label),
+    score: candidate.score,
+  }))
+  if (!candidates.length) return null
+  return { candidates, questions: deriveDisambiguationQuestions(concepts) }
 }
 
 function officialFromRow(index: NcmSearchIndex, row: NcmIndexRecord | null | undefined) {
@@ -598,6 +687,9 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
     const confidenceReason = top.code !== shortlist[0].code
       ? `AI rerank (${top.code}) discrepó del top determinístico (${shortlist[0].code}); fail-closed.`
       : `Evidencia insuficiente para superar el umbral de confianza (score ${shortlist[0].score}).`
+    // Best-effort sibling data: a conservative (highest-duty) estimate from the shortlist and
+    // plain-Spanish disambiguation. The fail-closed fields below stay null/low verbatim.
+    const provisional = conservativeProvisionalTariff(index, ordered)
     return {
       status: 'missing',
       code: null,
@@ -620,6 +712,14 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
       retrievalMode: 'missing',
       tariff: null,
       diagnostics: buildDiagnostics(concepts, searchTerms, exclusionTerms, ordered, confidenceReason, combinedMissingFacts[0] ?? 'confianza insuficiente'),
+      provisional: !!provisional,
+      provisionalCode: provisional?.code ?? null,
+      provisionalLabel: provisional ? plainSpanishLabel(provisional.label) : null,
+      provisionalTariff: provisional?.tariff ?? null,
+      provisionalBasis: provisional
+        ? `Estimación conservadora: aplicamos el derecho de importación más alto (${provisional.tariff.diePct}%) entre las posiciones más probables (NCM ${provisional.code} · ${plainSpanishLabel(provisional.label)}). Es un estimado para no frenar el cálculo — verificá la posición antes de operar.`
+        : null,
+      disambiguation: buildDisambiguation(ordered, concepts),
     }
   }
 

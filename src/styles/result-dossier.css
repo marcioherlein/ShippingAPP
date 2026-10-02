@@ -1,0 +1,168 @@
+/* Decision 3 & 4 — one Apple-clean guided dossier + market links/estimate.
+   Consolidates the result column into ~3 treatments: one hero, one card radius,
+   one grouped summary-list row. All colors/radii/shadows come from design tokens. */
+
+.result-dossier {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---- Hero: one number + the verdict inline ---- */
+.result-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 26px 28px;
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-2xl);
+  box-shadow: var(--ds-shadow-2);
+}
+
+.result-hero-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.result-hero-main .eyebrow { color: var(--ds-text-muted); }
+.result-hero-number {
+  color: var(--ds-text-strong);
+  font-size: clamp(2.25rem, 5vw, 3.25rem);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+}
+.result-hero-main small { color: var(--ds-text-muted); font-size: 0.9rem; }
+
+.result-hero-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 18px;
+  border-radius: var(--ds-radius-lg);
+  max-width: 340px;
+}
+.result-hero-verdict strong { font-weight: 600; }
+.result-hero-verdict span { font-size: 0.86rem; opacity: 0.92; }
+
+.result-hero-provisional {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-warning-soft);
+  color: var(--ds-warning);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+/* ---- Cards: one radius, one surface, one shadow ---- */
+.result-card {
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-2xl);
+  box-shadow: var(--ds-shadow-2);
+  padding: 24px 26px;
+}
+
+.result-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.result-card-head .eyebrow { color: var(--ds-text-muted); }
+.result-card-head h2 { margin: 2px 0 0; font-size: 1.15rem; font-weight: 600; color: var(--ds-text-strong); }
+.result-card-head small { color: var(--ds-text-muted); white-space: nowrap; }
+
+.result-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 0;
+  color: var(--ds-text-muted);
+  font-size: 0.86rem;
+}
+
+/* ---- Grouped breakdown rows (reuses .journey-summary-list base) ---- */
+.result-card .journey-summary-list + .journey-summary-list { margin-top: 14px; }
+.journey-summary-secondary { border-top: 1px dashed var(--ds-border-soft); padding-top: 12px; }
+.journey-summary-secondary > div span,
+.journey-summary-secondary > div b { color: var(--ds-text-muted); font-weight: 500; }
+
+.journey-summary-total {
+  border-top: 1px solid var(--ds-border);
+  margin-top: 6px;
+  padding-top: 12px;
+}
+.journey-summary-total span { font-weight: 600; color: var(--ds-text-strong); }
+.journey-summary-total b { font-weight: 700; color: var(--ds-text-strong); font-size: 1.05rem; }
+
+.journey-summary-profit {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-subtle);
+}
+.journey-summary-profit b { color: var(--ds-text-strong); font-weight: 600; }
+
+/* ---- Collapsible sections share the result-card treatment ---- */
+.result-collapsible { padding: 0; overflow: hidden; }
+.result-collapsible > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
+  cursor: pointer;
+  padding: 18px 26px;
+  font-weight: 600;
+  color: var(--ds-text-strong);
+}
+.result-collapsible > summary::-webkit-details-marker { display: none; }
+.result-collapsible > summary:hover { background: var(--ds-surface-subtle); }
+.result-collapsible-title { font-size: 1rem; }
+.result-collapsible > summary svg { color: var(--ds-text-muted); transition: transform 0.18s ease; }
+.result-collapsible[open] > summary svg { transform: rotate(180deg); }
+.result-collapsible-body { padding: 0 26px 24px; display: flex; flex-direction: column; gap: 16px; }
+/* Inner legacy cards sit flush inside the collapsible — drop their own chrome */
+.result-collapsible-body > .table-card,
+.result-collapsible-body > .method-card,
+.result-collapsible-body > .recommendation {
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+}
+
+/* ---- Decision 4: market search links + labeled estimate ---- */
+.market-search-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+.market-search-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  min-height: 44px;
+  border-radius: var(--ds-radius-pill);
+  border: 1px solid var(--ds-border);
+  background: var(--ds-surface);
+  color: var(--ds-text-strong);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.market-search-button:hover { background: var(--ds-surface-subtle); border-color: var(--ds-brand); }
+.market-search-button svg { color: var(--ds-brand-strong); }
+
+.market-estimate { display: flex; flex-direction: column; gap: 4px; }
+.market-estimate-lead { margin: 0; color: var(--ds-text-muted); font-size: 0.9rem; }
+.market-estimate-hero { background: var(--ds-surface-subtle); border-radius: var(--ds-radius-lg); }
+.market-estimate-note { margin: 10px 0 0; color: var(--ds-text-muted); font-size: 0.82rem; }

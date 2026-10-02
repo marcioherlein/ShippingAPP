@@ -1,6 +1,49 @@
 import { customsProfileFor } from './customsClassification'
 import type { ProductAnalysisV2 } from './productAnalysisV2'
 
+const PRODUCT_FUNCTION_MAP: Array<[RegExp, string]> = [
+  [/reloj|watch|clock/i, 'Mide y muestra la hora'],
+  [/parlante|speaker|altavoz|bocina|bafle/i, 'Reproduce audio'],
+  [/auricular|headphone|earphone|earbud|airpod/i, 'Escucha audio de forma personal'],
+  [/raqueta|racket/i, 'Raqueta para golpear pelotas en deporte'],
+  [/\bpelota\b|bal[oó]n|\bball\b/i, 'Balón para uso deportivo o recreativo'],
+  [/zapato|calzado|sandal|sandalia|\bshoe\b/i, 'Calzado para cubrir el pie'],
+  [/camiseta|remera|\bshirt\b|vestimenta|prenda|\bclothes\b/i, 'Prenda de vestir'],
+  [/mochila|backpack/i, 'Porta objetos y pertenencias en la espalda'],
+  [/cargador|charger/i, 'Carga baterías de dispositivos electrónicos'],
+  [/\bcable\b/i, 'Transmite corriente eléctrica o señal de datos'],
+  [/l[aá]mpara|bulb|foco|\bled\b/i, 'Ilumina espacios'],
+  [/\bmouse\b|rat[oó]n/i, 'Periférico de entrada para computadora'],
+  [/teclado|keyboard/i, 'Periférico de entrada para computadora'],
+  [/sart[eé]n|olla|cacerola|\bpot\b|\bpan\b/i, 'Cocina alimentos mediante calor'],
+  [/\btaza\b|tumbler|\bcup\b|\bmug\b/i, 'Recipiente para servir bebidas'],
+  [/maleta|luggage|suitcase/i, 'Transporta ropa y objetos en viajes'],
+  [/cartera|bolso|purse|handbag/i, 'Porta objetos personales'],
+  [/paraguas|umbrella/i, 'Protege de la lluvia'],
+  [/cintur[oó]n|\bbelt\b/i, 'Ajusta y sostiene ropa en la cintura'],
+  [/gafas|lentes|glasses|sunglasses/i, 'Protege o corrige la visión'],
+  [/collar|necklace/i, 'Adorno para el cuello'],
+  [/pulsera|bracelet/i, 'Adorno para la muñeca'],
+  [/juguete|\btoy\b/i, 'Entretenimiento y juego'],
+]
+
+export function inferFunctionFromProductName(name: string): string | null {
+  const n = (name || '').toLocaleLowerCase('es')
+  for (const [pattern, label] of PRODUCT_FUNCTION_MAP) {
+    if (pattern.test(n)) return label
+  }
+  return null
+}
+
+export type ManualProductChatData = {
+  name: string
+  unitPriceUsd: number
+  originCountry: string
+  packedWeightKg: number
+  moq: number
+  volumeCbm: number | null
+}
+
 export type ProductConfirmationData = {
   productName: string
   category: string
@@ -80,7 +123,7 @@ export function productConfirmationFromAnalysis(analysis: ProductAnalysisV2): Pr
     category: cleanText(analysis.product.category, 300),
     description: cleanText(analysis.product.description, 1200),
     material: cleanText(analysis.product.material, 300),
-    functionText: cleanText(analysis.product.functionText, 500),
+    functionText: cleanText(analysis.product.functionText || inferFunctionFromProductName(analysis.product.name), 500),
     originCountry: cleanText(analysis.product.originCountry, 120),
     unitPriceUsd: positive(analysis.product.unitPriceUsd),
     quantity: positive(analysis.suggestedQuantities[0]) || positive(analysis.product.moq) || 1,
@@ -123,11 +166,12 @@ export function missingProductConfirmationFields(data: ProductConfirmationData):
 }
 
 function classificationIdentityChanged(analysis: ProductAnalysisV2, data: ProductConfirmationData) {
+  const effectiveFunctionText = cleanText(analysis.product.functionText || inferFunctionFromProductName(analysis.product.name), 500)
   return cleanText(analysis.product.name, 500) !== cleanText(data.productName, 500)
     || cleanText(analysis.product.category, 300) !== cleanText(data.category, 300)
     || cleanText(analysis.product.description, 1200) !== cleanText(data.description, 1200)
     || cleanText(analysis.product.material, 300) !== cleanText(data.material, 300)
-    || cleanText(analysis.product.functionText, 500) !== cleanText(data.functionText, 500)
+    || effectiveFunctionText !== cleanText(data.functionText, 500)
 }
 
 export function applyProductConfirmation(analysis: ProductAnalysisV2, data: ProductConfirmationData): ProductAnalysisV2 {
@@ -199,5 +243,43 @@ export function createManualProductAnalysis(sourceUrl = 'manual://product', seed
       ? 'La identidad inicial del producto fue aportada por el usuario y debe confirmarse antes de clasificar.'
       : 'La fuente automática no entregó identidad suficiente. El usuario debe describir el producto antes de clasificar.'],
     customs: customsProfileFor('', '', ''),
+  }
+}
+
+export function createPrefilledAnalysis(data: ManualProductChatData): ProductAnalysisV2 {
+  const name = cleanText(data.name, 500)
+  const originCountry = cleanText(data.originCountry, 120)
+  const volumeCbm = positive(data.volumeCbm ?? data.packedWeightKg * 0.003)
+  const functionText = inferFunctionFromProductName(name)
+  return {
+    sourceUrl: 'manual://product',
+    fetched: false,
+    product: {
+      name,
+      category: '',
+      unitPriceUsd: positive(data.unitPriceUsd) || null,
+      moq: positive(data.moq) || null,
+      packedWeightKg: positive(data.packedWeightKg),
+      volumeCbm,
+      originCountry,
+      imageUrl: null,
+      material: null,
+      functionText: functionText || null,
+      description: null,
+    },
+    market: {
+      estimatedPriceArs: null,
+      estimatedMonthlyDemand: 0,
+      source: 'Mercado pendiente de validar',
+    },
+    suggestedQuantities: positive(data.moq) > 0 ? [positive(data.moq)] : [],
+    confidence: {
+      overall: 60,
+      productSource: 'Datos ingresados directamente por el usuario',
+      logistics: 'Datos confirmados por el usuario',
+      market: 'Pendiente',
+    },
+    assumptions: ['Datos del producto ingresados directamente por el usuario.'],
+    customs: customsProfileFor('', originCountry, ''),
   }
 }

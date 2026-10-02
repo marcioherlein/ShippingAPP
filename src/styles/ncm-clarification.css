@@ -191,3 +191,86 @@
     justify-content: center;
   }
 }
+
+/* Decision 2 — guided NCM disambiguation (never shows/asks for a raw code). */
+.ncm-disambiguation {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--ds-border-soft);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface-subtle);
+}
+.ncm-disambiguation-head { display: flex; flex-direction: column; gap: 4px; }
+.ncm-disambiguation-head .eyebrow { color: var(--ds-text-muted); }
+.ncm-disambiguation-head b { color: var(--ds-text-strong); font-size: 1.05rem; font-weight: 600; }
+.ncm-disambiguation-head small { color: var(--ds-text-muted); font-size: 0.86rem; }
+
+.ncm-disambiguation-candidate {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+}
+.ncm-disambiguation-candidate b { font-weight: 600; }
+.ncm-disambiguation-candidate small { color: var(--ds-text-muted); font-size: 0.78rem; }
+
+.ncm-disambiguation-error {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--ds-radius-sm);
+  background: var(--ds-warning-soft);
+  color: var(--ds-warning);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.ncm-disambiguation-questions { display: flex; flex-direction: column; gap: 14px; }
+.ncm-disambiguation-questions-intro { color: var(--ds-text-muted); font-size: 0.86rem; }
+.ncm-disambiguation-question { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ncm-disambiguation-question legend { padding: 0; font-weight: 600; color: var(--ds-text-strong); font-size: 0.92rem; }
+.ncm-disambiguation-chip[aria-pressed='true'],
+.ncm-disambiguation-chip.is-selected { border-color: var(--ds-brand); background: var(--ds-brand-soft, var(--ds-surface)); color: var(--ds-brand-strong); font-weight: 600; }
+
+.ncm-disambiguation-estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--ds-border-soft);
+}
+.ncm-disambiguation-estimate small { color: var(--ds-text-muted); font-size: 0.84rem; }
+
+/* Pipeline provisional/estimate states (Decision 1) + collapsed ready view (Decision 3). */
+.pipeline-classification-ready.is-provisional {
+  border: 1px solid rgba(146, 64, 14, 0.28);
+  background: var(--ds-warning-soft);
+  color: var(--ds-warning);
+}
+.pipeline-classification-ready.is-provisional b { color: var(--ds-warning); }
+.pipeline-disambiguation-details { margin-top: 12px; }
+.pipeline-disambiguation-details > summary { cursor: pointer; font-weight: 600; color: var(--ds-brand-strong); }
+.pipeline-ready-provisional-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0 0;
+  color: var(--ds-warning);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+/* Decision 3 — collapsed pipeline when the quote is ready (slim status line). */
+.pipeline-ready-collapsed { display: flex; flex-direction: column; gap: 16px; }
+.pipeline-ready-collapsed-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.pipeline-ready-collapsed-head .eyebrow { color: var(--ds-text-muted); }
+.pipeline-ready-collapsed-head h2 { margin: 2px 0 0; font-size: 1.2rem; font-weight: 600; color: var(--ds-text-strong); }
+.pipeline-classification-check.is-provisional { color: var(--ds-warning); }

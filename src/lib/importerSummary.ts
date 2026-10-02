@@ -48,6 +48,24 @@ function round2(value: number) {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
 }
 
+/**
+ * Typical Argentine retail markup over the landed (puesto) cost. ~60% is a documented rough
+ * heuristic for import resale — it is a LABELED, user-overridable estimate, never a benchmark
+ * and never promoted to a live market observation.
+ */
+export const TYPICAL_RESALE_MARKUP = 1.6
+
+/**
+ * Estimate a local sell price in USD from the per-unit landed cost. `fxArsPerUsd` is accepted so
+ * callers can reason in ARS, but the estimate is markup-based and FX-independent, so when FX is
+ * missing/invalid we still return the markup estimate. Returns null only when landed cost is not
+ * a positive number.
+ */
+export function estimateLocalPrice(unitLandedCostUsd: number, _fxArsPerUsd?: number | null): number | null {
+  if (!Number.isFinite(unitLandedCostUsd) || unitLandedCostUsd <= 0) return null
+  return round2(unitLandedCostUsd * TYPICAL_RESALE_MARKUP)
+}
+
 function modeLabel(mode: 'lcl' | 'air' | 'courier' | null): string {
   if (mode === 'lcl') return 'barco (LCL)'
   if (mode === 'air') return 'aéreo'
@@ -78,7 +96,14 @@ function verdictFor(
   mode: 'lcl' | 'air' | 'courier' | null,
   marginPct: number | null,
   blockers: string[],
+  marketIsEstimate = false,
 ): { verdict: ImportVerdict; headline: string; detail: string } {
+  // When margin rests on an estimated (not verified) local price, we keep the normal verdict but
+  // append a caveat so the user knows the number is best-effort — we never downgrade to
+  // 'sin-mercado' when a margin actually exists.
+  const estimateCaveat = marketIsEstimate && marginPct !== null
+    ? ' (sobre un precio local estimado, no verificado)'
+    : ''
   if (!mode || blockers.length > 0) {
     return {
       verdict: 'faltan-datos',
@@ -99,34 +124,34 @@ function verdictFor(
     return {
       verdict: 'no',
       headline: 'No conviene con estos datos',
-      detail: `El costo por unidad supera el precio de venta que cargaste. Revisá precio de compra o precio de venta.`,
+      detail: `El costo por unidad supera el precio de venta que cargaste. Revisá precio de compra o precio de venta.${estimateCaveat}`,
     }
   }
   if (marginPct < 10) {
     return {
       verdict: 'fragil',
       headline: 'Margen demasiado frágil',
-      detail: `El margen estimado es ${marginPct.toFixed(0)} %. Cualquier variación de flete, tipo de cambio o precio local puede volver negativa la operación.`,
+      detail: `El margen estimado es ${marginPct.toFixed(0)} %. Cualquier variación de flete, tipo de cambio o precio local puede volver negativa la operación.${estimateCaveat}`,
     }
   }
   if (marginPct < 20) {
     return {
       verdict: 'ajusta',
       headline: 'Ajustá la cantidad o el precio',
-      detail: `El margen queda por debajo del 20 %. Hay poco colchón para errores, demoras o gastos no modelados. Probá traer más unidades para bajar el costo unitario.`,
+      detail: `El margen queda por debajo del 20 %. Hay poco colchón para errores, demoras o gastos no modelados. Probá traer más unidades para bajar el costo unitario.${estimateCaveat}`,
     }
   }
   if (marginPct >= 35) {
     return {
       verdict: 'excelente',
       headline: `Oportunidad fuerte por ${modeLabel(mode)}`,
-      detail: `El margen estimado es ${marginPct.toFixed(0)} %. Hay un colchón inicial atractivo, sujeto a validar demanda y cotizaciones vigentes.`,
+      detail: `El margen estimado es ${marginPct.toFixed(0)} %. Hay un colchón inicial atractivo, sujeto a validar demanda y cotizaciones vigentes.${estimateCaveat}`,
     }
   }
   return {
     verdict: 'si',
     headline: `Conviene importar por ${modeLabel(mode)}`,
-    detail: `Margen estimado de ${marginPct.toFixed(0)} % sobre el precio de venta cargado.`,
+    detail: `Margen estimado de ${marginPct.toFixed(0)} % sobre el precio de venta cargado.${estimateCaveat}`,
   }
 }
 
@@ -135,6 +160,7 @@ export function buildImporterSummary(
   quantity: number,
   localSellPriceUsd: number,
   optimization: QuantityOptimization | null,
+  marketIsEstimate = false,
 ): ImporterSummary {
   const winner = comparison.bestMode ? comparison.modes[comparison.bestMode] : null
   const mode = comparison.bestMode
@@ -143,7 +169,7 @@ export function buildImporterSummary(
     ? round2(((localSellPriceUsd - winner.unitCostUsd) / localSellPriceUsd) * 100)
     : null
 
-  const { verdict, headline, detail } = verdictFor(mode, marginPct, checklist.blockers)
+  const { verdict, headline, detail } = verdictFor(mode, marginPct, checklist.blockers, marketIsEstimate)
 
   // Fixed items: paid once per shipment, not per unit
   const fixedItems: ImporterCostItem[] = []

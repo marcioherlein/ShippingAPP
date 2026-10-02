@@ -1,5 +1,5 @@
 import { analyzeAlibabaUrl, applyAnalysis, readAlibabaProduct, startImportAnalysis, type ProductAnalysis } from './productAnalysis'
-import { customsProfileFor, type CustomsProfile } from './customsClassification'
+import { customsProfileFor, type CustomsProfile, type NcmTariffProfile } from './customsClassification'
 import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
 import type { FullNcmApiResult } from './fullNcmClient'
 import type { Inputs } from './types'
@@ -13,6 +13,38 @@ export type ProductAnalysisV2 = Omit<ProductAnalysis, 'usageReservationId'> & {
     attempt: number
     maxAttempts: number
   }
+}
+
+/**
+ * Classification gating helpers. The fail-closed invariant stays intact:
+ * `hasConfirmedClassification` is the ONLY predicate that reads a confirmed
+ * high/medium duty. `effectiveDutyRatePct`/`effectiveTariffProfile` fall back to
+ * the conservative provisional estimate so the UI can proceed with a labeled
+ * best-effort cost instead of dead-ending — never promoting it to "confirmed".
+ */
+export function hasConfirmedClassification(customs: CustomsProfile): boolean {
+  return !!customs.ncmCandidate
+    && (customs.classificationConfidence === 'high' || customs.classificationConfidence === 'medium')
+    && customs.dutyRatePct !== null
+    && customs.dutyRatePct !== undefined
+}
+
+export function hasProvisionalClassification(customs: CustomsProfile): boolean {
+  return customs.provisional === true
+    && customs.provisionalDutyRatePct !== null
+    && customs.provisionalDutyRatePct !== undefined
+}
+
+export function effectiveDutyRatePct(customs: CustomsProfile): number | null {
+  if (hasConfirmedClassification(customs)) return customs.dutyRatePct ?? null
+  if (hasProvisionalClassification(customs)) return customs.provisionalDutyRatePct ?? null
+  return null
+}
+
+export function effectiveTariffProfile(customs: CustomsProfile): NcmTariffProfile | null {
+  if (hasConfirmedClassification(customs)) return customs.tariff ?? null
+  if (hasProvisionalClassification(customs)) return customs.provisionalTariff ?? customs.tariff ?? null
+  return null
 }
 
 function unclassifiedCustoms(originCountry?: string | null): CustomsProfile {
@@ -75,10 +107,7 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
   }
 
   const { usageReservationId, ...cleanBase } = paidBase
-  const classificationResolved = !!customs.ncmCandidate
-    && (customs.classificationConfidence === 'high' || customs.classificationConfidence === 'medium')
-    && customs.dutyRatePct !== null
-    && customs.dutyRatePct !== undefined
+  const classificationResolved = hasConfirmedClassification(customs)
   const keepReservation = !classificationResolved
     && refinement?.allowed === true
     && Boolean(usageReservationId)

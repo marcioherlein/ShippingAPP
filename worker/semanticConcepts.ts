@@ -403,6 +403,58 @@ export type Clarification = {
   fact: 'construction' | 'material' | 'activeMechanism' | 'function'
 }
 
+export type DisambiguationQuestion = {
+  // Stable key so the UI can track answers.
+  id: string
+  // Plain-Spanish yes/no question the user can answer without aduana knowledge.
+  prompt: string
+  // The product dimension this question discriminates (observability + answer routing).
+  attribute: 'material' | 'uso' | 'motor' | 'electrico' | 'construccion' | 'otro'
+  // Concrete choices. `value` feeds continuation; `note` is the Spanish phrase appended to the
+  // clarification sent back to the classifier. 'no-se' options carry no note (nothing asserted).
+  options: Array<{ label: string; value: string; note?: string }>
+}
+
+/**
+ * Structured yes/no/no-sé questions that discriminate between the candidate NCM positions the
+ * retrieval produced, phrased so a non-expert can answer them. These reuse the same polar
+ * concept gates as deriveClarifications but, unlike it, return concrete options whose `note`
+ * can be composed into a classifier continuation without free-text from the user. Returns []
+ * when no binary attribute would change the outcome.
+ */
+export function deriveDisambiguationQuestions(concepts: SemanticConcepts): DisambiguationQuestion[] {
+  const has = (key: string) => concepts.concepts.includes(key)
+  const questions: DisambiguationQuestion[] = []
+
+  if (has('beverage_container') && !has('vacuum_insulated') && !has('!vacuum_insulated')) {
+    questions.push({
+      id: 'insulation',
+      attribute: 'construccion',
+      prompt: '¿El recipiente tiene aislamiento térmico (doble pared / al vacío, tipo termo)?',
+      options: [
+        { label: 'Sí, es térmico / doble pared', value: 'si', note: 'El recipiente tiene aislamiento térmico de doble pared al vacío (termo isotérmico).' },
+        { label: 'No, es común sin aislamiento', value: 'no', note: 'El recipiente es común, de una sola pared, sin aislamiento térmico.' },
+        { label: 'No sé', value: 'no-se' },
+      ],
+    })
+  }
+
+  if (has('sunglasses') && !has('corrective_eyewear') && !has('!corrective_eyewear')) {
+    questions.push({
+      id: 'corrective',
+      attribute: 'uso',
+      prompt: '¿Los anteojos tienen lentes graduadas / correctoras?',
+      options: [
+        { label: 'Sólo de sol (no correctoras)', value: 'no', note: 'Son anteojos de sol sin corrección óptica (lentes no graduadas).' },
+        { label: 'Tienen lentes graduadas', value: 'si', note: 'Los anteojos tienen lentes graduadas / correctoras.' },
+        { label: 'No sé', value: 'no-se' },
+      ],
+    })
+  }
+
+  return questions
+}
+
 /**
  * Derive specific clarification questions, asked ONLY when the answer can materially change
  * the tariff classification. Every question maps to a structured fact so a continuation

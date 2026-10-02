@@ -87,7 +87,7 @@ export type QuotePrefill = {
   marketP75Ars?: number | null
   marketComparableCount?: number
   marketConfidence?: number | null
-  marketStatus?: 'live' | 'unavailable' | 'insufficient' | 'configuration_required' | 'unknown'
+  marketStatus?: 'live' | 'unavailable' | 'insufficient' | 'configuration_required' | 'unknown' | 'estimate'
   marketSource?: string | null
   marketComparables?: Array<{ id: string; title: string; priceArs: number; permalink?: string }>
   fxArsPerUsd?: number | null
@@ -108,6 +108,12 @@ export type QuotePrefill = {
   customsSourceDate?: string | null
   customsMissingFacts?: string[]
   customsRationale?: string[]
+  // Best-effort classification carried into the quote (additive). `provisional` means the
+  // dutyRatePct shown is the conservative estimate, not a confirmed rate.
+  provisional?: boolean
+  provisionalBasis?: string | null
+  provisionalCode?: string | null
+  provisionalLabel?: string | null
 }
 
 export function getCachedHotProducts(limit = 8) {

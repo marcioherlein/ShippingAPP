@@ -6,7 +6,7 @@
 }
 
 .owned-product-intake {
-  padding: 28px;
+  padding: 20px;
   border: 1px solid rgba(120, 138, 180, 0.18);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.72);
@@ -17,6 +17,8 @@
 .owned-product-intro h2,
 .progressive-confirm-head h2 {
   margin: 8px 0 10px;
+  font-size: 17px;
+  letter-spacing: -.02em;
 }
 
 .owned-product-intro p,
@@ -35,7 +37,7 @@
 .owned-product-options > button {
   position: relative;
   min-width: 0;
-  padding: 22px;
+  padding: 16px;
   text-align: left;
   border: 1px solid rgba(109, 126, 170, 0.18);
   border-radius: 22px;
@@ -54,8 +56,8 @@
 }
 
 .owned-product-options b {
-  margin: 14px 0 7px;
-  font-size: 1.08rem;
+  margin: 10px 0 6px;
+  font-size: 13px;
 }
 
 .owned-product-options small {
@@ -532,5 +534,142 @@
   .pipeline-currency-facts,
   .pipeline-currency-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ── Chatbot Q&A (describe mode) ─────────────────────────────────────────── */
+
+.product-chatbot {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chatbot-receipt-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.chatbot-receipt-item {
+  padding: 6px 11px;
+  border: 1px solid rgba(109, 126, 170, 0.22);
+  border-radius: 999px;
+  background: rgba(248, 250, 255, 0.9);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.chatbot-receipt-item:hover {
+  border-color: rgba(79, 93, 228, 0.4);
+  background: #eef1ff;
+  color: #4454dc;
+}
+
+.chatbot-question-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(109, 126, 170, 0.18);
+  border-radius: 16px;
+  background: rgba(248, 250, 255, 0.84);
+}
+
+.chatbot-question-eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.chatbot-question-label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.chatbot-answer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chatbot-answer-input {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(109, 126, 170, 0.28);
+  border-radius: 11px;
+  background: #fff;
+  font-size: 15px;
+  color: #1e293b;
+  box-sizing: border-box;
+}
+
+.chatbot-answer-input:focus {
+  outline: none;
+  border-color: var(--ds-brand, #4f5de4);
+  box-shadow: 0 0 0 3px rgba(79, 93, 228, 0.15);
+}
+
+.chatbot-unit-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: .04em;
+}
+
+.chatbot-continue-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.chatbot-skip-link {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chatbot-skip-link:hover {
+  color: #64748b;
+}
+
+/* Remove spinner arrows on number inputs inside chatbot */
+.chatbot-answer-input[type="number"]::-webkit-outer-spin-button,
+.chatbot-answer-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.chatbot-answer-input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+@media (max-width: 700px) {
+  .chatbot-answer-row {
+    flex-wrap: wrap;
+  }
+  .chatbot-continue-btn {
+    width: 100%;
+    justify-content: center;
   }
 }

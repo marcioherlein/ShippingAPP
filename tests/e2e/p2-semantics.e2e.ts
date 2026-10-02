@@ -18,6 +18,8 @@ test('journey choices expose grouped radio semantics and arrow-key selection', a
 
   const entityGroup = page.getByRole('radiogroup', { name: '¿Quién importa?' })
   await expect(entityGroup.getByRole('radio')).toHaveCount(3)
+  // Click an entity option to advance profileStep and reveal the signature group
+  await entityGroup.getByRole('radio', { name: 'Empresa', exact: true }).click()
 
   const signatureGroup = page.getByRole('radiogroup', { name: '¿Tenés firma/importador para operar?' })
   await expect(signatureGroup.getByRole('radio')).toHaveCount(3)

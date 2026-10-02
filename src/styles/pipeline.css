@@ -16,7 +16,7 @@
 .pipeline-confirm-head h2,
 .pipeline-run-head h2 {
   margin: 8px 0 9px;
-  font-size: 18px;
+  font-size: 18px !important;
   letter-spacing: -.02em;
   line-height: 1.35;
 }

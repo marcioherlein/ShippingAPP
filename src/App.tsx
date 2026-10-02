@@ -1,4 +1,5 @@
 import { readProductDraft, writeProductDraft, clearProductDraft } from './lib/productDraft'
+import { savePendingConfirm, loadPendingConfirm, clearPendingConfirm } from './lib/sessionDraft'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { startImportAnalysis } from './lib/productAnalysis'
 import UrlAnalyzer from './components/UrlAnalyzer'
@@ -238,6 +239,20 @@ export default function App() {
     return () => window.removeEventListener('shippingapp:journey-restored', restoreProduct)
   }, [intent])
 
+  // When auth resolves (modal sign-in completes), auto-retry any pending confirmation that was
+  // interrupted by the auth gate — saves the user from clicking "Confirmar" a second time.
+  const confirmAndCalculateRef = useRef<((data: ProductConfirmationData) => Promise<void>) | null>(null)
+  useEffect(() => {
+    const onAuthResolved = () => {
+      const pending = loadPendingConfirm()
+      if (!pending || !confirmAndCalculateRef.current) return
+      clearPendingConfirm()
+      void confirmAndCalculateRef.current(pending)
+    }
+    window.addEventListener('shippingapp:auth-resolved', onAuthResolved)
+    return () => window.removeEventListener('shippingapp:auth-resolved', onAuthResolved)
+  }, [])
+
   // Clear the restore guard even if no journey-restored event ever arrives.
   useEffect(() => {
     if (!restoringRef.current) return
@@ -376,6 +391,9 @@ export default function App() {
       return
     }
 
+    // Persist confirmation data so auth-resolved can auto-retry if the API gate interrupts this call.
+    savePendingConfirm(confirmedProduct)
+
     const runInputKey = currentCalculationInputKey
     const confirmedAnalysis = applyProductConfirmation(analysis, confirmedProduct)
     setAnalysis(confirmedAnalysis)
@@ -513,6 +531,7 @@ export default function App() {
         },
       }))
       await nextPaint(120)
+      clearPendingConfirm()
       setCalculationStatus('ready')
       setStep(4)
       revealSection(document.getElementById('calculator'))
@@ -521,6 +540,7 @@ export default function App() {
       setCalculationStatus('blocked')
     }
   }
+  confirmAndCalculateRef.current = confirmAndCalculate
 
   const continueOperation = () => {
     if (operationAnswered) setStep(2)

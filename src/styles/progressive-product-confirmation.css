@@ -17,7 +17,7 @@
 .owned-product-intro h2,
 .progressive-confirm-head h2 {
   margin: 8px 0 10px;
-  font-size: 17px;
+  font-size: 17px !important;
   letter-spacing: -.02em;
 }
 
@@ -669,6 +669,7 @@
   outline: none;
   transition: border-color 150ms ease, box-shadow 150ms ease;
   box-sizing: border-box;
+  width: 100%;
 }
 
 .chatbot-dock-input:focus {
@@ -725,6 +726,37 @@
 .chatbot-dock-input[type="number"]::-webkit-inner-spin-button,
 .chatbot-dock-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
 .chatbot-dock-input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+.chatbot-dock-input-wrap {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.chatbot-dock-input-wrap .chatbot-dock-input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-right: 48px;
+}
+
+.chatbot-dock-unit {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ds-brand, #4f5de4);
+  background: rgba(79, 93, 228, 0.09);
+  padding: 2px 7px;
+  border-radius: 6px;
+  pointer-events: none;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
 
 @media (max-width: 600px) {
   .chatbot-send-btn { padding: 0 12px; font-size: 13px; }

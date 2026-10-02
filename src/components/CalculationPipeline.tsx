@@ -252,6 +252,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
   const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
+    || (clarificationTarget === 'functionText' && !!draft.functionText)
   const canConfirm = classificationReady && !identityEdited
     ? quoteMissing.length === 0 && (draft.quantity ?? 0) > 0
     : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied
@@ -354,7 +355,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             onContinueEstimate={provisionalAvailable ? submitConfirmation : undefined}
           />}
 
-          {classifierAskedForMore && !refinementExhausted && !(refinement && (refinement.attempt >= 2 || (refinement.attempt > 0 && clarificationTarget === 'functionText'))) && <div className="pipeline-clarification-card">
+          {classifierAskedForMore && !(clarificationTarget === 'functionText' && !!draft.functionText) && !refinementExhausted && !(refinement && (refinement.attempt >= 2 || (refinement.attempt > 0 && clarificationTarget === 'functionText'))) && <div className="pipeline-clarification-card">
             <span className="eyebrow">Una pregunta para terminar</span>
             <div className="pipeline-clarification-copy">
               <h3>{clarificationUi.question}</h3>

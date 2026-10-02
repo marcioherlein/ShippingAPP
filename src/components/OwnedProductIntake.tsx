@@ -161,9 +161,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     setChatInput('')
   }
 
-  const placeholderWithUnit = CHAT_UNITS[chatStep]
-    ? `${CHAT_PLACEHOLDERS[chatStep]} (${CHAT_UNITS[chatStep]})`
-    : CHAT_PLACEHOLDERS[chatStep]
+  const currentUnit = CHAT_UNITS[chatStep] ?? null
 
   return <section className="owned-product-intake" aria-label="Cómo cargar tu producto">
     <div className="owned-product-intro">
@@ -234,20 +232,23 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
 
       <div className="chatbot-input-dock">
         <div className="chatbot-dock-row">
-          <input
-            ref={inputRef}
-            className="chatbot-dock-input"
-            type={isNumberStep(chatStep) ? 'number' : 'text'}
-            inputMode={isNumberStep(chatStep) ? 'decimal' : 'text'}
-            min={isNumberStep(chatStep) ? '0.001' : undefined}
-            step={isNumberStep(chatStep) ? 'any' : undefined}
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholderWithUnit}
-            aria-label={CHAT_LABELS[chatStep]}
-            autoFocus
-          />
+          <div className="chatbot-dock-input-wrap">
+            <input
+              ref={inputRef}
+              className="chatbot-dock-input"
+              type={isNumberStep(chatStep) ? 'number' : 'text'}
+              inputMode={isNumberStep(chatStep) ? 'decimal' : 'text'}
+              min={isNumberStep(chatStep) ? '0.001' : undefined}
+              step={isNumberStep(chatStep) ? 'any' : undefined}
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={CHAT_PLACEHOLDERS[chatStep]}
+              aria-label={CHAT_LABELS[chatStep]}
+              autoFocus
+            />
+            {currentUnit && <span className="chatbot-dock-unit" aria-hidden="true">{currentUnit}</span>}
+          </div>
           <button
             type="button"
             className="chatbot-send-btn"

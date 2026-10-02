@@ -351,11 +351,32 @@
 .journey-complete-row span { border-radius: 999px; background: var(--ds-brand-soft); color: var(--ds-brand-strong); border: 1px solid rgba(79, 93, 228, .18); padding: 7px 12px; font-size: 12px; font-weight: 600; }
 
 .journey-number-field > div { max-width: 300px; position: relative; }
-.journey-number-field > div small { position: absolute; left: 12px; top: 13px; z-index: 1; color: #94a3b8; font-weight: 800; }
-.journey-number-field input { padding-left: 48px; }
+.journey-number-field > div small {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  color: var(--ds-brand, #4f5de4);
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(79, 93, 228, 0.09);
+  padding: 2px 7px;
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.journey-number-field input { padding-left: 56px; min-height: 48px; }
+/* Hide native number spinners for a cleaner look */
+.journey-number-field input[type="number"]::-webkit-inner-spin-button,
+.journey-number-field input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+.journey-number-field input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .journey-number-field em { display: block; margin-top: 7px; color: #94a3b8; font-size: 11px; font-style: normal; }
 .journey-range-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 180px)); gap: 12px; }
 .journey-range-fields label span { display: block; margin-bottom: 7px; }
+.journey-range-fields input[type="number"]::-webkit-inner-spin-button,
+.journey-range-fields input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+.journey-range-fields input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 .journey-product-surface { margin: 10px 0 18px 46px; }
 .journey-product-surface .url-analyzer,

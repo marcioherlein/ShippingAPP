@@ -29,7 +29,7 @@ const CHAT_PLACEHOLDERS: Record<ChatStep, string> = {
   origin: 'Ej. China',
   weight: 'Ej. 0.35',
   moq: 'Ej. 100',
-  volume: 'Ej. 0.008',
+  volume: 'Ej. 0.008 ó 50x40x30cm',
 }
 const CHAT_UNITS: Partial<Record<ChatStep, string>> = {
   price: 'USD',
@@ -48,11 +48,37 @@ const CHAT_RECEIPT_FMT: Record<ChatStep, (v: string) => string> = {
 
 const isNumberStep = (step: ChatStep) => ['price', 'weight', 'moq', 'volume'].includes(step)
 
+/**
+ * Parse a provider dimension string (e.g. "122x20x15", "50*40*30cm", "1.2 x 0.5 x 0.3 m")
+ * into a volume in m³. Returns null if the string doesn't match a dimension pattern.
+ * Heuristic: if any value > 5 and no explicit unit, treat as cm.
+ */
+function parseDimensionsToCbm(value: string): number | null {
+  const trimmed = value.trim()
+  // Already a plain number in m³
+  const plain = Number(trimmed)
+  if (Number.isFinite(plain) && plain > 0) return plain
+  // Dimension string: N sep N sep N [unit]
+  const m = trimmed.match(/^([\d.]+)\s*[x×*]\s*([\d.]+)\s*[x×*]\s*([\d.]+)\s*(cm|mm|m)?$/i)
+  if (!m) return null
+  const d1 = Number(m[1]), d2 = Number(m[2]), d3 = Number(m[3])
+  if (!Number.isFinite(d1) || !Number.isFinite(d2) || !Number.isFinite(d3)) return null
+  if (d1 <= 0 || d2 <= 0 || d3 <= 0) return null
+  const unit = (m[4] || '').toLowerCase()
+  let scale: number
+  if (unit === 'cm') scale = 0.01
+  else if (unit === 'mm') scale = 0.001
+  else if (unit === 'm') scale = 1
+  else scale = (d1 > 5 || d2 > 5 || d3 > 5) ? 0.01 : 1
+  const cbm = d1 * scale * d2 * scale * d3 * scale
+  return cbm > 0 ? cbm : null
+}
+
 function validateChatInput(step: ChatStep, value: string): boolean {
   const trimmed = value.trim()
   if (step === 'name') return trimmed.length >= 3
   if (step === 'origin') return trimmed.length >= 2
-  if (step === 'volume') return trimmed.length > 0 && Number.isFinite(Number(trimmed)) && Number(trimmed) > 0
+  if (step === 'volume') return parseDimensionsToCbm(trimmed) !== null
   const n = Number(trimmed)
   return Number.isFinite(n) && n > 0
 }
@@ -127,7 +153,13 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   }
 
   const advanceStep = (rawValue: string) => {
-    const value = rawValue.trim()
+    let value = rawValue.trim()
+    // Normalize dimension strings (e.g. "122x20x15cm") to a plain m³ decimal so the receipt
+    // and finalizeChat both see a clean number rather than the raw dimension expression.
+    if (chatStep === 'volume' && !Number.isFinite(Number(value))) {
+      const cbm = parseDimensionsToCbm(value)
+      if (cbm !== null) value = parseFloat(cbm.toFixed(6)).toString()
+    }
     const newAnswers = { ...chatAnswers, [chatStep]: value }
     setChatAnswers(newAnswers)
     setChatInput('')
@@ -236,10 +268,10 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
             <input
               ref={inputRef}
               className="chatbot-dock-input"
-              type={isNumberStep(chatStep) ? 'number' : 'text'}
-              inputMode={isNumberStep(chatStep) ? 'decimal' : 'text'}
-              min={isNumberStep(chatStep) ? '0.001' : undefined}
-              step={isNumberStep(chatStep) ? 'any' : undefined}
+              type={isNumberStep(chatStep) && chatStep !== 'volume' ? 'number' : 'text'}
+              inputMode={isNumberStep(chatStep) && chatStep !== 'volume' ? 'decimal' : 'text'}
+              min={isNumberStep(chatStep) && chatStep !== 'volume' ? '0.001' : undefined}
+              step={isNumberStep(chatStep) && chatStep !== 'volume' ? 'any' : undefined}
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={handleKeyDown}

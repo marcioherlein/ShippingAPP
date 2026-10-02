@@ -8,14 +8,14 @@ const MIN_COMPARABLES = Number(process.env.ARGENTINA_MARKET_MIN_COMPARABLES || 5
 const BRANDED_PROBES = [
   { id: 'logitech-m170', productName: 'Logitech M170', category: 'mouse inalámbrico' },
   { id: 'samsung-a16-128-4', productName: 'Samsung Galaxy A16 128GB 4GB', category: 'celular' },
-  { id: 'motorola-g15-256-4', productName: 'Motorola G15 256GB 4GB', category: 'celular' },
+  { id: 'motorola-g34-5g', productName: 'Motorola Moto G34 5G 128GB', category: 'celular' },
 ]
 
 // Generic commodity probes (Stream B) — these must reach a live benchmark via functional mode
 // against Argentine retailers. Validates the language-bridge and commodity routing fixes.
 const COMMODITY_PROBES = [
   { id: 'padel-racket', productName: 'Paleta de padel', category: 'paleta de padel' },
-  { id: 'thermo-bottle-stainless', productName: '45oz 1350ml Large Capacity Stainless Steel Vacuum Bottle', category: 'stainless steel water bottle' },
+  { id: 'thermo-bottle-stainless', productName: 'Termo acero inoxidable 1 litro', category: 'termo' },
   { id: 'sport-bottle-plastic', productName: 'Large Capacity Sport Water Bottle Gym Plastic', category: 'sport water bottle' },
   { id: 'sunglasses-uv400', productName: 'Mens Sunglasses Luxury Designer UV400 Polarized', category: 'sunglasses' },
   { id: 'tws-earbuds', productName: 'TWS Wireless Bluetooth Earbuds', category: 'wireless earphones' },

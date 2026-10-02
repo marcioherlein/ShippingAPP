@@ -70,6 +70,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const [chatAnswers, setChatAnswers] = useState<Partial<Record<ChatStep, string>>>(draft?.chatAnswers || {})
   const [chatInput, setChatInput] = useState(draft?.chatInput || '')
   const inputRef = useRef<HTMLInputElement>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput }) }, [mode, link, chatStep, chatAnswers, chatInput])
 
@@ -77,6 +78,12 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     if (mode === 'describe') {
       const timer = setTimeout(() => inputRef.current?.focus(), 40)
       return () => clearTimeout(timer)
+    }
+  }, [mode, chatStep])
+
+  useEffect(() => {
+    if (mode === 'describe' && threadRef.current) {
+      threadRef.current.scrollTop = threadRef.current.scrollHeight
     }
   }, [mode, chatStep])
 
@@ -95,7 +102,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     } catch (err) {
       const raw = err instanceof Error ? err.message : ''
       const message = /expected pattern|string did not match/i.test(raw)
-        ? 'Falló transitoriamente la sesión del navegador. Reintentá; el enlace es válido y no se consumió ningún análisis.'
+        ? 'Falló transitoriamente la sesión del navegador. Reintená; el enlace es válido y no se consumió ningún análisis.'
         : raw || 'No pude leer esa publicación.'
       setError(`${message} También podés describir el producto sin link.`)
     } finally {
@@ -106,8 +113,6 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const answeredSteps = ALL_STEPS.filter(
     (s) => ALL_STEPS.indexOf(s) < ALL_STEPS.indexOf(chatStep) && chatAnswers[s] !== undefined,
   )
-  const mandatoryStepIndex = MANDATORY_STEPS.indexOf(chatStep as ChatStep)
-  const eyebrow = chatStep === 'volume' ? 'Opcional' : `${mandatoryStepIndex + 1} / ${MANDATORY_STEPS.length}`
 
   const finalizeChat = (answers: Partial<Record<ChatStep, string>>) => {
     const data: ManualProductChatData = {
@@ -156,6 +161,10 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     setChatInput('')
   }
 
+  const placeholderWithUnit = CHAT_UNITS[chatStep]
+    ? `${CHAT_PLACEHOLDERS[chatStep]} (${CHAT_UNITS[chatStep]})`
+    : CHAT_PLACEHOLDERS[chatStep]
+
   return <section className="owned-product-intake" aria-label="Cómo cargar tu producto">
     <div className="owned-product-intro">
       <span className="eyebrow">Tu producto</span>
@@ -197,33 +206,37 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
     </form>}
 
-    {mode === 'describe' && <div className="owned-product-entry product-chatbot">
-      <div className="owned-product-entry-head">
-        <div><b>Ingresá el producto</b><small>Una pregunta por vez. Tocá cualquier respuesta para corregirla.</small></div>
+    {mode === 'describe' && <div className="product-chatbot">
+      <div className="chatbot-topbar">
+        <b>Ingresá el producto</b>
         <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
       </div>
 
-      {answeredSteps.length > 0 && <div className="chatbot-receipt-row" role="list">
+      <div className="chatbot-thread" ref={threadRef}>
         {answeredSteps.map((step) => (
-          <button
-            key={step}
-            type="button"
-            className="chatbot-receipt-item"
-            onClick={() => editAnswer(step)}
-            aria-label={`${CHAT_LABELS[step]}: ${CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')} — tocá para editar`}
-          >
-            {CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')}
-          </button>
+          <React.Fragment key={step}>
+            <div className="chatbot-msg assistant">{CHAT_LABELS[step]}</div>
+            <button
+              type="button"
+              className="chatbot-msg user"
+              onClick={() => editAnswer(step)}
+              aria-label={`${CHAT_LABELS[step]}: ${CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')} — tocá para editar`}
+            >
+              {CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')}
+            </button>
+          </React.Fragment>
         ))}
-      </div>}
+        <div key={chatStep} className="chatbot-msg assistant chatbot-msg-enter">
+          {CHAT_LABELS[chatStep]}
+          {chatStep === 'volume' && <span className="chatbot-optional-tag"> · Opcional</span>}
+        </div>
+      </div>
 
-      <div className="chatbot-question-card">
-        <span className="chatbot-question-eyebrow">{eyebrow}</span>
-        <p className="chatbot-question-label">{CHAT_LABELS[chatStep]}</p>
-        <div className="chatbot-answer-row">
+      <div className="chatbot-input-dock">
+        <div className="chatbot-dock-row">
           <input
             ref={inputRef}
-            className="chatbot-answer-input"
+            className="chatbot-dock-input"
             type={isNumberStep(chatStep) ? 'number' : 'text'}
             inputMode={isNumberStep(chatStep) ? 'decimal' : 'text'}
             min={isNumberStep(chatStep) ? '0.001' : undefined}
@@ -231,14 +244,13 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={CHAT_PLACEHOLDERS[chatStep]}
+            placeholder={placeholderWithUnit}
             aria-label={CHAT_LABELS[chatStep]}
             autoFocus
           />
-          {CHAT_UNITS[chatStep] && <span className="chatbot-unit-label" aria-hidden="true">{CHAT_UNITS[chatStep]}</span>}
           <button
             type="button"
-            className="journey-primary-action chatbot-continue-btn"
+            className="chatbot-send-btn"
             disabled={!validateChatInput(chatStep, chatInput)}
             onClick={() => advanceStep(chatInput)}
           >
@@ -246,7 +258,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
           </button>
         </div>
         {chatStep === 'volume' && (
-          <button type="button" className="chatbot-skip-link" onClick={() => finalizeChat(chatAnswers)}>
+          <button type="button" className="chatbot-skip-btn" onClick={() => finalizeChat(chatAnswers)}>
             No sé / omitir
           </button>
         )}

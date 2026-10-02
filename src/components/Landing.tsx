@@ -17,16 +17,33 @@ export default function Landing({ onStart }: Props) {
   return <main className="journey-app journey-landing-view" id="home">
     <header className="journey-topbar">
       <a className="journey-brand" href="#home"><span className="journey-brand-mark">G</span><span>Global<b>Shipping</b></span></a>
-      <div className="journey-top-actions"><button type="button" onClick={onStart}>Calcular ahora</button></div>
     </header>
 
     <section className="journey-landing-hero">
+      <div className="journey-landing-ambient" aria-hidden="true" />
+      <div className="journey-landing-grid" aria-hidden="true" />
+
       <span className="journey-landing-eyebrow">Calculadora de costo de importaci&#xF3;n</span>
       <h1 className="journey-landing-headline">Recib&#xED; el valor real de tu producto <em>puesto en Argentina.</em></h1>
       <p className="journey-landing-sub">Pod&#xE9;s calcular flete, impuestos y gastos en destino en menos de 2 minutos.</p>
       <div className="journey-landing-cta-row">
         <button type="button" className="journey-landing-cta-primary" onClick={onStart}>Calcul&#xE1; ahora <span aria-hidden="true">&#x2192;</span></button>
         <button type="button" className="journey-landing-cta-secondary" onClick={scrollToHow}>Ver c&#xF3;mo funciona</button>
+      </div>
+
+      <div className="journey-landing-stats" aria-label="M&#xE9;tricas del producto">
+        <div className="journey-landing-stat">
+          <span className="journey-landing-stat-value">10.504</span>
+          <span className="journey-landing-stat-label">posiciones NCM</span>
+        </div>
+        <div className="journey-landing-stat">
+          <span className="journey-landing-stat-value">+1.200</span>
+          <span className="journey-landing-stat-label">consultas calculadas</span>
+        </div>
+        <div className="journey-landing-stat">
+          <span className="journey-landing-stat-value">&lt;2 min</span>
+          <span className="journey-landing-stat-label">cotizaci&#xF3;n completa</span>
+        </div>
       </div>
 
       <DemoPreview onStart={onStart} />

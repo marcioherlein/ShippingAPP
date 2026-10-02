@@ -6,7 +6,6 @@ import type { ManualProductChatData } from '../lib/productConfirmation'
 
 type Props = {
   onAlibabaLink: (url: string) => Promise<void>
-  onDescribeProduct?: (description: string) => void
   onStructuredData: (data: ManualProductChatData) => void
 }
 
@@ -53,7 +52,7 @@ function validateChatInput(step: ChatStep, value: string): boolean {
   const trimmed = value.trim()
   if (step === 'name') return trimmed.length >= 3
   if (step === 'origin') return trimmed.length >= 2
-  if (step === 'volume') return true // optional, any input passes
+  if (step === 'volume') return trimmed.length > 0 && Number.isFinite(Number(trimmed)) && Number(trimmed) > 0
   const n = Number(trimmed)
   return Number.isFinite(n) && n > 0
 }

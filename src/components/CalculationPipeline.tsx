@@ -350,9 +350,11 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             customs={analysis.customs}
             onPickCandidate={pickDisambiguationCandidate}
             onAnswer={submitDisambiguationAnswer}
+            provisionalAvailable={provisionalAvailable}
+            onContinueEstimate={provisionalAvailable ? submitConfirmation : undefined}
           />}
 
-          {classifierAskedForMore && !refinementExhausted && !(refinement && refinement.attempt > 0 && clarificationTarget === 'functionText') && <div className="pipeline-clarification-card">
+          {classifierAskedForMore && !refinementExhausted && !(refinement && (refinement.attempt >= 2 || (refinement.attempt > 0 && clarificationTarget === 'functionText'))) && <div className="pipeline-clarification-card">
             <span className="eyebrow">Una pregunta para terminar</span>
             <div className="pipeline-clarification-copy">
               <h3>{clarificationUi.question}</h3>
@@ -414,7 +416,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
               {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : null, 'volume')}
               {quantitySignal && knownFact('Cantidad', draft.quantity ? `${draft.quantity} u.` : null, 'quantity')}
             </div>
-            <button type="button" className="pipeline-secondary" aria-expanded={showAllQuoteFields} onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Mostrar sólo faltantes' : 'Corregir un dato detectado'}</button>
+            <button type="button" className="pipeline-secondary" aria-expanded={showAllQuoteFields} onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Ocultar campos opcionales' : 'Corregir un dato detectado'}</button>
           </div>
 
           {draft.unitPriceUsd > 0 && <div className="pipeline-currency-confirm">
@@ -437,7 +439,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             {priceCurrency !== 'USD' && <div className="pipeline-currency-preview" role="status">
               <span>{draft.unitPriceUsd} {priceCurrency} → <b>{usd(priceConversion.amountUsd)}</b> por unidad</span>
               <small>{priceConversion.note}</small>
-              <button type="button" className="journey-primary-action" onClick={applyCurrencyConversion}>Convertir el precio a USD <UiIcon name="arrow-right" size={16} /></button>
+              <button type="button" className="journey-primary-action" disabled={Number(fxRateInput) <= 0} onClick={applyCurrencyConversion}>Convertir el precio a USD <UiIcon name="arrow-right" size={16} /></button>
             </div>}
           </div>}
 
@@ -476,6 +478,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>
 
           {quoteMissing.length > 0 ? <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No te voy a pedir nada más de aduana.</b><span>Sólo falta: {quoteMissing.map((item) => item.label).join(' · ')}.</span></div> : <div className="pipeline-confirm-ok"><b>Listo para cotizar.</b><span>La NCM y los datos físicos/comerciales tienen evidencia suficiente.</span></div>}
+
+          {classificationReady && !identityEdited && (draft.quantity ?? 0) === 0 && <div className="pipeline-warning" role="alert"><b>Cantidad en cero.</b><span>Indicá cuántas unidades querés cotizar para poder calcular el costo total.</span></div>}
 
           <div className="pipeline-confirm-grid compact">
             <div><span>Trámite de intervención</span><b>{interventionFee ? 'USD 200 · incluido' : prefill.sensitiveCategory === 'unknown' ? 'Pendiente' : 'No aplica'}</b></div>
@@ -537,7 +541,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <b>No voy a completar el costo con un supuesto inventado.</b>
         <p>{blocker || 'La clasificación o un dato necesario para el cálculo necesita revisión.'}</p>
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
-        <NomencladorGuidance onManualSearch={onReviewProduct} />
+        <NomencladorGuidance onManualSearch={() => setShowManualNcm(true)} />
         <div className="pipeline-confirm-actions">
           <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <UiIcon name="arrow-right" size={16} /></button>
           <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>

@@ -249,7 +249,7 @@ export function createManualProductAnalysis(sourceUrl = 'manual://product', seed
 export function createPrefilledAnalysis(data: ManualProductChatData): ProductAnalysisV2 {
   const name = cleanText(data.name, 500)
   const originCountry = cleanText(data.originCountry, 120)
-  const volumeCbm = positive(data.volumeCbm ?? data.packedWeightKg * 0.003)
+  const volumeCbm = positive(data.volumeCbm ?? data.packedWeightKg * 0.005)
   const functionText = inferFunctionFromProductName(name)
   return {
     sourceUrl: 'manual://product',

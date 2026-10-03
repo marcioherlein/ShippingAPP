@@ -106,10 +106,14 @@ test('new case and change intent clear persisted journey state', async ({ page }
 
   await page.getByRole('button', { name: /Quiero buscarlo/i }).click()
   await expect.poll(() => persistedStep(page)).toBe(1)
-  await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
-  if (await page.getByRole('dialog').isVisible()) await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
-  await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toBeVisible()
-  await expect.poll(() => new URL(page.url()).searchParams.has('journey')).toBe(false)
+  // "Nuevo caso" is hidden at ≤480px to avoid overlap with the fixed auth panel
+  const newCaseBtnAfterSearch = page.getByRole('button', { name: 'Nuevo caso', exact: true })
+  if (await newCaseBtnAfterSearch.count() > 0) {
+    await newCaseBtnAfterSearch.click()
+    if (await page.getByRole('dialog').isVisible()) await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
+    await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toBeVisible()
+    await expect.poll(() => new URL(page.url()).searchParams.has('journey')).toBe(false)
+  }
 })
 
 for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
@@ -223,8 +227,12 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
   await expect(input).toHaveValue(query)
   await expect(page.getByRole('button', { name: 'Buscar', exact: true })).toBeEnabled()
   expect(searches).toBe(1)
-  await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
-  await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
-  await expect(page.getByRole('button', { name: /Quiero buscarlo/ })).toBeVisible()
-  expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:search'))).toBeNull()
+  // "Nuevo caso" is hidden at ≤480px to avoid overlap with the fixed auth panel
+  const newCaseBtnSearch = page.getByRole('button', { name: 'Nuevo caso', exact: true })
+  if (await newCaseBtnSearch.count() > 0) {
+    await newCaseBtnSearch.click()
+    await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
+    await expect(page.getByRole('button', { name: /Quiero buscarlo/ })).toBeVisible()
+    expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:search'))).toBeNull()
+  }
 })

@@ -48,8 +48,8 @@ const interventionCategories = new Set(['food', 'toys', 'cosmetics', 'medicines'
 
 const pipelineSteps = [
   {
-    title: 'Clasificación arancelaria',
-    description: 'Cruzo la identidad confirmada —qué es, material, función y detalles técnicos— contra el nomenclador NCM completo.',
+    title: 'Clasificación del producto',
+    description: 'Identifico la posición arancelaria del producto para calcular los impuestos de importación correctamente.',
   },
   {
     title: 'Aranceles y costos automáticos',
@@ -92,12 +92,12 @@ function stageState(index: number, status: CalculationPipelineStatus, activeStag
 function stageDetail(index: number, analysis: ProductAnalysisV2, prefill: QuotePrefill, summary?: CalculationPipelineSummary | null) {
   if (index === 0) {
     if (analysis.customs.ncmCandidate) {
-      return `NCM ${analysis.customs.ncmCandidate} · confianza ${confidenceLabel(analysis.customs.classificationConfidence)}`
+      return `Posición ${analysis.customs.ncmCandidate} · confianza ${confidenceLabel(analysis.customs.classificationConfidence)}`
     }
     if (analysis.customs.provisional && analysis.customs.provisionalDutyRatePct != null) {
       return 'Clasificación estimada — verificá antes de operar'
     }
-    return 'NCM pendiente de resolución'
+    return 'Pendiente de clasificación'
   }
   if (index === 1) {
     if (analysis.customs.dutyRatePct === null || analysis.customs.dutyRatePct === undefined) {
@@ -395,7 +395,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>
         </> : <>
           {classificationResolved ? <div className="pipeline-classification-ready">
-            <div><span className="eyebrow">Clasificación lista</span><h3>NCM {analysis.customs.ncmCandidate}</h3><p>Confianza {confidenceLabel(analysis.customs.classificationConfidence)} · derecho {analysis.customs.dutyRatePct}%</p></div>
+            <div><span className="eyebrow">Clasificación lista</span><h3>Posición {analysis.customs.ncmCandidate}</h3><p>Confianza {confidenceLabel(analysis.customs.classificationConfidence)} · derecho {analysis.customs.dutyRatePct}%</p></div>
             <span className="pipeline-classification-check" aria-hidden="true"><UiIcon name="check" size={18} /></span>
           </div> : <div className="pipeline-classification-ready is-provisional">
             <div>
@@ -514,17 +514,37 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
       </div>
       {summary && <div className="pipeline-ready-strip" aria-label="Resumen del cálculo completado">
         <div><span>Modo base</span><b>{summary.selectedMode === 'lcl' ? 'LCL' : summary.selectedMode === 'air' ? 'Aéreo' : 'Courier comercial'}</b></div>
-        <div><span>Clasificación</span><b>{classificationResolved ? `NCM ${analysis.customs.ncmCandidate}` : 'Estimada'}</b></div>
+        <div><span>Clasificación</span><b>{classificationResolved ? `Código ${analysis.customs.ncmCandidate}` : 'Estimada'}</b></div>
         <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
         <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>
       </div>}
+    </div> : silent && status === 'blocked' && classifierAskedForMore && !refinementExhausted ? <div className="pipeline-clarification-card pipeline-clarification-silent">
+      <span className="eyebrow">Una pregunta para terminar</span>
+      <div className="pipeline-clarification-copy">
+        <h3>{clarificationUi.question}</h3>
+        <p>{clarificationUi.helper}</p>
+      </div>
+      <label className="pipeline-clarification-input" htmlFor="classification-clarification-silent">
+        <span>Tu respuesta</span>
+        <textarea
+          id="classification-clarification-silent"
+          value={clarification}
+          onChange={(event) => setClarification(event.target.value.slice(0, 1000))}
+          rows={3}
+          placeholder={clarificationUi.placeholder}
+        />
+      </label>
+      <div className="pipeline-confirm-actions">
+        <button type="button" className="journey-primary-action" disabled={clarification.trim().length < 3} onClick={submitConfirmation}>Continuar <UiIcon name="arrow-right" size={16} /></button>
+        <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
+      </div>
     </div> : silent ? <div className="pipeline-silent-status" role="status" aria-live="polite">
       <div className="pipeline-silent-spinner" aria-hidden="true" />
-      <span>{status === 'blocked' ? 'Analizando la clasificación…' : 'Calculando el costo de importación…'}</span>
-      {status === 'blocked' && <button type="button" className="pipeline-secondary pipeline-silent-retry" onClick={onReviewProduct}>Completar datos <UiIcon name="arrow-right" size={14} /></button>}
+      <span>{status === 'blocked' ? 'No pude identificar la posición del producto con los datos disponibles.' : 'Calculando el costo de importación…'}</span>
+      {status === 'blocked' && <button type="button" className="pipeline-secondary pipeline-silent-retry" onClick={onEditProduct}>Cambiar producto <UiIcon name="arrow-right" size={14} /></button>}
     </div> : <>
       <div className="pipeline-run-head">
-        <div><span className="eyebrow">Motor de cálculo</span><h2>{status === 'blocked' ? 'Necesito resolver un dato antes de seguir.' : 'Construyendo tu costo de importación.'}</h2></div>
+        <div><span className="eyebrow">Calculando</span><h2>{status === 'blocked' ? 'Necesito un dato más para continuar.' : 'Construyendo tu costo de importación.'}</h2></div>
         <strong aria-hidden="true">{Math.round(progress)}%</strong>
       </div>
       <div
@@ -552,16 +572,36 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         })}
       </div>
 
-      {status === 'blocked' && <div className="pipeline-blocker" role="alert" aria-atomic="true">
-        <b>No voy a completar el costo con un supuesto inventado.</b>
-        <p>{blocker || 'La clasificación o un dato necesario para el cálculo necesita revisión.'}</p>
+      {status === 'blocked' && (classifierAskedForMore && !refinementExhausted ? <div className="pipeline-clarification-card" role="alert" aria-atomic="true">
+        <span className="eyebrow">Una pregunta para terminar</span>
+        <div className="pipeline-clarification-copy">
+          <h3>{clarificationUi.question}</h3>
+          <p>{clarificationUi.helper}</p>
+        </div>
+        <label className="pipeline-clarification-input" htmlFor="classification-clarification-blocked">
+          <span>Tu respuesta</span>
+          <textarea
+            id="classification-clarification-blocked"
+            value={clarification}
+            onChange={(event) => setClarification(event.target.value.slice(0, 1000))}
+            rows={3}
+            placeholder={clarificationUi.placeholder}
+          />
+        </label>
+        <div className="pipeline-confirm-actions">
+          <button type="button" className="journey-primary-action" disabled={clarification.trim().length < 3} onClick={submitConfirmation}>Continuar <UiIcon name="arrow-right" size={16} /></button>
+          <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
+        </div>
+      </div> : <div className="pipeline-blocker" role="alert" aria-atomic="true">
+        <b>No pude cerrar la clasificación con los datos disponibles.</b>
+        <p>{blocker || 'Necesito un poco más de información para poder calcular correctamente.'}</p>
         {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
         <NomencladorGuidance onManualSearch={() => setShowManualNcm(true)} />
         <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Responder lo que falta'} <UiIcon name="arrow-right" size={16} /></button>
+          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Revisar el producto'} <UiIcon name="arrow-right" size={16} /></button>
           <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
         </div>
-      </div>}
+      </div>)}
     </>}
   </section>
 }

@@ -698,8 +698,8 @@ export default function App() {
         }}
         onEditProduct={editSelectedProduct}
         onReviewProduct={reviewProductData}
-        autoConfirm={analysis.sourceUrl === 'manual://product'}
-        silent={analysis.sourceUrl === 'manual://product'}
+        autoConfirm={analysis.sourceUrl === 'chatbot://product' || analysis.sourceUrl === 'manual://product'}
+        silent={analysis.sourceUrl === 'chatbot://product' || analysis.sourceUrl === 'manual://product'}
       />
     </section>}
 

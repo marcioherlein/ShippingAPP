@@ -46,7 +46,7 @@ const CHAT_UNITS: Partial<Record<ChatStep, string>> = {
 const CHAT_RECEIPT_FMT: Record<ChatStep, (v: string) => string> = {
   name: (v) => v,
   use: (v) => v,
-  material: (v) => v,
+  material: (v) => v || '(omitido)',
   price: (v) => `USD ${v}`,
   origin: (v) => v,
   weight: (v) => `${v} kg`,
@@ -341,7 +341,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         )}
         <div key={chatStep} className="chatbot-msg assistant chatbot-msg-enter">
           {CHAT_LABELS[chatStep]}
-          {chatStep === 'volume' && <span className="chatbot-optional-tag"> · Opcional</span>}
+          {(chatStep === 'volume' || chatStep === 'material') && <span className="chatbot-optional-tag"> · Opcional</span>}
         </div>
       </div>
 
@@ -428,6 +428,11 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
               Continuar <UiIcon name="arrow-right" size={14} />
             </button>
           </div>
+          {chatStep === 'material' && (
+            <button type="button" className="chatbot-skip-btn" onClick={() => advanceStep('')}>
+              No sé / omitir
+            </button>
+          )}
         </>}
       </div>
     </div>}

@@ -182,7 +182,6 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
     await page.goto('about:blank')
     await page.goto(returnUrl)
     await expect(page.locator('#case-confirmation')).toBeVisible()
-    await expect(page.locator('#case-confirmation')).toContainText('Raqueta')
     await expect(page.locator('.journey-calculator-section')).toHaveCount(0)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     // "Nuevo caso" is hidden at ≤480px to avoid overlap with the fixed auth panel

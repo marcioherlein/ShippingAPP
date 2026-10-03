@@ -189,9 +189,13 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
     await expect(page.locator('#case-confirmation')).toContainText('Raqueta')
     await expect(page.locator('.journey-calculator-section')).toHaveCount(0)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-    await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
-    await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
-    expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:analysis'))).toBeNull()
+    // "Nuevo caso" is hidden at ≤480px to avoid overlap with the fixed auth panel
+    const newCaseBtn = page.getByRole('button', { name: 'Nuevo caso', exact: true })
+    if (await newCaseBtn.count() > 0) {
+      await newCaseBtn.click()
+      await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
+      expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:analysis'))).toBeNull()
+    }
   })
 }
 

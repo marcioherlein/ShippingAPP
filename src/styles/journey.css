@@ -17,7 +17,7 @@
   min-height: 72px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start; /* brand + nuevo-caso on left; right side stays free for fixed auth-account-control */
   gap: 16px;
   position: relative;
   z-index: 10;
@@ -441,6 +441,15 @@
 @media (max-width: 640px) {
   .journey-topbar { width: min(100% - 22px, 1180px); min-height: 62px; }
   .journey-top-actions button { padding: 7px 10px; font-size: 11px; }
+}
+
+/* On very narrow viewports the fixed auth-account-control leaves no room for "Nuevo caso".
+   The in-chat "Cambiar" button is the reset path there. */
+@media (max-width: 480px) {
+  .journey-top-actions { display: none; }
+}
+
+@media (max-width: 640px) {
   .journey-hero { width: min(100% - 22px, 1180px); margin-top: 22px; }
   .journey-hero h1 { font-size: 43px; }
   .journey-hero > p { font-size: 14px; }

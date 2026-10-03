@@ -95,9 +95,6 @@ body { background: var(--ds-surface-subtle); }
   .journey-topbar { gap: .5rem; }
   .journey-app :is(.journey-workspace, .journey-hero) { width: calc(100% - 32px); }
   .journey-conversation { padding: 1rem; border-radius: 1.25rem; }
-  .journey-stepper { grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: visible; gap: 2px; }
-  .journey-step { min-width: 0; }
-  .journey-step small { font-size: .6875rem; overflow-wrap: anywhere; text-align: center; }
   .journey-task-title { font-size: 1.75rem; }
   .journey-dialog-actions { flex-direction: column; }
   .journey-dialog-actions button { width: 100%; }
@@ -116,8 +113,7 @@ body { background: var(--ds-surface-subtle); }
 /* Legacy literal colors must follow the same contrast contract as tokens. */
 .journey-brand b, .journey-footer-brand b { color: var(--ds-brand-strong); }
 .journey-live-dot, .journey-hero .eyebrow, .journey-choice-grid > button small,
-.journey-footer-copy, .journey-footer-links a, .journey-step small { color: var(--ds-text-muted); }
-.journey-step:is(.active, .done) small { color: var(--ds-brand-strong); }
+.journey-footer-copy, .journey-footer-links a { color: var(--ds-text-muted); }
 /* Content is readable from first paint; decoration must never hide a section. */
 .journey-landing-hero {
   min-height: 0; padding: clamp(40px, 7vw, 88px) 0 clamp(48px, 6vw, 72px);
@@ -132,7 +128,6 @@ body { background: var(--ds-surface-subtle); }
 .journey-landing-cta-row { margin-bottom: 0; }
 .journey-landing-cta-primary:hover { transform: none; box-shadow: none; }
 .journey-bubble.user > div { background: var(--ds-brand-strong); box-shadow: none; }
-.journey-step:is(.active, .done) > span { box-shadow: none; }
 .skip-to-quote:not(:focus-visible) { clip-path: inset(50%); width: 1px; height: 1px; padding: 0; overflow: hidden; }
 @media (max-width: 640px) { .journey-landing-hero { padding: clamp(32px, 8vw, 48px) 0; } }
 .journey-bubble.user button { background: #fff; color: var(--ds-brand-strong); border-color: #fff; }
@@ -156,7 +151,7 @@ body { background: var(--ds-surface-subtle); }
 }
 /* An auto-sized grid child with auto margins used its product's intrinsic width. */
 .journey-workspace { grid-template-columns: minmax(0, 1fr); }
-.journey-conversation { width: min(100%, 820px); min-width: 0; }
+.journey-conversation { width: min(100%, 720px); min-width: 0; }
 .journey-bubble > div { min-width: 0; overflow-wrap: anywhere; }
 /* Product entry must paint immediately, including Safari's offscreen layers. */
 .journey-app .journey-product-surface,

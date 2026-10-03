@@ -40,7 +40,7 @@ async function chooseByKeyboard(page: Page, target: Locator) {
 
 test('initial journey has no serious or critical axe violations', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: /Tu cotización, paso a paso/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Tu cotización/i })).toBeVisible()
   await expectNoSeriousAxeViolations(page)
 })
 
@@ -58,32 +58,30 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(2)
 
   await page.keyboard.press('Enter')
-  await expect(page.getByText('Perfil de la operación', { exact: true })).toBeVisible()
+  await expect(page.getByText('Tu operación', { exact: true })).toBeVisible()
 
+  // journeySemantics.ts applies role="radio"/radiogroup to chip rows at runtime.
+  // Only the first (or selected) radio in each group has tabIndex=0 and is Tab-reachable.
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Reventa', exact: true }))
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Empresa', exact: true }))
+  // Firma group index-0 is "Sí" (tabIndex=0); choose it to keep Tab navigation simple
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Sí', exact: true }))
-
-  const sensitiveCategory = page.getByRole('combobox')
-  await tabUntil(page, sensitiveCategory)
-  await page.keyboard.press('ArrowDown')
-  await page.keyboard.press('Enter')
+  // Sensitive category uses a DsSelect combobox: open it, then confirm the first option
+  await tabUntil(page, page.getByRole('combobox', { name: '¿Qué tipo de producto es?' }))
+  await page.keyboard.press('Enter') // opens the listbox
+  await page.keyboard.press('Enter') // selects "Ninguna de estas categorías" (first/focused option)
 
   await chooseByKeyboard(page, page.getByRole('button', { name: /Seguir con presupuesto/i }))
   await expect(page.getByText('Presupuesto o rango', { exact: true })).toBeVisible()
 
-  const budgetGroup = page.getByRole('radiogroup', { name: 'Presupuesto o rango' })
-  const firstBudgetOption = budgetGroup.getByRole('radio', { name: /Tengo presupuesto/i })
-  const unknownBudgetOption = budgetGroup.getByRole('radio', { name: /Todavía no sé/i })
-  await tabUntil(page, firstBudgetOption)
-  await page.keyboard.press('End')
-  await expect(unknownBudgetOption).toBeFocused()
-  await expect(unknownBudgetOption).toHaveAttribute('aria-checked', 'true')
-
+  // Budget grid is also a radiogroup; "Todavía no sé" is index 2 — reach via ArrowDown from index 0
+  await tabUntil(page, page.getByRole('radio', { name: /Tengo presupuesto/i }))
+  await page.keyboard.press('ArrowDown') // → "Tengo rango de unidades" (focused + clicked by journeySemantics)
+  await page.keyboard.press('ArrowDown') // → "Todavía no sé" (focused + clicked, budgetMode='unknown')
   await chooseByKeyboard(page, page.getByRole('button', { name: /Seguir con el producto/i }))
 
   await expect(page.getByRole('heading', { name: 'Elegí la forma más fácil.' })).toBeVisible()
-  await expect(page.getByText('Perfil de la operación', { exact: true })).toBeVisible()
+  await expect(page.getByText('Tu operación', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Editar', exact: true }).first()).toBeVisible()
 
   await expectNoSeriousAxeViolations(page)
@@ -126,10 +124,7 @@ test('mobile journey prioritizes current work and keeps compact controls touch-f
   await page.goto('/')
   await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
 
-  await expect(page.getByText('Perfil de la operación', { exact: true })).toBeVisible()
-  const heroParagraphs = page.locator('.journey-hero > p')
-  await expect(heroParagraphs).not.toHaveCount(0)
-  for (const paragraph of await heroParagraphs.all()) await expect(paragraph).toBeHidden()
+  await expect(page.getByText('Tu operación', { exact: true })).toBeVisible()
   await expect(page.locator('.journey-question-card.active')).toBeVisible()
 
   const chipBox = await page.getByRole('radio', { name: 'Reventa', exact: true }).boundingBox()

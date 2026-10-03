@@ -13,8 +13,12 @@ for (const width of [390, 1280]) {
     await page.getByRole('radio', { name: /Tengo rango de unidades/i }).click()
     await page.getByRole('button', { name: /Seguir con el producto/i }).click()
     await page.getByRole('button', { name: /Describir el producto/i }).click()
-    // Chatbot flow: name → price → origin → weight → moq → skip volume
+    // Chatbot flow: name → use → material → price → origin → weight → moq → skip volume
     await page.getByLabel('¿Cómo se llama el producto?').fill('Parrilla cerrada para cocinar a leña y carbón de acero')
+    await page.getByRole('button', { name: 'Continuar' }).click()
+    await page.getByLabel('¿Para qué se usa?').fill('Para cocinar a la parrilla')
+    await page.getByRole('button', { name: 'Continuar' }).click()
+    await page.getByLabel('¿De qué está hecho?').fill('Acero')
     await page.getByRole('button', { name: 'Continuar' }).click()
     await page.getByLabel('¿Cuánto vale al proveedor? (FOB)').fill('15')
     await page.getByRole('button', { name: 'Continuar' }).click()

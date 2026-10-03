@@ -40,6 +40,8 @@ type Props = {
   onManualNcm: (customs: CustomsProfile, product: ProductConfirmationData) => void
   onEditProduct: () => void
   onReviewProduct: () => void
+  autoConfirm?: boolean
+  silent?: boolean
 }
 
 const interventionCategories = new Set(['food', 'toys', 'cosmetics', 'medicines', 'supplements', 'plants'])
@@ -198,7 +200,7 @@ function NomencladorGuidance({ onManualSearch }: { onManualSearch?: () => void }
   </div>
 }
 
-export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
+export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm, autoConfirm, silent }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
   const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
@@ -277,6 +279,14 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     onConfirm(next)
     setClarification('')
   }
+
+  // When autoConfirm is on (chatbot-originated analyses), skip the confirm form
+  // automatically as soon as canConfirm becomes true (first render with enough data).
+  useEffect(() => {
+    if (!autoConfirm || status !== 'confirm' || !canConfirm) return
+    onConfirm(draft)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConfirm, status, canConfirm])
 
   // Decision 2: a structured disambiguation answer re-runs the classifier through the SAME
   // refinement path as the free-text clarification (still counts against the 3-attempt budget).
@@ -508,6 +518,10 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
         <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>
       </div>}
+    </div> : silent ? <div className="pipeline-silent-status" role="status" aria-live="polite">
+      <div className="pipeline-silent-spinner" aria-hidden="true" />
+      <span>{status === 'blocked' ? 'Analizando la clasificación…' : 'Calculando el costo de importación…'}</span>
+      {status === 'blocked' && <button type="button" className="pipeline-secondary pipeline-silent-retry" onClick={onReviewProduct}>Completar datos <UiIcon name="arrow-right" size={14} /></button>}
     </div> : <>
       <div className="pipeline-run-head">
         <div><span className="eyebrow">Motor de cálculo</span><h2>{status === 'blocked' ? 'Necesito resolver un dato antes de seguir.' : 'Construyendo tu costo de importación.'}</h2></div>

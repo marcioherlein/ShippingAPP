@@ -590,29 +590,24 @@ export default function App() {
     </dialog>
     <header className="journey-topbar">
       <a className="journey-brand" href="#home"><span className="journey-brand-mark">G</span><span>Global<b>Shipping</b></span></a>
-      <div className="journey-top-actions"><span className="journey-live-dot">Motor de importación activo</span><button type="button" onClick={requestReset}>Nuevo caso</button></div>
+      <div className="journey-top-actions"><button type="button" onClick={requestReset}>Nuevo caso</button></div>
     </header>
 
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
-      <div className="journey-orb journey-orb-one" aria-hidden="true" />
-      <div className="journey-orb journey-orb-two" aria-hidden="true" />
-      <span className="eyebrow">Motor de costo de importaci&#xF3;n</span>
-      <h1 className="journey-task-title">Tu cotización, paso a paso</h1>
-      <p>Del link del proveedor al costo unitario puesto en Argentina. GlobalShipping clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p>
-      <div className="journey-stepper" role="region" aria-label="Progreso de la cotización" tabIndex={0}>
-        {stepLabels.map((label, index) => <div className={`journey-step${index < progressStep ? ' done' : ''}${index === progressStep ? ' active' : ''}`} key={label} aria-current={index === progressStep ? 'step' : undefined}>
-          <span>{index < progressStep ? <UiIcon name="check" size={16} /> : index + 1}</span><small>{label}</small>
-        </div>)}
+      <h1 className="journey-task-title">{progressStep === 4 ? 'Cotización lista' : 'Tu cotización'}</h1>
+      <div className="journey-progress-bar" role="progressbar" aria-valuenow={progressStep} aria-valuemin={0} aria-valuemax={4} aria-label={progressStep === 4 ? 'Cotización lista' : `Paso ${progressStep + 1} de 4: ${stepLabels[progressStep]}`}>
+        <div className="journey-progress-track">
+          <div className="journey-progress-fill" style={{ width: `${(progressStep / 4) * 100}%` }} />
+        </div>
+        <span className="journey-progress-label">{progressStep === 4 ? <><UiIcon name="check" size={14} />{' '}¡Listo!</> : `Paso ${progressStep + 1} de 4 · ${stepLabels[progressStep]}`}</span>
       </div>
     </section>
 
     <section className="journey-workspace">
       <div className="journey-conversation">
-        <div className="journey-thread-label"><span>GlobalShipping</span><small>Tu caso se arma mientras conversamos</small></div>
-
         <div className="journey-bubble assistant">
           <span className="journey-avatar">G</span>
-          <div><b>Primero: ¿desde dónde arrancamos?</b><p>No necesito que sepas de aduana. Elegí lo que mejor describe tu situación.</p></div>
+          <div><b>Primero: ¿desde dónde arrancamos?</b><p>Del link del proveedor al costo unitario puesto en Argentina. GlobalShipping clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p></div>
         </div>
 
         {intent === null ? <div className="journey-choice-grid three">
@@ -624,11 +619,11 @@ export default function App() {
         {intent && <>
           <div className="journey-bubble assistant">
             <span className="journey-avatar">G</span>
-            <div><b>Antes de cotizar necesito entender cómo vas a importar.</b><p>Estas respuestas pueden cambiar impuestos, gastos y requisitos. Si algo no lo sabés, marcá “No sé”.</p></div>
+            <div><b>Contame cómo vas a importar.</b><p>Estas respuestas afectan impuestos, gastos y trámites. Si no sabés algo, podés marcar “No sé”.</p></div>
           </div>
 
           <section className={`journey-question-card${step === 1 ? ' active' : ''}`}>
-            <div className="journey-question-head"><span>01</span><div><b>Perfil de la operación</b><small>Cuatro decisiones que afectan el costo real.</small></div>{step > 1 && <button type="button" onClick={() => setStep(1)}>Editar</button>}</div>
+            <div className="journey-question-head"><span>01</span><div><b>Tu operación</b><small>Afecta impuestos y trámites.</small></div>{step > 1 && <button type="button" onClick={() => setStep(1)}>Editar</button>}</div>
             {step === 1 ? <div className="journey-question-fields">
               <div><label>¿Para qué lo traés?</label><div className="journey-chip-row"><button className={purpose === 'resale' ? 'selected' : ''} onClick={() => setPurpose('resale')} type="button">Reventa</button><button className={purpose === 'own_use' ? 'selected' : ''} onClick={() => setPurpose('own_use')} type="button">Uso propio</button><button className={purpose === 'unknown' ? 'selected' : ''} onClick={() => setPurpose('unknown')} type="button">No sé</button></div></div>
               {profileStep >= 2 && <div><label>¿Quién importa?</label><div className="journey-chip-row"><button className={entityType === 'company' ? 'selected' : ''} onClick={() => setEntityType('company')} type="button">Empresa</button><button className={entityType === 'individual' ? 'selected' : ''} onClick={() => setEntityType('individual')} type="button">Persona</button><button className={entityType === 'unknown' ? 'selected' : ''} onClick={() => setEntityType('unknown')} type="button">No sé</button></div></div>}
@@ -641,7 +636,7 @@ export default function App() {
           {step >= 2 && <>
             <div className="journey-bubble assistant">
               <span className="journey-avatar">G</span>
-              <div><b>Ahora definamos el tamaño posible de la operación.</b><p>Podés darme presupuesto, rango de unidades o decir que todavía no lo sabés.</p></div>
+              <div><b>¿Cuánto querés invertir?</b><p>Presupuesto total, rango de unidades, o dejalo en abierto por ahora.</p></div>
             </div>
             <section className={`journey-question-card${step === 2 ? ' active' : ''}`}>
               <div className="journey-question-head"><span>02</span><div><b>Presupuesto o rango</b><small>Esto limita las cantidades que vale la pena simular.</small></div>{step > 2 && <button type="button" onClick={() => setStep(2)}>Editar</button>}</div>
@@ -651,8 +646,8 @@ export default function App() {
                   <button className={budgetMode === 'units' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('units')}><b>Tengo rango de unidades</b><small>Sé más o menos cuántas quiero probar.</small></button>
                   <button className={budgetMode === 'unknown' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('unknown')}><b>Todavía no sé</b><small>Quiero entender primero el orden de magnitud.</small></button>
                 </div>
-                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" step="500" value={budgetUsd} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; if (Number.isFinite(v)) setBudgetUsd(v) }} /></div><em>Incluye compra, flete e impuestos estimados.</em></label>}
-                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" step="1" value={unitsMin} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; if (Number.isFinite(v) && v >= 0) setUnitsMin(v) }} /></label><label><span>Máximo de unidades</span><input type="number" step="1" value={unitsMax} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; if (Number.isFinite(v) && v >= 0) setUnitsMax(v) }} /></label></div>}
+                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" step="500" value={budgetUsd || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; setBudgetUsd(Number.isFinite(v) && v >= 0 ? v : 0) }} /></div><em>Incluye compra, flete e impuestos estimados.</em></label>}
+                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" step="1" value={unitsMin || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; setUnitsMin(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label><label><span>Máximo de unidades</span><input type="number" step="1" value={unitsMax || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; setUnitsMax(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label></div>}
                 {budgetError && <div className="pipeline-warning" id="journey-budget-error" role="alert"><b>Revisá presupuesto o rango.</b><span>{budgetError}</span></div>}
                 <button className="journey-primary-action" type="button" disabled={!budgetAnswered} onClick={continueBudget}>Seguir con el producto <span><UiIcon name="arrow-right" size={18} /></span></button>
               </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : 'Todavía sin cantidad definida'}</span></div>}
@@ -715,6 +710,8 @@ export default function App() {
         }}
         onEditProduct={editSelectedProduct}
         onReviewProduct={reviewProductData}
+        autoConfirm={analysis.sourceUrl === 'manual://product'}
+        silent={analysis.sourceUrl === 'manual://product'}
       />
     </section>}
 
@@ -723,7 +720,7 @@ export default function App() {
       <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={{ ...quoteSetup, quantity: pipelineSummary?.baseQuantity ?? quoteSetup.quantity }} />
     </section>}
 
-    <footer className="journey-footer">
+    {!intent && <footer className="journey-footer">
       <div className="journey-footer-left">
         <a className="journey-footer-brand" href="#home"><span className="journey-brand-mark" style={{ width: '26px', height: '26px', fontSize: '13px', borderRadius: '8px' }}>G</span><span>Global<b>Shipping</b></span></a>
         <p className="journey-footer-copy">&#xA9; {new Date().getFullYear()} GlobalShipping. Calculadora de costos de importaci&#xF3;n.</p>
@@ -732,6 +729,6 @@ export default function App() {
         <a href="/privacidad.html">Pol&#xED;tica de Privacidad</a>
         <a href="/terminos.html">T&#xE9;rminos de Uso</a>
       </nav>
-    </footer>
+    </footer>}
   </main>
 }

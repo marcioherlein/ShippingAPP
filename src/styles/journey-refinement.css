@@ -7,15 +7,15 @@
 /* Once the user has chosen an entry path, the hero stops competing with the task. */
 .journey-app:has(.journey-bubble.user) .journey-hero {
   width: min(1180px, calc(100% - 32px));
-  margin: 18px auto 20px;
+  margin: 10px auto 12px;
   text-align: left;
 }
 
 .journey-app:has(.journey-bubble.user) .journey-hero h1 {
   max-width: 760px;
-  margin: 6px 0 8px;
-  font-size: clamp(30px, 4vw, 46px);
-  line-height: 1.02;
+  margin: 4px 0 6px;
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.1;
 }
 
 .journey-app:has(.journey-bubble.user) .journey-hero > p {
@@ -24,7 +24,7 @@
 
 .journey-app:has(.journey-bubble.user) .journey-stepper {
   max-width: 760px;
-  margin: 18px 0 0;
+  margin: 12px 0 0;
 }
 
 /* The conversation teaches only when needed. Once the following stage is complete,

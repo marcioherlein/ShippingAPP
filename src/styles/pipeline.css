@@ -328,3 +328,34 @@
 .manual-ncm-load-error b { color: #92400e; }
 .manual-ncm-load-error p { color: #785311; font-size: 13px; line-height: 1.55; margin: 8px 0 12px; }
 .manual-ncm-selection-error { color: #b42318; font-size: 13px; margin: 6px 0 0; }
+
+/* ── Silent mode: minimal spinner shown to end-users instead of technical pipeline boxes ── */
+
+.pipeline-silent-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--ds-text-secondary, #64748b);
+  font-size: 14px;
+}
+
+.pipeline-silent-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(79, 93, 228, 0.18);
+  border-top-color: var(--ds-brand, #4f5de4);
+  border-radius: 50%;
+  animation: pipelineSpinnerRotate 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pipelineSpinnerRotate {
+  to { transform: rotate(360deg); }
+}
+
+.pipeline-silent-retry {
+  margin-top: 4px;
+}

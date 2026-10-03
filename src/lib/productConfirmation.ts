@@ -77,6 +77,8 @@ export function inferFunctionFromProductName(name: string): string | null {
 
 export type ManualProductChatData = {
   name: string
+  use: string
+  material: string
   unitPriceUsd: number
   originCountry: string
   packedWeightKg: number
@@ -290,9 +292,10 @@ export function createPrefilledAnalysis(data: ManualProductChatData): ProductAna
   const name = cleanText(data.name, 500)
   const originCountry = cleanText(data.originCountry, 120)
   const volumeCbm = positive(data.volumeCbm ?? data.packedWeightKg * 0.005)
-  const functionText = inferFunctionFromProductName(name)
+  const functionText = data.use ? cleanText(data.use, 500) : inferFunctionFromProductName(name)
+  const material = data.material ? cleanText(data.material, 300) : null
   return {
-    sourceUrl: 'manual://product',
+    sourceUrl: 'chatbot://product',
     fetched: false,
     product: {
       name,
@@ -303,7 +306,7 @@ export function createPrefilledAnalysis(data: ManualProductChatData): ProductAna
       volumeCbm,
       originCountry,
       imageUrl: null,
-      material: null,
+      material: material,
       functionText: functionText || null,
       description: null,
     },

@@ -1,5 +1,5 @@
 import { readProductDraft, writeProductDraft } from '../lib/productDraft'
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import UiIcon from './UiIcon'
 import { isAlibabaUrl } from '../lib/productIntake'
 import type { ManualProductChatData } from '../lib/productConfirmation'
@@ -10,13 +10,15 @@ type Props = {
 }
 
 type Mode = 'link' | 'describe' | null
-type ChatStep = 'name' | 'price' | 'origin' | 'weight' | 'moq' | 'volume'
+type ChatStep = 'name' | 'use' | 'material' | 'price' | 'origin' | 'weight' | 'moq' | 'volume'
 
-const MANDATORY_STEPS: ChatStep[] = ['name', 'price', 'origin', 'weight', 'moq']
+const MANDATORY_STEPS: ChatStep[] = ['name', 'use', 'material', 'price', 'origin', 'weight', 'moq']
 const ALL_STEPS: ChatStep[] = [...MANDATORY_STEPS, 'volume']
 
 const CHAT_LABELS: Record<ChatStep, string> = {
   name: '¿Cómo se llama el producto?',
+  use: '¿Para qué se usa?',
+  material: '¿De qué está hecho?',
   price: '¿Cuánto vale al proveedor? (FOB)',
   origin: '¿De dónde viene?',
   weight: '¿Cuánto pesa por unidad?',
@@ -25,6 +27,8 @@ const CHAT_LABELS: Record<ChatStep, string> = {
 }
 const CHAT_PLACEHOLDERS: Record<ChatStep, string> = {
   name: 'Ej. Reloj de pulsera automático',
+  use: 'Ej. Mide y muestra la hora',
+  material: 'Ej. Acero inoxidable, plástico ABS',
   price: 'Ej. 18.50',
   origin: 'Ej. China',
   weight: 'Ej. 0.35',
@@ -39,6 +43,8 @@ const CHAT_UNITS: Partial<Record<ChatStep, string>> = {
 }
 const CHAT_RECEIPT_FMT: Record<ChatStep, (v: string) => string> = {
   name: (v) => v,
+  use: (v) => v,
+  material: (v) => v,
   price: (v) => `USD ${v}`,
   origin: (v) => v,
   weight: (v) => `${v} kg`,
@@ -46,7 +52,18 @@ const CHAT_RECEIPT_FMT: Record<ChatStep, (v: string) => string> = {
   volume: (v) => `${v} m³`,
 }
 
-const isNumberStep = (step: ChatStep) => ['price', 'weight', 'moq', 'volume'].includes(step)
+const CHAT_STEP_LABELS_SHORT: Record<ChatStep, string> = {
+  name: 'Producto',
+  use: 'Uso',
+  material: 'Material',
+  price: 'Precio',
+  origin: 'Origen',
+  weight: 'Peso',
+  moq: 'MOQ',
+  volume: 'Volumen',
+}
+
+const isNumberStep = (step: ChatStep) => ['price', 'weight', 'moq'].includes(step)
 
 /**
  * Parse a provider dimension string (e.g. "122x20x15", "50*40*30cm", "1.2 x 0.5 x 0.3 m")
@@ -77,6 +94,8 @@ function parseDimensionsToCbm(value: string): number | null {
 function validateChatInput(step: ChatStep, value: string): boolean {
   const trimmed = value.trim()
   if (step === 'name') return trimmed.length >= 3
+  if (step === 'use') return trimmed.length >= 2
+  if (step === 'material') return trimmed.length >= 2
   if (step === 'origin') return trimmed.length >= 2
   if (step === 'volume') return parseDimensionsToCbm(trimmed) !== null
   const n = Number(trimmed)
@@ -95,6 +114,11 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const [chatStep, setChatStep] = useState<ChatStep>(draft?.chatStep || 'name')
   const [chatAnswers, setChatAnswers] = useState<Partial<Record<ChatStep, string>>>(draft?.chatAnswers || {})
   const [chatInput, setChatInput] = useState(draft?.chatInput || '')
+  const [volumeMode, setVolumeMode] = useState<'dims' | 'cbm'>('dims')
+  const [dimL, setDimL] = useState('')
+  const [dimW, setDimW] = useState('')
+  const [dimH, setDimH] = useState('')
+  const [dimUnit, setDimUnit] = useState<'cm' | 'm'>('cm')
   const inputRef = useRef<HTMLInputElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
@@ -143,6 +167,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const finalizeChat = (answers: Partial<Record<ChatStep, string>>) => {
     const data: ManualProductChatData = {
       name: (answers.name || '').trim(),
+      use: (answers.use || '').trim(),
+      material: (answers.material || '').trim(),
       unitPriceUsd: Number(answers.price) || 0,
       originCountry: (answers.origin || '').trim(),
       packedWeightKg: Number(answers.weight) || 0,
@@ -176,7 +202,15 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     const cleared = { ...chatAnswers }
     ALL_STEPS.slice(idx).forEach((s) => delete cleared[s])
     setChatAnswers(cleared)
-    setChatInput(chatAnswers[step] || '')
+    if (step === 'volume') {
+      setChatInput(chatAnswers[step] || '')
+      setVolumeMode('cbm')
+      setDimL('')
+      setDimW('')
+      setDimH('')
+    } else {
+      setChatInput(chatAnswers[step] || '')
+    }
     setChatStep(step)
   }
 
@@ -191,6 +225,27 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     setChatStep('name')
     setChatAnswers({})
     setChatInput('')
+    setVolumeMode('dims')
+    setDimL('')
+    setDimW('')
+    setDimH('')
+    setDimUnit('cm')
+  }
+
+  const dimsAreValid = () => {
+    const l = parseFloat(dimL), w = parseFloat(dimW), h = parseFloat(dimH)
+    return l > 0 && w > 0 && h > 0
+  }
+
+  const advanceVolumeStep = () => {
+    if (volumeMode === 'cbm') {
+      advanceStep(chatInput)
+    } else {
+      const scale = dimUnit === 'cm' ? 0.01 : 1
+      const l = parseFloat(dimL), w = parseFloat(dimW), h = parseFloat(dimH)
+      const cbm = l * scale * w * scale * h * scale
+      advanceStep(parseFloat(cbm.toFixed(6)).toString())
+    }
   }
 
   const currentUnit = CHAT_UNITS[chatStep] ?? null
@@ -243,19 +298,22 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       </div>
 
       <div className="chatbot-thread" ref={threadRef}>
-        {answeredSteps.map((step) => (
-          <React.Fragment key={step}>
-            <div className="chatbot-msg assistant">{CHAT_LABELS[step]}</div>
-            <button
-              type="button"
-              className="chatbot-msg user"
-              onClick={() => editAnswer(step)}
-              aria-label={`${CHAT_LABELS[step]}: ${CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')} — tocá para editar`}
-            >
-              {CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')}
-            </button>
-          </React.Fragment>
-        ))}
+        {answeredSteps.length > 0 && (
+          <div className="chatbot-receipt-bar">
+            {answeredSteps.map((step) => (
+              <button
+                key={step}
+                type="button"
+                className="chatbot-receipt-chip"
+                onClick={() => editAnswer(step)}
+                title={`${CHAT_LABELS[step]} — tocá para editar`}
+              >
+                <span className="chatbot-receipt-chip-label">{CHAT_STEP_LABELS_SHORT[step]}</span>
+                <span className="chatbot-receipt-chip-value">{CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div key={chatStep} className="chatbot-msg assistant chatbot-msg-enter">
           {CHAT_LABELS[chatStep]}
           {chatStep === 'volume' && <span className="chatbot-optional-tag"> · Opcional</span>}
@@ -263,38 +321,89 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       </div>
 
       <div className="chatbot-input-dock">
-        <div className="chatbot-dock-row">
-          <div className="chatbot-dock-input-wrap">
-            <input
-              ref={inputRef}
-              className="chatbot-dock-input"
-              type={isNumberStep(chatStep) && chatStep !== 'volume' ? 'number' : 'text'}
-              inputMode={isNumberStep(chatStep) && chatStep !== 'volume' ? 'decimal' : 'text'}
-              min={isNumberStep(chatStep) && chatStep !== 'volume' ? '0.001' : undefined}
-              step={isNumberStep(chatStep) && chatStep !== 'volume' ? 'any' : undefined}
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={CHAT_PLACEHOLDERS[chatStep]}
-              aria-label={CHAT_LABELS[chatStep]}
-              autoFocus
-            />
-            {currentUnit && <span className="chatbot-dock-unit" aria-hidden="true">{currentUnit}</span>}
+        {chatStep === 'volume' ? <>
+          <div className="chatbot-vol-tabs">
+            <button type="button" className={`chatbot-vol-tab${volumeMode === 'dims' ? ' active' : ''}`} onClick={() => setVolumeMode('dims')}>Medidas</button>
+            <button type="button" className={`chatbot-vol-tab${volumeMode === 'cbm' ? ' active' : ''}`} onClick={() => setVolumeMode('cbm')}>Volumen m³</button>
           </div>
-          <button
-            type="button"
-            className="chatbot-send-btn"
-            disabled={!validateChatInput(chatStep, chatInput)}
-            onClick={() => advanceStep(chatInput)}
-          >
-            Continuar <UiIcon name="arrow-right" size={14} />
-          </button>
-        </div>
-        {chatStep === 'volume' && (
+          {volumeMode === 'dims' ? (
+            <div className="chatbot-dims-row">
+              <label className="chatbot-dim-field">
+                <span>Largo</span>
+                <input type="number" min="0.001" step="any" value={dimL} onChange={(e) => setDimL(e.target.value)} placeholder="50" autoFocus />
+              </label>
+              <label className="chatbot-dim-field">
+                <span>Ancho</span>
+                <input type="number" min="0.001" step="any" value={dimW} onChange={(e) => setDimW(e.target.value)} placeholder="40" />
+              </label>
+              <label className="chatbot-dim-field">
+                <span>Alto</span>
+                <input
+                  type="number" min="0.001" step="any" value={dimH}
+                  onChange={(e) => setDimH(e.target.value)} placeholder="30"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && dimsAreValid()) advanceVolumeStep() }}
+                />
+              </label>
+              <div className="chatbot-dim-unit-toggle">
+                <button type="button" className={dimUnit === 'cm' ? 'active' : ''} onClick={() => setDimUnit('cm')}>cm</button>
+                <button type="button" className={dimUnit === 'm' ? 'active' : ''} onClick={() => setDimUnit('m')}>m</button>
+              </div>
+              <button type="button" className="chatbot-send-btn chatbot-dims-send" disabled={!dimsAreValid()} onClick={advanceVolumeStep}>
+                Continuar <UiIcon name="arrow-right" size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="chatbot-dock-row">
+              <div className="chatbot-dock-input-wrap">
+                <input
+                  ref={inputRef}
+                  className="chatbot-dock-input"
+                  type="number" min="0.0001" step="any"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && validateChatInput('volume', chatInput)) advanceVolumeStep() }}
+                  placeholder="ej. 0.008"
+                  autoFocus
+                />
+                <span className="chatbot-dock-unit" aria-hidden="true">m³</span>
+              </div>
+              <button type="button" className="chatbot-send-btn" disabled={!validateChatInput('volume', chatInput)} onClick={advanceVolumeStep}>
+                Continuar <UiIcon name="arrow-right" size={14} />
+              </button>
+            </div>
+          )}
           <button type="button" className="chatbot-skip-btn" onClick={() => finalizeChat(chatAnswers)}>
             No sé / omitir
           </button>
-        )}
+        </> : <>
+          <div className="chatbot-dock-row">
+            <div className="chatbot-dock-input-wrap">
+              <input
+                ref={inputRef}
+                className="chatbot-dock-input"
+                type={isNumberStep(chatStep) ? 'number' : 'text'}
+                inputMode={isNumberStep(chatStep) ? 'decimal' : 'text'}
+                min={isNumberStep(chatStep) ? '0.001' : undefined}
+                step={isNumberStep(chatStep) ? 'any' : undefined}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={CHAT_PLACEHOLDERS[chatStep]}
+                aria-label={CHAT_LABELS[chatStep]}
+                autoFocus
+              />
+              {currentUnit && <span className="chatbot-dock-unit" aria-hidden="true">{currentUnit}</span>}
+            </div>
+            <button
+              type="button"
+              className="chatbot-send-btn"
+              disabled={!validateChatInput(chatStep, chatInput)}
+              onClick={() => advanceStep(chatInput)}
+            >
+              Continuar <UiIcon name="arrow-right" size={14} />
+            </button>
+          </div>
+        </>}
       </div>
     </div>}
 

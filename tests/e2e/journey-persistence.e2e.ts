@@ -16,10 +16,6 @@ async function completeOperation(page: Page) {
   await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
   await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
   await page.getByRole('radio', { name: 'Sí', exact: true }).click()
-  // This field's user-facing copy can evolve. Persistence behavior should be
-  // anchored to the stable form control contract instead of label wording.
-  await page.locator('#journey-sensitive-category').click()
-  await page.locator('#journey-sensitive-category-listbox [data-value="none"]').click()
   await page.getByRole('button', { name: /Seguir con presupuesto/i }).click()
   await expect(page.locator('.journey-question-card.active .journey-question-head > span')).toHaveText('02')
   await expect.poll(() => persistedStep(page)).toBe(2)
@@ -210,8 +206,6 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
   await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
   await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
   await page.getByRole('radio', { name: 'Sí', exact: true }).click()
-  await page.locator('#journey-sensitive-category').click()
-  await page.locator('#journey-sensitive-category-listbox [data-value="none"]').click()
   await page.getByRole('button', { name: /Seguir con presupuesto/ }).click()
   await page.getByRole('radio', { name: /Todavía no sé/ }).click()
   await page.getByRole('button', { name: /Seguir con el producto/ }).click()

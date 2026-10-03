@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import UiIcon from './UiIcon'
 import { isAlibabaUrl } from '../lib/productIntake'
 import type { ManualProductChatData } from '../lib/productConfirmation'
+import { inferSensitiveCategoryFromName } from '../lib/productConfirmation'
+import type { SensitiveProductCategory } from '../lib/landedCostEngine'
 
 type Props = {
   onAlibabaLink: (url: string) => Promise<void>
@@ -65,6 +67,15 @@ const CHAT_STEP_LABELS_SHORT: Record<ChatStep, string> = {
 
 const isNumberStep = (step: ChatStep) => ['price', 'weight', 'moq'].includes(step)
 
+const SENSITIVE_OPTIONS: Array<{ value: SensitiveProductCategory; label: string; icon: string }> = [
+  { value: 'food',        label: 'Alimentos',        icon: '🥗' },
+  { value: 'toys',        label: 'Juguetes',         icon: '🧸' },
+  { value: 'cosmetics',   label: 'Cosméticos',       icon: '💄' },
+  { value: 'medicines',   label: 'Medicamentos',     icon: '💊' },
+  { value: 'supplements', label: 'Suplementos',      icon: '🧴' },
+  { value: 'plants',      label: 'Plantas / Flores', icon: '🌿' },
+]
+
 /**
  * Parse a provider dimension string (e.g. "122x20x15", "50*40*30cm", "1.2 x 0.5 x 0.3 m")
  * into a volume in m³. Returns null if the string doesn't match a dimension pattern.
@@ -119,6 +130,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const [dimW, setDimW] = useState('')
   const [dimH, setDimH] = useState('')
   const [dimUnit, setDimUnit] = useState<'cm' | 'm'>('cm')
+  const [awaitingSensitive, setAwaitingSensitive] = useState(false)
+  const [pendingChatAnswers, setPendingChatAnswers] = useState<Partial<Record<ChatStep, string>>>({})
   const inputRef = useRef<HTMLInputElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
@@ -164,7 +177,16 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     (s) => ALL_STEPS.indexOf(s) < ALL_STEPS.indexOf(chatStep) && chatAnswers[s] !== undefined,
   )
 
-  const finalizeChat = (answers: Partial<Record<ChatStep, string>>) => {
+  const finalizeChat = (answers: Partial<Record<ChatStep, string>>, sensitiveCategory?: SensitiveProductCategory) => {
+    if (sensitiveCategory === undefined) {
+      const inferred = inferSensitiveCategoryFromName(answers.name || '')
+      if (inferred === 'unknown') {
+        setPendingChatAnswers(answers)
+        setAwaitingSensitive(true)
+        return
+      }
+      sensitiveCategory = inferred
+    }
     const data: ManualProductChatData = {
       name: (answers.name || '').trim(),
       use: (answers.use || '').trim(),
@@ -174,6 +196,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       packedWeightKg: Number(answers.weight) || 0,
       moq: Number(answers.moq) || 1,
       volumeCbm: answers.volume && Number(answers.volume) > 0 ? Number(answers.volume) : null,
+      sensitiveCategory,
     }
     onStructuredData(data)
   }
@@ -230,6 +253,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     setDimW('')
     setDimH('')
     setDimUnit('cm')
+    setAwaitingSensitive(false)
+    setPendingChatAnswers({})
   }
 
   const dimsAreValid = () => {
@@ -404,6 +429,38 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
             </button>
           </div>
         </>}
+      </div>
+    </div>}
+
+    {mode === 'describe' && awaitingSensitive && <div className="product-chatbot">
+      <div className="chatbot-topbar">
+        <b>Ingresá el producto</b>
+        <button type="button" onClick={() => setAwaitingSensitive(false)}>Volver</button>
+      </div>
+      <div className="chatbot-thread" ref={threadRef}>
+        <div className="chatbot-msg assistant chatbot-msg-enter">
+          ¿Tu producto entra en alguna de estas categorías?
+          <span className="chatbot-optional-tag"> · Solo si aplica</span>
+        </div>
+      </div>
+      <div className="chatbot-sensitive-grid">
+        {SENSITIVE_OPTIONS.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            className="chatbot-sensitive-chip"
+            onClick={() => { setAwaitingSensitive(false); finalizeChat(pendingChatAnswers, value) }}
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="chatbot-sensitive-none"
+          onClick={() => { setAwaitingSensitive(false); finalizeChat(pendingChatAnswers, 'none') }}
+        >
+          Ninguna de estas
+        </button>
       </div>
     </div>}
 

@@ -1,5 +1,6 @@
 import { customsProfileFor } from './customsClassification'
 import type { ProductAnalysisV2 } from './productAnalysisV2'
+import type { SensitiveProductCategory } from './landedCostEngine'
 
 const PRODUCT_FUNCTION_MAP: Array<[RegExp, string]> = [
   [/reloj|watch|clock/i, 'Mide y muestra la hora'],
@@ -84,6 +85,25 @@ export type ManualProductChatData = {
   packedWeightKg: number
   moq: number
   volumeCbm: number | null
+  sensitiveCategory: SensitiveProductCategory
+}
+
+const SENSITIVE_PATTERNS: Array<[SensitiveProductCategory, RegExp]> = [
+  ['food',        /alimento|comida|snack|chocolate|galleta|cereal|salsa|queso|leche|yogur|harina|azúcar|café|bebida|vino|cerveza|mate|dulce|mermelada|conserva|enlatad|embutido|chorizo|fiambre|miel|arroz|pasta|fideos|caldo|sopa|galleta|bizcochuelo|torta|pan\b/i],
+  ['toys',        /juguete|toy\b|muñec[ao]|peluche|lego\b|puzzle|rompecabeza|juego de mesa|figura.*(acción|coleccion)|osito de peluche/i],
+  ['cosmetics',   /sérum|serum|shampoo|champú|maquillaje|labial|perfume|loción|locion|colonia\b|gel.*(facial|corporal|pelo|capilar)|mascarilla|hidratante|humectante|base de maquillaje|rubor|delineador|contorno|esmalte de uñas|tónico facial|limpiador facial|crema (facial|corporal|antiedad|solar|hidratante|para)/i],
+  ['medicines',   /medicamento|fármaco|farmaco|pastilla|comprimido|antibiótico|antibiotico|analgésico|analgesico|antigripal|remedio medico|jarabe medicinal/i],
+  ['supplements', /proteína|proteina|suplemento dietario|suplemento nutricional|vitamina\b|colágeno|colageno|creatina\b|bcaa\b|aminoácido|aminoacido|omega[\s-]?3|probiótico|probiotico|prebiótico|whey\b|caseína/i],
+  ['plants',      /\bplanta\b|flores?\b|semilla\b|bulbo\b|cactus\b|suculenta/i],
+]
+
+export function inferSensitiveCategoryFromName(name: string): SensitiveProductCategory {
+  for (const [category, pattern] of SENSITIVE_PATTERNS) {
+    if (pattern.test(name)) return category
+  }
+  // "crema" alone is ambiguous (food vs cosmetic); ask the user
+  if (/\bcrema\b/i.test(name) && !/crema de (manteca|maní|chocolate|leche)/.test(name)) return 'unknown'
+  return 'none'
 }
 
 export type ProductConfirmationData = {

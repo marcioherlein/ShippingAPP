@@ -33,21 +33,6 @@ describe('DsSelect accessible listbox contract', () => {
   })
 })
 
-describe('journey sensitive-category uses DsSelect with replayable value', () => {
-  it('renders the DsSelect (not a native select) with the stable id', () => {
-    expect(app).toContain('<DsSelect id="journey-sensitive-category"')
-    expect(app).not.toContain('<select id="journey-sensitive-category"')
-  })
-
-  it('captures and restores the selection through data-value click-replay', () => {
-    expect(persistence).toContain("document.getElementById('journey-sensitive-category')?.getAttribute('data-value')")
-    expect(persistence).toContain("selectDsOption('journey-sensitive-category'")
-    expect(persistence).toContain('${triggerId}-listbox [data-value="${value}"]')
-    // The mutation observer must watch data-value so a DsSelect change syncs.
-    expect(persistence).toContain("attributeFilter: ['class', 'aria-checked', 'data-value']")
-  })
-})
-
 describe('post-login continues where the user left off', () => {
   it('persists a ready pipeline snapshot and rehydrates it on restore', () => {
     // Snapshot written when a quote is ready.

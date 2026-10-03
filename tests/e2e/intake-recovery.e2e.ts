@@ -7,8 +7,6 @@ for (const width of [390, 1280]) {
     await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
     await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
     await page.getByRole('radio', { name: 'Sí', exact: true }).click()
-    await page.locator('#journey-sensitive-category').click()
-    await page.locator('#journey-sensitive-category-listbox [data-value="none"]').click()
     await page.getByRole('button', { name: /Seguir con presupuesto/i }).click()
     await page.getByRole('radio', { name: /Tengo rango de unidades/i }).click()
     await page.getByRole('button', { name: /Seguir con el producto/i }).click()

@@ -66,10 +66,6 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Empresa', exact: true }))
   // Firma group index-0 is "Sí" (tabIndex=0); choose it to keep Tab navigation simple
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Sí', exact: true }))
-  // Sensitive category uses a DsSelect combobox: open it, then confirm the first option
-  await tabUntil(page, page.getByRole('combobox', { name: '¿Qué tipo de producto es?' }))
-  await page.keyboard.press('Enter') // opens the listbox
-  await page.keyboard.press('Enter') // selects "Ninguna de estas categorías" (first/focused option)
 
   await chooseByKeyboard(page, page.getByRole('button', { name: /Seguir con presupuesto/i }))
   await expect(page.getByText('Presupuesto o rango', { exact: true })).toBeVisible()

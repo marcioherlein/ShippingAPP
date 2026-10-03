@@ -155,14 +155,11 @@ function captureOperation() {
   const purpose = selectedRadioCopy('¿Para qué lo traés?') || completed[0] || ''
   const entity = selectedRadioCopy('¿Quién importa?') || completed[1] || ''
   const signature = selectedRadioCopy('¿Tenés firma/importador para operar?') || completed[2] || ''
-  const sensitive = completed[3] || ''
-  const selectedSensitive = document.getElementById('journey-sensitive-category')?.getAttribute('data-value') || undefined
 
   return {
     purpose: mapByPrefix(purpose, purposeByCopy),
     entityType: mapByPrefix(entity, entityByCopy),
     signature: mapByPrefix(signature, signatureByCopy),
-    sensitiveCategory: (selectedSensitive || mapByPrefix(sensitive, sensitiveByCopy)) as PersistedJourneyState['sensitiveCategory'],
   }
 }
 
@@ -339,9 +336,6 @@ async function restoreOperation(state: PersistedJourneyState) {
   await selectRadio('¿Para qué lo traés?', state.purpose ? purposeCopy[state.purpose] : undefined)
   await selectRadio('¿Quién importa?', state.entityType ? entityCopy[state.entityType] : undefined)
   await selectRadio('¿Tenés firma/importador para operar?', state.signature ? signatureCopy[state.signature] : undefined)
-  if (state.sensitiveCategory) {
-    await selectDsOption('journey-sensitive-category', state.sensitiveCategory)
-  }
 }
 
 async function restoreBudget(state: PersistedJourneyState) {
@@ -387,9 +381,6 @@ export async function restoreJourneyState(state: PersistedJourneyState) {
   if (state.step === 1) return
 
   if (currentStep() === 1) {
-    // Wait for the gate to become enabled — selecting the sensitive-category
-    // DsSelect option re-renders React asynchronously, so the button may still
-    // read disabled the instant restoreOperation resolves. Poll until ready.
     const next = await waitFor(() => {
       const button = buttonContaining('Seguir con presupuesto')
       return button && !button.disabled ? button : null

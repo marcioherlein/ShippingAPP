@@ -53,18 +53,6 @@ function signatureLabel(value: SignatureAnswer | null) {
   return 'Sin responder'
 }
 
-function sensitiveLabel(value: SensitiveProductCategory | null) {
-  if (value === 'none') return 'No es categoría sensible'
-  if (value === 'food') return 'Alimentos'
-  if (value === 'toys') return 'Juguetes'
-  if (value === 'plants') return 'Plantas / Flores'
-  if (value === 'cosmetics') return 'Cosméticos'
-  if (value === 'medicines') return 'Medicamentos'
-  if (value === 'supplements') return 'Suplementos'
-  if (value === 'unknown') return 'Todavía no sé'
-  return 'Sin responder'
-}
-
 function makeAnalysisPrefill(
   analysis: ProductAnalysisV2,
   budgetMode: BudgetMode,
@@ -270,8 +258,8 @@ export default function App() {
     }
   }, [calculationStatus, pipelineSummary, pipelineStage, calculationInputKey])
 
-  const operationAnswered = purpose !== null && entityType !== null && signature !== null && sensitiveCategory !== null
-  const profileStep = purpose === null ? 1 : entityType === null ? 2 : signature === null ? 3 : sensitiveCategory === null ? 4 : 5
+  const operationAnswered = purpose !== null && entityType !== null && signature !== null
+  const profileStep = purpose === null ? 1 : entityType === null ? 2 : signature === null ? 3 : 4
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
   const budgetAnswered = budgetMode !== null && budgetError === null
 
@@ -356,6 +344,7 @@ export default function App() {
   }
 
   const handleManualProductData = (data: ManualProductChatData) => {
+    setSensitiveCategory(data.sensitiveCategory)
     handleAnalysis(createPrefilledAnalysis(data))
   }
 
@@ -628,9 +617,8 @@ export default function App() {
               <div><label>¿Para qué lo traés?</label><div className="journey-chip-row"><button className={purpose === 'resale' ? 'selected' : ''} onClick={() => setPurpose('resale')} type="button">Reventa</button><button className={purpose === 'own_use' ? 'selected' : ''} onClick={() => setPurpose('own_use')} type="button">Uso propio</button><button className={purpose === 'unknown' ? 'selected' : ''} onClick={() => setPurpose('unknown')} type="button">No sé</button></div></div>
               {profileStep >= 2 && <div><label>¿Quién importa?</label><div className="journey-chip-row"><button className={entityType === 'company' ? 'selected' : ''} onClick={() => setEntityType('company')} type="button">Empresa</button><button className={entityType === 'individual' ? 'selected' : ''} onClick={() => setEntityType('individual')} type="button">Persona</button><button className={entityType === 'unknown' ? 'selected' : ''} onClick={() => setEntityType('unknown')} type="button">No sé</button></div></div>}
               {profileStep >= 3 && <div><label>¿Tenés firma/importador para operar?</label><div className="journey-chip-row"><button className={signature === 'yes' ? 'selected' : ''} onClick={() => setSignature('yes')} type="button">Sí</button><button className={signature === 'no' ? 'selected' : ''} onClick={() => setSignature('no')} type="button">No</button><button className={signature === 'unknown' ? 'selected' : ''} onClick={() => setSignature('unknown')} type="button">No sé</button></div></div>}
-              {profileStep >= 4 && <div><label htmlFor="journey-sensitive-category">¿Qué tipo de producto es?</label><small>Esto sirve para detectar si hay intervención especial. Si no sabés, elegí "No sé".</small><DsSelect id="journey-sensitive-category" ariaLabel="¿Qué tipo de producto es?" placeholder="Elegir una opción" value={sensitiveCategory || ''} onChange={(value) => setSensitiveCategory(value as SensitiveProductCategory)} options={[{ value: 'none', label: 'Ninguna de estas categorías' }, { value: 'food', label: 'Alimentos' }, { value: 'toys', label: 'Juguetes' }, { value: 'cosmetics', label: 'Cosméticos' }, { value: 'medicines', label: 'Medicamentos' }, { value: 'supplements', label: 'Suplementos' }, { value: 'plants', label: 'Plantas / Flores' }, { value: 'unknown', label: 'No sé' }]} /></div>}
               <button className="journey-primary-action" type="button" disabled={!operationAnswered} onClick={continueOperation}>Seguir con presupuesto <span><UiIcon name="arrow-right" size={18} /></span></button>
-            </div> : <div className="journey-complete-row"><span>{purposeLabel(purpose)}</span><span>{entityLabel(entityType)}</span><span>{signatureLabel(signature)}</span><span>{sensitiveLabel(sensitiveCategory)}</span></div>}
+            </div> : <div className="journey-complete-row"><span>{purposeLabel(purpose)}</span><span>{entityLabel(entityType)}</span><span>{signatureLabel(signature)}</span></div>}
           </section>
 
           {step >= 2 && <>

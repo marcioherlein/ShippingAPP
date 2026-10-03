@@ -37,11 +37,11 @@ test('disabled primary actions explain what is missing', async ({ page }) => {
 
   const operationAction = page.locator('.journey-question-card.active .journey-primary-action')
   await expect(operationAction).toBeDisabled()
-  await expect(operationAction).toHaveAttribute('data-disabled-reason', /Completá las cuatro respuestas/)
-  await expect(operationAction).toHaveAttribute('aria-label', /Completá las cuatro respuestas/)
+  await expect(operationAction).toHaveAttribute('data-disabled-reason', /Completá las tres respuestas/)
+  await expect(operationAction).toHaveAttribute('aria-label', /Completá las tres respuestas/)
 
   const visibleReason = await operationAction.evaluate((element) => getComputedStyle(element, '::after').content)
-  expect(visibleReason).toContain('Completá las cuatro respuestas')
+  expect(visibleReason).toContain('Completá las tres respuestas')
 })
 
 test('budget mode is an accessible radio group with a contextual disabled reason', async ({ page }) => {
@@ -51,8 +51,6 @@ test('budget mode is an accessible radio group with a contextual disabled reason
   await page.getByRole('radiogroup', { name: '¿Para qué lo traés?' }).getByRole('radio', { name: 'Reventa' }).click()
   await page.getByRole('radiogroup', { name: '¿Quién importa?' }).getByRole('radio', { name: 'Empresa' }).click()
   await page.getByRole('radiogroup', { name: '¿Tenés firma/importador para operar?' }).getByRole('radio', { name: 'Sí' }).click()
-  await page.locator('#journey-sensitive-category').click()
-  await page.locator('#journey-sensitive-category-listbox [data-value="none"]').click()
   await page.getByRole('button', { name: /Seguir con presupuesto/i }).click()
 
   const budgetGroup = page.getByRole('radiogroup', { name: 'Presupuesto o rango' })

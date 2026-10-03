@@ -912,3 +912,50 @@
   .chatbot-dim-field { max-width: none; }
   .chatbot-dims-send { width: 100%; justify-content: center; }
 }
+
+.chatbot-sensitive-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 16px 16px 12px;
+}
+
+.chatbot-sensitive-chip {
+  border: 1px solid rgba(148,163,184,.3);
+  border-radius: 12px;
+  background: #fff;
+  color: #1d1d1f;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 8px;
+  cursor: pointer;
+  text-align: center;
+  min-height: 44px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.chatbot-sensitive-chip:hover {
+  background: #f1f3ff;
+  border-color: #5666f5;
+  color: #5666f5;
+}
+
+.chatbot-sensitive-none {
+  grid-column: 1 / -1;
+  border: 1px dashed rgba(148,163,184,.4);
+  border-radius: 12px;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 8px;
+  cursor: pointer;
+  min-height: 40px;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.chatbot-sensitive-none:hover { color: #1d1d1f; border-color: #94a3b8; }
+
+@media (max-width: 480px) {
+  .chatbot-sensitive-grid { grid-template-columns: repeat(2, 1fr); }
+}

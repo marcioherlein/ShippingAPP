@@ -12,10 +12,10 @@ type Props = {
 }
 
 type Mode = 'link' | 'describe' | null
-type ChatStep = 'name' | 'use' | 'material' | 'price' | 'origin' | 'weight' | 'moq' | 'volume'
+type ChatStep = 'name' | 'use' | 'material' | 'price' | 'origin' | 'weight' | 'moq' | 'volume' | 'carton'
 
 const MANDATORY_STEPS: ChatStep[] = ['name', 'use', 'material', 'price', 'origin', 'weight', 'moq']
-const ALL_STEPS: ChatStep[] = [...MANDATORY_STEPS, 'volume']
+const ALL_STEPS: ChatStep[] = [...MANDATORY_STEPS, 'volume', 'carton']
 
 const CHAT_LABELS: Record<ChatStep, string> = {
   name: '¿Cómo se llama el producto?',
@@ -26,6 +26,7 @@ const CHAT_LABELS: Record<ChatStep, string> = {
   weight: '¿Cuánto pesa por unidad?',
   moq: '¿Cuál es el mínimo del proveedor?',
   volume: '¿Cuánto ocupa por unidad?',
+  carton: '¿Cuántas unidades van en esa caja?',
 }
 const CHAT_PLACEHOLDERS: Record<ChatStep, string> = {
   name: 'Ej. Reloj de pulsera automático',
@@ -36,12 +37,14 @@ const CHAT_PLACEHOLDERS: Record<ChatStep, string> = {
   weight: 'Ej. 0.35',
   moq: 'Ej. 100',
   volume: 'Ej. 0.008 ó 50x40x30cm',
+  carton: 'Ej. 2',
 }
 const CHAT_UNITS: Partial<Record<ChatStep, string>> = {
   price: 'USD',
   weight: 'kg',
   moq: 'u.',
   volume: 'm³',
+  carton: 'u.',
 }
 const CHAT_RECEIPT_FMT: Record<ChatStep, (v: string) => string> = {
   name: (v) => v,
@@ -52,6 +55,7 @@ const CHAT_RECEIPT_FMT: Record<ChatStep, (v: string) => string> = {
   weight: (v) => `${v} kg`,
   moq: (v) => `MOQ ${v}`,
   volume: (v) => `${v} m³`,
+  carton: (v) => `${v} u./caja`,
 }
 
 const CHAT_STEP_LABELS_SHORT: Record<ChatStep, string> = {
@@ -63,9 +67,10 @@ const CHAT_STEP_LABELS_SHORT: Record<ChatStep, string> = {
   weight: 'Peso',
   moq: 'MOQ',
   volume: 'Volumen',
+  carton: 'x Caja',
 }
 
-const isNumberStep = (step: ChatStep) => ['price', 'weight', 'moq'].includes(step)
+const isNumberStep = (step: ChatStep) => ['price', 'weight', 'moq', 'carton'].includes(step)
 
 const SENSITIVE_OPTIONS: Array<{ value: SensitiveProductCategory; label: string; icon: string }> = [
   { value: 'food',        label: 'Alimentos',        icon: '🥗' },
@@ -109,6 +114,7 @@ function validateChatInput(step: ChatStep, value: string): boolean {
   if (step === 'material') return trimmed.length >= 2
   if (step === 'origin') return trimmed.length >= 2
   if (step === 'volume') return parseDimensionsToCbm(trimmed) !== null
+  if (step === 'carton') return Number.isInteger(Number(trimmed)) && Number(trimmed) >= 1
   const n = Number(trimmed)
   return Number.isFinite(n) && n > 0
 }
@@ -187,6 +193,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       }
       sensitiveCategory = inferred
     }
+    const unitsPerCarton = answers.carton ? Math.max(1, Math.round(Number(answers.carton)) || 1) : 1
+    const rawVolumeCbm = answers.volume && Number(answers.volume) > 0 ? Number(answers.volume) : null
     const data: ManualProductChatData = {
       name: (answers.name || '').trim(),
       use: (answers.use || '').trim(),
@@ -195,7 +203,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       originCountry: (answers.origin || '').trim(),
       packedWeightKg: Number(answers.weight) || 0,
       moq: Number(answers.moq) || 1,
-      volumeCbm: answers.volume && Number(answers.volume) > 0 ? Number(answers.volume) : null,
+      volumeCbm: rawVolumeCbm !== null ? parseFloat((rawVolumeCbm / unitsPerCarton).toFixed(6)) : null,
       sensitiveCategory,
     }
     onStructuredData(data)
@@ -341,7 +349,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         )}
         <div key={chatStep} className="chatbot-msg assistant chatbot-msg-enter">
           {CHAT_LABELS[chatStep]}
-          {(chatStep === 'volume' || chatStep === 'material') && <span className="chatbot-optional-tag"> · Opcional</span>}
+          {(chatStep === 'volume' || chatStep === 'material' || chatStep === 'carton') && <span className="chatbot-optional-tag"> · Opcional</span>}
         </div>
       </div>
 
@@ -408,8 +416,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
                 className="chatbot-dock-input"
                 type={isNumberStep(chatStep) ? 'number' : 'text'}
                 inputMode={isNumberStep(chatStep) ? 'decimal' : 'text'}
-                min={isNumberStep(chatStep) ? '0.001' : undefined}
-                step={isNumberStep(chatStep) ? 'any' : undefined}
+                min={isNumberStep(chatStep) ? (chatStep === 'carton' ? '1' : '0.001') : undefined}
+                step={isNumberStep(chatStep) ? (chatStep === 'carton' ? '1' : 'any') : undefined}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -431,6 +439,11 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
           {chatStep === 'material' && (
             <button type="button" className="chatbot-skip-btn" onClick={() => advanceStep('')}>
               No sé / omitir
+            </button>
+          )}
+          {chatStep === 'carton' && (
+            <button type="button" className="chatbot-skip-btn" onClick={() => advanceStep('')}>
+              1 unidad / omitir
             </button>
           )}
         </>}

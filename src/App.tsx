@@ -16,7 +16,9 @@ import { getJourneyBudgetError } from './lib/journeyValidation'
 import { scrollIntoViewIfNeeded, scrollWindowToTop } from './lib/motionPreference'
 import { translateProductLabel } from './lib/productTranslation'
 import {
+  applyClassificationClarification,
   applyProductConfirmation,
+  classificationClarificationTarget,
   createManualProductAnalysis,
   createPrefilledAnalysis,
   missingClassificationConfirmationFields,
@@ -192,6 +194,9 @@ export default function App() {
   const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
+  const [chatbotClarificationInput, setChatbotClarificationInput] = useState('')
+  const [chatbotAutoSubmitted, setChatbotAutoSubmitted] = useState(false)
+  const chatbotAutoSubmitFiredRef = useRef(false)
   const [entered, setEntered] = useState<boolean>(readInitialEntered)
 
   // True while the persistence layer replays a saved journey, so the reveal
@@ -279,6 +284,23 @@ export default function App() {
   const effectiveCalculationStatus: CalculationPipelineStatus = calculationInputKey && calculationInputKey !== currentCalculationInputKey
     ? 'confirm'
     : calculationStatus
+
+  // Derived classification state for chatbot/manual products — used to decide
+  // whether to show a clarification card inline in the chatbot area.
+  const chatbotProduct = !!analysis && (analysis.sourceUrl === 'chatbot://product' || analysis.sourceUrl === 'manual://product')
+  const chatbotClassifierAskedForMore = chatbotProduct
+    && calculationStatus === 'blocked'
+    && !!analysis
+    && analysis.customs.missingFacts.length > 0
+    && !hasConfirmedClassification(analysis.customs)
+    && !hasProvisionalClassification(analysis.customs)
+  const chatbotClarificationTarget = analysis ? classificationClarificationTarget(analysis.customs.missingFacts) : null
+  const chatbotRefinementExhausted = !!(
+    analysis?.classificationRefinement
+    && analysis.classificationRefinement.allowed === false
+    && analysis.classificationRefinement.maxAttempts > 0
+    && analysis.classificationRefinement.attempt >= analysis.classificationRefinement.maxAttempts
+  )
 
   const analysisPrefill = useMemo<QuotePrefill | null>(() => {
     if (!analysis) return null
@@ -396,7 +418,7 @@ export default function App() {
       const manualSelection = confirmedAnalysis.customs.source.includes('selección confirmada por el usuario')
       const refreshed = manualSelection && !confirmedAnalysis.usageReservationId && !confirmedAnalysis.fx
         ? { ...await startImportAnalysis(confirmedAnalysis), customs: confirmedAnalysis.customs }
-        : hasUsableClassification(confirmedAnalysis)
+        : hasUsableClassification(confirmedAnalysis) && confirmedAnalysis.customs.missingFacts.length === 0
           ? confirmedAnalysis
           : await enrichProductAnalysisV2(confirmedAnalysis)
       setAnalysis(refreshed)
@@ -531,6 +553,40 @@ export default function App() {
   }
   confirmAndCalculateRef.current = confirmAndCalculate
 
+  // Reset auto-submit tracking whenever a genuinely new product analysis starts.
+  useEffect(() => {
+    chatbotAutoSubmitFiredRef.current = false
+    setChatbotAutoSubmitted(false)
+  }, [analysis?.sourceUrl, analysis?.product.name])
+
+  // Auto-submit classification clarification when the chatbot product already has
+  // functionText and the classifier is asking for it on the first attempt.
+  // Uses a ref+state pair so the guard is reliable even when classificationRefinement
+  // is not updated by the seed fallback path (worker unavailable).
+  useEffect(() => {
+    if (!chatbotProduct || !analysis) return
+    if (calculationStatus !== 'blocked' || !chatbotClassifierAskedForMore) return
+    if (chatbotClarificationTarget !== 'functionText') return
+    if (!analysis.product.functionText) return
+    if (chatbotAutoSubmitFiredRef.current) return
+    chatbotAutoSubmitFiredRef.current = true
+    setChatbotAutoSubmitted(true)
+    const draft = productConfirmationFromAnalysis(analysis)
+    const next = applyClassificationClarification(draft, analysis.product.functionText, analysis.customs.missingFacts)
+    void confirmAndCalculate(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatbotProduct, calculationStatus, chatbotClassifierAskedForMore, chatbotClarificationTarget])
+
+  // Pre-fill the inline clarification input when the pipeline asks for something
+  // the analysis already has (e.g. functionText answered during chatbot).
+  useEffect(() => {
+    if (!chatbotClassifierAskedForMore || !chatbotAutoSubmitted) return
+    if (chatbotClarificationInput) return
+    if (chatbotClarificationTarget === 'functionText' && analysis?.product.functionText) {
+      setChatbotClarificationInput(analysis.product.functionText)
+    }
+  }, [chatbotClassifierAskedForMore, chatbotAutoSubmitted, chatbotClarificationTarget, analysis?.product.functionText])
+
   const continueOperation = () => {
     if (operationAnswered) setStep(2)
   }
@@ -643,7 +699,7 @@ export default function App() {
           </>}
 
           {step >= 3 && <>
-            <div className="journey-bubble assistant">
+            {!(intent === 'have_product' && analysis) && <div className="journey-bubble assistant">
               <span className="journey-avatar">G</span>
               <div>
                 <b>{intent === 'have_product' ? '¿Tenés el link o preferís contarme qué producto es?' : '¿Qué producto querés buscar?'}</b>
@@ -651,9 +707,48 @@ export default function App() {
                   ? 'Pegá el link de Alibaba o describí el producto. Después confirmamos sólo la información que realmente haga falta.'
                   : 'Escribí producto + material/uso y, si querés, precio máximo o MOQ. También podés pegar directamente un link de Alibaba.'}</p>
               </div>
-            </div>
+            </div>}
 
             {intent === 'have_product' && !analysis && <div className="journey-product-surface"><OwnedProductIntake onAlibabaLink={handleOwnedProductLink} onStructuredData={handleManualProductData} /></div>}
+
+            {/* When the classifier needs more info for a chatbot product (after first auto-submit
+                already tried), show the clarification card here — inside the chatbot area, not
+                in a separate pipeline section. chatbotAutoSubmitted means the auto-submit already ran. */}
+            {intent === 'have_product' && analysis && chatbotClassifierAskedForMore && chatbotAutoSubmitted && !chatbotRefinementExhausted && (
+              <div className="journey-product-surface">
+                <div className="pipeline-clarification-card pipeline-clarification-silent">
+                  <span className="eyebrow">Una pregunta para terminar</span>
+                  <div className="pipeline-clarification-copy">
+                    <h3>{chatbotClarificationTarget === 'functionText' ? '¿Para qué se usa este producto?' : chatbotClarificationTarget === 'material' ? '¿De qué material está hecho principalmente?' : '¿Qué tipo de producto es?'}</h3>
+                    <p>Con una frase corta alcanza. Necesito este dato para distinguir la posición arancelaria correcta.</p>
+                  </div>
+                  <label className="pipeline-clarification-input" htmlFor="chatbot-clarification-input">
+                    <span>Tu respuesta</span>
+                    <textarea
+                      id="chatbot-clarification-input"
+                      value={chatbotClarificationInput}
+                      onChange={(e) => setChatbotClarificationInput(e.target.value.slice(0, 1000))}
+                      rows={3}
+                      placeholder="Ej. Se usa principalmente para…"
+                    />
+                  </label>
+                  <div className="pipeline-confirm-actions">
+                    <button
+                      type="button"
+                      className="journey-primary-action"
+                      disabled={chatbotClarificationInput.trim().length < 3}
+                      onClick={() => {
+                        if (!analysis) return
+                        const draft = productConfirmationFromAnalysis(analysis)
+                        const next = applyClassificationClarification(draft, chatbotClarificationInput, analysis.customs.missingFacts)
+                        void confirmAndCalculate(next)
+                        setChatbotClarificationInput('')
+                      }}
+                    >Continuar <UiIcon name="arrow-right" size={16} /></button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {(intent === 'search_product' || intent === 'discover') && <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode={intent === 'discover' ? 'discovery' : 'intake'} onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>}
           </>}

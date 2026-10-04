@@ -288,8 +288,6 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoConfirm, status, canConfirm])
 
-  // Decision 2: a structured disambiguation answer re-runs the classifier through the SAME
-  // refinement path as the free-text clarification (still counts against the 3-attempt budget).
   const submitDisambiguationAnswer = (note: string) => {
     onConfirm(applyClassificationClarification(draft, note, analysis.customs.missingFacts))
     setClarification('')
@@ -518,30 +516,10 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
         <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>
       </div>}
-    </div> : silent && status === 'blocked' && classifierAskedForMore && !refinementExhausted ? <div className="pipeline-clarification-card pipeline-clarification-silent">
-      <span className="eyebrow">Una pregunta para terminar</span>
-      <div className="pipeline-clarification-copy">
-        <h3>{clarificationUi.question}</h3>
-        <p>{clarificationUi.helper}</p>
-      </div>
-      <label className="pipeline-clarification-input" htmlFor="classification-clarification-silent">
-        <span>Tu respuesta</span>
-        <textarea
-          id="classification-clarification-silent"
-          value={clarification}
-          onChange={(event) => setClarification(event.target.value.slice(0, 1000))}
-          rows={3}
-          placeholder={clarificationUi.placeholder}
-        />
-      </label>
-      <div className="pipeline-confirm-actions">
-        <button type="button" className="journey-primary-action" disabled={clarification.trim().length < 3} onClick={submitConfirmation}>Continuar <UiIcon name="arrow-right" size={16} /></button>
-        <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
-      </div>
     </div> : silent ? <div className="pipeline-silent-status" role="status" aria-live="polite">
       <div className="pipeline-silent-spinner" aria-hidden="true" />
-      <span>{status === 'blocked' ? 'No pude identificar la posición del producto con los datos disponibles.' : 'Calculando el costo de importación…'}</span>
-      {status === 'blocked' && <button type="button" className="pipeline-secondary pipeline-silent-retry" onClick={onEditProduct}>Cambiar producto <UiIcon name="arrow-right" size={14} /></button>}
+      <span>{status === 'processing' ? 'Calculando el costo de importación…' : status === 'blocked' && classifierAskedForMore ? 'Analizando el producto…' : status === 'blocked' ? 'No pude identificar la posición del producto con los datos disponibles.' : 'Calculando el costo de importación…'}</span>
+      {status === 'blocked' && !classifierAskedForMore && <button type="button" className="pipeline-secondary pipeline-silent-retry" onClick={onEditProduct}>Cambiar producto <UiIcon name="arrow-right" size={14} /></button>}
     </div> : <>
       <div className="pipeline-run-head">
         <div><span className="eyebrow">Calculando</span><h2>{status === 'blocked' ? 'Necesito un dato más para continuar.' : 'Construyendo tu costo de importación.'}</h2></div>

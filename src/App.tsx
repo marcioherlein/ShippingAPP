@@ -196,6 +196,7 @@ export default function App() {
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
   const [chatbotClarificationInput, setChatbotClarificationInput] = useState('')
   const [chatbotAutoSubmitted, setChatbotAutoSubmitted] = useState(false)
+  const [manualClarificationAttempts, setManualClarificationAttempts] = useState(0)
   const chatbotAutoSubmitFiredRef = useRef(false)
   const [entered, setEntered] = useState<boolean>(readInitialEntered)
 
@@ -557,6 +558,7 @@ export default function App() {
   useEffect(() => {
     chatbotAutoSubmitFiredRef.current = false
     setChatbotAutoSubmitted(false)
+    setManualClarificationAttempts(0)
   }, [analysis?.sourceUrl, analysis?.product.name])
 
   // Auto-submit classification clarification when the chatbot product already has
@@ -579,13 +581,16 @@ export default function App() {
 
   // Pre-fill the inline clarification input when the pipeline asks for something
   // the analysis already has (e.g. functionText answered during chatbot).
+  // Only fill on the first display (manualClarificationAttempts === 0); after
+  // the user has manually submitted, leave the field empty for a fresh answer.
   useEffect(() => {
     if (!chatbotClassifierAskedForMore || !chatbotAutoSubmitted) return
     if (chatbotClarificationInput) return
+    if (manualClarificationAttempts > 0) return
     if (chatbotClarificationTarget === 'functionText' && analysis?.product.functionText) {
       setChatbotClarificationInput(analysis.product.functionText)
     }
-  }, [chatbotClassifierAskedForMore, chatbotAutoSubmitted, chatbotClarificationTarget, analysis?.product.functionText])
+  }, [chatbotClassifierAskedForMore, chatbotAutoSubmitted, manualClarificationAttempts, chatbotClarificationTarget, analysis?.product.functionText])
 
   const continueOperation = () => {
     if (operationAnswered) setStep(2)
@@ -711,10 +716,47 @@ export default function App() {
 
             {intent === 'have_product' && !analysis && <div className="journey-product-surface"><OwnedProductIntake onAlibabaLink={handleOwnedProductLink} onStructuredData={handleManualProductData} /></div>}
 
-            {/* When the classifier needs more info for a chatbot product (after first auto-submit
-                already tried), show the clarification card here — inside the chatbot area, not
-                in a separate pipeline section. chatbotAutoSubmitted means the auto-submit already ran. */}
-            {intent === 'have_product' && analysis && chatbotClassifierAskedForMore && chatbotAutoSubmitted && !chatbotRefinementExhausted && (
+            {/* Product receipt: once analysis is set, show a read-only summary of
+                what the chatbot collected so the user isn't left in the dark. */}
+            {intent === 'have_product' && analysis && chatbotProduct && (
+              <div className="journey-product-surface">
+                <div className="pipeline-understood-card">
+                  <span className="eyebrow">Producto cargado</span>
+                  <p className="pipeline-understood-sentence"><b>{analysis.product.name}</b></p>
+                  <div className="chatbot-receipt-bar">
+                    {analysis.product.unitPriceUsd ? (
+                      <span className="chatbot-receipt-chip">
+                        <span className="chatbot-receipt-chip-label">Precio FOB</span>
+                        <span className="chatbot-receipt-chip-value">USD {analysis.product.unitPriceUsd.toLocaleString('es-AR')}</span>
+                      </span>
+                    ) : null}
+                    {analysis.product.originCountry ? (
+                      <span className="chatbot-receipt-chip">
+                        <span className="chatbot-receipt-chip-label">Origen</span>
+                        <span className="chatbot-receipt-chip-value">{analysis.product.originCountry}</span>
+                      </span>
+                    ) : null}
+                    {analysis.product.packedWeightKg ? (
+                      <span className="chatbot-receipt-chip">
+                        <span className="chatbot-receipt-chip-label">Peso</span>
+                        <span className="chatbot-receipt-chip-value">{analysis.product.packedWeightKg} kg</span>
+                      </span>
+                    ) : null}
+                    {analysis.product.moq ? (
+                      <span className="chatbot-receipt-chip">
+                        <span className="chatbot-receipt-chip-label">MOQ</span>
+                        <span className="chatbot-receipt-chip-value">{analysis.product.moq} uds.</span>
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Normal clarification card — shown after auto-submit, while the user still
+                has attempts remaining. manualClarificationAttempts < 2 prevents the loop:
+                after 2 manual submits with no result, we drop to the exit path below. */}
+            {intent === 'have_product' && analysis && chatbotClassifierAskedForMore && chatbotAutoSubmitted && !chatbotRefinementExhausted && manualClarificationAttempts < 2 && (
               <div className="journey-product-surface">
                 <div className="pipeline-clarification-card pipeline-clarification-silent">
                   <span className="eyebrow">Una pregunta para terminar</span>
@@ -741,10 +783,29 @@ export default function App() {
                         if (!analysis) return
                         const draft = productConfirmationFromAnalysis(analysis)
                         const next = applyClassificationClarification(draft, chatbotClarificationInput, analysis.customs.missingFacts)
+                        setManualClarificationAttempts(a => a + 1)
                         void confirmAndCalculate(next)
                         setChatbotClarificationInput('')
                       }}
                     >Continuar <UiIcon name="arrow-right" size={16} /></button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Exit path — shown when the classifier can't resolve after 2 manual
+                attempts or when the server marks the refinement as exhausted.
+                Offers to change the product; does not loop back to the same question. */}
+            {intent === 'have_product' && analysis && chatbotClassifierAskedForMore && chatbotAutoSubmitted && (chatbotRefinementExhausted || manualClarificationAttempts >= 2) && (
+              <div className="journey-product-surface">
+                <div className="pipeline-clarification-card pipeline-clarification-silent">
+                  <span className="eyebrow">No pudimos clasificar el producto</span>
+                  <div className="pipeline-clarification-copy">
+                    <h3>No encontramos la posición arancelaria</h3>
+                    <p>Con la información disponible no logramos determinar la NCM con certeza. Podés cargar otro producto o buscarlo por URL de Alibaba para una clasificación más precisa.</p>
+                  </div>
+                  <div className="pipeline-confirm-actions">
+                    <button type="button" className="pipeline-secondary" onClick={editSelectedProduct}>Cambiar producto</button>
                   </div>
                 </div>
               </div>

@@ -155,14 +155,22 @@ export function applyClassificationClarification(
   if (!note) return data
 
   const target = classificationClarificationTarget(missingFacts)
-  const descriptionNote = `Aclaración del usuario: ${note}`
-  const description = cleanText(data.description, 1200).includes(descriptionNote)
-    ? cleanText(data.description, 1200)
-    : cleanText([data.description, descriptionNote].filter(Boolean).join('. '), 1200)
+
+  // For specialized targets (functionText, material, category) update ONLY that
+  // field — NOT description. Appending a note to description triggers
+  // classificationIdentityChanged → customsProfileFor('','','') discards the
+  // entire prior classification attempt. Only touch description when that IS
+  // the clarification target.
+  if (target === 'description') {
+    const descriptionNote = `Aclaración del usuario: ${note}`
+    const description = cleanText(data.description, 1200).includes(descriptionNote)
+      ? cleanText(data.description, 1200)
+      : cleanText([data.description, descriptionNote].filter(Boolean).join('. '), 1200)
+    return { ...data, description }
+  }
 
   return {
     ...data,
-    description,
     ...(target === 'functionText' ? { functionText: cleanText(note, 500) } : {}),
     ...(target === 'material' ? { material: cleanText(note, 300) } : {}),
     ...(target === 'category' ? { category: cleanText(note, 300) } : {}),

@@ -52,24 +52,27 @@ describe('progressive product confirmation', () => {
     expect(classificationClarificationTarget(['Tipo o categoría del producto'])).toBe('category')
   })
 
-  it('puts a thermo clarification into the structured function fact and the audit description', () => {
+  it('puts a thermo clarification into the structured function fact without touching description', () => {
     const base = createManualProductAnalysis('manual://thermo', '45oz 1350ml Stainless Steel Vacuum Water Bottle')
     const draft = productConfirmationFromAnalysis(base)
+    const originalDescription = draft.description
     const answer = 'Se usa para conservar y transportar bebidas frías o calientes.'
     const clarified = applyClassificationClarification(draft, answer, ['Función/uso principal'])
 
     expect(clarified.functionText).toBe(answer)
-    expect(clarified.description).toContain('Aclaración del usuario:')
-    expect(clarified.description).toContain('bebidas frías o calientes')
+    // description must NOT be modified for non-description targets: changing it
+    // would trigger classificationIdentityChanged → customs reset every round.
+    expect(clarified.description).toBe(originalDescription)
   })
 
   it('updates an existing structured fact when the user clarifies it', () => {
     const base = createManualProductAnalysis('manual://thermo', 'Botella térmica de acero inoxidable')
     const draft = { ...productConfirmationFromAnalysis(base), material: 'acero inoxidable' }
+    const originalDescription = draft.description
     const clarified = applyClassificationClarification(draft, 'acero inoxidable 304 con tapa plástica', ['Material/composición'])
 
     expect(clarified.material).toBe('acero inoxidable 304 con tapa plástica')
-    expect(clarified.description).toContain('acero inoxidable 304 con tapa plástica')
+    expect(clarified.description).toBe(originalDescription)
   })
 
   it('preserves a resolved NCM when only quote/logistics facts change', () => {

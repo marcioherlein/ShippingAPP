@@ -96,4 +96,39 @@
   }
 }
 
+/* Narrow phones: collapse to a single compact sign-in button so it doesn't
+   clip the brand logo on the left side of the topbar. */
+@media (max-width: 460px) {
+  .auth-account-control {
+    gap: 4px;
+    padding: 5px 6px;
+  }
+  .auth-primary { display: none; }
+  .auth-secondary {
+    padding: 8px 12px;
+    font-size: 12px;
+    min-height: 38px;
+    border-radius: 10px;
+  }
+}
+
+/* Dark mode: swap the frosted-glass pill from a light surface to a dark one
+   so it blends with the night-toned app rather than looking like a white card
+   floating over dark content. */
+@media (prefers-color-scheme: dark) {
+  .auth-account-control {
+    background: rgba(13, 19, 38, 0.88);
+    border-color: rgba(148, 163, 210, 0.22);
+    box-shadow: 0 12px 38px rgba(0, 0, 0, 0.42);
+  }
+  .auth-account-control button { color: #cdd7ea; }
+  .auth-secondary { background: transparent; color: #b4c0d6; }
+  .auth-primary { background: #4a57e0; color: #fff; }
+  .auth-usage-badge {
+    background: rgba(28, 36, 58, 0.72);
+    border-color: rgba(148, 163, 210, 0.20);
+    color: #b4c0d6;
+  }
+}
+
 /* Account actions belong in document flow; signed-in controls must wrap too. */

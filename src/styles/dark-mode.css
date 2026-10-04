@@ -338,6 +338,60 @@
     border-color: rgba(139, 150, 255, 0.18);
     border-top-color: #8b96ff;
   }
+
+  /* Journey question cards — these were missing dark overrides, causing a light
+     frosted-glass card to appear inside the dark conversation surface. */
+  .journey-question-card {
+    background: rgba(15, 21, 40, 0.80);
+    border-color: rgba(148, 163, 210, 0.18);
+  }
+  .journey-question-card.active {
+    border-color: rgba(139, 150, 255, 0.42);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+  }
+  .journey-question-head {
+    background: rgba(10, 14, 28, 0.62);
+    border-bottom-color: rgba(148, 163, 210, 0.12);
+  }
+  .journey-question-head b { color: #f2f6ff; }
+  .journey-question-head small { color: #8b97b0; }
+  .journey-question-fields {
+    background: transparent;
+  }
+  .journey-complete-row b { color: #e6ecf7; }
+  .journey-complete-row small { color: #8b97b0; }
+
+  /* Pipeline clarification / extraction cards */
+  .pipeline-understood-card,
+  .pipeline-clarification-card,
+  .pipeline-classification-ready,
+  .pipeline-progressive-fields {
+    background: rgba(15, 21, 40, 0.80);
+    border-color: rgba(148, 163, 210, 0.18);
+    color: #cdd7ea;
+  }
+  .pipeline-known-fact {
+    background: #161d31;
+    border-color: rgba(148, 163, 210, 0.14);
+    color: #cdd7ea;
+  }
+  .pipeline-known-fact span { color: #8b97b0; }
+  .pipeline-known-fact b { color: #e6ecf7; }
+
+  /* Landing page: eyebrow pill + stat strip — light surfaces on dark hero */
+  .journey-landing-eyebrow {
+    background: rgba(20, 28, 50, 0.72);
+    border-color: rgba(148, 163, 210, 0.20);
+    color: var(--ds-brand-strong, #a2acff);
+  }
+  .journey-landing-headline { color: #f2f6ff; }
+  .journey-landing-sub { color: #9aa6c0; }
+  .journey-landing-stats {
+    background: rgba(16, 22, 42, 0.72);
+    border-color: rgba(148, 163, 210, 0.18);
+  }
+  .journey-landing-stat-value { color: #f2f6ff; }
+  .journey-landing-stat-label { color: #8b97b0; }
 }
 
 /* When the OS also asks for reduced transparency, product-quality.css swaps the

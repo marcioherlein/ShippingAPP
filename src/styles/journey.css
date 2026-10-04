@@ -447,11 +447,13 @@
    The in-chat "Cambiar" button is the reset path there. */
 @media (max-width: 480px) {
   .journey-top-actions { display: none; }
+  /* Reserve space on the right so brand text doesn't extend under the fixed auth pill. */
+  .journey-topbar { padding-right: 108px; }
 }
 
 @media (max-width: 640px) {
   .journey-hero { width: min(100% - 22px, 1180px); margin-top: 22px; }
-  .journey-hero h1 { font-size: 43px; }
+  .journey-hero h1 { font-size: 32px; }
   .journey-hero > p { font-size: 14px; }
   .journey-workspace,
   .journey-calculator-section,
@@ -1282,6 +1284,14 @@
   .journey-landing-stat { padding: 14px 16px; }
   .journey-landing-stat-value { font-size: 18px; }
   .journey-landing-stat-label { font-size: 11px; }
+}
+
+@media (max-width: 460px) {
+  /* Landing hero: cap the headline at a comfortable mobile reading size. */
+  .journey-landing-headline { font-size: 36px; letter-spacing: -.022em; }
+  .journey-landing-sub { font-size: 15px; }
+  /* Topbar: ensure the auth pill (already collapsed to single button) clears. */
+  .journey-topbar { min-height: 56px; }
 }
 
 /* Ultra-narrow: stack stats vertically */

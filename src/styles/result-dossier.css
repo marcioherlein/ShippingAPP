@@ -2,6 +2,13 @@
    Consolidates the result column into ~3 treatments: one hero, one card radius,
    one grouped summary-list row. All colors/radii/shadows come from design tokens. */
 
+.journey-result-source-label {
+  width: min(100%, 900px);
+  margin: 0 auto 4px;
+  text-align: right;
+}
+.journey-result-source-label small { color: var(--ds-text-muted); font-size: 0.78rem; }
+
 .result-dossier {
   display: flex;
   flex-direction: column;
@@ -26,10 +33,10 @@
 .result-hero-main .eyebrow { color: var(--ds-text-muted); }
 .result-hero-number {
   color: var(--ds-text-strong);
-  font-size: clamp(2.25rem, 5vw, 3.25rem);
+  font-size: clamp(2.6rem, 6vw, 3.75rem);
   font-weight: 600;
   line-height: 1.02;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 .result-hero-main small { color: var(--ds-text-muted); font-size: 0.9rem; }
 
@@ -152,17 +159,24 @@
   padding: 11px 18px;
   min-height: 44px;
   border-radius: var(--ds-radius-pill);
-  border: 1px solid var(--ds-border);
-  background: var(--ds-surface);
-  color: var(--ds-text-strong);
+  border: 0;
+  background: var(--ds-brand);
+  color: #fff;
   font-weight: 600;
   font-size: 0.9rem;
   text-decoration: none;
 }
-.market-search-button:hover { background: var(--ds-surface-subtle); border-color: var(--ds-brand); }
-.market-search-button svg { color: var(--ds-brand-strong); }
+.market-search-button:hover { background: var(--ds-brand-strong); }
+.market-search-button svg { color: rgba(255,255,255,.8); }
 
 .market-estimate { display: flex; flex-direction: column; gap: 4px; }
 .market-estimate-lead { margin: 0; color: var(--ds-text-muted); font-size: 0.9rem; }
-.market-estimate-hero { background: var(--ds-surface-subtle); border-radius: var(--ds-radius-lg); }
+.market-estimate-hero {
+  background: var(--ds-surface-subtle);
+  border-radius: var(--ds-radius-lg);
+  color: var(--ds-text-strong);
+}
+.market-estimate-hero span { color: var(--ds-text-muted); font-size: 0.82rem; }
+.market-estimate-hero strong { color: var(--ds-text-strong); font-size: clamp(1.8rem, 4vw, 2.5rem); letter-spacing: -0.02em; }
+.market-estimate-hero small { color: var(--ds-text-muted); font-size: 0.8rem; }
 .market-estimate-note { margin: 10px 0 0; color: var(--ds-text-muted); font-size: 0.82rem; }

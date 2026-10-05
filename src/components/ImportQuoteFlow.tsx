@@ -286,12 +286,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
   const verdictSignals = useMemo(() => buildVerdictSignals(summary, quote, budgetUsd, prefill), [summary, quote, budgetUsd, prefill])
 
   return <section className="manual-quote-shell journey-quote-shell">
-    <div className="table-title journey-quote-title">
-      <div><span className="eyebrow">Resultado calculado</span><h2>Costo unitario primero. Optimización después.</h2></div>
-      <small>{prefill?.sourceLabel ?? importFreightValues.meta.source}</small>
-    </div>
-
-    {prefill && <div className="analysis-banner hot-prefill-banner"><b>Datos precargados desde el pipeline.</b> NCM, aranceles, costos de trámite y datos físicos alimentan el motor; podés revisar cualquier supuesto antes de decidir.</div>}
+    <div className="journey-result-source-label"><small>{prefill?.sourceLabel ?? importFreightValues.meta.source}</small></div>
 
     {prefill?.ncmCode && <section className="quote-customs-evidence">
       <div><span className="eyebrow">Clasificación usada</span><h3>Aranceles aplicados</h3><p>Clasificación y aranceles aplicados automáticamente desde el nomenclador cargado.</p></div>

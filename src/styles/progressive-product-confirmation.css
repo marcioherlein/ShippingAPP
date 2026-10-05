@@ -592,9 +592,9 @@
 
 .chatbot-msg {
   max-width: 72%;
-  padding: 9px 13px;
+  padding: 8px 12px;
   border-radius: 18px;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.45;
   word-break: break-word;
 }
@@ -605,6 +605,7 @@
   border: 1px solid rgba(0, 0, 0, 0.07);
   border-bottom-left-radius: 5px;
   align-self: flex-start;
+  font-size: 13px;
 }
 
 .chatbot-msg.user {
@@ -623,6 +624,13 @@
 
 .chatbot-msg.user:hover {
   filter: brightness(0.88);
+}
+
+/* Most-recent assistant message is the active question — give it a brand-tinted border */
+.chatbot-thread .chatbot-msg.assistant:last-of-type {
+  background: rgba(240, 242, 255, 0.9);
+  border-color: rgba(79, 93, 228, 0.22);
+  font-weight: 500;
 }
 
 @keyframes chatMsgIn {

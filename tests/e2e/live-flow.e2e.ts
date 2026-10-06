@@ -32,6 +32,8 @@ test('electric motorcycle: unknown MOQ, persisted confirmation, validated manual
   await page.getByRole('button', { name: 'No sé / omitir', exact: true }).click()
   const review = page.locator('#case-confirmation')
   await expect(review).toBeVisible()
+  await expect(review.locator('.pipeline-clarification-card')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Confirmar y clasificar/ })).toBeEnabled()
   await expect(review.locator('.pipeline-known-grid').first()).toContainText('Sin dato')
   await page.getByLabel('Variante / modelo confirmado').fill('M5 · sin pedales · 3000 W')
   await page.reload()

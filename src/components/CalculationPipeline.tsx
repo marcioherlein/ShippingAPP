@@ -250,7 +250,11 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     && refinement.maxAttempts > 0
     && refinement.attempt >= refinement.maxAttempts
   const identityEdited = !sameIdentity(draft, sourceDraft)
-  const classifierAskedForMore = !classificationReady && analysis.customs.missingFacts.length > 0
+  // Fresh intake uses an intentionally unclassified placeholder. Its generic
+  // missing facts are not a response from the classifier and must not repeat
+  // questions already answered in the chat before the first NCM request.
+  const classifierAttempted = !!analysis.usageReservationId || !!refinement
+  const classifierAskedForMore = classifierAttempted && !classificationReady && analysis.customs.missingFacts.length > 0
   const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
   const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
@@ -375,7 +379,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <span className="eyebrow">Una pregunta para terminar</span>
             <div className="pipeline-clarification-copy">
               <h3>{clarificationUi.question}</h3>
-              <p>{clarificationUi.helper}</p>
+              <p>{analysis.customs.missingFacts[0] || clarificationUi.helper}</p>
             </div>
             <label className="pipeline-clarification-input" htmlFor="classification-clarification">
               <span>Tu respuesta</span>

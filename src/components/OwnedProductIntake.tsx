@@ -53,7 +53,7 @@ const CHAT_RECEIPT_FMT: Record<ChatStep, (v: string) => string> = {
   price: (v) => `USD ${v}`,
   origin: (v) => v,
   weight: (v) => `${v} kg`,
-  moq: (v) => `MOQ ${v}`,
+  moq: (v) => v ? `MOQ ${v}` : 'Sin dato',
   volume: (v) => `${v} m³`,
   carton: (v) => `${v} u./caja`,
 }
@@ -114,12 +114,13 @@ function validateChatInput(step: ChatStep, value: string): boolean {
   if (step === 'material') return trimmed.length >= 2
   if (step === 'origin') return trimmed.length >= 2
   if (step === 'volume') return parseDimensionsToCbm(trimmed) !== null
+  if (step === 'moq') return Number.isInteger(Number(trimmed)) && Number(trimmed) >= 1
   if (step === 'carton') return Number.isInteger(Number(trimmed)) && Number(trimmed) >= 1
   const n = Number(trimmed)
   return Number.isFinite(n) && n > 0
 }
 
-type EntryDraft = { mode: Mode; link: string; chatStep?: ChatStep; chatAnswers?: Partial<Record<ChatStep, string>>; chatInput?: string }
+type EntryDraft = { mode: Mode; link: string; chatStep?: ChatStep; chatAnswers?: Partial<Record<ChatStep, string>>; chatInput?: string; volumeMode?: 'dims' | 'cbm'; dimL?: string; dimW?: string; dimH?: string; dimUnit?: 'cm' | 'm'; awaitingSensitive?: boolean; pendingChatAnswers?: Partial<Record<ChatStep, string>> }
 
 export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: Props) {
   const [draft] = useState(() => readProductDraft<EntryDraft>('entry'))
@@ -131,17 +132,17 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const [chatStep, setChatStep] = useState<ChatStep>(draft?.chatStep || 'name')
   const [chatAnswers, setChatAnswers] = useState<Partial<Record<ChatStep, string>>>(draft?.chatAnswers || {})
   const [chatInput, setChatInput] = useState(draft?.chatInput || '')
-  const [volumeMode, setVolumeMode] = useState<'dims' | 'cbm'>('dims')
-  const [dimL, setDimL] = useState('')
-  const [dimW, setDimW] = useState('')
-  const [dimH, setDimH] = useState('')
-  const [dimUnit, setDimUnit] = useState<'cm' | 'm'>('cm')
-  const [awaitingSensitive, setAwaitingSensitive] = useState(false)
-  const [pendingChatAnswers, setPendingChatAnswers] = useState<Partial<Record<ChatStep, string>>>({})
+  const [volumeMode, setVolumeMode] = useState<'dims' | 'cbm'>(draft?.volumeMode || 'dims')
+  const [dimL, setDimL] = useState(draft?.dimL || '')
+  const [dimW, setDimW] = useState(draft?.dimW || '')
+  const [dimH, setDimH] = useState(draft?.dimH || '')
+  const [dimUnit, setDimUnit] = useState<'cm' | 'm'>(draft?.dimUnit || 'cm')
+  const [awaitingSensitive, setAwaitingSensitive] = useState(draft?.awaitingSensitive || false)
+  const [pendingChatAnswers, setPendingChatAnswers] = useState<Partial<Record<ChatStep, string>>>(draft?.pendingChatAnswers || {})
   const inputRef = useRef<HTMLInputElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput }) }, [mode, link, chatStep, chatAnswers, chatInput])
+  useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers }) }, [mode, link, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers])
 
   useEffect(() => {
     if (mode === 'describe') {
@@ -202,7 +203,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       unitPriceUsd: Number(answers.price) || 0,
       originCountry: (answers.origin || '').trim(),
       packedWeightKg: Number(answers.weight) || 0,
-      moq: Number(answers.moq) || 1,
+      moq: Number(answers.moq) || 0,
       volumeCbm: rawVolumeCbm !== null ? parseFloat((rawVolumeCbm / unitsPerCarton).toFixed(6)) : null,
       sensitiveCategory,
     }
@@ -300,13 +301,13 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       <button type="button" onClick={() => { resetDescribe(); setMode('describe') }}>
         <span className="owned-product-option-icon"><UiIcon name="edit" size={19} /></span>
         <b>Describir el producto</b>
-        <small>Te pregunto una cosa por vez: nombre, precio, origen, peso y MOQ. Listo en 30 segundos.</small>
+        <small>Te guío una pregunta por vez. Si no conocés el mínimo del proveedor, podés omitirlo.</small>
       </button>
     </div>}
 
     {mode === 'link' && <form className="owned-product-entry" onSubmit={(event) => void submitLink(event)}>
       <div className="owned-product-entry-head">
-        <div><b>Pegá la publicación de Alibaba</b><small>GlobalShipping intenta lectura propia primero; Browser Run y Parse.bot quedan como respaldo. Esta lectura no consume un análisis.</small></div>
+        <div><b>Pegá la publicación de Alibaba</b><small>Revisaremos los datos de la publicación con vos. Esta lectura no consume un análisis.</small></div>
         <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
       </div>
       <div className="owned-product-link-row">
@@ -324,7 +325,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
     </form>}
 
-    {mode === 'describe' && <div className="product-chatbot">
+    {mode === 'describe' && !awaitingSensitive && <div className="product-chatbot">
       <div className="chatbot-topbar">
         <b>Ingresá el producto</b>
         <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
@@ -349,7 +350,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         )}
         <div key={chatStep} className="chatbot-msg assistant chatbot-msg-enter">
           {CHAT_LABELS[chatStep]}
-          {(chatStep === 'volume' || chatStep === 'material' || chatStep === 'carton') && <span className="chatbot-optional-tag"> · Opcional</span>}
+          {(chatStep === 'volume' || chatStep === 'material' || chatStep === 'moq' || chatStep === 'carton') && <span className="chatbot-optional-tag"> · Opcional</span>}
         </div>
       </div>
 
@@ -436,7 +437,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
               Continuar <UiIcon name="arrow-right" size={14} />
             </button>
           </div>
-          {chatStep === 'material' && (
+          {(chatStep === 'material' || chatStep === 'moq') && (
             <button type="button" className="chatbot-skip-btn" onClick={() => advanceStep('')}>
               No sé / omitir
             </button>

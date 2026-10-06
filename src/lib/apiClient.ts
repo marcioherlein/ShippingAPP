@@ -56,7 +56,7 @@ function signalUsageUpdated(response: Response) {
   }
 }
 
-export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
+async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
   const shouldAttach = isProtectedSameOriginApi(input)
   const headers = new Headers(input instanceof Request ? input.headers : undefined)
   if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value))
@@ -98,4 +98,31 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   }
   if (shouldAttach) signalUsageUpdated(response)
   return response
+}
+
+/** Bounds both session lookup and provider requests; abort releases the connection. */
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const controller = new AbortController()
+  const abort = () => controller.abort(init?.signal?.reason)
+  init?.signal?.addEventListener('abort', abort, { once: true })
+  if (init?.signal?.aborted) abort()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      apiFetchInternal(input, { ...init, signal: controller.signal }).then(async response => {
+        if (!response.body) return response
+        const body = await response.arrayBuffer()
+        return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers })
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error('La operación tardó más de 30 segundos. Conservamos los datos: podés reintentar o completar la ficha manualmente.'))
+          controller.abort()
+        }, 30_000)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+    init?.signal?.removeEventListener('abort', abort)
+  }
 }

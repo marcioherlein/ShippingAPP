@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { assertCanonicalLabelSentinels, deriveCanonicalParentLabel, reconcileNcmIndexLabels } from './ncm-label-reconciliation.mjs'
 
 const canonicalSentinels = new Map<string, string>([
+  ['8711.60.00', 'Motocicletas y velocípedos > Propulsadas con motor eléctrico'],
   ['9506.51.00', 'Artículos y material para deportes > Raquetas de tenis, bádminton o similares > Raquetas de tenis, incluso sin cordaje'],
   ['9506.40.00', 'Artículos y material para deportes > Artículos y material para tenis de mesa'],
   ['9506.91.00', 'Artículos y material para deportes > Los demás > Artículos y material para cultura física, gimnasia o atletismo'],
@@ -17,6 +18,7 @@ function fixture() {
     ['9506.59.00', 'Artículos y material para cultura física — Inflables', 20, 20, 3, 0, 21, 20, 6, 2.5, null, 'NO'],
     ['8507.60.00', 'Acumuladores eléctricos — De níquel-cadmio — Los demás', 18, 18, 3, 0, 21, 20, 6, 2.5, null, 'NO'],
   ]
+  records.push(['8711.60.00', 'Motocicletas > Con motor de pistón de 50 cm3', 20, 20, 3, 0, 21, 20, 6, 2.5, null, 'NO'])
   const labels = new Map(canonicalSentinels)
   for (let i = records.length; i < 10000; i += 1) {
     const code = `1000.${String(Math.floor(i / 100) % 100).padStart(2, '0')}.${String(i % 100).padStart(2, '0')}`
@@ -41,6 +43,8 @@ describe('NCM canonical label reconciliation', () => {
     expect(result.records[0][1]).not.toContain('Inflables')
     expect(result.records[4][1]).toContain('iones de litio')
     expect(result.records[4][1]).not.toContain('níquel-cadmio')
+    expect(result.records[5][1]).toContain('motor eléctrico')
+    expect(result.records[5].slice(2)).toEqual(ncm.records[5].slice(2))
     expect(result.records[0].slice(2)).toEqual(beforeTariff)
     expect(result.meta.canonicalLabelCoverage).toBe(10000)
     expect(result.meta.canonicalLabelSourceDate).toBe('2026-08-14')
@@ -66,6 +70,9 @@ describe('NCM canonical label reconciliation', () => {
 
   it('rejects the exact historical semantic contaminations', () => {
     const broken = new Map(canonicalSentinels)
+    broken.set('8711.60.00', 'Motocicletas > Con motor de pistón de 50 cm3')
+    expect(() => assertCanonicalLabelSentinels(broken)).toThrow(/8711\.60\.00/)
+    broken.set('8711.60.00', canonicalSentinels.get('8711.60.00')!)
     broken.set('9506.51.00', 'Artículos y material para cultura física — Inflables')
     expect(() => assertCanonicalLabelSentinels(broken)).toThrow(/9506\.51\.00/)
 

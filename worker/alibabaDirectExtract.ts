@@ -3,6 +3,7 @@ export type AlibabaDirectFacts = {
   name: string | null
   category: string | null
   categoryPath: string[]
+  supplierEvidence?: { priceText: string | null; currency: string | null; quantityUnit: string | null; variant: string | null }
   unitPriceUsd: number | null
   moq: number | null
   packedWeightKg: number | null
@@ -473,6 +474,12 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
     category: category || null,
     categoryPath,
     unitPriceUsd,
+    supplierEvidence: {
+      priceText: cleanString(firstValue(allObjects, ['priceDisplay', 'price_display', 'unit_price', 'unitPrice', 'price']), 300),
+      currency: cleanString(firstValue(allObjects, ['priceCurrency', 'price_currency', 'currency']), 30),
+      quantityUnit: cleanString(firstValue(allObjects, ['quantityUnit', 'quantity_unit', 'unit']), 80),
+      variant: cleanString(firstValue(allObjects, ['skuName', 'sku_name', 'model']), 300),
+    },
     moq: moq ? Math.round(moq) : null,
     packedWeightKg,
     volumeCbm,

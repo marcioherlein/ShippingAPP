@@ -1,87 +1,85 @@
-# ShippingAPP — pending delivery batches
+# ShippingAPP — launch recovery batches
 
-Updated September 23, 2026 from the owner's requested corrections.
-Budget: no paid services or plan upgrades. Clerk production cutover is deferred.
-Current main: 5aa4b6f. Never equate a successful build with production recovery.
+Updated October 6, 2026. No new paid services. Clerk production cutover remains deferred.
+Baseline main: 56659a19a7117c1bd1249296f46a39d583e14b1a.
 
-## Batch 1 — free compute recovery (in progress)
+## 1. Unblock product intake and classification
 
-- Route API processing through SQLite-backed Durable Objects on Workers Free.
-- Preserve authentication, credits, requests and source-evidence requirements.
-- Pass CI, real Wrangler runtime, deployment, 20 intake + 20 NCM cases, local
-  retailer comparisons and chat tests before closing the incident.
-- Current local evidence: 934 tests and production build passed. Wrangler bundle
-  dry-run passed. Local runtime blocked by uv_interface_addresses environment
-  error; CI must supply real runtime evidence. Not deployed yet.
+MOQ is optional and absent values remain unknown. Neither MOQ nor suggested scenarios
+become the buyer's purchase quantity. The chat no longer silently confirms or repeatedly
+reclassifies products. A single editable review remains available after failure, together
+with missing facts, candidates and the manual nomenclature search. Manual selections
+require a matching index entry and complete tariff evidence.
 
-## Batch 2 — extracted facts, currency and supplier confirmation
+Per-tab product, review, search and chatbot drafts survive reload/sign-in navigation.
+The 8711.60.00 source index label now uses the canonical ARCA/SIM electric-motor
+label rather than the erroneous piston-engine label; tariff columns are unchanged.
+A semantic sentinel prevents recurrence in the deployment bundle.
 
-- Require an explicit user confirmation of ALL extracted facts before using them
-  for a calculation: name/type, supplier URL, variant, price, original currency,
-  price tier, unit/pack basis, MOQ, dimensions, packed weight, volume and origin.
-- One editable review screen with a single confirmation action; show missing
-  values explicitly. Never silently accept extracted facts. Reconfirm changed
-  extracted facts after a re-read or variant/quantity change.
-- Identify supplier currency before conversion; dollar symbols alone are not
-  proof of USD. Keep the original value/currency and the converted USD value.
-- USD remains USD. For ARS use the official USD exchange rate with source, date
-  and direction. Other currencies need a supported source-backed cross rate to
-  USD. Do not apply ARS/USD to CNY, BRL or other currencies. When evidence is
-  missing or ambiguous, require correction instead of inventing a rate.
-- Validate unit prices versus packs, ranges and volume tiers for the selected
-  variant and purchase quantity. Confirm supplier MOQ without making unknown MOQ
-  mandatory. Keep commercial MOQ distinct from the buyer's selected quantity.
-- Show the same official ARS/USD basis consistently in local-market comparison,
-  without confusing displayed conversion with customs valuation rules.
-- Tests: ambiguous $, USD unchanged, ARS official conversion, cross currency,
-  tier changes, packs, missing MOQ and confirmation invalidation.
+Evidence: Chromium 320px motorcycle journey skips MOQ, preserves variant, selects
+8711.60.00 through the validated index and reports missing packaging volume without
+requiring a new product. Authentication-return persistence is separately covered.
 
-## Batch 3 — guided classification and bilingual product identity
+## 2. Product search and recovery
 
-- Display a Spanish product description while retaining the supplier's original
-  title, brand/model and technical specifications for traceability.
-- Build Argentine-market queries using Spanish product/category synonyms;
-  preserve brands, model identifiers, units and discriminating attributes.
-- Prefer existing deterministic mappings and translation capabilities; no new
-  paid translation provider. Never present guessed translated specs as facts.
-- If NCM classification fails, explain the missing distinction in plain Spanish,
-  ask one targeted question and then offer the existing manual text/code/chapter
-  search. No endless repeated questions or forced restart.
-- Validate manual choices against the official index and complete tariff data;
-  confirmation is not a substitute for valid tariff evidence.
-- Tests: English supplier names, Spanish retail matches, preserved model/units,
-  repeated clarification recovery and manual NCM continuation.
+Supplier search and product extraction have distinct visible states. API calls have a
+30-second deadline covering session lookup, response headers and body; cancellation
+releases the request. Classification begins after product confirmation. Errors expose
+retry and manual description. Existing results and queries survive failure/reload.
+Authentication resumes only an explicitly interrupted request.
 
-## Batch 4 — one purchase quantity throughout the journey
+Evidence: mobile browser fixture covers successful supplier search, failed Alibaba
+extraction and failed retry with preserved query/results. Deadline unit test covers a
+stalled request. These provider responses are controlled fixtures, not proof that
+Alibaba always succeeds in production.
 
-- Reuse the budget/quantity already entered. Do not ask repeatedly for quantity.
-- A range remains a range until a quantity is selected or proposed and confirmed.
-  For budget-only input, propose an affordable quantity and obtain confirmation.
-- If neither budget nor quantity was supplied, ask whether the user wants the
-  confirmed supplier minimum. Never automatically substitute MOQ for quantity.
-- If MOQ is unknown, ask for desired quantity; unknown MOQ must not block progress.
-- Reflect edits consistently in supplier tiers, freight, taxes, total and unit
-  landed cost. Explain any change that invalidates a prior price tier.
-- Tests: explicit quantity, range, budget only, accept/reject MOQ, unknown MOQ,
-  change quantity and no duplicate prompting after sign-in/reload.
+## 3. Confirmed supplier evidence
 
-## Batch 5 — Apple HIG / Insic-style guided experience
+One review shows original source/text, currency, unit/pack basis, variant, MOQ, weight
+and packaging volume. Unknown extracted currency/basis/variant require correction.
+USD remains USD. Other currencies require an editable documented USD cross rate,
+source and date. Pack amounts divide by confirmed units per pack. Quantity bands are
+editable, including additional tiers; overlapping bands and uncovered quantities block
+costs. Source extraction retains original price/currency/unit/variant evidence.
+No weight-derived volume is generated. No cost-derived Argentina selling price is generated.
 
-- Apply Apple HIG and the user's Insic/AppLlama principles to the web, preserving
-  ShippingAPP identity: simple hierarchy, restrained typography, progressive
-  disclosure, comfortable touch targets and clear primary actions.
-- A visible step-by-step journey: product, editable confirmation, classification,
-  quantity review when needed, cost and Argentine comparison. Reuse earlier data.
-- Clear progress while work runs; remove stale thinking messages on failure.
-  Recovery keeps the draft. Respect reduced-motion preferences.
-- Mobile-first layouts without horizontal overflow; accessible labels, focus,
-  keyboard support and contrast. Avoid oversized controls and repetitive copy.
-- Verify Chromium and mobile WebKit plus actual production flows. Cover login
-  return, price confirmation, NCM recovery and quantity changes end to end.
+Evidence: unit tests cover ambiguous currency, unchanged USD, documented CNY pack
+conversion, missing rate evidence, tier overlap/gaps and explicit quantities. Browser
+coverage verifies the review cannot calculate until these values are confirmed.
+Live signed-in supplier/variant evidence remains an acceptance requirement.
 
-## Completion evidence
+## 4. Quantity and results
 
-Record each batch's PR/commit, test results, production deployment and live case
-results here. No batch is complete merely because its implementation is present.
-Keep external-provider coverage gaps visible; never lower comparable-product
-quality thresholds just to make a gate green.
+An exact initial quantity is reused. A range remains a range until selected. Budget
+input is shown and can propose an affordable quantity using confirmed supplier pricing.
+The MOQ shortcut requires an explicit click. Product edits return to the same review,
+and quantity edits invalidate the result before recalculating price, freight, tax and
+unit cost. Optimizer scenarios use confirmed tiers and omit uncovered quantities.
+Argentina comparison requires live source/comparable evidence; missing evidence is
+visible and does not invent profitability. Manual local prices remain estimates.
+
+Evidence: quantity/confirmation tests and an end-to-end pack/tier edit exercise the
+same stored purchase quantity and changed landed unit cost. Budget proposal and
+production authenticated provider behavior still require real-case acceptance.
+
+## 5. Mobile visual system
+
+A shared neutral/lavender palette, semantic surfaces and consistent typography/buttons
+apply across intake/review/results in light/dark mode. Inputs use 16px text and controls
+44px minimum targets. The account toolbar occupies document flow; navigation and chat
+text wrap without clipping. New-case action remains reachable on narrow phones.
+
+Evidence: browser gates include keyboard/focus, axe, reduced motion, larger text,
+320px/390px screens and desktop screenshots. New acceptance tests also run in mobile
+WebKit in CI. Local WebKit cannot run because required host libraries are unavailable;
+CI must supply that evidence. Physical iPhone keyboard/zoom remains unverified.
+
+## Verification and release status
+
+Local unit/integration suite: 169 files, 991 tests passing; one additional optimizer regression passes in the targeted suite (992 total). Production build and
+nomenclature asset validation pass. Existing isolated Chromium suite: 27 tests passing;
+29 existing/recovery Chromium cases pass in the combined run; all three new acceptance
+cases pass after correcting implicit label activation in the shared currency dropdown.
+Mobile WebKit CI results must be attached to the PR before merge. Deployment must pass its runtime
+and production smoke gates. A successful build does not close the five batches:
+real signed-in Alibaba cases and a physical iPhone session remain outstanding.

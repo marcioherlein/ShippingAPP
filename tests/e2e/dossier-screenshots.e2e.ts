@@ -8,7 +8,7 @@
  * State B — confirmed / live: high-confidence NCM + live MercadoLibre data
  */
 
-import { expect, test } from '@playwright/test'
+import { expect, browserTest as test } from './fixtures'
 
 async function openDossier(
   page: import('@playwright/test').Page,
@@ -40,7 +40,8 @@ test.describe('dossier: provisional classification + estimate market', () => {
 
     // Market estimate section: search buttons + estimate hero present.
     await expect(page.locator('.market-search-actions')).toBeVisible()
-    await expect(page.locator('.market-estimate-hero')).toBeVisible()
+    await expect(page.locator('.market-estimate-hero')).toHaveCount(0)
+    await expect(page.locator('.market-estimate-lead')).toContainText('No hay evidencia suficiente')
 
     // No horizontal overflow.
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)

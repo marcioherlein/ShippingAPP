@@ -92,6 +92,7 @@ export type QuotePrefill = {
   marketComparables?: Array<{ id: string; title: string; priceArs: number; permalink?: string }>
   fxArsPerUsd?: number | null
   fxSourceDate?: string | null
+  fxSourceLabel?: string | null
   sensitiveCategory: HotProduct['sensitiveCategory']
   sourceLabel: string
   ncmCode?: string | null

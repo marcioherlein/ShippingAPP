@@ -13,6 +13,7 @@ export type ParsebotAlibabaFacts = {
   name?: string | null
   category?: string | null
   categoryPath?: string[]
+  supplierEvidence?: { priceText: string | null; currency: string | null; quantityUnit: string | null; variant: string | null }
   unitPriceUsd?: number | null
   moq?: number | null
   packedWeightKg?: number | null
@@ -254,6 +255,7 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
     category: cleanString(categoryValue, 300),
     categoryPath,
     unitPriceUsd: numberOrNull(priceValue),
+    supplierEvidence: { priceText: cleanString(firstPresent(product, ['price_display', 'priceDisplay', 'unit_price', 'unitPrice']), 300), currency: cleanString(firstPresent(product, ['priceCurrency', 'currency', 'currency_code']), 30), quantityUnit: cleanString(firstPresent(product, ['quantity_unit', 'quantityUnit']), 80), variant: cleanString(firstPresent(product, ['sku_name', 'model']), 300) },
     moq: numberOrNull(moqValue),
     packedWeightKg: weightKg(weightValue),
     volumeCbm: volumeToCbm(volumeValue) ?? dimensionsToCbm(dimensionsValue),

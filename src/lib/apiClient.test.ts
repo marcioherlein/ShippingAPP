@@ -118,3 +118,19 @@ describe('apiFetch authentication and metering transport boundary', () => {
     }
   })
 })
+
+describe('request deadline', () => {
+  it('releases a stalled provider request after 30 seconds', async () => {
+    vi.useFakeTimers()
+    let signal: AbortSignal | null = null
+    setApiTokenProvider(null)
+    vi.stubGlobal('fetch', vi.fn((_input, init) => { signal = init.signal; return new Promise(() => {}) }))
+    const request = apiFetch('/api/product-read', { method: 'POST' })
+    const assertion = expect(request).rejects.toThrow('30 segundos')
+    await vi.advanceTimersByTimeAsync(30_001)
+    await assertion
+    expect((signal as unknown as AbortSignal).aborted).toBe(true)
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+})

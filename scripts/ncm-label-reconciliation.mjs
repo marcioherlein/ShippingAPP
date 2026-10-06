@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 export const NCM_LABEL_SENTINELS = [
+  { code: '8711.60.00', includes: ['motor electrico'], excludes: ['piston', '50 cm3'] },
   { code: '9506.51.00', includes: ['raquetas de tenis'], excludes: ['inflables'] },
   { code: '9506.40.00', includes: ['tenis de mesa'], excludes: ['inflables'] },
   { code: '9506.91.00', includes: ['cultura fisica', 'gimnasia'], excludes: ['inflables'] },

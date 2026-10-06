@@ -1,3 +1,4 @@
+import type { SupplierQuote } from './supplierQuote'
 import { customsProfileFor } from './customsClassification'
 import type { ProductAnalysisV2 } from './productAnalysisV2'
 import type { SensitiveProductCategory } from './landedCostEngine'
@@ -115,6 +116,7 @@ export type ProductConfirmationData = {
   originCountry: string
   unitPriceUsd: number
   quantity?: number
+  supplierQuote?: SupplierQuote
   moq: number
   unitWeightKg: number
   unitVolumeCbm: number
@@ -196,7 +198,8 @@ export function productConfirmationFromAnalysis(analysis: ProductAnalysisV2): Pr
     functionText: cleanText(analysis.product.functionText || inferFunctionFromProductName(analysis.product.name), 500),
     originCountry: cleanText(analysis.product.originCountry, 120),
     unitPriceUsd: positive(analysis.product.unitPriceUsd),
-    quantity: positive(analysis.suggestedQuantities[0]) || positive(analysis.product.moq) || 1,
+    quantity: positive(analysis.product.purchaseQuantity) || undefined,
+    supplierQuote: analysis.product.supplierQuote,
     moq: positive(analysis.product.moq),
     unitWeightKg: positive(analysis.product.packedWeightKg),
     unitVolumeCbm: positive(analysis.product.volumeCbm),
@@ -250,7 +253,7 @@ export function applyProductConfirmation(analysis: ProductAnalysisV2, data: Prod
   const originCountry = cleanText(data.originCountry, 120)
   const moq = positive(data.moq)
   const existingQuantities = analysis.suggestedQuantities.filter((value) => Number.isFinite(value) && value > 0)
-  const suggestedQuantities = [...new Set([positive(data.quantity), moq, ...existingQuantities].filter((value) => value > 0))]
+  const suggestedQuantities = [...new Set([positive(data.quantity), ...existingQuantities].filter((value) => value > 0))]
   const identityChanged = classificationIdentityChanged(analysis, data)
 
   return {
@@ -264,6 +267,8 @@ export function applyProductConfirmation(analysis: ProductAnalysisV2, data: Prod
       functionText: cleanText(data.functionText, 500) || null,
       originCountry,
       unitPriceUsd: positive(data.unitPriceUsd) || null,
+      purchaseQuantity: positive(data.quantity) || undefined,
+      supplierQuote: data.supplierQuote,
       moq: moq || null,
       packedWeightKg: positive(data.unitWeightKg),
       volumeCbm: resolvedProductVolumeCbm(data),
@@ -319,7 +324,7 @@ export function createManualProductAnalysis(sourceUrl = 'manual://product', seed
 export function createPrefilledAnalysis(data: ManualProductChatData): ProductAnalysisV2 {
   const name = cleanText(data.name, 500)
   const originCountry = cleanText(data.originCountry, 120)
-  const volumeCbm = positive(data.volumeCbm ?? data.packedWeightKg * 0.005)
+  const volumeCbm = positive(data.volumeCbm)
   const functionText = data.use ? cleanText(data.use, 500) : inferFunctionFromProductName(name)
   const material = data.material ? cleanText(data.material, 300) : null
   return {
@@ -343,7 +348,7 @@ export function createPrefilledAnalysis(data: ManualProductChatData): ProductAna
       estimatedMonthlyDemand: 0,
       source: 'Mercado pendiente de validar',
     },
-    suggestedQuantities: positive(data.moq) > 0 ? [positive(data.moq)] : [],
+    suggestedQuantities: [],
     confidence: {
       overall: 60,
       productSource: 'Datos ingresados directamente por el usuario',

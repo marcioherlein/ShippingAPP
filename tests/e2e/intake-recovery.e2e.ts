@@ -27,7 +27,7 @@ for (const width of [390, 1280]) {
     await page.getByLabel('¿Cuál es el mínimo del proveedor?').fill('50')
     await page.getByRole('button', { name: 'Continuar' }).click()
     await page.getByRole('button', { name: 'No sé / omitir' }).click()
-    // After chatbot completes, pipeline auto-classifies (silent mode — no confirm card shown)
+    // The completed chat leads to an explicit editable confirmation.
     await expect(page.locator('#case-confirmation')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })

@@ -149,7 +149,7 @@ function maxAffordableQuantity(input: QuantityOptimizerInput, startQuantity: num
 }
 
 export function generateQuantityCandidates(input: QuantityOptimizerInput) {
-  const moq = positiveInt(input.moq || input.quantity || 1, 1)
+  const moq = positiveInt(input.moq || input.supplierQuote?.minQuantity || 1, 1)
   const increment = positiveInt(input.unitIncrement || 1, 1)
   const current = roundUpToIncrement(input.quantity || moq, increment)
   const values = new Set<number>()
@@ -205,7 +205,7 @@ function scoreCandidates(candidates: QuantityCandidate[], input: QuantityOptimiz
     const affordabilityPenalty = candidate.affordable ? 0 : 45
     const reasons: string[] = []
     if (!candidate.affordable) reasons.push('Supera el presupuesto cargado.')
-    if (candidate.quantity === positiveInt(input.moq || input.quantity || 1, 1)) reasons.push('Incluye MOQ como punto de partida.')
+    if (input.moq && input.moq > 0 && candidate.quantity === positiveInt(input.moq, 1)) reasons.push('Incluye MOQ como punto de partida.')
     if (candidate.selectedMode) reasons.push(`${candidate.selectedMode === 'lcl' ? 'LCL' : 'Aéreo'} es el menor costo accionable.`)
     if (candidate.monthsOfStock !== null && targetMonths) reasons.push(`${candidate.monthsOfStock} meses de stock vs objetivo ${targetMonths}.`)
     if (candidate.totalVolumeCbm >= 1) reasons.push(`${candidate.totalVolumeCbm} m³ estimados; revisar packaging real con proveedor.`)
@@ -256,6 +256,7 @@ export function optimizeQuantity(input: QuantityOptimizerInput): QuantityOptimiz
       ? `Stock objetivo ${targetStockMonths} meses para estrategia ${strategy}.`
       : 'Sin demanda mensual, se optimiza por costo unitario, presupuesto y margen; stock queda como dato pendiente.',
   ]
+  if (!input.moq || input.moq <= 0) notes.push('MOQ sin dato: las cantidades son escenarios y requieren confirmar el mínimo con el proveedor.')
   return {
     strategy,
     budgetUsd: Math.max(0, input.budgetUsd || 0),

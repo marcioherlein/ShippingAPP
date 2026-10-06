@@ -1,6 +1,9 @@
 /* One set of surfaces and controls for the complete quotation journey. */
 :root { --flow-canvas: #f6f5fa; --flow-accent: #5144b5; --flow-accent-text: #fff; --ds-brand: #5144b5; --ds-brand-strong: #5144b5; --ds-brand-soft: #efedfa; }
 .journey-app { background: var(--flow-canvas); }
+/* Essential results must paint immediately, including WebKit's offscreen
+   compositing. Never leave the quotation inside an opacity entrance animation. */
+.journey-app .journey-calculator-section { animation: none; opacity: 1; transform: none; }
 .journey-main-nav { display: flex; align-items: center; gap: 20px; margin-left: auto; }
 .journey-main-nav a { color: var(--ds-text-secondary); text-decoration: none; font-weight: 600; padding: 12px 0; }
 .journey-main-nav a:hover { color: var(--ds-text-strong); }

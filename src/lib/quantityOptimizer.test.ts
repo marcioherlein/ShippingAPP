@@ -25,6 +25,13 @@ const base = {
 }
 
 describe('quantity optimizer', () => {
+  it('can reduce the initial quantity to meet budget when MOQ is unknown', () => {
+    const result = optimizeQuantity({ ...base, quantity: 100, moq: undefined, budgetUsd: 3000 })
+    expect(result.affordableCandidates.some(candidate => candidate.quantity < 100)).toBe(true)
+    expect(result.candidates.flatMap(candidate => candidate.reasons).join(' ')).not.toContain('Incluye MOQ')
+    expect(result.notes.join(' ')).toContain('MOQ sin dato')
+  })
+
   it('uses supplier price breaks when scoring candidate quantities', () => {
     expect(unitPriceForQuantity(50, 40, [{ minQuantity: 100, unitPriceUsd: 36 }])).toBe(40)
     expect(unitPriceForQuantity(100, 40, [{ minQuantity: 100, unitPriceUsd: 36 }])).toBe(36)

@@ -70,6 +70,20 @@ test.describe('dossier: provisional classification + estimate market', () => {
 
 // ── Confirmed + live market ─────────────────────────────────────────────────
 
+test('editing a live market price removes confirmed benchmark status', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 780 })
+  await openDossier(page, 'confirmed')
+  await expect(page.locator('.market-provenance')).toBeVisible()
+  await page.locator('.quote-assumptions > summary').click()
+  await page.getByLabel('Precio venta local (USD)').fill('120')
+  await expect(page.locator('.market-provenance')).toHaveCount(0)
+  await expect(page.locator('.market-estimate-hero')).toContainText('Sin fuente indicada')
+  await page.getByLabel('Fuente del precio local').fill('Cotización del distribuidor, 6 octubre 2026')
+  await expect(page.locator('.market-estimate-hero')).toContainText('Cotización del distribuidor')
+  await expect(page.locator('.market-estimate-hero')).toContainText('No es un benchmark confirmado')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
 test.describe('dossier: confirmed classification + live market', () => {
   test('desktop 1440px', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 })

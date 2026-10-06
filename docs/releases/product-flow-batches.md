@@ -1,7 +1,7 @@
 # ShippingAPP — launch recovery batches
 
 Updated October 6, 2026. No new paid services. Clerk production cutover remains deferred.
-Baseline main: 56659a19a7117c1bd1249296f46a39d583e14b1a.
+Baseline main: d04ed3e0e71252e3f87e02191bd31cf7eb49811b.
 
 ## 1. Unblock product intake and classification
 
@@ -82,6 +82,39 @@ Local unit/integration suite: 169 files, 991 tests passing; one additional optim
 nomenclature asset validation pass. Existing isolated Chromium suite: 27 tests passing;
 29 existing/recovery Chromium cases pass in the combined run; all three new acceptance
 cases pass after correcting implicit label activation in the shared currency dropdown.
-Mobile WebKit CI results must be attached to the PR before merge. Deployment must pass its runtime
-and production smoke gates. A successful build does not close the five batches:
-real signed-in Alibaba cases and a physical iPhone session remain outstanding.
+The deployed baseline subsequently passed CI: 992 unit/integration tests and 42
+Chromium/mobile WebKit tests. CI run 37521831322 and Deploy Production run
+37521831510 completed successfully; Stage 6, 7 and 8 production gates also passed.
+A successful build does not close the five batches: real signed-in Alibaba cases
+and a physical iPhone session remain outstanding.
+
+## October 6 follow-up — publication authorized, verification pending
+
+The result no longer substitutes 1 (or displays the prefill's zero sentinel) for an
+unknown supplier MOQ. Confirmed results show “Sin dato”; corrections return to the
+product review. Standalone estimates allow leaving MOQ empty.
+
+The quantity optimizer no longer treats the buyer's starting quantity as an inferred
+MOQ. With MOQ unknown it can consider smaller, affordable scenarios within confirmed
+price bands. It explicitly warns that the supplier minimum still needs confirmation.
+An open budget is no longer described as proof that a proposed quantity is affordable.
+
+Manual local-price edits remove the confirmed benchmark badge, expose an editable
+source field and identify the value as user-entered. The result no longer claims that
+the entered price was generated using a 1.6 markup.
+
+WebKit coverage now also selects intake recovery, result dossier and accessibility
+tests. New browser regressions verify unknown MOQ in the result and manual-price
+provenance, including editing an originally live benchmark at 320px.
+
+Local validation of this follow-up: 170 files / 996 unit and integration tests pass,
+including rendered React result regressions; production build and nomenclature asset
+validation pass. The updated browser suite has not run locally: this workspace has
+no installed Playwright browsers. These are prepared tests, not claimed browser evidence.
+
+Publication to marcioherlein/ShippingAPP was explicitly authorized on October 6.
+Require the expanded CI browser suite to pass before merging, then verify production gates.
+
+Remaining launch acceptance: real authenticated Alibaba extraction (including the
+reported gram/kilogram case), realistic budget-based selection, physical iPhone
+keyboard/zoom, and visual approval of the ComplyDo-inspired navigation/layout.

@@ -155,7 +155,7 @@ function MarketSearchButtons({ productName }: { productName: string }) {
   </div>
 }
 
-function ArgentinaMarketCard({ prefill, localSellPriceUsd, productName }: { prefill: QuotePrefill | null; localSellPriceUsd: number; productName: string }) {
+function ArgentinaMarketCard({ prefill, localSellPriceUsd, productName, localPriceSource }: { prefill: QuotePrefill | null; localSellPriceUsd: number; productName: string; localPriceSource: string }) {
   const marketPriceArs = Number(prefill?.marketPriceArs) || 0
   const hasMarket = reliableMarket(prefill)
   const fx = Number(prefill?.fxArsPerUsd) || 0
@@ -178,9 +178,9 @@ function ArgentinaMarketCard({ prefill, localSellPriceUsd, productName }: { pref
       <p className="market-estimate-lead">No hay evidencia suficiente para comparar precios o declarar rentabilidad. Podés buscar publicaciones y cargar un precio comprobado:</p>
       <MarketSearchButtons productName={productName} />
       {estimateUsd > 0 ? <div className="market-price-hero market-estimate-hero">
-        <span>Precio local estimado (no verificado)</span>
+        <span>Precio local ingresado (no verificado)</span>
         <strong>{estimateArs > 0 ? ars(estimateArs) : usd(estimateUsd)}</strong>
-        <small>Costo puesto × margen típico de reventa (×1.6){estimateArs > 0 ? ` · ${usd(estimateUsd)} al tipo de cambio disponible` : ''}. Verificá con las búsquedas de arriba.</small>
+        <small>{localPriceSource.trim() ? `Fuente indicada: ${localPriceSource.trim()}` : 'Sin fuente indicada'}{estimateArs > 0 ? ` · ${usd(estimateUsd)} al tipo de cambio disponible` : ''}. No es un benchmark confirmado.</small>
       </div> : null}
       <p className="market-estimate-note">Cargá un precio comprobado en “Precio venta local” e indicá su fuente antes de decidir.</p>
     </div>}
@@ -221,8 +221,11 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
   const [gainsRatePct, setGainsRatePct] = useState(prefill?.gainsRatePct ?? 6)
   const [iibbRatePct, setIibbRatePct] = useState(prefill?.iibbRatePct ?? 2.5)
   const [localSellPriceUsd, setLocalSellPriceUsd] = useState(prefill?.localSellPriceUsd ?? 0)
+  const [localPriceEdited, setLocalPriceEdited] = useState(false)
+  const [localPriceSource, setLocalPriceSource] = useState('')
+  const effectiveMarketPrefill = useMemo(() => localPriceEdited && prefill ? { ...prefill, marketStatus: 'estimate' as const } : prefill, [localPriceEdited, prefill])
   const [budgetUsd, setBudgetUsd] = useState(setup?.budgetUsd ?? prefill?.budgetUsd ?? 0)
-  const [moq, setMoq] = useState(prefill?.moq ?? 1)
+  const [moq, setMoq] = useState<number | undefined>(prefill?.moq && prefill.moq > 0 ? prefill.moq : undefined)
   const [monthlyDemand, setMonthlyDemand] = useState(prefill?.monthlyDemand ?? 0)
   const [strategy, setStrategy] = useState<BuyStrategy>('normal')
   const [purpose, setPurpose] = useState<ImportPurpose>(setup?.purpose ?? 'unknown')
@@ -275,11 +278,11 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
   const topCandidates = optimizer.candidates.slice(0, 5)
   const breakdown = winner ? unitBreakdown(winner, quantity) : []
 
-  const marketLive = reliableMarket(prefill)
+  const marketLive = reliableMarket(effectiveMarketPrefill)
   const marketIsEstimate = !marketLive
 
   const summary = useMemo(() => buildImporterSummary(quote, quantity, localSellPriceUsd, optimizer, marketIsEstimate), [quote, quantity, localSellPriceUsd, optimizer, marketIsEstimate])
-  const verdictSignals = useMemo(() => buildVerdictSignals(summary, quote, budgetUsd, prefill), [summary, quote, budgetUsd, prefill])
+  const verdictSignals = useMemo(() => buildVerdictSignals(summary, quote, budgetUsd, effectiveMarketPrefill), [summary, quote, budgetUsd, effectiveMarketPrefill])
 
   return <section className="manual-quote-shell journey-quote-shell">
     <div className="journey-result-source-label"><small>{prefill?.sourceLabel ?? importFreightValues.meta.source}</small></div>
@@ -304,7 +307,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
           <label className="field field-wide"><span>Producto</span><input placeholder="Ej. paleta de pádel carbono" value={productName} onChange={(e) => setProductName(e.target.value)} /></label>
           <label className="field field-wide"><span>Origen</span><DsSelect ariaLabel="País de origen" value={originCountry} onChange={setOriginCountry} options={originCountries.map((country) => ({ value: country, label: country }))} /></label>
           <div className="field-grid">
-            <NumberField label="Cantidad base" hint="El costo unitario de arriba corresponde a esta cantidad, no a importar literalmente 1 unidad." value={quantity} min={Math.max(1, moq)} onChange={next => { if (Number.isInteger(next) && next >= Math.max(1, moq)) { if (onQuantityChange) onQuantityChange(next); else setQuantity(next) } }} suffix="u." />
+            <NumberField label="Cantidad base" hint="El costo unitario de arriba corresponde a esta cantidad, no a importar literalmente 1 unidad." value={quantity} min={Math.max(1, moq ?? 1)} onChange={next => { if (Number.isInteger(next) && next >= Math.max(1, moq ?? 1)) { if (onQuantityChange) onQuantityChange(next); else setQuantity(next) } }} suffix="u." />
             <NumberField label="Precio FOB unitario" value={unitPriceUsd} onChange={setUnitPriceUsd} step={0.01} suffix="USD" />
             <NumberField label="Peso unitario" value={unitWeightKg} onChange={setUnitWeightKg} step={0.01} suffix="kg" />
             <NumberField label="Volumen unitario" value={unitVolumeCbm} onChange={setUnitVolumeCbm} step={0.001} suffix="m³" />
@@ -338,9 +341,10 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
           <div className="section-heading"><span>04</span><div><h2>Optimización</h2><p>Se ejecuta después de entender el costo base por unidad.</p></div></div>
           <div className="field-grid">
             <NumberField label="Presupuesto máximo" hint="Costo final total. 0 = todavía no definido." value={budgetUsd} onChange={setBudgetUsd} step={100} suffix="USD" />
-            <NumberField label="MOQ proveedor" value={moq} onChange={setMoq} min={1} suffix="u." />
+            {onReviewProduct ? <div className="field"><span>MOQ proveedor</span><strong>{moq === undefined ? 'Sin dato' : `${moq} unidades`}</strong><small>Para corregirlo, editá la ficha del producto.</small></div> : <label className="field"><span>MOQ proveedor</span><small>Opcional. Dejalo vacío si el proveedor no lo informó.</small><div className="input-wrap"><input type="number" min={1} step={1} value={moq ?? ''} onChange={e => { const value = Number(e.target.value); setMoq(e.target.value !== '' && Number.isInteger(value) && value > 0 ? value : undefined) }} /><small>u.</small></div></label>}
             <NumberField label="Demanda mensual" hint="Opcional; 0 si no sabés" value={monthlyDemand} onChange={setMonthlyDemand} suffix="u./mes" />
-            <NumberField label="Precio venta local (USD)" hint="Se precarga desde el benchmark argentino cuando hay tipo de cambio disponible; podés reemplazarlo." value={localSellPriceUsd} onChange={setLocalSellPriceUsd} step={0.01} suffix="USD" />
+            <NumberField label="Precio venta local (USD)" hint="Se precarga desde el benchmark argentino cuando hay tipo de cambio disponible; al editarlo pasa a ser una estimación tuya." value={localSellPriceUsd} onChange={value => { setLocalSellPriceUsd(value); setLocalPriceEdited(true) }} step={0.01} suffix="USD" />
+            {(!marketLive && localSellPriceUsd > 0) && <label className="field"><span>Fuente del precio local</span><small>Publicación, cotización o enlace que respalda el precio ingresado.</small><input value={localPriceSource} onChange={e => setLocalPriceSource(e.target.value)} placeholder="Ej. enlace de una publicación comparable" /></label>}
             <label className="field"><span>Estrategia</span><small>{strategyCopy(strategy)}</small><DsSelect ariaLabel="Estrategia de compra" value={strategy} onChange={(v) => setStrategy(v as BuyStrategy)} options={(Object.keys(strategyLabels) as BuyStrategy[]).map((key) => ({ value: key, label: strategyLabels[key] }))} /></label>
           </div>
         </section>
@@ -385,7 +389,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
 
         <details className="result-card result-collapsible" open>
           <summary><span className="result-collapsible-title">Mercado argentino</span><UiIcon name="chevron-down" size={16} /></summary>
-          <div className="result-collapsible-body"><ArgentinaMarketCard prefill={prefill} localSellPriceUsd={localSellPriceUsd} productName={productName} /></div>
+          <div className="result-collapsible-body"><ArgentinaMarketCard prefill={effectiveMarketPrefill} localSellPriceUsd={localSellPriceUsd} productName={productName} localPriceSource={localPriceSource} /></div>
         </details>
 
         <details className="result-card result-collapsible">
@@ -428,6 +432,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
             <section className="table-card journey-quantity-card">
               <div className="table-title"><div><span className="eyebrow">Ahora sí: optimización</span><h2>{quantityRecommendation ? `${quantityRecommendation.quantity} unidades recomendadas` : budgetUsd <= 0 ? 'Definí presupuesto para optimizar' : 'Sin recomendación'}</h2></div><small>{budgetUsd > 0 ? `Presupuesto ${usd(budgetUsd)}` : 'Presupuesto abierto'}</small></div>
               <p className="assumption-note">Primero fijamos el costo unitario de la operación base. Recién después probamos cantidades para encontrar dónde bajan flete/gastos por unidad sin romper presupuesto, MOQ o stock.</p>
+              {moq === undefined && <p className="assumption-note">MOQ sin dato: confirmá con el proveedor que acepta la cantidad propuesta antes de comprar.</p>}
               {quantityRecommendation && <>
                 <div className="metric-grid">
                   <div><span>Modo recomendado</span><b>{quantityRecommendation.selectedMode === 'lcl' ? 'LCL' : quantityRecommendation.selectedMode === 'air' ? 'Aéreo' : quantityRecommendation.selectedMode === 'courier' ? 'Courier comercial' : '-'}</b></div>
@@ -440,7 +445,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
                 {quantityRecommendation.reasons.filter((r) => r.includes('m³')).map((r) => (
                   <p key={r} className="assumption-note importer-logistics-signal"><UiIcon name="info" size={15} /> {r}</p>
                 ))}
-                <p className="assumption-note">{quantityRecommendation.affordable ? 'Entra dentro del presupuesto cargado.' : 'No entra dentro del presupuesto: es la opción menos mala encontrada desde el MOQ.'} {optimizer.notes[2]}</p>
+                <p className="assumption-note">{budgetUsd <= 0 ? 'Falta un presupuesto para evaluar si podés financiar esta cantidad.' : quantityRecommendation.affordable ? 'Entra dentro del presupuesto cargado.' : 'Ninguna cantidad evaluada entra en el presupuesto cargado.'} {optimizer.notes[2]}</p>
                 <button className="secondary" type="button" onClick={() => onQuantityChange ? onQuantityChange(quantityRecommendation.quantity) : setQuantity(quantityRecommendation.quantity)}>Usar esta cantidad en la simulación</button>
               </>}
               {topCandidates.length > 0 && <div className="table-scroll" style={{ marginTop: 14 }}><table><thead><tr><th>Cantidad</th><th>Modo</th><th>Total</th><th>Unitario</th><th>m³</th><th>Stock</th><th>Estado</th></tr></thead><tbody>{topCandidates.map((candidate) => <tr key={candidate.quantity} className={candidate.quantity === quantityRecommendation?.quantity ? 'selected-row' : undefined}><td><b>{candidate.quantity} u.</b></td><td>{candidate.selectedMode === 'lcl' ? 'LCL' : candidate.selectedMode === 'air' ? 'Aéreo' : candidate.selectedMode === 'courier' ? 'Courier' : '-'}</td><td>{usd(candidate.totalCostUsd)}</td><td>{usd(candidate.unitCostUsd)}</td><td>{candidate.totalVolumeCbm}</td><td>{candidate.monthsOfStock === null ? '-' : `${candidate.monthsOfStock}m`}</td><td>{candidate.affordable ? 'OK' : 'Fuera presupuesto'}</td></tr>)}</tbody></table></div>}

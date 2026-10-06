@@ -70,7 +70,9 @@ apply across intake/review/results in light/dark mode. Inputs use 16px text and 
 text wrap without clipping. New-case action remains reachable on narrow phones.
 
 Evidence: browser gates include keyboard/focus, axe, reduced motion, larger text,
-320px/390px screens and desktop screenshots. New acceptance tests also run in mobile
+320px/390px screens and desktop screenshots. The final dark result flow passes
+axe without serious/critical WCAG AA violations, including the original-price review,
+NCM summary, provider messages and landed-cost cards. New acceptance tests also run in mobile
 WebKit in CI. Local WebKit cannot run because required host libraries are unavailable;
 CI must supply that evidence. Physical iPhone keyboard/zoom remains unverified.
 

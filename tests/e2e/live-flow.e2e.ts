@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import { test, expect } from './fixtures'
 
 async function setup(page: import('@playwright/test').Page, search = false) {
@@ -142,4 +143,7 @@ test('ambiguous supplier currency blocks costs; documented pack conversion and t
   expect(paidRequests).toBe(1)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('confirmed-tier-dark-390.png'), fullPage: true })
+  const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()
+  const blocking = axe.violations.filter(item => item.impact === 'serious' || item.impact === 'critical')
+  expect(blocking.map(item => ({ id: item.id, nodes: item.nodes.map(node => ({ html: node.html, summary: node.failureSummary })) }))).toEqual([])
 })

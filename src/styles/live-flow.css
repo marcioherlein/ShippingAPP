@@ -47,3 +47,37 @@
 
 .supplier-tier { border: 1px solid var(--ds-border); border-radius: 10px; min-width: 0; padding: 12px; }
 .supplier-tier legend { font-size: 14px; color: var(--ds-text-secondary); }
+/* Older result shells must use the same semantic surfaces as their cards. */
+.journey-app :is(.manual-quote-shell, .quote-customs-evidence, .quote-customs-facts > span, .intake-message.assistant) { background: var(--ds-surface); color: var(--ds-text-strong); border-color: var(--ds-border); box-shadow: none; }
+.journey-app :is(.journey-hero h1, .quote-customs-evidence h3, .quote-customs-facts b, .pipeline-ready-strip b, .journey-summary-list b) { color: var(--ds-text-strong); }
+.journey-app :is(.quote-customs-evidence p, .quote-customs-facts small, .pipeline-ready-strip span, .journey-summary-list span) { color: var(--ds-text-secondary); }
+@media (prefers-color-scheme: dark) {
+  :root { --ds-brand: #6958d4; --ds-brand-strong: #6958d4; }
+  .journey-app :is(.journey-brand b, .journey-footer-brand b, .journey-main-nav a, .journey-question-head button) { color: #b9b3ff; }
+  .journey-app .intake-message.user { background: var(--ds-surface-subtle); color: var(--ds-text-strong); }
+  .journey-app :is(.journey-complete-row span, .journey-question-head button) { background: var(--ds-surface-subtle); }
+  .journey-app .journey-bubble.user button { background: var(--ds-surface); color: #b9b3ff; border-color: var(--ds-border); }
+  .journey-app .pipeline-ready-strip { background: var(--ds-surface-subtle); }
+}
+.journey-app .journey-complete-row { flex-wrap: wrap; overflow: visible; }
+.journey-app .journey-task-title { color: var(--ds-text-strong); }
+.journey-app :is(.analyzer-copy p, .extraction-top p, .extraction-card .assumption-note) { color: var(--ds-text-secondary); }
+.journey-app .intake-message.assistant > span { color: var(--ds-text-secondary); }
+@media (prefers-color-scheme: dark) {
+  :root { --a11y-functional-muted: #b4c0d6; }
+  .journey-app .pipeline-ready-strip :is(span, b) { color: var(--ds-text-strong); }
+}
+@media (prefers-color-scheme: dark) {
+  .journey-app:has(.journey-bubble.user) .journey-complete-row span { background: var(--ds-surface-subtle); color: var(--ds-text-secondary); }
+  .journey-app:has(.journey-bubble.user) .journey-question-head button { background: var(--ds-surface-subtle); color: #b9b3ff; }
+  .journey-app .journey-question-head > span { color: #b9b3ff; }
+  .journey-app .quote-assumptions > summary { background: var(--ds-surface-subtle); color: var(--ds-text-strong); }
+  .journey-app .quote-assumptions > summary small { color: var(--ds-text-secondary); }
+}
+.journey-app .journey-question-card:not(.active) .journey-complete-row { flex-wrap: wrap; overflow: visible; white-space: normal; }
+@media (prefers-color-scheme: dark) {
+  .journey-app .quote-assumptions > summary em { color: #b9b3ff; }
+}
+@media (prefers-color-scheme: dark) {
+  .journey-app .journey-question-card:not(.active) .journey-question-head > span { color: #b9b3ff; }
+}

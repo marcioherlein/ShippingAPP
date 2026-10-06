@@ -1,0 +1,83 @@
+/* One set of surfaces and controls for the complete quotation journey. */
+:root { --flow-canvas: #f6f5fa; --flow-accent: #5144b5; --flow-accent-text: #fff; --ds-brand: #5144b5; --ds-brand-strong: #5144b5; --ds-brand-soft: #efedfa; }
+.journey-app { background: var(--flow-canvas); }
+.journey-main-nav { display: flex; align-items: center; gap: 20px; margin-left: auto; }
+.journey-main-nav a { color: var(--ds-text-secondary); text-decoration: none; font-weight: 600; padding: 12px 0; }
+.journey-main-nav a:hover { color: var(--ds-text-strong); }
+.journey-topbar { border-bottom: 1px solid var(--ds-border); min-height: 68px; }
+.journey-app :is(.journey-question-card, .owned-product-intake, .product-chatbot, .calculation-pipeline, .journey-case-summary, .pipeline-product-card, .discovery-item) { background: var(--ds-surface); color: var(--ds-text-strong); border-color: var(--ds-border); box-shadow: none; border-radius: 16px; }
+.journey-app :is(.pipeline-understood-card, .chatbot-receipt-chip, .pipeline-currency-confirm, .supplier-review, .pipeline-classification-ready, .pipeline-clarification-card) { background: var(--ds-surface-subtle); color: var(--ds-text-strong); border-color: var(--ds-border); box-shadow: none; }
+.journey-app :is(input, textarea, .ds-select-trigger) { color: var(--ds-text-strong); background: var(--ds-surface); border-color: var(--ds-border); min-height: 44px; font-size: 16px; }
+.journey-app :is(input, textarea)::placeholder { color: var(--ds-text-secondary); }
+.journey-app :is(button, .journey-main-nav a) { min-height: 44px; }
+.journey-app :is(.journey-primary-action, .chatbot-send-btn) { background: var(--flow-accent); color: var(--flow-accent-text); border-color: var(--flow-accent); box-shadow: none; border-radius: 10px; }
+.journey-app :is(.chatbot-msg, .intake-message p, .chatbot-receipt-chip-value) { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.55; }
+.journey-app :is(.chatbot-thread, .chatbot-receipt-bar) { max-height: none; overflow: visible; }
+.chatbot-receipt-bar { flex-wrap: wrap; }
+.supplier-review { padding: 20px; border: 1px solid var(--ds-border); border-radius: 12px; margin: 16px 0; }
+.supplier-review h3 { margin: 0 0 8px; font-size: 18px; }
+.supplier-review :is(p, a), .supplier-logistics-review { font-size: 15px; line-height: 1.55; color: var(--ds-text-secondary); }
+.supplier-review a { color: var(--ds-brand-strong); }
+.supplier-logistics-review summary { cursor: pointer; padding: 12px 0; }
+.search-operation-state { color: var(--ds-text-secondary); font-size: 15px; line-height: 1.5; }
+.pipeline-known-fact small, .pipeline-known-fact span, .pipeline-confirm-field small { color: var(--ds-text-secondary); }
+.auth-account-control { position: relative; inset: auto; z-index: 20; max-width: none; width: 100%; box-sizing: border-box; border-radius: 0; border: 0; border-bottom: 1px solid var(--ds-border); background: var(--ds-surface); box-shadow: none; padding: 8px max(16px, calc((100vw - 1180px) / 2)); backdrop-filter: none; }
+@media (max-width: 600px) {
+  .journey-topbar { flex-wrap: wrap; gap: 8px 14px; padding: 12px 0; }
+  .journey-main-nav { gap: 12px; }
+  .journey-main-nav a { font-size: 14px; }
+  .journey-top-actions { display: flex !important; }
+  .journey-top-actions button { display: inline-flex !important; }
+  .journey-app :is(.pipeline-progressive-fields, .pipeline-known-grid, .pipeline-quantity-choice) { grid-template-columns: minmax(0, 1fr); }
+  .journey-app :is(.pipeline-confirm-field, .pipeline-confirm-field.wide) { grid-column: auto; min-width: 0; }
+  .supplier-review { padding: 14px; }
+  .journey-app :is(.pipeline-confirm-actions, .chatbot-dock-row) { flex-wrap: wrap; }
+  .journey-app :is(.chatbot-dock-input-wrap, .chatbot-send-btn) { min-width: 0; }
+  .journey-app :is(.chatbot-receipt-chip, .pipeline-secondary) { max-width: 100%; white-space: normal; }
+  .journey-app :is(.product-chatbot, .chatbot-thread, .chatbot-input-dock) { min-width: 0; }
+  .auth-account-control { position: relative; inset: auto; flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+  .auth-account-control .auth-usage-badge { max-width: none; white-space: normal; overflow: visible; }
+}
+@media (prefers-color-scheme: dark) {
+  :root { --flow-canvas: #10101b; --flow-accent: #6958d4; --ds-text-muted: #a9b3c6; --ds-brand: #b9b3ff; --ds-brand-strong: #b9b3ff; --ds-brand-soft: #282443; }
+  .journey-app { background: var(--flow-canvas); }
+  .auth-account-control { background: var(--ds-surface); }
+  .supplier-review a { color: #b9b3ff; }
+}
+
+.supplier-tier { border: 1px solid var(--ds-border); border-radius: 10px; min-width: 0; padding: 12px; }
+.supplier-tier legend { font-size: 14px; color: var(--ds-text-secondary); }
+/* Older result shells must use the same semantic surfaces as their cards. */
+.journey-app :is(.manual-quote-shell, .quote-customs-evidence, .quote-customs-facts > span, .intake-message.assistant) { background: var(--ds-surface); color: var(--ds-text-strong); border-color: var(--ds-border); box-shadow: none; }
+.journey-app :is(.journey-hero h1, .quote-customs-evidence h3, .quote-customs-facts b, .pipeline-ready-strip b, .journey-summary-list b) { color: var(--ds-text-strong); }
+.journey-app :is(.quote-customs-evidence p, .quote-customs-facts small, .pipeline-ready-strip span, .journey-summary-list span) { color: var(--ds-text-secondary); }
+@media (prefers-color-scheme: dark) {
+  :root { --ds-brand: #6958d4; --ds-brand-strong: #6958d4; }
+  .journey-app :is(.journey-brand b, .journey-footer-brand b, .journey-main-nav a, .journey-question-head button) { color: #b9b3ff; }
+  .journey-app .intake-message.user { background: var(--ds-surface-subtle); color: var(--ds-text-strong); }
+  .journey-app :is(.journey-complete-row span, .journey-question-head button) { background: var(--ds-surface-subtle); }
+  .journey-app .journey-bubble.user button { background: var(--ds-surface); color: #b9b3ff; border-color: var(--ds-border); }
+  .journey-app .pipeline-ready-strip { background: var(--ds-surface-subtle); }
+}
+.journey-app .journey-complete-row { flex-wrap: wrap; overflow: visible; }
+.journey-app .journey-task-title { color: var(--ds-text-strong); }
+.journey-app :is(.analyzer-copy p, .extraction-top p, .extraction-card .assumption-note) { color: var(--ds-text-secondary); }
+.journey-app .intake-message.assistant > span { color: var(--ds-text-secondary); }
+@media (prefers-color-scheme: dark) {
+  :root { --a11y-functional-muted: #b4c0d6; }
+  .journey-app .pipeline-ready-strip :is(span, b) { color: var(--ds-text-strong); }
+}
+@media (prefers-color-scheme: dark) {
+  .journey-app:has(.journey-bubble.user) .journey-complete-row span { background: var(--ds-surface-subtle); color: var(--ds-text-secondary); }
+  .journey-app:has(.journey-bubble.user) .journey-question-head button { background: var(--ds-surface-subtle); color: #b9b3ff; }
+  .journey-app .journey-question-head > span { color: #b9b3ff; }
+  .journey-app .quote-assumptions > summary { background: var(--ds-surface-subtle); color: var(--ds-text-strong); }
+  .journey-app .quote-assumptions > summary small { color: var(--ds-text-secondary); }
+}
+.journey-app .journey-question-card:not(.active) .journey-complete-row { flex-wrap: wrap; overflow: visible; white-space: normal; }
+@media (prefers-color-scheme: dark) {
+  .journey-app .quote-assumptions > summary em { color: #b9b3ff; }
+}
+@media (prefers-color-scheme: dark) {
+  .journey-app .journey-question-card:not(.active) .journey-question-head > span { color: #b9b3ff; }
+}

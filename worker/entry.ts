@@ -174,7 +174,8 @@ function confirmedProductAnalysis(body: unknown) {
   const suggested = Array.isArray(raw.suggestedQuantities)
     ? raw.suggestedQuantities.map(positiveNumber).filter((value: number) => value > 0).slice(0, 12)
     : []
-  const suggestedQuantities = [...new Set([...(moq ? [moq] : []), ...suggested])].sort((a, b) => a - b)
+  const purchaseQuantity = positiveNumber(product.purchaseQuantity) || undefined
+  const suggestedQuantities = [...new Set([...(purchaseQuantity ? [purchaseQuantity] : []), ...suggested])]
 
   return {
     sourceUrl,
@@ -184,6 +185,9 @@ function confirmedProductAnalysis(body: unknown) {
       name,
       category,
       unitPriceUsd,
+      purchaseQuantity,
+      supplierEvidence: product.supplierEvidence && typeof product.supplierEvidence === 'object' ? product.supplierEvidence : undefined,
+      supplierQuote: product.supplierQuote && typeof product.supplierQuote === 'object' ? product.supplierQuote : undefined,
       moq,
       packedWeightKg,
       volumeCbm,

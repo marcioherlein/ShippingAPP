@@ -1,6 +1,7 @@
 import { readProductDraft, writeProductDraft, clearProductDraft } from './lib/productDraft'
 import { savePendingConfirm, loadPendingConfirm, clearPendingConfirm } from './lib/sessionDraft'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { supplierQuotePrice } from './lib/supplierQuote'
 import { startImportAnalysis } from './lib/productAnalysis'
 import UrlAnalyzer from './components/UrlAnalyzer'
 import OwnedProductIntake from './components/OwnedProductIntake'
@@ -83,7 +84,7 @@ function makeAnalysisPrefill(
       priceArs: Number(item.priceArs),
       ...(item.permalink?.startsWith('https://') ? { permalink: item.permalink } : {}),
     }))
-  const confirmedQuantity = analysis.suggestedQuantities[0] || analysis.product.moq || 0
+  const confirmedQuantity = analysis.product.purchaseQuantity || 0
   return {
     productName: analysis.product.name,
     originCountry: analysis.product.originCountry || '',
@@ -94,18 +95,19 @@ function makeAnalysisPrefill(
     moq: analysis.product.moq || 0,
     budgetUsd: budgetMode === 'budget' ? budgetUsd : 0,
     monthlyDemand: analysis.market.estimatedMonthlyDemand || 0,
-    localSellPriceUsd: estimatedLocalUsd,
+    localSellPriceUsd: marketDetails?.status === 'live' && (marketDetails.comparableCount || marketComparables.length) > 0 ? estimatedLocalUsd : 0,
     marketPriceArs: analysis.market.estimatedPriceArs,
     marketP25Ars: marketDetails?.p25Ars ?? null,
     marketMedianArs: marketDetails?.medianArs ?? null,
     marketP75Ars: marketDetails?.p75Ars ?? null,
     marketComparableCount: marketDetails?.comparableCount ?? marketComparables.length,
     marketConfidence: marketDetails?.confidence ?? null,
-    marketStatus: marketDetails?.status ?? (analysis.market.estimatedPriceArs && analysis.market.estimatedPriceArs > 0 ? 'live' : 'unknown'),
+    marketStatus: marketDetails?.status ?? 'unknown',
     marketSource: analysis.market.source,
     marketComparables,
     fxArsPerUsd: fx,
     fxSourceDate: analysis.fx?.sourceDate ?? null,
+    fxSourceLabel: analysis.fx?.source ?? null,
     sensitiveCategory: sensitiveCategory || 'unknown',
     sourceLabel: analysis.sourceUrl.startsWith('manual://')
       ? 'Producto descripto por el usuario'
@@ -194,10 +196,6 @@ export default function App() {
   const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
-  const [chatbotClarificationInput, setChatbotClarificationInput] = useState('')
-  const [chatbotAutoSubmitted, setChatbotAutoSubmitted] = useState(false)
-  const [manualClarificationAttempts, setManualClarificationAttempts] = useState(0)
-  const chatbotAutoSubmitFiredRef = useRef(false)
   const [entered, setEntered] = useState<boolean>(readInitialEntered)
 
   // True while the persistence layer replays a saved journey, so the reveal
@@ -286,22 +284,7 @@ export default function App() {
     ? 'confirm'
     : calculationStatus
 
-  // Derived classification state for chatbot/manual products — used to decide
-  // whether to show a clarification card inline in the chatbot area.
-  const chatbotProduct = !!analysis && (analysis.sourceUrl === 'chatbot://product' || analysis.sourceUrl === 'manual://product')
-  const chatbotClassifierAskedForMore = chatbotProduct
-    && calculationStatus === 'blocked'
-    && !!analysis
-    && analysis.customs.missingFacts.length > 0
-    && !hasConfirmedClassification(analysis.customs)
-    && !hasProvisionalClassification(analysis.customs)
-  const chatbotClarificationTarget = analysis ? classificationClarificationTarget(analysis.customs.missingFacts) : null
-  const chatbotRefinementExhausted = !!(
-    analysis?.classificationRefinement
-    && analysis.classificationRefinement.allowed === false
-    && analysis.classificationRefinement.maxAttempts > 0
-    && analysis.classificationRefinement.attempt >= analysis.classificationRefinement.maxAttempts
-  )
+  const chatbotProduct = !!analysis && analysis.sourceUrl === 'chatbot://product'
 
   const analysisPrefill = useMemo<QuotePrefill | null>(() => {
     if (!analysis) return null
@@ -310,7 +293,7 @@ export default function App() {
 
   const quoteSetup = useMemo<JourneyQuoteSetup>(() => ({
     budgetUsd: budgetMode === 'budget' ? budgetUsd : 0,
-    quantity: budgetMode === 'units' ? Math.max(unitsMin, Math.round((unitsMin + unitsMax) / 2)) : undefined,
+    quantity: budgetMode === 'units' && unitsMin === unitsMax ? unitsMin : undefined,
     purpose: purpose || 'unknown',
     entityType: entityType || 'unknown',
     hasImporterSignature: signature || 'unknown',
@@ -347,7 +330,7 @@ export default function App() {
   }
 
   const handleAnalysis = (next: ProductAnalysisV2) => {
-    setAnalysis({ ...next, suggestedQuantities: quoteSetup.quantity ? [quoteSetup.quantity, ...next.suggestedQuantities] : next.suggestedQuantities })
+    setAnalysis({ ...next, product: { ...next.product, purchaseQuantity: quoteSetup.quantity }, suggestedQuantities: quoteSetup.quantity ? [quoteSetup.quantity] : next.suggestedQuantities })
     resetPipeline()
     setStep(3)
     revealSection(document.getElementById('case-confirmation'))
@@ -423,6 +406,7 @@ export default function App() {
           ? confirmedAnalysis
           : await enrichProductAnalysisV2(confirmedAnalysis)
       setAnalysis(refreshed)
+      clearPendingConfirm()
 
       const confirmedClassification = hasConfirmedClassification(refreshed.customs)
       const provisionalClassification = hasProvisionalClassification(refreshed.customs)
@@ -466,7 +450,13 @@ export default function App() {
       await nextPaint()
       setPipelineStage(2)
 
-      const baseQuantity = confirmedProduct.quantity ?? quoteSetup.quantity ?? (prefill.quantity || prefill.moq)
+      const priceEvidence = refreshed.product.supplierQuote
+      if (!priceEvidence || supplierQuotePrice(priceEvidence, confirmedProduct.quantity) === null) {
+        setPipelineBlocker('Revisá moneda, unidad o lote, variante y tramo del precio antes de cotizar.')
+        setCalculationStatus('blocked')
+        return
+      }
+      const baseQuantity = confirmedProduct.quantity ?? quoteSetup.quantity ?? prefill.quantity
       if (!baseQuantity || baseQuantity <= 0) {
         setPipelineBlocker('Necesito una cantidad base positiva para distribuir flete y gastos por unidad.')
         setCalculationStatus('blocked')
@@ -548,49 +538,13 @@ export default function App() {
       setStep(4)
       revealSection(document.getElementById('calculator'))
     } catch (error) {
-      setPipelineBlocker(error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.')
+      const message = error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.'
+      if (!/Ingresá a tu cuenta|validar tu sesión/.test(message)) clearPendingConfirm()
+      setPipelineBlocker(message)
       setCalculationStatus('blocked')
     }
   }
   confirmAndCalculateRef.current = confirmAndCalculate
-
-  // Reset auto-submit tracking whenever a genuinely new product analysis starts.
-  useEffect(() => {
-    chatbotAutoSubmitFiredRef.current = false
-    setChatbotAutoSubmitted(false)
-    setManualClarificationAttempts(0)
-  }, [analysis?.sourceUrl, analysis?.product.name])
-
-  // Auto-submit classification clarification when the chatbot product already has
-  // functionText and the classifier is asking for it on the first attempt.
-  // Uses a ref+state pair so the guard is reliable even when classificationRefinement
-  // is not updated by the seed fallback path (worker unavailable).
-  useEffect(() => {
-    if (!chatbotProduct || !analysis) return
-    if (calculationStatus !== 'blocked' || !chatbotClassifierAskedForMore) return
-    if (chatbotClarificationTarget !== 'functionText') return
-    if (!analysis.product.functionText) return
-    if (chatbotAutoSubmitFiredRef.current) return
-    chatbotAutoSubmitFiredRef.current = true
-    setChatbotAutoSubmitted(true)
-    const draft = productConfirmationFromAnalysis(analysis)
-    const next = applyClassificationClarification(draft, analysis.product.functionText, analysis.customs.missingFacts)
-    void confirmAndCalculate(next)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatbotProduct, calculationStatus, chatbotClassifierAskedForMore, chatbotClarificationTarget])
-
-  // Pre-fill the inline clarification input when the pipeline asks for something
-  // the analysis already has (e.g. functionText answered during chatbot).
-  // Only fill on the first display (manualClarificationAttempts === 0); after
-  // the user has manually submitted, leave the field empty for a fresh answer.
-  useEffect(() => {
-    if (!chatbotClassifierAskedForMore || !chatbotAutoSubmitted) return
-    if (chatbotClarificationInput) return
-    if (manualClarificationAttempts > 0) return
-    if (chatbotClarificationTarget === 'functionText' && analysis?.product.functionText) {
-      setChatbotClarificationInput(analysis.product.functionText)
-    }
-  }, [chatbotClassifierAskedForMore, chatbotAutoSubmitted, manualClarificationAttempts, chatbotClarificationTarget, analysis?.product.functionText])
 
   const continueOperation = () => {
     if (operationAnswered) setStep(2)
@@ -603,6 +557,7 @@ export default function App() {
 
   const resetJourney = () => {
     clearProductDraft()
+    clearPendingConfirm()
     resetDialog.current?.close()
     window.dispatchEvent(new Event('shippingapp:journey-reset'))
     setIntent(null)
@@ -640,6 +595,7 @@ export default function App() {
     </dialog>
     <header className="journey-topbar">
       <a className="journey-brand" href="#home"><span className="journey-brand-mark">G</span><span>Global<b>Shipping</b></span></a>
+      <nav className="journey-main-nav" aria-label="Navegación principal"><a href="#cotizador">Cotizador</a>{analysis && <a href="#case-confirmation">Producto</a>}</nav>
       <div className="journey-top-actions"><button type="button" onClick={requestReset}>Nuevo caso</button></div>
     </header>
 
@@ -699,7 +655,7 @@ export default function App() {
                 {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" step="1" value={unitsMin || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; setUnitsMin(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label><label><span>Máximo de unidades</span><input type="number" step="1" value={unitsMax || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; setUnitsMax(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label></div>}
                 {budgetError && <div className="pipeline-warning" id="journey-budget-error" role="alert"><b>Revisá presupuesto o rango.</b><span>{budgetError}</span></div>}
                 <button className="journey-primary-action" type="button" disabled={!budgetAnswered} onClick={continueBudget}>Seguir con el producto <span><UiIcon name="arrow-right" size={18} /></span></button>
-              </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : 'Todavía sin cantidad definida'}</span></div>}
+              </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : analysis?.product.purchaseQuantity ? `${analysis.product.purchaseQuantity} unidades seleccionadas` : 'Todavía sin cantidad definida'}</span>{analysis?.product.purchaseQuantity && budgetMode !== 'unknown' ? <span>{analysis.product.purchaseQuantity} unidades seleccionadas</span> : null}</div>}
             </section>
           </>}
 
@@ -753,64 +709,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Normal clarification card — shown after auto-submit, while the user still
-                has attempts remaining. manualClarificationAttempts < 2 prevents the loop:
-                after 2 manual submits with no result, we drop to the exit path below. */}
-            {intent === 'have_product' && analysis && chatbotClassifierAskedForMore && chatbotAutoSubmitted && !chatbotRefinementExhausted && manualClarificationAttempts < 2 && (
-              <div className="journey-product-surface">
-                <div className="pipeline-clarification-card pipeline-clarification-silent">
-                  <span className="eyebrow">Una pregunta para terminar</span>
-                  <div className="pipeline-clarification-copy">
-                    <h3>{chatbotClarificationTarget === 'functionText' ? '¿Para qué se usa este producto?' : chatbotClarificationTarget === 'material' ? '¿De qué material está hecho principalmente?' : '¿Qué tipo de producto es?'}</h3>
-                    <p>Con una frase corta alcanza. Necesito este dato para distinguir la posición arancelaria correcta.</p>
-                  </div>
-                  <label className="pipeline-clarification-input" htmlFor="chatbot-clarification-input">
-                    <span>Tu respuesta</span>
-                    <textarea
-                      id="chatbot-clarification-input"
-                      value={chatbotClarificationInput}
-                      onChange={(e) => setChatbotClarificationInput(e.target.value.slice(0, 1000))}
-                      rows={3}
-                      placeholder="Ej. Se usa principalmente para…"
-                    />
-                  </label>
-                  <div className="pipeline-confirm-actions">
-                    <button
-                      type="button"
-                      className="journey-primary-action"
-                      disabled={chatbotClarificationInput.trim().length < 3}
-                      onClick={() => {
-                        if (!analysis) return
-                        const draft = productConfirmationFromAnalysis(analysis)
-                        const next = applyClassificationClarification(draft, chatbotClarificationInput, analysis.customs.missingFacts)
-                        setManualClarificationAttempts(a => a + 1)
-                        void confirmAndCalculate(next)
-                        setChatbotClarificationInput('')
-                      }}
-                    >Continuar <UiIcon name="arrow-right" size={16} /></button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Exit path — shown when the classifier can't resolve after 2 manual
-                attempts or when the server marks the refinement as exhausted.
-                Offers to change the product; does not loop back to the same question. */}
-            {intent === 'have_product' && analysis && chatbotClassifierAskedForMore && chatbotAutoSubmitted && (chatbotRefinementExhausted || manualClarificationAttempts >= 2) && (
-              <div className="journey-product-surface">
-                <div className="pipeline-clarification-card pipeline-clarification-silent">
-                  <span className="eyebrow">No pudimos clasificar el producto</span>
-                  <div className="pipeline-clarification-copy">
-                    <h3>No encontramos la posición arancelaria</h3>
-                    <p>Con la información disponible no logramos determinar la NCM con certeza. Podés cargar otro producto o buscarlo por URL de Alibaba para una clasificación más precisa.</p>
-                  </div>
-                  <div className="pipeline-confirm-actions">
-                    <button type="button" className="pipeline-secondary" onClick={editSelectedProduct}>Cambiar producto</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {(intent === 'search_product' || intent === 'discover') && <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode={intent === 'discover' ? 'discovery' : 'intake'} onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>}
           </>}
         </>}
@@ -845,6 +743,7 @@ export default function App() {
         prefill={analysisPrefill}
         status={effectiveCalculationStatus}
         activeStage={pipelineStage}
+        purchaseRange={budgetMode === 'units' ? { min: unitsMin, max: unitsMax } : undefined}
         summary={pipelineSummary}
         blocker={pipelineBlocker}
         onConfirm={(product) => void confirmAndCalculate(product)}
@@ -854,13 +753,14 @@ export default function App() {
         }}
         onEditProduct={editSelectedProduct}
         onReviewProduct={reviewProductData}
-        autoConfirm={analysis.sourceUrl === 'chatbot://product' || analysis.sourceUrl === 'manual://product'}
-        silent={analysis.sourceUrl === 'chatbot://product' || analysis.sourceUrl === 'manual://product'}
       />
     </section>}
 
     {analysisPrefill && effectiveCalculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
-      <ImportQuoteFlow key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={{ ...quoteSetup, quantity: pipelineSummary?.baseQuantity ?? quoteSetup.quantity }} />
+      <ImportQuoteFlow supplierQuote={analysis?.product.supplierQuote} onReviewProduct={reviewProductData} onQuantityChange={quantity => {
+        setAnalysis({ ...analysis!, product: { ...analysis!.product, purchaseQuantity: quantity }, suggestedQuantities: [quantity] })
+        reviewProductData()
+      }} key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={{ ...quoteSetup, quantity: pipelineSummary?.baseQuantity ?? quoteSetup.quantity }} />
     </section>}
 
     {!intent && <footer className="journey-footer">

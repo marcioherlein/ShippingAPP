@@ -17,6 +17,8 @@ type Props = {
   deferCalculation?: boolean
 }
 
+type SearchDraft = { draft?: string; lastSearch?: string; discovery?: ProductDiscoveryResponse | null; messages?: ThreadMessage[]; selectedConstraints?: DiscoveryConstraints | null; pendingAuth?: boolean }
+
 type ThreadMessage = { role: 'user' | 'assistant'; content: string }
 
 const starters = [
@@ -39,7 +41,7 @@ function readLabel(analysis: ProductAnalysisV2) {
 }
 
 function money(value?: number | null) {
-  return value && value > 0 ? `USD ${value.toFixed(2)}` : null
+  return value && value > 0 ? `${value.toFixed(2)} · moneda a confirmar` : null
 }
 
 function units(value?: number | null) {
@@ -47,17 +49,19 @@ function units(value?: number | null) {
 }
 
 export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mode = 'intake', deferCalculation = false }: Props) {
-  const [savedSearch] = useState(() => readProductDraft<{ draft?: string; lastSearch?: string }>('search'))
+  const [savedSearch] = useState(() => readProductDraft<SearchDraft>('search'))
   const [draft, setDraft] = useState(() => typeof savedSearch?.draft === 'string' ? savedSearch.draft.slice(0, 1800) : '')
   const [lastSearch, setLastSearch] = useState(() => typeof savedSearch?.lastSearch === 'string' ? savedSearch.lastSearch.slice(0, 1800) : '')
-  const [messages, setMessages] = useState<ThreadMessage[]>([])
-  const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(null)
-  const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(null)
+  const [messages, setMessages] = useState<ThreadMessage[]>(savedSearch?.messages || [])
+  const [discovery, setDiscovery] = useState<ProductDiscoveryResponse | null>(savedSearch?.discovery || null)
+  const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(savedSearch?.selectedConstraints || null)
   const [loading, setLoading] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'search' | 'extract'>('idle')
+  const pendingAuth = useRef(savedSearch?.pendingAuth || false)
   const [error, setError] = useState('')
   const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(null)
 
-  useEffect(() => { writeProductDraft('search', { draft, lastSearch }) }, [draft, lastSearch])
+  useEffect(() => { writeProductDraft('search', { draft, lastSearch, discovery, messages: messages.slice(-12), selectedConstraints, pendingAuth: pendingAuth.current }) }, [draft, lastSearch, discovery, messages, selectedConstraints])
 
   const constraintChecks = useMemo(
     () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],
@@ -65,6 +69,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   )
 
   const analyzeRealUrl = async (url: string, fromDiscovery = false, constraints: DiscoveryConstraints | null = null) => {
+    setPhase('extract')
     const next = await ingestAlibabaUrlV2(url)
     setSelectedConstraints(fromDiscovery ? constraints : null)
     setFailedSourceUrl(null)
@@ -80,10 +85,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
   const runDiscoverySearch = async (query: string, userText: string) => {
     setFailedSourceUrl(null)
-    setMessages((current) => [...current, {
-      role: 'assistant',
-      content: 'Buscando publicaciones reales en Alibaba…',
-    }])
+    setPhase('search')
     const live = await discoverProducts(query, userText)
     setDiscovery(live)
     setMessages((current) => [...current, {
@@ -105,12 +107,11 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     setDraft(value)
     // Save before the request can open sign-in or navigate away. Restoring text
     // must never automatically repeat a metered search.
-    writeProductDraft('search', { draft: value, lastSearch: value })
+    writeProductDraft('search', { draft: value, lastSearch: value, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current })
     setLoading(true)
     setError('')
     setFailedSourceUrl(null)
-    setDiscovery(null)
-    setSelectedConstraints(null)
+    // Keep prior results until a new successful response replaces them.
 
     try {
       if (isAlibabaUrl(value)) {
@@ -130,9 +131,13 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       await runDiscoverySearch(query, value)
     } catch (err) {
       if (isAlibabaUrl(value)) setFailedSourceUrl(value)
-      setError(err instanceof Error ? err.message : 'No pude completar la búsqueda en este momento.')
+      const message = err instanceof Error ? err.message : 'No pude completar la búsqueda en este momento.'
+      pendingAuth.current = /Ingresá a tu cuenta|validar tu sesión/.test(message)
+      writeProductDraft('search', { draft: value, lastSearch: value, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current })
+      setError(message)
     } finally {
       setLoading(false)
+      setPhase('idle')
     }
   }
 
@@ -148,6 +153,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       setError(err instanceof Error ? err.message : 'No pude analizar la publicación seleccionada.')
     } finally {
       setLoading(false)
+      setPhase('idle')
     }
   }
 
@@ -164,9 +170,12 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   submitValueRef.current = submitValue
   useEffect(() => {
     const onAuthResolved = () => {
-      const pending = readProductDraft<{ lastSearch?: string }>('search')
+      const pending = readProductDraft<SearchDraft>('search')
       const query = pending?.lastSearch?.trim()
-      if (query) void submitValueRef.current(query)
+      if (!pending?.pendingAuth || !query) return
+      pendingAuth.current = false
+      writeProductDraft('search', { ...pending, pendingAuth: false })
+      void submitValueRef.current(query)
     }
     window.addEventListener('shippingapp:auth-resolved', onAuthResolved)
     return () => window.removeEventListener('shippingapp:auth-resolved', onAuthResolved)
@@ -190,9 +199,10 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         <span>{message.role === 'user' ? 'Vos' : 'GlobalShipping'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>GlobalShipping</span><p>Consultando publicaciones y comprobando los datos…</p><div className="search-loading-bar" role="progressbar" aria-label="Buscando productos"><span /></div></div>}
+      {loading && <div className="intake-message assistant"><span>GlobalShipping</span><p>{phase === 'extract' ? 'Leyendo los datos de la publicación…' : 'Buscando proveedores y publicaciones…'}</p><div className="search-loading-bar" role="progressbar" aria-label="Buscando productos"><span /></div></div>}
     </div>}
 
+    {loading && <p className="search-operation-state" role="status">{phase === 'extract' ? '2. Extracción del producto' : '1. Búsqueda de proveedor'} · límite de 30 segundos. La clasificación NCM empieza después de tu confirmación.</p>}
     <form className="url-form" onSubmit={submit}>
       <div className="url-input-wrap">
         <input
@@ -268,7 +278,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         {analysis.confidence.overall > 0 && <span className="confidence">{analysis.confidence.overall}% detectado</span>}
       </div>
       <div className="fact-grid">
-        {analysis.product.unitPriceUsd && analysis.product.unitPriceUsd > 0 ? <div><span>Precio proveedor</span><b>USD {analysis.product.unitPriceUsd.toFixed(2)}</b></div> : null}
+        {analysis.product.unitPriceUsd && analysis.product.unitPriceUsd > 0 ? <div><span>{analysis.product.supplierQuote ? 'FOB unitario confirmado' : 'Precio proveedor detectado'}</span><b>{analysis.product.supplierQuote ? `USD ${analysis.product.unitPriceUsd.toFixed(2)} por unidad` : `${analysis.product.unitPriceUsd.toFixed(2)} · ${analysis.product.supplierEvidence?.currency || 'moneda a confirmar'}`}</b>{analysis.product.supplierQuote && <small>Oferta original en {analysis.product.supplierQuote.currency} · {analysis.product.supplierQuote.basis === 'pack' ? 'por lote' : 'por unidad'} · {analysis.product.supplierQuote.variant}{analysis.product.supplierQuote.currency !== 'USD' && ` · Conversión: ${analysis.product.supplierQuote.usdPerCurrency} USD por ${analysis.product.supplierQuote.currency} · ${analysis.product.supplierQuote.fxSource} · ${analysis.product.supplierQuote.fxDate}`}</small>}</div> : null}
         {analysis.product.moq && analysis.product.moq > 0 ? <div><span>MOQ</span><b>{analysis.product.moq} u.</b></div> : null}
         {analysis.product.packedWeightKg && analysis.product.packedWeightKg > 0 ? <div><span>Peso unitario</span><b>{analysis.product.packedWeightKg} kg</b></div> : null}
         {analysis.product.volumeCbm && analysis.product.volumeCbm > 0 ? <div><span>Volumen unitario</span><b>{analysis.product.volumeCbm} m³</b></div> : null}

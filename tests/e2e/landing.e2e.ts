@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, browserTest as test } from './fixtures'
 
 // The landing must render as its own screen (no app tool visible) and entering
 // the tool must be an instant view switch — no anchor smooth-scroll "salto".

@@ -1,3 +1,4 @@
+import { supplierQuotePrice, type SupplierQuote } from './supplierQuote'
 import { compareLandedCost, type LandedCostComparison, type LandedCostInput, type ModeCostBreakdown } from './landedCostEngine'
 
 export type BuyStrategy = 'test' | 'normal' | 'aggressive'
@@ -18,6 +19,7 @@ export type QuantityOptimizerInput = Omit<LandedCostInput, 'quantity' | 'unitPri
   targetStockMonths?: number | null
   localSellPriceUsd?: number
   priceTiers?: QuantityPriceTier[]
+  supplierQuote?: SupplierQuote
 }
 
 export type QuantityCandidate = {
@@ -91,7 +93,8 @@ function strategyTargetMonths(input: QuantityOptimizerInput) {
 }
 
 function candidateCost(input: QuantityOptimizerInput, quantity: number): QuantityCandidate {
-  const unitPriceUsd = unitPriceForQuantity(quantity, input.unitPriceUsd, input.priceTiers)
+  const confirmedPrice = input.supplierQuote ? supplierQuotePrice(input.supplierQuote, quantity) : unitPriceForQuantity(quantity, input.unitPriceUsd, input.priceTiers)
+  const unitPriceUsd = confirmedPrice ?? 0
   const comparison = compareLandedCost({ ...input, quantity, unitPriceUsd })
   const selectedMode = comparison.bestMode
   const selectedCost = selectedMode ? comparison.modes[selectedMode] : null
@@ -103,7 +106,7 @@ function candidateCost(input: QuantityOptimizerInput, quantity: number): Quantit
     ? round(((input.localSellPriceUsd - unitCostUsd) / input.localSellPriceUsd) * 100, 1)
     : null
   const budgetUsd = Math.max(0, input.budgetUsd || 0)
-  const affordable = budgetUsd <= 0 || totalCostUsd <= budgetUsd
+  const affordable = confirmedPrice !== null && (budgetUsd <= 0 || totalCostUsd <= budgetUsd)
   const totalVolumeCbm = round(quantity * Math.max(0, input.unitVolumeCbm), 3)
   const totalWeightKg = round(quantity * Math.max(0, input.unitWeightKg), 2)
   return {
@@ -157,6 +160,7 @@ export function generateQuantityCandidates(input: QuantityOptimizerInput) {
   ;[2, 3, 5, 8, 10].forEach((multiple) => add(moq * multiple))
 
   for (const tier of input.priceTiers || []) add(tier.minQuantity)
+  if (input.supplierQuote) for (const tier of [input.supplierQuote, ...(input.supplierQuote.additionalTiers || [])]) add(tier.minQuantity)
 
   if (input.unitVolumeCbm > 0) {
     ;[0.25, 0.5, 1, 1.5, 2, 3, 5].forEach((cbm) => add(cbm / input.unitVolumeCbm))
@@ -239,7 +243,7 @@ function scoreCandidates(candidates: QuantityCandidate[], input: QuantityOptimiz
 export function optimizeQuantity(input: QuantityOptimizerInput): QuantityOptimization {
   const strategy = input.strategy || 'normal'
   const quantities = generateQuantityCandidates(input)
-  const rawCandidates = quantities.map((quantity) => candidateCost(input, quantity))
+  const rawCandidates = quantities.filter(quantity => !input.supplierQuote || supplierQuotePrice(input.supplierQuote, quantity) !== null).map((quantity) => candidateCost(input, quantity))
   const candidates = scoreCandidates(rawCandidates, input).sort((a, b) => b.score - a.score || a.unitCostUsd - b.unitCostUsd || a.totalCostUsd - b.totalCostUsd)
   const affordableCandidates = candidates.filter((candidate) => candidate.affordable)
   const recommendation = (affordableCandidates[0] || candidates[0]) ?? null

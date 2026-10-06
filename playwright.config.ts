@@ -18,12 +18,12 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile-webkit',
-      testMatch: '**/journey-persistence.e2e.ts',
-      use: { ...devices['iPhone 13'] },
+      testMatch: ['**/journey-persistence.e2e.ts', '**/live-flow.e2e.ts'],
+      use: { ...devices['iPhone 13'], launchOptions: { executablePath: process.env.PW_WEBKIT_EXECUTABLE_PATH } },
     },
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], launchOptions: { executablePath: process.env.PW_CHROMIUM_EXECUTABLE_PATH, args: process.env.PW_CHROMIUM_SINGLE_PROCESS === '1' ? ['--single-process', '--no-zygote', '--disable-gpu'] : [] } },
     },
   ],
   webServer: {

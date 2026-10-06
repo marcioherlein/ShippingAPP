@@ -1,13 +1,16 @@
+import { optimizeQuantity } from '../lib/quantityOptimizer'
 import ManualNcmPicker from './ManualNcmPicker'
 import NcmDisambiguation from './NcmDisambiguation'
 import DsSelect from './DsSelect'
 import UiIcon from './UiIcon'
 import type { CustomsProfile } from '../lib/customsClassification'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { usd } from '../lib/format'
-import { convertToUsd, CURRENCY_LABELS, type CurrencyCode } from '../lib/currency'
+import SupplierQuoteReview from './SupplierQuoteReview'
+import { initialSupplierQuote, supplierQuotePrice } from '../lib/supplierQuote'
+import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import {
   applyClassificationClarification,
   classificationClarificationTarget,
@@ -34,14 +37,13 @@ type Props = {
   prefill: QuotePrefill
   status: CalculationPipelineStatus
   activeStage: number
+  purchaseRange?: { min: number; max: number }
   summary?: CalculationPipelineSummary | null
   blocker?: string | null
   onConfirm: (product: ProductConfirmationData) => void
   onManualNcm: (customs: CustomsProfile, product: ProductConfirmationData) => void
   onEditProduct: () => void
   onReviewProduct: () => void
-  autoConfirm?: boolean
-  silent?: boolean
 }
 
 const interventionCategories = new Set(['food', 'toys', 'cosmetics', 'medicines', 'supplements', 'plants'])
@@ -113,7 +115,7 @@ function stageDetail(index: number, analysis: ProductAnalysisV2, prefill: QuoteP
     return `${prefill.originCountry} · ${prefill.unitWeightKg || 0} kg/u. · ${prefill.unitVolumeCbm || 0} m³/u.`
   }
   if (summary) return `${summary.baseQuantity} u. base · ${summary.selectedMode === 'lcl' ? 'LCL' : summary.selectedMode === 'air' ? 'Aéreo' : 'Courier comercial'} · ${usd(summary.unitCostUsd)}/u.`
-  return `Cantidad base: ${prefill.quantity || prefill.moq || 1} unidades`
+  return prefill.quantity ? `Cantidad base: ${prefill.quantity} unidades` : 'Cantidad de compra pendiente de selección'
 }
 
 function pipelineStatusAnnouncement(status: CalculationPipelineStatus, activeStage: number, blocker?: string | null, summary?: CalculationPipelineSummary | null) {
@@ -200,37 +202,35 @@ function NomencladorGuidance({ onManualSearch }: { onManualSearch?: () => void }
   </div>
 }
 
-export default function CalculationPipeline({ analysis, prefill, status, activeStage, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm, autoConfirm, silent }: Props) {
+export default function CalculationPipeline({ analysis, prefill, status, activeStage, purchaseRange, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
   const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
-  const [draft, setDraft] = useState<ProductConfirmationData>(() => productConfirmationFromAnalysis(analysis))
+  const [draft, setDraft] = useState<ProductConfirmationData>(() => {
+    const saved = readProductDraft<{sourceUrl: string; productName: string; draft: ProductConfirmationData}>('confirmation')
+    return saved?.sourceUrl === analysis.sourceUrl && saved.productName === analysis.product.name ? saved.draft : productConfirmationFromAnalysis(analysis)
+  })
   const [showManualNcm, setShowManualNcm] = useState(false)
   const [showCorrections, setShowCorrections] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
   const [clarification, setClarification] = useState('')
-  // Currency of the extracted supplier price. Alibaba defaults to USD, but a
-  // ¥/€ price must be converted to official dollars before the engine uses it
-  // (audit item #1). Kept as UI state so confirming does not mutate the shape
-  // of ProductConfirmationData.
-  const [priceCurrency, setPriceCurrency] = useState<CurrencyCode>('USD')
-  const [fxRateInput, setFxRateInput] = useState('')
-
+  const [supplierQuote, setSupplierQuote] = useState(() => draft.supplierQuote || initialSupplierQuote(analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product'))
+  const lastAnalysis = useRef(analysis)
   useEffect(() => {
-    // A refinement returns a new analysis with the same sourceUrl. Sync from the
-    // complete analysis object so a previous clarification is never silently
-    // dropped on the next round.
-    setDraft(productConfirmationFromAnalysis(analysis))
-    setShowCorrections(false)
-    setShowAllQuoteFields(false)
+    if (lastAnalysis.current === analysis) return
+    lastAnalysis.current = analysis
+    const initial = productConfirmationFromAnalysis(analysis)
+    setDraft(initial)
+    setSupplierQuote(initial.supplierQuote || initialSupplierQuote(analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product'))
     setClarification('')
-    setPriceCurrency('USD')
-    setFxRateInput('')
   }, [analysis])
+  useEffect(() => {
+    writeProductDraft('confirmation', { sourceUrl: analysis.sourceUrl, productName: analysis.product.name, draft: { ...draft, supplierQuote } })
+  }, [draft, supplierQuote, analysis.sourceUrl, analysis.product.name])
 
   const sourceDraft = useMemo(() => productConfirmationFromAnalysis(analysis), [analysis])
   const classificationMissing = useMemo(() => missingClassificationConfirmationFields(draft), [draft])
-  const quoteMissing = useMemo(() => missingQuoteConfirmationFields(draft), [draft])
+  const quoteMissing = useMemo(() => missingQuoteConfirmationFields({ ...draft, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 }), [draft, supplierQuote])
   const classificationResolved = !!analysis.customs.ncmCandidate
     && (analysis.customs.classificationConfidence === 'high' || analysis.customs.classificationConfidence === 'medium')
     && analysis.customs.dutyRatePct !== null
@@ -254,19 +254,29 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
   const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
-    || (clarificationTarget === 'functionText' && !!draft.functionText)
-  const canConfirm = classificationReady && !identityEdited
-    ? quoteMissing.length === 0 && (draft.quantity ?? 0) > 0
-    : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied
+  const priceReady = supplierQuote.amount <= 0 || supplierQuotePrice(supplierQuote, draft.quantity) !== null
+  const quantityInRange = !purchaseRange || ((draft.quantity ?? 0) >= purchaseRange.min && (draft.quantity ?? 0) <= purchaseRange.max)
+  const canConfirm = (!classificationReady || identityEdited || priceReady) && (!classificationReady || quantityInRange) && Number.isInteger(draft.moq) && draft.moq >= 0 && (classificationReady && !identityEdited
+    ? quoteMissing.length === 0 && Number.isInteger(draft.quantity) && (draft.quantity ?? 0) >= Math.max(1, draft.moq)
+    : !refinementExhausted && classificationMissing.length === 0 && clarificationSatisfied)
   const volume = resolvedProductVolumeCbm(draft)
-  // Quantity is only a real question when nothing in the analysis implies it.
-  // A supplier MOQ or a suggested quantity already answers "how many"; asking
-  // again is the redundant prompt the UX audit called out.
-  const quantitySignal = (analysis.suggestedQuantities?.[0] ?? 0) > 0 || (analysis.product.moq ?? 0) > 0
+  // Only an explicit purchase quantity answers the quantity question.
+  const quantitySignal = (analysis.product.purchaseQuantity ?? 0) > 0
   const minimumQuantity = Math.max(1, Math.floor(analysis.product.moq || draft.moq || 1))
-  const fxRate = fxRateInput.trim() ? Number(fxRateInput) : null
-  const priceConversion = convertToUsd(draft.unitPriceUsd, priceCurrency, fxRate)
-
+  const budgetProposal = useMemo(() => {
+    const price = supplierQuotePrice(supplierQuote)
+    if (!classificationReady || !price || prefill.budgetUsd <= 0 || quoteMissing.length) return null
+    const options = optimizeQuantity({
+      originCountry: draft.originCountry, quantity: draft.quantity || Math.max(1, draft.moq),
+      unitPriceUsd: price, unitWeightKg: draft.unitWeightKg, unitVolumeCbm: volume,
+      dutyRatePct: prefill.dutyRatePct || 0, statisticsRatePct: prefill.statisticsRatePct ?? undefined,
+      vatRatePct: prefill.vatRatePct ?? undefined, vatAdditionalRatePct: prefill.vatAdditionalRatePct ?? undefined,
+      gainsRatePct: prefill.gainsRatePct ?? undefined, iibbRatePct: prefill.iibbRatePct ?? undefined,
+      purpose: 'unknown', entityType: 'unknown', hasImporterSignature: null, sensitiveCategory: prefill.sensitiveCategory,
+      supplierQuote, budgetUsd: prefill.budgetUsd, moq: draft.moq, strategy: 'test',
+    })
+    return options.affordableCandidates.find(candidate => supplierQuotePrice(supplierQuote, candidate.quantity) !== null) || null
+  }, [classificationReady, draft, supplierQuote, prefill, volume, quoteMissing.length])
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
   }
@@ -276,40 +286,26 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     const next = note
       ? applyClassificationClarification(draft, note, analysis.customs.missingFacts)
       : draft
-    onConfirm(next)
+    onConfirm({ ...next, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, next.quantity) || 0 })
     setClarification('')
   }
 
-  // When autoConfirm is on (chatbot-originated analyses), skip the confirm form
-  // automatically as soon as canConfirm becomes true (first render with enough data).
-  useEffect(() => {
-    if (!autoConfirm || status !== 'confirm' || !canConfirm) return
-    onConfirm(draft)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConfirm, status, canConfirm])
-
   const submitDisambiguationAnswer = (note: string) => {
-    onConfirm(applyClassificationClarification(draft, note, analysis.customs.missingFacts))
+    onConfirm({ ...applyClassificationClarification(draft, note, analysis.customs.missingFacts), supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 })
     setClarification('')
   }
   // A direct candidate pick resolves to a confirmed profile and routes through the existing
   // manual-NCM path (same as ManualNcmPicker), so economics use validated tariffs.
   const pickDisambiguationCandidate = (customs: CustomsProfile) => {
-    onManualNcm(customs, draft)
+    onManualNcm(customs, { ...draft, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 })
   }
 
   const quoteFieldMissing = (id: string) => quoteMissing.some((item) => item.id === id)
 
-  const applyCurrencyConversion = () => {
-    if (priceCurrency === 'USD') return
-    update('unitPriceUsd', priceConversion.amountUsd)
-    setPriceCurrency('USD')
-    setFxRateInput('')
-  }
-
   return <section className="calculation-pipeline" id="case-confirmation" aria-busy={status === 'processing'}>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>
-    {status === 'confirm' ? <>
+    {(status === 'confirm' || status === 'blocked') ? <>
+      {status === 'blocked' && blocker && <div className="pipeline-blocker" role="alert" aria-atomic="true">{blocker}{analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.map(fact => <li key={fact}>{fact}</li>)}</ul>}</div>}
       <div className="pipeline-confirm-head progressive-confirm-head">
         <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : provisionalAvailable ? 'Estimado listo para cotizar' : 'Confirmación inteligente'}</span>
         <h2>{classificationResolved
@@ -325,8 +321,20 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
       </div>
 
       <div className="pipeline-product-card progressive-product-card">
+        <div className="pipeline-known-grid">
+          {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : 'Sin dato', 'moq-review')}
+          {knownFact('Peso embalado', draft.unitWeightKg > 0 ? `${draft.unitWeightKg} kg/u.` : 'Sin dato', 'weight-review')}
+          {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : 'Sin dato', 'volume-review')}
+        </div>
+        <details className="supplier-logistics-review"><summary>Editar mínimo, origen, peso o volumen</summary><div className="pipeline-progressive-fields">
+          <label className="pipeline-confirm-field"><span>MOQ (opcional)</span><input type="number" min="1" step="1" value={draft.moq || ''} onChange={e => update('moq', numberValue(e.target.value))} placeholder="Sin dato" /></label>
+          <label className="pipeline-confirm-field"><span>Origen del producto</span><input value={draft.originCountry} onChange={e => update('originCountry', e.target.value)} /></label>
+          <label className="pipeline-confirm-field"><span>Peso embalado por unidad (kg)</span><input type="number" min="0" step="any" value={draft.unitWeightKg || ''} onChange={e => update('unitWeightKg', numberValue(e.target.value))} /></label>
+          <label className="pipeline-confirm-field"><span>Volumen embalado por unidad (m³)</span><input type="number" min="0" step="any" value={draft.unitVolumeCbm || ''} onChange={e => update('unitVolumeCbm', numberValue(e.target.value))} /></label>
+        </div></details>
+        <SupplierQuoteReview quote={supplierQuote} quantity={draft.quantity} sourceUrl={analysis.sourceUrl} evidence={analysis.product.supplierEvidence} onChange={setSupplierQuote} />
         <button type="button" className="pipeline-secondary" aria-expanded={showManualNcm} onClick={() => setShowManualNcm(value => !value)}>Buscar o cambiar posición en el nomenclador</button>
-        {showManualNcm && <ManualNcmPicker customs={analysis.customs} onSelect={customs => { onManualNcm(customs, draft); setShowManualNcm(false) }} />}
+        {showManualNcm && <ManualNcmPicker customs={analysis.customs} onSelect={customs => { onManualNcm(customs, { ...draft, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 }); setShowManualNcm(false) }} />}
         {!classificationReady ? <>
           <div className="pipeline-understood-card">
             <span className="eyebrow">Producto detectado</span>
@@ -336,8 +344,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
               {knownFact('Material', draft.material, 'material')}
               {knownFact('Función', draft.functionText, 'function')}
               {knownFact('Origen', draft.originCountry, 'origin')}
-              {knownFact('Precio proveedor', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
-              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+              {knownFact('Precio proveedor', supplierQuotePrice(supplierQuote, draft.quantity) !== null ? usd(supplierQuotePrice(supplierQuote, draft.quantity)!) : 'Moneda y oferta a confirmar', 'price')}
+              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : 'Sin dato', 'moq')}
             </div>
             {draft.description && draft.description !== draft.productName && <details className="pipeline-source-detail"><summary>Ver detalle técnico leído</summary><p>{draft.description}</p></details>}
             <div className="pipeline-understood-actions">
@@ -354,7 +362,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <label className="pipeline-confirm-field wide"><span>Detalle técnico útil</span><textarea value={draft.description} onChange={(event) => update('description', event.target.value)} placeholder="Modelo, tecnología, composición o cualquier característica que diferencie el producto." rows={3} /></label>
           </div>}
 
-          {hasDisambiguation && !refinementExhausted && <NcmDisambiguation
+          {hasDisambiguation && <NcmDisambiguation
             disambiguation={disambiguation!}
             customs={analysis.customs}
             onPickCandidate={pickDisambiguationCandidate}
@@ -363,7 +371,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             onContinueEstimate={provisionalAvailable ? submitConfirmation : undefined}
           />}
 
-          {classifierAskedForMore && !(clarificationTarget === 'functionText' && !!draft.functionText) && !refinementExhausted && !(refinement && (refinement.attempt >= 2 || (refinement.attempt > 0 && clarificationTarget === 'functionText'))) && <div className="pipeline-clarification-card">
+          {classifierAskedForMore && !hasDisambiguation && !refinementExhausted && <div className="pipeline-clarification-card">
             <span className="eyebrow">Una pregunta para terminar</span>
             <div className="pipeline-clarification-copy">
               <h3>{clarificationUi.question}</h3>
@@ -419,38 +427,14 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
             <span className="eyebrow">Datos que ya tengo</span>
             <div className="pipeline-known-grid">
               {knownFact('Origen', draft.originCountry, 'origin')}
-              {knownFact('FOB unitario', draft.unitPriceUsd > 0 ? usd(draft.unitPriceUsd) : null, 'price')}
-              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : null, 'moq')}
+              {knownFact('FOB unitario', supplierQuotePrice(supplierQuote, draft.quantity) !== null ? usd(supplierQuotePrice(supplierQuote, draft.quantity)!) : 'Moneda y oferta a confirmar', 'price')}
+              {knownFact('MOQ', draft.moq > 0 ? `${draft.moq} u.` : 'Sin dato', 'moq')}
               {knownFact('Peso embalado', draft.unitWeightKg > 0 ? `${draft.unitWeightKg} kg/u.` : null, 'weight')}
               {knownFact('Volumen embalado', volume > 0 ? `${volume.toFixed(6)} m³/u.` : null, 'volume')}
               {quantitySignal && knownFact('Cantidad', draft.quantity ? `${draft.quantity} u.` : null, 'quantity')}
             </div>
             <button type="button" className="pipeline-secondary" aria-expanded={showAllQuoteFields} onClick={() => setShowAllQuoteFields((value) => !value)}>{showAllQuoteFields ? 'Ocultar campos opcionales' : 'Corregir un dato detectado'}</button>
           </div>
-
-          {draft.unitPriceUsd > 0 && <div className="pipeline-currency-confirm">
-            <div className="pipeline-currency-head"><b>Confirmá el precio y la cantidad mínima</b><small>Reviso lo que extraje. Si el proveedor expresa el precio en otra moneda, pasalo a dólares oficiales antes de calcular.</small></div>
-            <div className="pipeline-currency-facts">
-              <div><span>Precio FOB detectado</span><b>{priceCurrency === 'USD' ? usd(draft.unitPriceUsd) : `${draft.unitPriceUsd} ${priceCurrency}`}</b></div>
-              <div><span>Cantidad mínima (MOQ)</span><b>{draft.moq > 0 ? `${draft.moq} u.` : 'Sin dato'}</b></div>
-            </div>
-            <div className="pipeline-currency-grid">
-              <label className="pipeline-confirm-field"><span>Moneda del precio del proveedor</span>
-                <DsSelect
-                  ariaLabel="Moneda del precio del proveedor"
-                  value={priceCurrency}
-                  onChange={(value) => setPriceCurrency(value as CurrencyCode)}
-                  options={(Object.keys(CURRENCY_LABELS) as CurrencyCode[]).map((code) => ({ value: code, label: `${code} · ${CURRENCY_LABELS[code]}` }))}
-                />
-              </label>
-              {priceCurrency !== 'USD' && <label className="pipeline-confirm-field"><span>Tipo de cambio (USD por 1 {priceCurrency})</span><input type="number" min="0" step="0.0001" value={fxRateInput} onChange={(event) => setFxRateInput(event.target.value)} placeholder={`${priceConversion.usdPerUnit}`} /></label>}
-            </div>
-            {priceCurrency !== 'USD' && <div className="pipeline-currency-preview" role="status">
-              <span>{draft.unitPriceUsd} {priceCurrency} → <b>{usd(priceConversion.amountUsd)}</b> por unidad</span>
-              <small>{priceConversion.note}</small>
-              <button type="button" className="journey-primary-action" disabled={Number(fxRateInput) <= 0} onClick={applyCurrencyConversion}>Convertir el precio a USD <UiIcon name="arrow-right" size={16} /></button>
-            </div>}
-          </div>}
 
           {showAllQuoteFields && <div className="pipeline-progressive-fields">
             <label className="pipeline-confirm-field"><span>Nombre del producto</span><input value={draft.productName} onChange={event => update('productName', event.target.value)} /></label>
@@ -463,15 +447,15 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           <div className="pipeline-progressive-fields quote-missing-fields">
             <div className="pipeline-progressive-title"><b>{quoteMissing.length ? `Me ${quoteMissing.length === 1 ? 'falta' : 'faltan'} ${quoteMissing.length} ${quoteMissing.length === 1 ? 'dato' : 'datos'} para cotizar.` : 'Ya tengo todo para cotizar.'}</b><small>Pedimos sólo lo que interviene en compra o flete.</small></div>
             {!quantitySignal && !showAllQuoteFields && <div className="pipeline-quantity-prompt">
-              <div className="pipeline-quantity-copy"><b>¿Con cuántas unidades arrancamos?</b><small>No necesito un número exacto ahora. Si todavía no lo definiste, arrancamos con la cantidad mínima y la optimización después prueba otras cantidades sin pasarte del presupuesto.</small></div>
+              <div className="pipeline-quantity-copy"><b>¿Con cuántas unidades arrancamos?</b><small>{purchaseRange ? `Tu rango: ${purchaseRange.min}–${purchaseRange.max} unidades. ` : prefill.budgetUsd > 0 ? `Tu presupuesto: ${usd(prefill.budgetUsd)}. ` : ''}Elegí una cantidad dentro del rango o presupuesto que ya ingresaste. El mínimo del proveedor sólo se usa si lo elegís explícitamente.</small></div>
               <div className="pipeline-quantity-choice">
-                <button type="button" className={`pipeline-quantity-option${draft.quantity === minimumQuantity ? ' is-active' : ''}`} onClick={() => update('quantity', minimumQuantity)}><span>Traer la cantidad mínima</span><em>{minimumQuantity} u.</em></button>
+                {budgetProposal && <button type="button" className="pipeline-quantity-option" onClick={() => update('quantity', budgetProposal.quantity)}><span>Usar propuesta según presupuesto</span><em>{budgetProposal.quantity} u. · {usd(budgetProposal.totalCostUsd)} estimados</em></button>}
+                {draft.moq > 0 && <button type="button" className={`pipeline-quantity-option${draft.quantity === minimumQuantity ? ' is-active' : ''}`} onClick={() => update('quantity', minimumQuantity)}><span>Traer la cantidad mínima</span><em>{minimumQuantity} u.</em></button>}
                 <label className="pipeline-confirm-field"><span>O indicá una cantidad</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} placeholder={`${minimumQuantity}`} /></label>
               </div>
             </div>}
             {showAllQuoteFields && <label className="pipeline-confirm-field"><span>Cantidad a cotizar (unidades)</span><input type="number" min="1" step="1" value={draft.quantity || ''} onChange={event => update('quantity', Math.floor(numberValue(event.target.value)))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('originCountry')) && <label className="pipeline-confirm-field"><span>País de origen de la mercadería</span><input value={draft.originCountry} onChange={(event) => update('originCountry', event.target.value)} placeholder="Ej. China" /></label>}
-            {(showAllQuoteFields || quoteFieldMissing('unitPriceUsd')) && <label className="pipeline-confirm-field"><span>Precio FOB unitario (USD)</span><input type="number" min="0" step="0.01" value={draft.unitPriceUsd || ''} onChange={(event) => update('unitPriceUsd', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('moq')) && <label className="pipeline-confirm-field"><span>MOQ / cantidad mínima (opcional)</span><input type="number" min="0" step="1" value={draft.moq || ''} onChange={(event) => update('moq', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('unitWeightKg')) && <label className="pipeline-confirm-field"><span>Peso de una unidad embalada (kg)</span><input type="number" min="0" step="0.001" value={draft.unitWeightKg || ''} onChange={(event) => update('unitWeightKg', numberValue(event.target.value))} /></label>}
             {(showAllQuoteFields || quoteFieldMissing('packageVolume')) && <div className="pipeline-volume-entry wide">
@@ -488,6 +472,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
 
           {quoteMissing.length > 0 ? <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No te voy a pedir nada más de aduana.</b><span>Sólo falta: {quoteMissing.map((item) => item.label).join(' · ')}.</span></div> : <div className="pipeline-confirm-ok"><b>Listo para cotizar.</b><span>La NCM y los datos físicos/comerciales tienen evidencia suficiente.</span></div>}
 
+          {!quantityInRange && <p role="alert">Elegí una cantidad dentro del rango {purchaseRange?.min}–{purchaseRange?.max} que ingresaste, o editá ese rango.</p>}
           {classificationReady && !identityEdited && (draft.quantity ?? 0) === 0 && <div className="pipeline-warning" role="alert"><b>Cantidad en cero.</b><span>Indicá cuántas unidades querés cotizar para poder calcular el costo total.</span></div>}
 
           <div className="pipeline-confirm-grid compact">
@@ -516,13 +501,9 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         <div><span>Intervención</span><b>{interventionFee ? 'USD 200 incluido' : 'No aplica'}</b></div>
         <div><span>Costo puesto/u.</span><b>{usd(summary.unitCostUsd)}</b></div>
       </div>}
-    </div> : silent ? <div className="pipeline-silent-status" role="status" aria-live="polite">
-      <div className="pipeline-silent-spinner" aria-hidden="true" />
-      <span>{status === 'processing' ? 'Calculando el costo de importación…' : status === 'blocked' && classifierAskedForMore ? 'Analizando el producto…' : status === 'blocked' ? 'No pude identificar la posición del producto con los datos disponibles.' : 'Calculando el costo de importación…'}</span>
-      {status === 'blocked' && !classifierAskedForMore && <button type="button" className="pipeline-secondary pipeline-silent-retry" onClick={onEditProduct}>Cambiar producto <UiIcon name="arrow-right" size={14} /></button>}
     </div> : <>
       <div className="pipeline-run-head">
-        <div><span className="eyebrow">Calculando</span><h2>{status === 'blocked' ? 'Necesito un dato más para continuar.' : 'Construyendo tu costo de importación.'}</h2></div>
+        <div><span className="eyebrow">Calculando</span><h2>Construyendo tu costo de importación.</h2></div>
         <strong aria-hidden="true">{Math.round(progress)}%</strong>
       </div>
       <div
@@ -550,36 +531,6 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         })}
       </div>
 
-      {status === 'blocked' && (classifierAskedForMore && !refinementExhausted ? <div className="pipeline-clarification-card" role="alert" aria-atomic="true">
-        <span className="eyebrow">Una pregunta para terminar</span>
-        <div className="pipeline-clarification-copy">
-          <h3>{clarificationUi.question}</h3>
-          <p>{clarificationUi.helper}</p>
-        </div>
-        <label className="pipeline-clarification-input" htmlFor="classification-clarification-blocked">
-          <span>Tu respuesta</span>
-          <textarea
-            id="classification-clarification-blocked"
-            value={clarification}
-            onChange={(event) => setClarification(event.target.value.slice(0, 1000))}
-            rows={3}
-            placeholder={clarificationUi.placeholder}
-          />
-        </label>
-        <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" disabled={clarification.trim().length < 3} onClick={submitConfirmation}>Continuar <UiIcon name="arrow-right" size={16} /></button>
-          <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
-        </div>
-      </div> : <div className="pipeline-blocker" role="alert" aria-atomic="true">
-        <b>No pude cerrar la clasificación con los datos disponibles.</b>
-        <p>{blocker || 'Necesito un poco más de información para poder calcular correctamente.'}</p>
-        {analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.slice(0, 6).map((fact) => <li key={fact}>{fact}</li>)}</ul>}
-        <NomencladorGuidance onManualSearch={() => setShowManualNcm(true)} />
-        <div className="pipeline-confirm-actions">
-          <button type="button" className="journey-primary-action" onClick={onReviewProduct}>{refinementExhausted ? 'Revisar el producto' : 'Revisar el producto'} <UiIcon name="arrow-right" size={16} /></button>
-          <button type="button" className="pipeline-secondary" onClick={onEditProduct}>Cambiar producto</button>
-        </div>
-      </div>)}
     </>}
   </section>
 }

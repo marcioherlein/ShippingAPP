@@ -24,6 +24,7 @@ import './styles/result-dossier.css'
 import './styles/product-quality.css'
 import './styles/ds-select.css'
 import './styles/dark-mode.css'
+import './styles/live-flow.css'
 
 import ImportQuoteFlow from './components/ImportQuoteFlow'
 import type { QuotePrefill } from './lib/hotProducts'

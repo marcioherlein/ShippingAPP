@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import type { SupplierQuote } from '../lib/supplierQuote'
+import React, { useMemo, useState } from 'react'
 import { importFreightValues } from '../data/importFreightValues'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type ModeCostBreakdown, type SensitiveProductCategory, type TransportMode } from '../lib/landedCostEngine'
 import { optimizeQuantity, type BuyStrategy } from '../lib/quantityOptimizer'
-import { buildImporterSummary, estimateLocalPrice, type ImporterSummary } from '../lib/importerSummary'
+import { buildImporterSummary, type ImporterSummary } from '../lib/importerSummary'
 import { mercadoLibreSearchUrl, googleShoppingArUrl } from '../lib/marketSearchLinks'
 import type { QuotePrefill } from '../lib/hotProducts'
 import { ars, usd } from '../lib/format'
@@ -58,6 +59,9 @@ export type JourneyQuoteSetup = {
 type ImportQuoteFlowProps = {
   prefill?: QuotePrefill | null
   setup?: JourneyQuoteSetup | null
+  onQuantityChange?: (quantity: number) => void
+  onReviewProduct?: () => void
+  supplierQuote?: SupplierQuote
 }
 
 function NumberField({ label, hint, value, min = 0, step = 1, suffix, onChange }: NumberFieldProps) {
@@ -96,8 +100,12 @@ const verdictClass: Record<string, string> = {
 
 type VerdictSignal = { label: string; title: string; detail: string; tone: 'positive' | 'warning' | 'negative' | 'neutral' }
 
+function reliableMarket(prefill: QuotePrefill | null) {
+  return prefill?.marketStatus === 'live' && Number(prefill.marketPriceArs) > 0 && Number(prefill.marketComparableCount) > 0 && !!prefill.marketSource
+}
+
 function buildVerdictSignals(summary: ImporterSummary, quote: ReturnType<typeof compareLandedCost>, budgetUsd: number, prefill: QuotePrefill | null): VerdictSignal[] {
-  const marketLive = prefill?.marketStatus === 'live' && Number(prefill.marketPriceArs) > 0
+  const marketLive = reliableMarket(prefill)
   const margin = summary.profitPct
   const commercial: VerdictSignal = margin === null
     ? { label: 'Rentabilidad', title: 'No evaluada', detail: 'Falta un precio argentino confiable.', tone: 'neutral' }
@@ -123,7 +131,7 @@ function buildVerdictSignals(summary: ImporterSummary, quote: ReturnType<typeof 
   const market: VerdictSignal = marketLive
     ? { label: 'Mercado argentino', title: 'Benchmark confirmado', detail: `${prefill?.marketComparableCount || 0} comparables${prefill?.marketConfidence !== null && prefill?.marketConfidence !== undefined ? ` · confianza ${prefill.marketConfidence}%` : ''}.`, tone: 'positive' }
     : summary.sellPriceUsd !== null
-      ? { label: 'Mercado argentino', title: 'Estimación, no es un benchmark', detail: 'Usamos un precio local estimado (×1.6 sobre el costo puesto). Verificá con las búsquedas antes de decidir.', tone: 'warning' }
+      ? { label: 'Mercado argentino', title: 'Estimación, no es un benchmark', detail: 'Usamos el precio local que ingresaste. Verificá su fuente y comparabilidad antes de decidir.', tone: 'warning' }
       : { label: 'Mercado argentino', title: 'Evidencia insuficiente', detail: 'No se usa un precio local no validado para declarar rentabilidad.', tone: 'warning' }
 
   const customsKnown = Boolean(prefill?.ncmCode) && (prefill?.classificationConfidence === 'high' || prefill?.classificationConfidence === 'medium')
@@ -149,12 +157,12 @@ function MarketSearchButtons({ productName }: { productName: string }) {
 
 function ArgentinaMarketCard({ prefill, localSellPriceUsd, productName }: { prefill: QuotePrefill | null; localSellPriceUsd: number; productName: string }) {
   const marketPriceArs = Number(prefill?.marketPriceArs) || 0
-  const hasMarket = prefill?.marketStatus === 'live' && marketPriceArs > 0
+  const hasMarket = reliableMarket(prefill)
   const fx = Number(prefill?.fxArsPerUsd) || 0
   const estimateUsd = localSellPriceUsd > 0 ? localSellPriceUsd : 0
   const estimateArs = estimateUsd > 0 && fx > 0 ? estimateUsd * fx : 0
   return <section className={`table-card argentina-market-card${hasMarket ? '' : ' market-missing'}`} aria-labelledby="argentina-market-title">
-    <div className="table-title"><div><span className="eyebrow">Mercado argentino</span><h2 id="argentina-market-title">Precios encontrados en Argentina</h2></div><small>{hasMarket ? 'Evidencia vigente' : 'Estimación local (no es un benchmark)'}</small></div>
+    <div className="table-title"><div><span className="eyebrow">Mercado argentino</span><h2 id="argentina-market-title">Precios encontrados en Argentina</h2></div><small>{hasMarket ? 'Evidencia vigente' : 'Evidencia insuficiente'}</small></div>
     {hasMarket ? <>
       <div className="market-price-hero"><span>Precio usado para calcular el margen</span><strong>{ars(marketPriceArs)}</strong><small>{localSellPriceUsd > 0 ? `${usd(localSellPriceUsd)} al tipo de cambio disponible` : 'Conversión USD no disponible'}</small></div>
       <div className="market-price-range">
@@ -165,16 +173,16 @@ function ArgentinaMarketCard({ prefill, localSellPriceUsd, productName }: { pref
       {prefill?.marketComparables?.length ? <div className="market-comparables"><h3>Publicaciones comparables</h3>{prefill.marketComparables.map((item) => item.permalink
         ? <a key={item.id} href={item.permalink} target="_blank" rel="noreferrer"><span>{item.title}</span><b>{ars(item.priceArs)}</b></a>
         : <div key={item.id}><span>{item.title}</span><b>{ars(item.priceArs)}</b></div>)}</div> : null}
-      <p className="market-provenance"><b>{prefill?.marketComparableCount || 0} comparables aceptados</b>{prefill?.marketConfidence !== null && prefill?.marketConfidence !== undefined ? ` · confianza ${prefill.marketConfidence}%` : ''}<br />Fuente: {prefill?.marketSource || 'mercado argentino'}{prefill?.fxSourceDate ? ` · tipo de cambio ${prefill.fxSourceDate}` : ''}</p>
+      <p className="market-provenance"><b>{prefill?.marketComparableCount || 0} comparables aceptados</b>{prefill?.marketConfidence !== null && prefill?.marketConfidence !== undefined ? ` · confianza ${prefill.marketConfidence}%` : ''}<br />Fuente: {prefill?.marketSource || 'mercado argentino'}{prefill?.fxSourceDate ? ` · tipo de cambio ${prefill.fxSourceDate}${prefill.fxSourceLabel ? ` · ${prefill.fxSourceLabel}` : ""}` : ''}</p>
     </> : <div className="market-estimate">
-      <p className="market-estimate-lead">No pudimos traer precios comparables automáticamente. Buscá el producto en Argentina en dos clics y compará con la estimación:</p>
+      <p className="market-estimate-lead">No hay evidencia suficiente para comparar precios o declarar rentabilidad. Podés buscar publicaciones y cargar un precio comprobado:</p>
       <MarketSearchButtons productName={productName} />
       {estimateUsd > 0 ? <div className="market-price-hero market-estimate-hero">
         <span>Precio local estimado (no verificado)</span>
         <strong>{estimateArs > 0 ? ars(estimateArs) : usd(estimateUsd)}</strong>
         <small>Costo puesto × margen típico de reventa (×1.6){estimateArs > 0 ? ` · ${usd(estimateUsd)} al tipo de cambio disponible` : ''}. Verificá con las búsquedas de arriba.</small>
       </div> : null}
-      <p className="market-estimate-note">Precargamos este valor en el campo editable “Precio venta local” de los supuestos. Reemplazalo cuando tengas un precio real.</p>
+      <p className="market-estimate-note">Cargá un precio comprobado en “Precio venta local” e indicá su fuente antes de decidir.</p>
     </div>}
   </section>
 }
@@ -199,7 +207,7 @@ function unitBreakdown(mode: ModeCostBreakdown, quantity: number) {
   ] as const
 }
 
-export default function ImportQuoteFlow({ prefill = null, setup = null }: ImportQuoteFlowProps) {
+export default function ImportQuoteFlow({ prefill = null, setup = null, onQuantityChange, onReviewProduct, supplierQuote }: ImportQuoteFlowProps) {
   const [productName, setProductName] = useState(prefill?.productName ?? '')
   const [originCountry, setOriginCountry] = useState(prefill?.originCountry ?? 'China')
   const [quantity, setQuantity] = useState(setup?.quantity ?? prefill?.quantity ?? 100)
@@ -253,7 +261,8 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
     monthlyDemand,
     strategy,
     localSellPriceUsd,
-  }), [originCountry, quantity, unitPriceUsd, unitWeightKg, unitVolumeCbm, dutyRatePct, statisticsRatePct, vatRatePct, vatAdditionalRatePct, gainsRatePct, iibbRatePct, purpose, entityType, hasImporterSignature, sensitiveCategory, capitalGoodEligible, capitalGoodUse, budgetUsd, moq, monthlyDemand, strategy, localSellPriceUsd])
+    supplierQuote,
+  }), [originCountry, quantity, unitPriceUsd, unitWeightKg, unitVolumeCbm, dutyRatePct, statisticsRatePct, vatRatePct, vatAdditionalRatePct, gainsRatePct, iibbRatePct, purpose, entityType, hasImporterSignature, sensitiveCategory, capitalGoodEligible, capitalGoodUse, budgetUsd, moq, monthlyDemand, strategy, localSellPriceUsd, supplierQuote])
 
   const lcl = quote.modes.lcl
   const air = quote.modes.air
@@ -266,21 +275,8 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
   const topCandidates = optimizer.candidates.slice(0, 5)
   const breakdown = winner ? unitBreakdown(winner, quantity) : []
 
-  const marketLive = prefill?.marketStatus === 'live' && Number(prefill?.marketPriceArs) > 0
+  const marketLive = reliableMarket(prefill)
   const marketIsEstimate = !marketLive
-
-  // Decision 4: with no live benchmark, pre-fill the editable local price with a labeled estimate
-  // (landed cost × typical resale markup) ONCE, so the user sees a usable margin instead of a dead
-  // field. They can override it afterwards; we never auto-refill after that first fill.
-  const estimateAutofilled = useRef(false)
-  useEffect(() => {
-    if (estimateAutofilled.current || marketLive || localSellPriceUsd > 0 || !winner) return
-    const est = estimateLocalPrice(winner.unitCostUsd, prefill?.fxArsPerUsd)
-    if (est && est > 0) {
-      estimateAutofilled.current = true
-      setLocalSellPriceUsd(est)
-    }
-  }, [marketLive, localSellPriceUsd, winner, prefill])
 
   const summary = useMemo(() => buildImporterSummary(quote, quantity, localSellPriceUsd, optimizer, marketIsEstimate), [quote, quantity, localSellPriceUsd, optimizer, marketIsEstimate])
   const verdictSignals = useMemo(() => buildVerdictSignals(summary, quote, budgetUsd, prefill), [summary, quote, budgetUsd, prefill])
@@ -303,15 +299,16 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
       <details className="inputs-column quote-assumptions">
         <summary><span><b>Revisar o corregir supuestos</b><small>Producto, operación, aranceles y optimización</small></span><em>Editar</em></summary>
         <section className="panel">
+          {onReviewProduct ? <><div className="section-heading"><span>01</span><div><h2>Producto y proveedor</h2><p>Las correcciones vuelven a la ficha para confirmar oferta, tramo y logística.</p></div></div><button type="button" className="secondary" onClick={onReviewProduct}>Editar ficha del producto</button></> : <>
           <div className="section-heading"><span>01</span><div><h2>Producto y proveedor</h2><p>Base física y comercial usada para la simulación.</p></div></div>
           <label className="field field-wide"><span>Producto</span><input placeholder="Ej. paleta de pádel carbono" value={productName} onChange={(e) => setProductName(e.target.value)} /></label>
           <label className="field field-wide"><span>Origen</span><DsSelect ariaLabel="País de origen" value={originCountry} onChange={setOriginCountry} options={originCountries.map((country) => ({ value: country, label: country }))} /></label>
           <div className="field-grid">
-            <NumberField label="Cantidad base" hint="El costo unitario de arriba corresponde a esta cantidad, no a importar literalmente 1 unidad." value={quantity} onChange={setQuantity} suffix="u." />
+            <NumberField label="Cantidad base" hint="El costo unitario de arriba corresponde a esta cantidad, no a importar literalmente 1 unidad." value={quantity} min={Math.max(1, moq)} onChange={next => { if (Number.isInteger(next) && next >= Math.max(1, moq)) { if (onQuantityChange) onQuantityChange(next); else setQuantity(next) } }} suffix="u." />
             <NumberField label="Precio FOB unitario" value={unitPriceUsd} onChange={setUnitPriceUsd} step={0.01} suffix="USD" />
             <NumberField label="Peso unitario" value={unitWeightKg} onChange={setUnitWeightKg} step={0.01} suffix="kg" />
             <NumberField label="Volumen unitario" value={unitVolumeCbm} onChange={setUnitVolumeCbm} step={0.001} suffix="m³" />
-          </div>
+          </div></>}
         </section>
 
         <section className="panel journey-profile-panel">
@@ -444,7 +441,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null }: Import
                   <p key={r} className="assumption-note importer-logistics-signal"><UiIcon name="info" size={15} /> {r}</p>
                 ))}
                 <p className="assumption-note">{quantityRecommendation.affordable ? 'Entra dentro del presupuesto cargado.' : 'No entra dentro del presupuesto: es la opción menos mala encontrada desde el MOQ.'} {optimizer.notes[2]}</p>
-                <button className="secondary" type="button" onClick={() => setQuantity(quantityRecommendation.quantity)}>Usar esta cantidad en la simulación</button>
+                <button className="secondary" type="button" onClick={() => onQuantityChange ? onQuantityChange(quantityRecommendation.quantity) : setQuantity(quantityRecommendation.quantity)}>Usar esta cantidad en la simulación</button>
               </>}
               {topCandidates.length > 0 && <div className="table-scroll" style={{ marginTop: 14 }}><table><thead><tr><th>Cantidad</th><th>Modo</th><th>Total</th><th>Unitario</th><th>m³</th><th>Stock</th><th>Estado</th></tr></thead><tbody>{topCandidates.map((candidate) => <tr key={candidate.quantity} className={candidate.quantity === quantityRecommendation?.quantity ? 'selected-row' : undefined}><td><b>{candidate.quantity} u.</b></td><td>{candidate.selectedMode === 'lcl' ? 'LCL' : candidate.selectedMode === 'air' ? 'Aéreo' : candidate.selectedMode === 'courier' ? 'Courier' : '-'}</td><td>{usd(candidate.totalCostUsd)}</td><td>{usd(candidate.unitCostUsd)}</td><td>{candidate.totalVolumeCbm}</td><td>{candidate.monthsOfStock === null ? '-' : `${candidate.monthsOfStock}m`}</td><td>{candidate.affordable ? 'OK' : 'Fuera presupuesto'}</td></tr>)}</tbody></table></div>}
             </section>

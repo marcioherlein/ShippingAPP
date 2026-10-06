@@ -243,7 +243,13 @@ export default function DsSelect({
                 data-value={option.value}
                 className={`ds-select-option${isSelected ? ' is-selected' : ''}${option.disabled ? ' is-disabled' : ''}`}
                 onMouseEnter={() => !option.disabled && setActiveIndex(index)}
-                onClick={() => commit(index)}
+                onClick={event => {
+                  // Options may live inside a label. Prevent implicit label activation
+                  // from clicking the trigger again after a successful selection.
+                  event.preventDefault()
+                  event.stopPropagation()
+                  commit(index)
+                }}
               >
                 <span className="ds-select-option-body">
                   <span className="ds-select-option-label">{option.label}</span>

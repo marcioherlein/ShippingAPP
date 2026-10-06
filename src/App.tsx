@@ -201,6 +201,7 @@ export default function App() {
   // True while the persistence layer replays a saved journey, so the reveal
   // scrolls below don't yank the page during restore/popstate.
   const restoringRef = useRef(hasPendingRestore())
+  const pendingResultReveal = useRef(false)
 
   useEffect(() => {
     try { localStorage.setItem(ENTERED_KEY, entered ? '1' : '0') } catch { /* storage may be unavailable */ }
@@ -307,6 +308,14 @@ export default function App() {
     if (restoringRef.current) return
     scrollIntoViewIfNeeded(target)
   }
+
+  // The result exists only after React commits the ready state. Querying it
+  // inside confirmAndCalculate reads the previous DOM and cannot reveal it.
+  useEffect(() => {
+    if (effectiveCalculationStatus !== 'ready' || restoringRef.current || !pendingResultReveal.current) return
+    pendingResultReveal.current = false
+    scrollIntoViewIfNeeded(document.querySelector('#calculator .result-hero'))
+  }, [effectiveCalculationStatus])
 
   const enterApp = () => {
     setEntered(true)
@@ -534,9 +543,9 @@ export default function App() {
       }))
       await nextPaint(120)
       clearPendingConfirm()
+      pendingResultReveal.current = true
       setCalculationStatus('ready')
       setStep(4)
-      revealSection(document.getElementById('calculator'))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.'
       if (!/Ingresá a tu cuenta|validar tu sesión/.test(message)) clearPendingConfirm()

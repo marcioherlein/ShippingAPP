@@ -107,6 +107,13 @@ WebKit coverage now also selects intake recovery, result dossier and accessibili
 tests. New browser regressions verify unknown MOQ in the result and manual-price
 provenance, including editing an originally live benchmark at 320px.
 
+The first expanded CI run passed 996 unit/integration and 54 browser tests, but
+visual review found the WebKit dark full-page result capture blank below the
+pipeline summary. The quotation now paints without an opacity entrance animation.
+The ready-state reveal runs after React commits the result instead of querying a
+not-yet-mounted DOM node. Browser acceptance additionally requires the cost hero
+to enter the viewport automatically after each confirmation, before screenshot/axe.
+
 Local validation of this follow-up: 170 files / 996 unit and integration tests pass,
 including rendered React result regressions; production build and nomenclature asset
 validation pass. The updated browser suite has not run locally: this workspace has

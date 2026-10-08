@@ -47,7 +47,7 @@
   cursor: pointer;
 }
 .app-header :is(.app-header-nav a, .app-header-nav button, .auth-secondary, .app-account-menu > summary):hover { background: var(--ds-surface-subtle); color: var(--ds-text-strong); }
-.app-header .auth-primary { background: var(--flow-accent); color: var(--flow-accent-text); }
+.app-header .auth-account-control .auth-primary { background: var(--flow-accent); color: var(--flow-accent-text); }
 .app-header .app-header-nav button { border-color: var(--ds-border); color: var(--ds-text-strong); }
 .app-header :is(a, button, summary):focus-visible { outline: 2px solid var(--flow-accent); outline-offset: 3px; }
 .app-account-menu { position: relative; }
@@ -84,7 +84,7 @@
   .app-header-nav button { margin-left: auto; }
 }
 @media (max-width: 460px) {
-  .app-header .auth-primary { display: none; }
+  .app-header .auth-account-control .auth-primary { display: none; }
   .app-wordmark { font-size: 17px; }
   .app-header :is(.app-header-nav a, .app-header-nav button, .auth-secondary, .app-account-menu > summary) { padding-inline: 10px; }
 }

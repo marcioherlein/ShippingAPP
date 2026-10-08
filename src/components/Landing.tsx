@@ -1,4 +1,5 @@
 import React from 'react'
+import AppHeader from './AppHeader'
 import { preferredScrollBehavior } from '../lib/motionPreference'
 
 type Props = { onStart: () => void }
@@ -15,9 +16,7 @@ export default function Landing({ onStart }: Props) {
   }
 
   return <main className="journey-app journey-landing-view" id="home">
-    <header className="journey-topbar">
-      <a className="journey-brand" href="#home"><span className="journey-brand-mark">G</span><span>Global<b>Shipping</b></span></a>
-    </header>
+    <AppHeader />
 
     <section className="journey-landing-hero">
       <div className="journey-landing-ambient" aria-hidden="true" />
@@ -82,7 +81,7 @@ export default function Landing({ onStart }: Props) {
 
     <footer className="journey-footer">
       <div className="journey-footer-left">
-        <a className="journey-footer-brand" href="#home"><span className="journey-brand-mark" style={{ width: '26px', height: '26px', fontSize: '13px', borderRadius: '8px' }}>G</span><span>Global<b>Shipping</b></span></a>
+        <a className="journey-footer-brand" href="#home"><span>GlobalShipping</span></a>
         <p className="journey-footer-copy">&#xA9; {new Date().getFullYear()} GlobalShipping. Calculadora de costos de importaci&#xF3;n.</p>
       </div>
       <nav className="journey-footer-links" aria-label="P&#xE1;ginas legales">

@@ -8,6 +8,7 @@ import OwnedProductIntake from './components/OwnedProductIntake'
 import CalculationPipeline, { type CalculationPipelineStatus, type CalculationPipelineSummary } from './components/CalculationPipeline'
 import ImportQuoteFlow, { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
 import Landing from './components/Landing'
+import AppHeader from './components/AppHeader'
 import DsSelect from './components/DsSelect'
 import UiIcon from './components/UiIcon'
 import type { QuotePrefill } from './lib/hotProducts'
@@ -602,11 +603,7 @@ export default function App() {
         <button type="button" className="journey-destructive-action" onClick={resetJourney}>Empezar de nuevo</button>
       </div>
     </dialog>
-    <header className="journey-topbar">
-      <a className="journey-brand" href="#home"><span className="journey-brand-mark">G</span><span>Global<b>Shipping</b></span></a>
-      <nav className="journey-main-nav" aria-label="Navegación principal"><a href="#cotizador">Cotizador</a>{analysis && <a href="#case-confirmation">Producto</a>}</nav>
-      <div className="journey-top-actions"><button type="button" onClick={requestReset}>Nuevo caso</button></div>
-    </header>
+    <AppHeader onNewCase={requestReset} hasProduct={!!analysis} />
 
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
       <h1 className="journey-task-title">{progressStep === 4 ? 'Cotización lista' : 'Tu cotización'}</h1>

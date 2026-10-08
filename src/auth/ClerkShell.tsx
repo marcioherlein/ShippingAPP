@@ -7,6 +7,7 @@ import Watchlist from '../components/Watchlist'
 import UsageBadge from '../components/UsageBadge'
 import EmailPreferences from '../components/EmailPreferences'
 import './auth.css'
+import { AccountControlsContext } from './AccountControls'
 
 type AccountSyncState = 'idle' | 'syncing' | 'ready' | 'error'
 type HistorySaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -102,8 +103,7 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
       ? 'No pudimos sincronizar la cuenta'
       : 'Conectando cuenta…'
 
-  return <>
-    <div className="auth-account-control" aria-label="Cuenta">
+  const controls = <div className="auth-account-control" role="group" aria-label="Cuenta">
       <Show when="signed-out">
         <SignInButton mode="modal">
           <button type="button" className="auth-secondary">Ingresar</button>
@@ -113,14 +113,19 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
         </SignUpButton>
       </Show>
       <Show when="signed-in">
+        <details className="app-account-menu">
+          <summary>Mi cuenta</summary>
+          <div className="app-account-panel">
         <span className="auth-saved-label" data-account-sync={accountSync} data-history-save={historySave}>{accountLabel}</span>
         {accountSync === 'ready' && <UsageBadge />}
         {accountSync === 'ready' && <EmailPreferences />}
         <Watchlist />
         <AnalysisHistory />
         <UserButton />
+          </div>
+        </details>
       </Show>
     </div>
-    {children}
-  </>
+
+  return <AccountControlsContext value={controls}>{children}</AccountControlsContext>
 }

@@ -8,6 +8,7 @@ import OwnedProductIntake from './components/OwnedProductIntake'
 import CalculationPipeline, { type CalculationPipelineStatus, type CalculationPipelineSummary } from './components/CalculationPipeline'
 import ImportQuoteFlow, { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
 import Landing from './components/Landing'
+import AppHeader from './components/AppHeader'
 import DsSelect from './components/DsSelect'
 import UiIcon from './components/UiIcon'
 import type { QuotePrefill } from './lib/hotProducts'
@@ -602,11 +603,7 @@ export default function App() {
         <button type="button" className="journey-destructive-action" onClick={resetJourney}>Empezar de nuevo</button>
       </div>
     </dialog>
-    <header className="journey-topbar">
-      <a className="journey-brand" href="#home"><span className="journey-brand-mark">G</span><span>Global<b>Shipping</b></span></a>
-      <nav className="journey-main-nav" aria-label="Navegación principal"><a href="#cotizador">Cotizador</a>{analysis && <a href="#case-confirmation">Producto</a>}</nav>
-      <div className="journey-top-actions"><button type="button" onClick={requestReset}>Nuevo caso</button></div>
-    </header>
+    <AppHeader onNewCase={requestReset} hasProduct={!!analysis} />
 
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
       <h1 className="journey-task-title">{progressStep === 4 ? 'Cotización lista' : 'Tu cotización'}</h1>
@@ -621,7 +618,7 @@ export default function App() {
     <section className="journey-workspace">
       <div className="journey-conversation">
         <div className="journey-bubble assistant">
-          <span className="journey-avatar">G</span>
+          <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
           <div><b>Primero: ¿desde dónde arrancamos?</b><p>Del link del proveedor al costo unitario puesto en Argentina. GlobalShipping clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p></div>
         </div>
 
@@ -633,7 +630,7 @@ export default function App() {
 
         {intent && <>
           <div className="journey-bubble assistant">
-            <span className="journey-avatar">G</span>
+            <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
             <div><b>Contame cómo vas a importar.</b><p>Estas respuestas afectan impuestos, gastos y trámites. Si no sabés algo, podés marcar “No sé”.</p></div>
           </div>
 
@@ -649,7 +646,7 @@ export default function App() {
 
           {step >= 2 && <>
             <div className="journey-bubble assistant">
-              <span className="journey-avatar">G</span>
+              <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
               <div><b>¿Cuánto querés invertir?</b><p>Presupuesto total, rango de unidades, o dejalo en abierto por ahora.</p></div>
             </div>
             <section className={`journey-question-card${step === 2 ? ' active' : ''}`}>
@@ -670,7 +667,7 @@ export default function App() {
 
           {step >= 3 && <>
             {!(intent === 'have_product' && analysis) && <div className="journey-bubble assistant">
-              <span className="journey-avatar">G</span>
+              <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
               <div>
                 <b>{intent === 'have_product' ? '¿Tenés el link o preferís contarme qué producto es?' : '¿Qué producto querés buscar?'}</b>
                 <p>{intent === 'have_product'
@@ -774,7 +771,7 @@ export default function App() {
 
     {!intent && <footer className="journey-footer">
       <div className="journey-footer-left">
-        <a className="journey-footer-brand" href="#home"><span className="journey-brand-mark" style={{ width: '26px', height: '26px', fontSize: '13px', borderRadius: '8px' }}>G</span><span>Global<b>Shipping</b></span></a>
+        <a className="journey-footer-brand" href="#home"><span>GlobalShipping</span></a>
         <p className="journey-footer-copy">&#xA9; {new Date().getFullYear()} GlobalShipping. Calculadora de costos de importaci&#xF3;n.</p>
       </div>
       <nav className="journey-footer-links" aria-label="P&#xE1;ginas legales">

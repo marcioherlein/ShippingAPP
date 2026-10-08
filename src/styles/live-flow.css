@@ -24,7 +24,6 @@
 .supplier-logistics-review summary { cursor: pointer; padding: 12px 0; }
 .search-operation-state { color: var(--ds-text-secondary); font-size: 15px; line-height: 1.5; }
 .pipeline-known-fact small, .pipeline-known-fact span, .pipeline-confirm-field small { color: var(--ds-text-secondary); }
-.auth-account-control { position: relative; inset: auto; z-index: 20; max-width: none; width: 100%; box-sizing: border-box; border-radius: 0; border: 0; border-bottom: 1px solid var(--ds-border); background: var(--ds-surface); box-shadow: none; padding: 8px max(16px, calc((100vw - 1180px) / 2)); backdrop-filter: none; }
 @media (max-width: 600px) {
   .journey-topbar { flex-wrap: wrap; gap: 8px 14px; padding: 12px 0; }
   .journey-main-nav { gap: 12px; }
@@ -38,13 +37,10 @@
   .journey-app :is(.chatbot-dock-input-wrap, .chatbot-send-btn) { min-width: 0; }
   .journey-app :is(.chatbot-receipt-chip, .pipeline-secondary) { max-width: 100%; white-space: normal; }
   .journey-app :is(.product-chatbot, .chatbot-thread, .chatbot-input-dock) { min-width: 0; }
-  .auth-account-control { position: relative; inset: auto; flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
-  .auth-account-control .auth-usage-badge { max-width: none; white-space: normal; overflow: visible; }
 }
 @media (prefers-color-scheme: dark) {
   :root { --flow-canvas: #10101b; --flow-accent: #6958d4; --ds-text-muted: #a9b3c6; --ds-brand: #b9b3ff; --ds-brand-strong: #b9b3ff; --ds-brand-soft: #282443; }
   .journey-app { background: var(--flow-canvas); }
-  .auth-account-control { background: var(--ds-surface); }
   .supplier-review a { color: #b9b3ff; }
 }
 

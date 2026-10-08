@@ -22,6 +22,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
       await page.screenshot({ path: testInfo.outputPath(`header-${colorScheme}-${width}.png`) })
     }
+    await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
     await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('button', { name: 'Seguir con este caso', exact: true }).click()

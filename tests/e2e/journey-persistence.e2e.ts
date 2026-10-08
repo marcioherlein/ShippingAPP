@@ -128,15 +128,17 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
       await expect(page.getByRole('heading', { name: 'Elegí la forma más fácil.' })).toBeVisible()
       await expect.poll(() => persistedStep(page)).toBe(3)
     }
-    // Exercise all the signed-in toolbar labels with the production stylesheet.
+    // Exercise the signed-in account menu in its shared-header location.
     await page.addStyleTag({ url: '/src/auth/auth.css' })
     await page.evaluate(() => {
       const toolbar = document.createElement('div')
       toolbar.className = 'auth-account-control'
-      toolbar.innerHTML = '<span class="auth-usage-badge">10 análisis disponibles</span><button>Emails</button><button>Seguimiento</button><button>Historial</button><button>Mi cuenta</button>'
-      document.querySelector('#root')!.prepend(toolbar)
+      toolbar.innerHTML = '<details class="app-account-menu"><summary>Mi cuenta</summary><div class="app-account-panel"><span class="auth-usage-badge">10 análisis disponibles</span><button>Emails</button><button>Seguimiento</button><button>Historial</button></div></details>'
+      document.querySelector('.app-header-account')!.append(toolbar)
     })
-    for (const selector of ['.auth-account-control', '.owned-product-options > button']) {
+    await page.locator('.app-account-menu > summary').click()
+    await expect(page.locator('.app-account-panel')).toBeVisible()
+    for (const selector of ['.auth-account-control', '.app-account-panel', '.app-account-panel > button', '.owned-product-options > button']) {
       const boxes = await page.locator(selector).evaluateAll(els => els.map(el => {
         const r = el.getBoundingClientRect()
         return { left: r.left, right: r.right, overflow: el.scrollWidth > el.clientWidth + 1 }
@@ -147,6 +149,8 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
         expect(box.overflow).toBe(false)
       }
     }
+    await page.locator('.app-account-menu > summary').click()
+    await expect(page.locator('.app-account-panel')).not.toBeVisible()
     await expect(page.locator('.journey-product-surface')).toHaveCSS('opacity', '1')
     await page.locator('.owned-product-intake').scrollIntoViewIfNeeded()
     await page.screenshot({ path: testInfo.outputPath('product-mobile.png'), fullPage: true, animations: 'disabled' })

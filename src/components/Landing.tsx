@@ -6,7 +6,8 @@ export default function Landing({ onStart }: Props) {
   const [navScrolled, setNavScrolled] = useState(false)
 
   const scrollToHow = () => {
-    document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    document.getElementById('como-funciona')?.scrollIntoView({ behavior, block: 'start' })
   }
 
   // Frosted-glass nav on scroll

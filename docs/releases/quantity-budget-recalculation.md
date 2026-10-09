@@ -7,3 +7,5 @@ Budget search evaluates each confirmed price band independently, including later
 Regression coverage includes discounted-band affordability, range/increment constraints, missing-origin costs and rendered tier recalculation. Browser cases exercise budget selection and range selection on Chromium and mobile WebKit with controlled provider responses. Original capacity is reused and saved/result quantities match. Real-account login and physical iPhone keyboard/zoom remain outstanding acceptance checks.
 
 The intervening landing redesign changed its markup/copy without updating existing tests and restored the removed G mark. This change updates those tests and removes both restored marks.
+
+The first browser run passed the new budget/range cases, but exposed existing design overrides that forced a light header and dark title in dark mode and overrode reduced-motion transitions. The follow-up retains the intervening full-width navigation/font changes, uses semantic surfaces/text colors and restores motion preferences, including landing scroll behavior. These regressions must pass the unchanged accessibility gates before merge.

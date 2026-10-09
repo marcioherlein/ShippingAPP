@@ -815,35 +815,85 @@
 .gs-typing__dot:nth-child(2) { animation-delay: 0.16s; }
 .gs-typing__dot:nth-child(3) { animation-delay: 0.32s; }
 
+/* ── GLOBAL: Inter as base font (consistent across all views) ── */
+:root {
+  --app-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+body {
+  font-family: var(--app-font) !important;
+}
+
 /* ── TOOL FLOW: ACE DESIGN SYSTEM UPGRADE ─────────────────────
  * Brings the quotation workspace to the same design level as the
  * ACE-inspired landing. Scoped to journey-* / app-header classes
  * (tool view only — landing uses gs-* namespace).
  * ──────────────────────────────────────────────────────────── */
 
-/* 1. Sticky frosted-glass AppHeader */
+/* 1. Full-width sticky frosted-glass AppHeader
+ *    Original CSS puts width: min(1180px…) on the element itself,
+ *    which makes the bar narrower than the viewport.
+ *    Override to 100% and move spacing to padding. */
 .app-header {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: clamp(20px, 3vw, 48px) !important;
+  padding-right: clamp(20px, 3vw, 48px) !important;
+  box-sizing: border-box !important;
   position: sticky !important;
   top: 0 !important;
-  background: rgba(248, 249, 255, 0.82) !important;
-  backdrop-filter: blur(22px) saturate(160%);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  border-bottom-color: rgba(79, 93, 228, 0.1) !important;
-  box-shadow: 0 1px 0 rgba(79, 93, 228, 0.07), 0 2px 12px rgba(48, 59, 91, 0.06) !important;
   z-index: 100 !important;
+  /* Clearly visible white frosted glass — distinct from light grey page */
+  background: var(--ds-surface) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid rgba(79, 93, 228, 0.14) !important;
+  box-shadow: 0 1px 0 rgba(79, 93, 228, 0.08), 0 4px 24px rgba(48, 59, 91, 0.07) !important;
 }
 
-/* 2. Playfair Display for the hero title */
+/* App wordmark — Inter bold, same visual weight as gs-nav brand */
+.app-wordmark {
+  font-family: "Inter", sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.04em !important;
+}
+
+/* 2. Playfair Display — all structural page headings */
 .journey-hero h1,
-.journey-task-title {
+.journey-task-title,
+h2.pipeline-confirm-head,
+.pipeline-run-head h2,
+.pipeline-section-title {
   font-family: "Playfair Display", Georgia, "Times New Roman", serif !important;
-  font-size: clamp(22px, 2.8vw, 32px) !important;
   font-weight: 700 !important;
   letter-spacing: -0.025em !important;
-  color: #1d1d1f !important;
 }
 
-/* 3. Deeper, more ACE-quality shadow on conversation card */
+/* Main "Tu cotización" title — bolder presence */
+.journey-task-title {
+  font-size: clamp(24px, 3vw, 36px) !important;
+  color: var(--ds-text-strong) !important;
+}
+
+/* Bot bubble title — Playfair for the first bold line */
+.journey-bubble.assistant > div > b:first-child {
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--ds-text-strong) !important;
+}
+
+/* Question card section labels — Playfair light serif treatment */
+.journey-question-head > div > b {
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* 3. Deeper shadow on conversation card */
 .journey-conversation {
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.02),
@@ -852,7 +902,7 @@
   border-color: rgba(79, 93, 228, 0.1) !important;
 }
 
-/* 4. ACE spring curve on choice cards — lifts 3px with depth shadow */
+/* 4. ACE spring on choice cards */
 .journey-choice-grid > button {
   transition:
     border-color .22s cubic-bezier(0.16,1,0.3,1),
@@ -863,7 +913,7 @@
   transform: translateY(-3px) !important;
   box-shadow: 0 20px 48px rgba(65, 78, 139, 0.14) !important;
   border-color: rgba(79, 93, 228, 0.4) !important;
-  background: #fff !important;
+  background: var(--ds-surface) !important;
 }
 
 /* 5. Active question card — ACE blue glow ring */
@@ -874,7 +924,7 @@
   border-color: rgba(79, 93, 228, 0.32) !important;
 }
 
-/* 6. Primary action — spring lift + stronger glow on hover */
+/* 6. Primary action — spring lift on hover */
 .journey-primary-action:not(:disabled):hover {
   transform: translateY(-2px) !important;
   box-shadow: 0 12px 28px rgba(79, 93, 228, 0.30) !important;
@@ -884,19 +934,30 @@
     box-shadow .2s cubic-bezier(0.16,1,0.3,1) !important;
 }
 
-/* 7. Bubble entry animation — each new bubble pops in */
+/* 7. Bubble entry animation */
 .journey-bubble {
   animation: gs-msg-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* 8. Chip row — ACE spring on selection */
+/* 8. Chip row — ACE spring on hover/selection */
 .journey-chip-row button {
   transition:
-    background    .18s cubic-bezier(0.16,1,0.3,1),
-    border-color  .18s cubic-bezier(0.16,1,0.3,1),
-    transform     .18s cubic-bezier(0.16,1,0.3,1) !important;
+    background   .18s cubic-bezier(0.16,1,0.3,1),
+    border-color .18s cubic-bezier(0.16,1,0.3,1),
+    transform    .18s cubic-bezier(0.16,1,0.3,1) !important;
 }
 .journey-chip-row button:hover {
   transform: translateY(-1px) !important;
   border-color: rgba(79, 93, 228, 0.35) !important;
+}
+
+/* Keep the late-loaded design overrides consistent with motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  #root *, #root *::before, #root *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+  .journey-choice-grid > button:hover,
+  .journey-primary-action:not(:disabled):hover,
+  .journey-chip-row button:hover { transform: none !important; }
 }

@@ -1,3 +1,4 @@
+import { mergeSupplierEvidence } from '../src/lib/supplierEvidence'
 import { extractAlibabaDirectHttp, type DirectAlibabaResult } from './alibabaDirectProvider'
 import { extractAlibabaWithParsebot, type ParsebotAlibabaFacts, type ParsebotAlibabaResult } from './parsebotAlibaba'
 import { extractAlibabaNative, type NativeAlibabaResult } from './nativeAlibaba'
@@ -173,7 +174,10 @@ function mergeCommonFacts(data: any, facts: ParsebotAlibabaFacts, options: {
     name: (!usableText(product.name, ['Producto Alibaba']) || priorNameIsUrlOnly) && usableText(facts.name) ? facts.name : product.name,
     category: !usableText(product.category, ['Sin clasificar']) && usableText(facts.category) ? facts.category : product.category,
     unitPriceUsd: usableNumber(product.unitPriceUsd) ? product.unitPriceUsd : usableNumber(facts.unitPriceUsd) ? facts.unitPriceUsd : null,
-    supplierEvidence: facts.supplierEvidence || product.supplierEvidence,
+    supplierEvidence: mergeSupplierEvidence(product.supplierEvidence, facts.supplierEvidence, {
+      price: !usableNumber(product.unitPriceUsd), weight: !usableNumber(product.packedWeightKg),
+      moq: !usableNumber(product.moq), volume: !usableNumber(product.volumeCbm),
+    }, options.source === 'browser' ? 'Lectura en navegador' : 'Datos estructurados del proveedor'),
     moq: finalMoq,
     packedWeightKg: usableNumber(product.packedWeightKg) ? product.packedWeightKg : usableNumber(facts.packedWeightKg) ? facts.packedWeightKg : 0,
     volumeCbm: usableNumber(product.volumeCbm) ? product.volumeCbm : usableNumber(facts.volumeCbm) ? facts.volumeCbm : 0,
@@ -219,7 +223,7 @@ function mergeDirect(data: any, direct: Exclude<DirectAlibabaResult, { status: '
     name: usableText(facts.name) ? facts.name : product.name,
     category: usableText(facts.category) ? facts.category : facts.categoryPath.at(-1) || product.category,
     unitPriceUsd: usableNumber(facts.unitPriceUsd) ? facts.unitPriceUsd : null,
-    supplierEvidence: facts.supplierEvidence || product.supplierEvidence,
+    supplierEvidence: mergeSupplierEvidence(undefined, facts.supplierEvidence, { price: true, weight: true, moq: true, volume: true }, 'Lectura directa'),
     moq: finalMoq,
     packedWeightKg: usableNumber(facts.packedWeightKg) ? facts.packedWeightKg : 0,
     volumeCbm: usableNumber(facts.volumeCbm) ? facts.volumeCbm : 0,

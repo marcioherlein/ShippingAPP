@@ -1,9 +1,10 @@
+import { originalSupplierText, type SupplierEvidence } from '../src/lib/supplierEvidence'
 import { parseWeightKg } from './weightUnits'
 export type AlibabaDirectFacts = {
   name: string | null
   category: string | null
   categoryPath: string[]
-  supplierEvidence?: { priceText: string | null; currency: string | null; quantityUnit: string | null; variant: string | null }
+  supplierEvidence?: SupplierEvidence
   unitPriceUsd: number | null
   moq: number | null
   packedWeightKg: number | null
@@ -418,10 +419,12 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
   if (moq) evidence.push(tier && moq === tier.minQuantity ? 'moq_price_tier' : 'moq')
 
   const weightValue = firstValue(allObjects, ['unitWeight', 'unit_weight', 'packageWeight', 'package_weight', 'grossWeight', 'gross_weight', 'packingWeight', 'packing_weight', 'weight'])
+  let weightText = originalSupplierText(weightValue)
   let packedWeightKg = normalizeWeightKg(weightValue)
   if (!packedWeightKg) {
     const match = text.match(/(?:Package Weight|Gross Weight|Unit Weight|Packing Weight)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|g|grams?|lbs?|pounds?)/i)
-    packedWeightKg = match ? normalizeWeightKg(`${match[1]} ${match[2]}`) : null
+    weightText = match ? `${match[1]} ${match[2]}` : weightText
+    packedWeightKg = match ? normalizeWeightKg(weightText) : null
   }
   if (packedWeightKg) evidence.push('weight')
 
@@ -479,6 +482,10 @@ export function extractAlibabaDirectFacts(html: string, url?: URL): AlibabaDirec
       currency: cleanString(firstValue(allObjects, ['priceCurrency', 'price_currency', 'currency']), 30),
       quantityUnit: cleanString(firstValue(allObjects, ['quantityUnit', 'quantity_unit', 'unit']), 80),
       variant: cleanString(firstValue(allObjects, ['skuName', 'sku_name', 'model']), 300),
+      weightText,
+      moqText: moq ? `${moq}${tier && moq === tier.minQuantity ? ' (mínimo del tramo de precio; confirmar MOQ)' : ''}` : null,
+      volumeText: originalSupplierText(volumeValue) || unitSize,
+      priceSource: 'Lectura directa', weightSource: 'Lectura directa', moqSource: 'Lectura directa', volumeSource: 'Lectura directa',
     },
     moq: moq ? Math.round(moq) : null,
     packedWeightKg,

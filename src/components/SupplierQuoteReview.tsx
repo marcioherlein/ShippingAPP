@@ -1,17 +1,23 @@
+import type { SupplierEvidence } from '../lib/supplierEvidence'
 import type { SupplierQuote } from '../lib/supplierQuote'
 import { supplierQuotePrice } from '../lib/supplierQuote'
 import { CURRENCY_LABELS, type CurrencyCode } from '../lib/currency'
 import DsSelect from './DsSelect'
 import { usd } from '../lib/format'
 
-export default function SupplierQuoteReview({ quote, quantity, sourceUrl, evidence, onChange }: { quote: SupplierQuote; quantity?: number; sourceUrl: string; evidence?: { priceText: string | null; currency: string | null; quantityUnit: string | null; variant: string | null }; onChange: (quote: SupplierQuote) => void }) {
+export default function SupplierQuoteReview({ quote, quantity, sourceUrl, evidence, onChange }: { quote: SupplierQuote; quantity?: number; sourceUrl: string; evidence?: SupplierEvidence; onChange: (quote: SupplierQuote) => void }) {
   const set = <K extends keyof SupplierQuote>(key: K, value: SupplierQuote[K]) => onChange({ ...quote, [key]: value })
   const price = supplierQuotePrice(quote, quantity)
   return <section className="supplier-review" aria-label="Confirmación del precio del proveedor">
     <h3>Revisá la oferta del proveedor</h3>
     <p>Confirmá moneda, variante y si el importe es por unidad o lote. Un símbolo $ solo no identifica la moneda.</p>
-    {sourceUrl.startsWith('https://') ? <a href={sourceUrl} target="_blank" rel="noreferrer">Ver publicación original</a> : <p>Fuente: datos que ingresaste en el chat.</p>}
-    {evidence && <p className="supplier-original-evidence">Oferta original: {evidence.priceText || 'Importe sin texto disponible'} · Moneda: {evidence.currency || 'sin identificar'} · Unidad: {evidence.quantityUnit || 'sin identificar'} · Variante: {evidence.variant || 'sin identificar'}</p>}
+    {sourceUrl.startsWith('https://') ? <a href={sourceUrl} target="_blank" rel="noreferrer">Ver publicación original</a> : <p>Fuente: datos ingresados manualmente.</p>}
+    {evidence && <p className="supplier-original-evidence">Oferta original: {evidence.priceText || 'Importe sin texto disponible'} · Moneda: {evidence.currency || 'sin identificar'} · Unidad: {evidence.quantityUnit || 'sin identificar'} · Variante: {evidence.variant || 'sin identificar'}{evidence.priceSource && ` · Fuente: ${evidence.priceSource}`}</p>}
+    {evidence && <dl className="supplier-original-evidence" aria-label="Evidencia original de logística">
+      <dt>Peso original del proveedor</dt><dd>{evidence.weightText || 'Sin dato original'}{evidence.weightSource && ` · ${evidence.weightSource}`}</dd>
+      <dt>Mínimo original del proveedor (MOQ)</dt><dd>{evidence.moqText || 'Sin dato original'}{evidence.moqSource && ` · ${evidence.moqSource}`}</dd>
+      <dt>Volumen o medidas originales</dt><dd>{evidence.volumeText || 'Sin dato original'}{evidence.volumeSource && ` · ${evidence.volumeSource}`}</dd>
+    </dl>}
     <div className="pipeline-progressive-fields">
       <label className="pipeline-confirm-field"><span>Precio en moneda original</span><input type="number" min="0" step="any" value={quote.amount || ''} onChange={e => set('amount', Number(e.target.value))} /></label>
       <label className="pipeline-confirm-field"><span>Moneda original</span><DsSelect ariaLabel="Moneda original" value={quote.currency} onChange={v => set('currency', v as CurrencyCode)} options={[{value:'',label:'Elegí la moneda'}, ...Object.entries(CURRENCY_LABELS).map(([value,label]) => ({value,label:`${value} · ${label}`}))]} /></label>
@@ -33,6 +39,7 @@ export default function SupplierQuoteReview({ quote, quantity, sourceUrl, eviden
         <p>Para ARS, usá la referencia oficial documentada. Para otras monedas, usá su cruce a USD; no apliques el tipo de cambio argentino.</p>
       </>}
     </div>
-    <p role="status">{price === null ? 'Falta confirmar la oferta o su precio no cubre la cantidad elegida. Los tramos deben tener límites sin superponerse.' : `Precio unitario para calcular: ${usd(price)}${quote.currency !== 'USD' ? ` · Fuente: ${quote.fxSource} · ${quote.fxDate}` : ' · USD, sin conversión'}`}</p>
+    <p>Los valores detectados se usan sólo después de confirmar la ficha. Podés corregir moneda, precio, peso y MOQ en esta misma revisión.</p>
+    <p role="status">{price === null ? 'Falta confirmar la oferta o su precio no cubre la cantidad elegida. Los tramos deben tener límites sin superponerse.' : `Vista previa del precio unitario: ${usd(price)}${quote.currency !== 'USD' ? ` · Fuente: ${quote.fxSource} · ${quote.fxDate}` : ' · USD, sin conversión'}`}</p>
   </section>
 }

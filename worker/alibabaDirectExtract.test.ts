@@ -62,6 +62,7 @@ describe('Alibaba deterministic direct extractor', () => {
   it('converts grams to kilograms', () => {
     const html = page(`<script type="application/json">${JSON.stringify({ productId: '12345678', productTitle: 'Wireless Earbuds', unitWeight: '265 g' })}</script>`)
     expect(extractAlibabaDirectFacts(html).packedWeightKg).toBe(0.265)
+    expect(extractAlibabaDirectFacts(html).supplierEvidence?.weightText).toBe('265 g')
   })
 
   it('converts pounds to kilograms', () => {

@@ -1,4 +1,4 @@
-import type { CurrencyCode } from './currency'
+import { isSupportedCurrency, type CurrencyCode } from './currency'
 
 export type SupplierPriceTier = { amount: number; minQuantity: number; maxQuantity: number | null }
 
@@ -18,7 +18,8 @@ export type SupplierQuote = {
 }
 
 export function supplierQuotePrice(quote: SupplierQuote, quantity?: number) {
-  if (!Number.isFinite(quote.amount) || quote.amount <= 0 || !quote.currency || !quote.basis || !quote.variant.trim()) return null
+  if (!Number.isFinite(quote.amount) || quote.amount <= 0 || !isSupportedCurrency(quote.currency) || !['unit', 'pack'].includes(quote.basis) || !quote.variant.trim()) return null
+  if (quantity !== undefined && (!Number.isInteger(quantity) || quantity < 1)) return null
   if (!Number.isInteger(quote.minQuantity) || quote.minQuantity < 1) return null
   if (quote.maxQuantity !== null && (!Number.isInteger(quote.maxQuantity) || quote.maxQuantity < quote.minQuantity)) return null
   const tiers = [quote, ...(quote.additionalTiers || [])].sort((a, b) => a.minQuantity - b.minQuantity)
@@ -34,8 +35,15 @@ export function supplierQuotePrice(quote: SupplierQuote, quantity?: number) {
   if (!Number.isInteger(pack) || pack < 1) return null
   const rate = quote.currency === 'USD' ? 1 : quote.usdPerCurrency
   if (!Number.isFinite(rate) || rate <= 0) return null
-  if (quote.currency !== 'USD' && (!quote.fxSource.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(quote.fxDate))) return null
-  return selected.amount * rate / pack
+  if (quote.currency !== 'USD' && (!quote.fxSource.trim() || !validFxDate(quote.fxDate))) return null
+  const price = selected.amount * rate / pack
+  return Number.isFinite(price) && price > 0 ? price : null
+}
+
+function validFxDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
 export function initialSupplierQuote(amount: number, manual = false): SupplierQuote {

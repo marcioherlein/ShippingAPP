@@ -1,3 +1,4 @@
+import { mergeSupplierEvidence } from '../src/lib/supplierEvidence'
 import enrichWorker from './enrich'
 import { readTrustedUserId } from './auth'
 import { extractAlibabaNative } from './nativeAlibaba'
@@ -92,7 +93,10 @@ export function mergeDirectFacts(data: any, direct: DirectReady) {
     name: facts.name || trustedPriorText(prior, 'name', true, ['Producto Alibaba']) || 'Producto Alibaba',
     category: facts.category || facts.categoryPath.at(-1) || trustedPriorText(prior, 'category', true, ['Sin clasificar']) || 'Sin clasificar',
     unitPriceUsd: facts.unitPriceUsd ?? trustedPriorNumber(prior, 'unitPriceUsd', trustPrior),
-    supplierEvidence: facts.supplierEvidence || prior.supplierEvidence,
+    supplierEvidence: mergeSupplierEvidence(trustPrior ? prior.supplierEvidence : undefined, facts.supplierEvidence, {
+      price: facts.unitPriceUsd != null, weight: facts.packedWeightKg != null,
+      moq: facts.moq != null, volume: facts.volumeCbm != null,
+    }, 'Lectura directa'),
     moq: finalMoq,
     packedWeightKg: facts.packedWeightKg ?? trustedPriorNumber(prior, 'packedWeightKg', trustPrior) ?? 0,
     volumeCbm: facts.volumeCbm ?? trustedPriorNumber(prior, 'volumeCbm', trustPrior) ?? 0,
@@ -158,7 +162,10 @@ export function mergeNativeFacts(data: any, native: NativeReady) {
     name: usableText(prior.name, ['Producto Alibaba']) ? prior.name : facts.name || prior.name,
     category: usableText(prior.category, ['Sin clasificar']) ? prior.category : facts.category || prior.category,
     unitPriceUsd: usableNumber(prior.unitPriceUsd) ? prior.unitPriceUsd : facts.unitPriceUsd || null,
-    supplierEvidence: facts.supplierEvidence || prior.supplierEvidence,
+    supplierEvidence: mergeSupplierEvidence(prior.supplierEvidence, facts.supplierEvidence, {
+      price: !usableNumber(prior.unitPriceUsd), weight: !usableNumber(prior.packedWeightKg),
+      moq: !usableNumber(prior.moq), volume: !usableNumber(prior.volumeCbm),
+    }, 'Lectura en navegador'),
     moq: usableNumber(prior.moq) ? prior.moq : facts.moq || null,
     packedWeightKg: usableNumber(prior.packedWeightKg) ? prior.packedWeightKg : facts.packedWeightKg || 0,
     volumeCbm: usableNumber(prior.volumeCbm) ? prior.volumeCbm : facts.volumeCbm || 0,

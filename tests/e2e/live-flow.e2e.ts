@@ -110,7 +110,7 @@ test('ambiguous supplier currency blocks costs; documented pack conversion and t
   const { createManualProductAnalysis } = await import('../../src/lib/productConfirmation')
   const source = 'https://www.alibaba.com/product-detail/Tennis_1600000001234.html'
   const fixture = createManualProductAnalysis(source, 'Raqueta de tenis de aluminio')
-  Object.assign(fixture.product, { category: 'Raqueta de tenis', material: 'Aluminio', functionText: 'Para jugar tenis', originCountry: 'China', unitPriceUsd: 100, moq: null, packedWeightKg: 0.5, volumeCbm: 0.01, supplierEvidence: { priceText: '$100 / box', currency: null, quantityUnit: 'box', variant: null } })
+  Object.assign(fixture.product, { category: 'Raqueta de tenis', material: 'Aluminio', functionText: 'Para jugar tenis', originCountry: 'China', unitPriceUsd: 100, moq: null, packedWeightKg: 0.5, volumeCbm: 0.01, supplierEvidence: { priceText: '$100 / box', currency: null, quantityUnit: 'box', variant: null, weightText: '500 g', moqText: null, volumeText: '0.01 m3', priceSource: 'Lectura directa', weightSource: 'Lectura directa' } })
   let paidRequests = 0
   await page.route('**/api/product-read', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(fixture) }))
   await page.route('**/api/analyze', async route => {
@@ -124,6 +124,10 @@ test('ambiguous supplier currency blocks costs; documented pack conversion and t
   await page.getByRole('textbox', { name: 'Buscar productos en Alibaba' }).fill(source)
   await page.getByRole('button', { name: 'Buscar', exact: true }).click()
   await expect(page.getByRole('combobox', { name: 'Moneda original' })).toContainText('Elegí la moneda')
+  await expect(page.getByText('Peso original del proveedor', { exact: true })).toBeVisible()
+  await expect(page.getByText('500 g · Lectura directa', { exact: true })).toBeVisible()
+  await expect(page.locator('.supplier-original-evidence').first()).toContainText('Moneda: sin identificar')
+  await expect(page.getByText('Los valores detectados se usan sólo después de confirmar la ficha.', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: /Buscar o cambiar posición/ }).click()
   await page.getByLabel('Producto o código NCM').fill('9506.51.00')
   await page.getByRole('radio', { name: /9506.51.00/ }).check()

@@ -95,6 +95,7 @@ describe('extractAlibabaNative', () => {
             product_type: 'Mechanical Watches',
             moq: 5,
             unit_price: 71.5,
+            price_currency: 'USD',
             price_tiers: [{ min_quantity: 5, unit_price: 71.5 }],
             unit_size: '12X10X8 cm',
             hs_code: '910221',
@@ -112,6 +113,8 @@ describe('extractAlibabaNative', () => {
     expect(result.facts.unitPriceUsd).toBe(71.5)
     expect(result.facts.moq).toBe(5)
     expect(result.facts.packedWeightKg).toBe(0.138)
+    expect(result.facts.supplierEvidence?.weightText).toBe('0.138 kg')
+    expect(result.facts.supplierEvidence?.currency).toBe('USD')
     expect(result.facts.volumeCbm).toBe(0.00096)
     expect(result.facts.originCountry).toBe('Chongqing, China')
     expect(result.facts.hsCode).toBe('910221')
@@ -170,7 +173,7 @@ describe('extractAlibabaNative', () => {
         title: 'Automatic Mechanical Wristwatch',
         product_type: null,
         moq: null,
-        unit_price: 71.5,
+        unit_price: 99,
         price_tiers: [{ min_quantity: '5 pieces', unit_price: 71.5 }],
         specifications: [
           { name: 'Product Type', value: 'Mechanical Wristwatch' },
@@ -182,6 +185,21 @@ describe('extractAlibabaNative', () => {
     if (result.status !== 'ready') return
     expect(result.facts.category).toBe('Mechanical Wristwatch')
     expect(result.facts.moq).toBe(5)
+    expect(result.facts.unitPriceUsd).toBe(71.5)
+    expect(result.facts.supplierEvidence?.priceText).toBe('71.5')
+  })
+
+  it('does not borrow structured currency for a retained rendered price', async () => {
+    const html = partialRenderedWatchHtml.replace('"unit_weight":', '"unit_price":"71.50","unit_weight":')
+    const result = await extractAlibabaNative(watchUrl, browserWithJson({ result: {
+      title: 'Automatic Mechanical Wristwatch', unit_price: 99, price_currency: 'EUR',
+      price_tiers: [{ min_quantity: 5, unit_price: 99 }], moq: 5,
+    } }, 200, html))
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') return
+    expect(result.facts.unitPriceUsd).toBe(71.5)
+    expect(result.facts.supplierEvidence?.priceText).toBe('71.50')
+    expect(result.facts.supplierEvidence?.currency).toBeNull()
   })
 
   it('does not substitute supplier country for merchandise origin', async () => {

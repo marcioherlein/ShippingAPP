@@ -8,7 +8,7 @@ import UsageBadge from '../components/UsageBadge'
 import EmailPreferences from '../components/EmailPreferences'
 import './auth.css'
 import { AccountControlsContext } from './AccountControls'
-import { getSessionState, setSessionState, subscribeSession } from '../lib/authSession'
+import { authenticationError, getSessionState, setSessionState, subscribeSession } from '../lib/authSession'
 
 type AccountSyncState = 'idle' | 'syncing' | 'ready' | 'error'
 type HistorySaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -41,10 +41,12 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
     setSyncError('')
 
     void apiFetch('/api/me', { signal: controller.signal })
-      .then((response) => {
+      .then(async (response) => {
+        const identity = await response.json() as { authenticated?: boolean; accountId?: string }
         if (!active) return
-        setAccountSync(response.ok ? 'ready' : 'error')
-        setSessionState(response.ok ? 'ready' : 'error')
+        if (!response.ok || identity.authenticated !== true || !identity.accountId) throw authenticationError('auth_identity_unavailable', true)
+        setAccountSync('ready')
+        setSessionState('ready')
       })
       .catch((error) => {
         if (!active) return

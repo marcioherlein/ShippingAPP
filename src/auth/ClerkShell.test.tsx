@@ -31,10 +31,15 @@ it('does not announce login completion until /api/me accepts the session', async
     await act(async () => root.render(<ClerkShell><div>App</div></ClerkShell>))
     expect(getSessionState()).toBe('verifying')
     expect(resumed).not.toHaveBeenCalled()
-    await act(async () => resolve(new Response('{"user":{"id":"db-user"}}')))
+    await act(async () => resolve(new Response('{"authenticated":true,"accountId":"db-user"}')))
     expect(getSessionState()).toBe('ready')
     expect(resumed).toHaveBeenCalledTimes(1)
   } finally { window.removeEventListener('shippingapp:auth-resolved', resumed) }
+})
+it('does not treat an HTTP 200 without an authenticated account as verified identity', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+  await act(async () => root.render(<ClerkShell><div>App</div></ClerkShell>))
+  expect(getSessionState()).toBe('error')
 })
 it('keeps a signed-in API failure technical and never reopens the sign-in modal', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{"code":"auth_origin_rejected"}', { status: 401 })))

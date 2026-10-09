@@ -814,3 +814,89 @@
 
 .gs-typing__dot:nth-child(2) { animation-delay: 0.16s; }
 .gs-typing__dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* ── TOOL FLOW: ACE DESIGN SYSTEM UPGRADE ─────────────────────
+ * Brings the quotation workspace to the same design level as the
+ * ACE-inspired landing. Scoped to journey-* / app-header classes
+ * (tool view only — landing uses gs-* namespace).
+ * ──────────────────────────────────────────────────────────── */
+
+/* 1. Sticky frosted-glass AppHeader */
+.app-header {
+  position: sticky !important;
+  top: 0 !important;
+  background: rgba(248, 249, 255, 0.82) !important;
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border-bottom-color: rgba(79, 93, 228, 0.1) !important;
+  box-shadow: 0 1px 0 rgba(79, 93, 228, 0.07), 0 2px 12px rgba(48, 59, 91, 0.06) !important;
+  z-index: 100 !important;
+}
+
+/* 2. Playfair Display for the hero title */
+.journey-hero h1,
+.journey-task-title {
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif !important;
+  font-size: clamp(22px, 2.8vw, 32px) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
+  color: #1d1d1f !important;
+}
+
+/* 3. Deeper, more ACE-quality shadow on conversation card */
+.journey-conversation {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 6px 16px rgba(79, 93, 228, 0.06),
+    0 32px 64px rgba(48, 59, 91, 0.08) !important;
+  border-color: rgba(79, 93, 228, 0.1) !important;
+}
+
+/* 4. ACE spring curve on choice cards — lifts 3px with depth shadow */
+.journey-choice-grid > button {
+  transition:
+    border-color .22s cubic-bezier(0.16,1,0.3,1),
+    transform   .22s cubic-bezier(0.16,1,0.3,1),
+    box-shadow  .22s cubic-bezier(0.16,1,0.3,1) !important;
+}
+.journey-choice-grid > button:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 20px 48px rgba(65, 78, 139, 0.14) !important;
+  border-color: rgba(79, 93, 228, 0.4) !important;
+  background: #fff !important;
+}
+
+/* 5. Active question card — ACE blue glow ring */
+.journey-question-card.active {
+  box-shadow:
+    0 0 0 2px rgba(79, 93, 228, 0.13),
+    0 24px 56px rgba(70, 84, 150, 0.10) !important;
+  border-color: rgba(79, 93, 228, 0.32) !important;
+}
+
+/* 6. Primary action — spring lift + stronger glow on hover */
+.journey-primary-action:not(:disabled):hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 12px 28px rgba(79, 93, 228, 0.30) !important;
+  transition:
+    background .2s cubic-bezier(0.16,1,0.3,1),
+    transform  .2s cubic-bezier(0.16,1,0.3,1),
+    box-shadow .2s cubic-bezier(0.16,1,0.3,1) !important;
+}
+
+/* 7. Bubble entry animation — each new bubble pops in */
+.journey-bubble {
+  animation: gs-msg-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 8. Chip row — ACE spring on selection */
+.journey-chip-row button {
+  transition:
+    background    .18s cubic-bezier(0.16,1,0.3,1),
+    border-color  .18s cubic-bezier(0.16,1,0.3,1),
+    transform     .18s cubic-bezier(0.16,1,0.3,1) !important;
+}
+.journey-chip-row button:hover {
+  transform: translateY(-1px) !important;
+  border-color: rgba(79, 93, 228, 0.35) !important;
+}

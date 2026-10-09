@@ -7,8 +7,8 @@ const journeyCss = readFileSync(new URL('./styles/journey.css', import.meta.url)
 
 describe('landing copy contract', () => {
   it('renders the approved hero, steps and freight messages', () => {
-    expect(landing).toContain('Recib&#xED; el valor real de tu producto <em>puesto en Argentina.</em>')
-    expect(landing).toContain('Pod&#xE9;s calcular flete, impuestos y gastos en destino en menos de 2 minutos.')
+    expect(landing).toContain('Conocé el costo real de tu producto <em>puesto en Argentina.</em>')
+    expect(landing).toContain('Clasificaci&#xF3;n NCM autom&#xE1;tica, aranceles reales e IVA importaci&#xF3;n')
     expect(landing).toContain('Consegu&#xED; en 3 pasos tu costo real')
     expect(landing).toContain('Fletes Internacionales Reales')
     expect(app).toContain('y te da la mejor alternativa para tu importaci&#xF3;n.')

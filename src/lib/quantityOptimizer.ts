@@ -20,6 +20,7 @@ export type QuantityOptimizerInput = Omit<LandedCostInput, 'quantity' | 'unitPri
   localSellPriceUsd?: number
   priceTiers?: QuantityPriceTier[]
   supplierQuote?: SupplierQuote
+  purchaseRange?: { min: number; max: number }
 }
 
 export type QuantityCandidate = {
@@ -106,7 +107,7 @@ function candidateCost(input: QuantityOptimizerInput, quantity: number): Quantit
     ? round(((input.localSellPriceUsd - unitCostUsd) / input.localSellPriceUsd) * 100, 1)
     : null
   const budgetUsd = Math.max(0, input.budgetUsd || 0)
-  const affordable = confirmedPrice !== null && (budgetUsd <= 0 || totalCostUsd <= budgetUsd)
+  const affordable = confirmedPrice !== null && selectedCost !== null && totalCostUsd > 0 && (budgetUsd <= 0 || totalCostUsd <= budgetUsd)
   const totalVolumeCbm = round(quantity * Math.max(0, input.unitVolumeCbm), 3)
   const totalWeightKg = round(quantity * Math.max(0, input.unitWeightKg), 2)
   return {
@@ -127,36 +128,46 @@ function candidateCost(input: QuantityOptimizerInput, quantity: number): Quantit
   }
 }
 
-function maxAffordableQuantity(input: QuantityOptimizerInput, startQuantity: number, increment: number) {
+function maxAffordableQuantity(input: QuantityOptimizerInput, startQuantity: number, increment: number, endQuantity = 250000) {
   if (!input.budgetUsd || input.budgetUsd <= 0) return null
+  const end = Math.floor(endQuantity / increment) * increment
+  if (startQuantity > end || !candidateCost(input, startQuantity).affordable) return null
   let low = startQuantity
   let high = startQuantity
   for (let guard = 0; guard < 22; guard += 1) {
     const candidate = candidateCost(input, high)
     if (!candidate.affordable) break
     low = high
-    high = high * 2
-    if (high > 250000) break
+    if (high === end) return high
+    high = Math.min(end, high * 2)
   }
-  if (low === startQuantity && !candidateCost(input, low).affordable) return null
   for (let guard = 0; guard < 28 && high - low > increment; guard += 1) {
-    const mid = roundUpToIncrement((low + high) / 2, increment)
+    const mid = Math.floor((low + high) / (2 * increment)) * increment
     const candidate = candidateCost(input, mid)
     if (candidate.affordable) low = mid
-    else high = mid - increment
+    else high = mid
   }
-  return roundUpToIncrement(low, increment)
+  return low
 }
 
 export function generateQuantityCandidates(input: QuantityOptimizerInput) {
-  const moq = positiveInt(input.moq || input.supplierQuote?.minQuantity || 1, 1)
+  const moq = positiveInt(input.moq || 1, 1)
   const increment = positiveInt(input.unitIncrement || 1, 1)
+  const range = input.purchaseRange
+  if (range && (!Number.isInteger(range.min) || !Number.isInteger(range.max) || range.min < 1 || range.max < range.min)) return []
+  const minimum = roundUpToIncrement(Math.max(moq, range?.min || 1), increment)
+  const maximum = range?.max ?? 250000
+  if (minimum > maximum) return []
   const current = roundUpToIncrement(input.quantity || moq, increment)
   const values = new Set<number>()
-  const add = (value: number) => values.add(Math.max(moq, roundUpToIncrement(value, increment)))
+  const add = (value: number) => {
+    const quantity = Math.max(minimum, roundUpToIncrement(value, increment))
+    if (quantity <= maximum) values.add(quantity)
+  }
 
   add(moq)
   add(current)
+  if (range) add(Math.floor(maximum / increment) * increment)
   ;[2, 3, 5, 8, 10].forEach((multiple) => add(moq * multiple))
 
   for (const tier of input.priceTiers || []) add(tier.minQuantity)
@@ -173,11 +184,21 @@ export function generateQuantityCandidates(input: QuantityOptimizerInput) {
     add(input.monthlyDemand * (targetMonths + 1))
   }
 
-  const maxBudget = maxAffordableQuantity(input, moq, increment)
-  if (maxBudget) {
-    add(maxBudget)
-    add(maxBudget * 0.75)
-    add(maxBudget * 0.5)
+  // Search each confirmed price band independently: a later discount can make
+  // an order affordable even when the earlier band's minimum exceeds budget.
+  const bands = input.supplierQuote
+    ? [input.supplierQuote, ...(input.supplierQuote.additionalTiers || [])]
+    : [minimum, ...(input.priceTiers || []).filter(tier => Number.isInteger(tier.minQuantity) && tier.minQuantity > minimum && tier.unitPriceUsd > 0).map(tier => tier.minQuantity)]
+      .sort((a, b) => a - b).map((minQuantity, index, starts) => ({ minQuantity, maxQuantity: starts[index + 1] ? starts[index + 1] - 1 : maximum }))
+  for (const band of bands) {
+    const start = roundUpToIncrement(Math.max(minimum, band.minQuantity), increment)
+    const end = Math.min(maximum, band.maxQuantity ?? maximum)
+    const maxBudget = maxAffordableQuantity(input, start, increment, end)
+    if (maxBudget) {
+      add(maxBudget)
+      add(maxBudget * 0.75)
+      add(maxBudget * 0.5)
+    }
   }
 
   return [...values].filter((value) => value > 0).sort((a, b) => a - b).slice(0, 48)

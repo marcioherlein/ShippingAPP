@@ -1,16 +1,85 @@
 import AxeBuilder from '@axe-core/playwright'
 import { test, expect } from './fixtures'
 
-async function setup(page: import('@playwright/test').Page, search = false) {
+async function setup(page: import('@playwright/test').Page, search = false, capacity: 'unknown' | 'budget' | 'units' = 'unknown') {
   await page.goto('/')
   await page.getByRole('button', { name: search ? /Quiero buscarlo/ : /Ya tengo un producto/ }).click()
   await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
   await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
   await page.getByRole('radio', { name: 'Sí', exact: true }).click()
   await page.getByRole('button', { name: /Seguir con presupuesto/ }).click()
-  await page.getByRole('radio', { name: /Todavía no sé/ }).click()
+  await page.getByRole('radio', { name: capacity === 'budget' ? /Tengo presupuesto/ : capacity === 'units' ? /Tengo rango de unidades/ : /Todavía no sé/ }).click()
+  if (capacity === 'budget') await page.getByLabel('Presupuesto máximo total').fill('10000')
+  if (capacity === 'units') {
+    await page.getByLabel('Mínimo de unidades').fill('80')
+    await page.getByLabel('Máximo de unidades').fill('160')
+  }
   await page.getByRole('button', { name: /Seguir con el producto/ }).click()
 }
+
+for (const capacity of ['budget', 'units'] as const) test(`${capacity}: reuses capacity and keeps selected quantity and confirmed tier in results`, async ({ page }, testInfo) => {
+  const { createManualProductAnalysis } = await import('../../src/lib/productConfirmation')
+  const source = 'https://www.alibaba.com/product-detail/Tennis_1600000001234.html'
+  const fixture = createManualProductAnalysis(source, 'Raqueta de tenis de aluminio')
+  Object.assign(fixture.product, { category: 'Raqueta de tenis', material: 'Aluminio', functionText: 'Para jugar tenis', originCountry: 'China', unitPriceUsd: 1000, moq: 10, packedWeightKg: 0.5, volumeCbm: 0.01 })
+  let paidRequests = 0
+  await page.route('**/api/product-read', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(fixture) }))
+  await page.route('**/api/analyze', async route => {
+    paidRequests++
+    await route.fulfill({ contentType: 'application/json', headers: { 'x-shippingapp-usage-reservation': 'fixture-reservation' }, body: JSON.stringify({ ...fixture, product: route.request().postDataJSON().product }) })
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await setup(page, true, capacity)
+  await page.getByRole('textbox', { name: 'Buscar productos en Alibaba' }).fill(source)
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click()
+  await page.getByRole('button', { name: /Buscar o cambiar posición/ }).click()
+  await page.getByLabel('Producto o código NCM').fill('9506.51.00')
+  await page.getByRole('radio', { name: /9506.51.00/ }).check()
+  await page.getByRole('checkbox', { name: /Revisé la descripción/ }).check()
+  await page.getByRole('button', { name: 'Usar esta posición', exact: true }).click()
+  await page.getByLabel('Precio en moneda original', { exact: true }).fill('1000')
+  await page.getByRole('combobox', { name: 'Moneda original' }).click()
+  await page.getByRole('option', { name: /USD/ }).click()
+  await page.getByRole('combobox', { name: 'Precio por' }).click()
+  await page.getByRole('option', { name: 'Una unidad', exact: true }).click()
+  await page.getByLabel('Variante / modelo confirmado').fill('T-10 aluminio')
+  await page.getByLabel('Precio válido desde (unidades)').fill('10')
+  await page.getByLabel('Precio válido hasta (opcional)').fill('19')
+  await page.getByRole('button', { name: 'Agregar otro tramo de precio confirmado' }).click()
+  await page.getByLabel('Importe original del tramo').fill('10')
+  await page.getByLabel('Desde (unidades)', { exact: true }).fill('20')
+  await page.getByLabel('Hasta (opcional)', { exact: true }).fill('199')
+  const confirm = page.getByRole('button', { name: /Cotizar con estos datos/ })
+  await expect(confirm).toBeDisabled()
+  if (capacity === 'budget') {
+    await page.getByRole('button', { name: /Usar propuesta según presupuesto/ }).click()
+  } else {
+    await page.getByLabel('O indicá una cantidad').fill('60')
+    await expect(confirm).toBeDisabled()
+    await expect(page.getByRole('alert').filter({ hasText: 'Elegí una cantidad dentro del rango 80–160' })).toBeVisible()
+    await page.getByLabel('O indicá una cantidad').fill('100')
+  }
+  const selected = Number(await page.getByLabel('O indicá una cantidad').inputValue())
+  expect(selected).toBeGreaterThanOrEqual(capacity === 'budget' ? 20 : 80)
+  expect(selected).toBeLessThanOrEqual(capacity === 'budget' ? 199 : 160)
+  await expect(confirm).toBeEnabled()
+  await confirm.click()
+  await expect(page.locator('.result-hero-number')).toBeInViewport()
+  const saved = await page.evaluate(() => JSON.parse(sessionStorage.getItem('shippingapp:product-draft:analysis')!).data.analysis.product)
+  expect(saved.purchaseQuantity).toBe(selected)
+  expect(saved.unitPriceUsd).toBe(10)
+  await expect(page.locator('.journey-complete-row')).toContainText(['Reventa', `${selected} unidades seleccionadas`])
+  await expect(page.getByText(`Total para importar ${selected} u.`, { exact: true })).toBeVisible()
+  await page.getByText('Optimización de cantidad', { exact: true }).click()
+  if (capacity === 'units') {
+    const quantities = await page.locator('.journey-quantity-card tbody tr td:first-child').allTextContents()
+    expect(quantities.length).toBeGreaterThan(0)
+    expect(quantities.every(text => Number(text.replace(/\D/g, '')) >= 80 && Number(text.replace(/\D/g, '')) <= 160)).toBe(true)
+  }
+  expect(paidRequests).toBe(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath(`${capacity}-quantity-390.png`), fullPage: true })
+})
 
 test('electric motorcycle: unknown MOQ, persisted confirmation, validated manual NCM at 320px', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 780 })

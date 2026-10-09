@@ -1,4 +1,5 @@
 import { optimizeQuantity } from '../lib/quantityOptimizer'
+import type { LandedCostInput } from '../lib/landedCostEngine'
 import ManualNcmPicker from './ManualNcmPicker'
 import NcmDisambiguation from './NcmDisambiguation'
 import DsSelect from './DsSelect'
@@ -38,6 +39,7 @@ type Props = {
   status: CalculationPipelineStatus
   activeStage: number
   purchaseRange?: { min: number; max: number }
+  costProfile?: Pick<LandedCostInput, 'purpose' | 'entityType' | 'hasImporterSignature' | 'sensitiveCategory'>
   summary?: CalculationPipelineSummary | null
   blocker?: string | null
   onConfirm: (product: ProductConfirmationData) => void
@@ -202,7 +204,7 @@ function NomencladorGuidance({ onManualSearch }: { onManualSearch?: () => void }
   </div>
 }
 
-export default function CalculationPipeline({ analysis, prefill, status, activeStage, purchaseRange, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
+export default function CalculationPipeline({ analysis, prefill, status, activeStage, purchaseRange, costProfile, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
   const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
@@ -266,10 +268,10 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const volume = resolvedProductVolumeCbm(draft)
   // Only an explicit purchase quantity answers the quantity question.
   const quantitySignal = (analysis.product.purchaseQuantity ?? 0) > 0
-  const minimumQuantity = Math.max(1, Math.floor(analysis.product.moq || draft.moq || 1))
+  const minimumQuantity = Math.max(1, Math.floor(draft.moq || 1))
   const budgetProposal = useMemo(() => {
     const price = supplierQuotePrice(supplierQuote)
-    if (!classificationReady || !price || prefill.budgetUsd <= 0 || quoteMissing.length) return null
+    if (!classificationReady || !price || prefill.budgetUsd <= 0 || missingQuoteConfirmationFields({ ...draft, unitPriceUsd: price }).length) return null
     const options = optimizeQuantity({
       originCountry: draft.originCountry, quantity: draft.quantity || Math.max(1, draft.moq),
       unitPriceUsd: price, unitWeightKg: draft.unitWeightKg, unitVolumeCbm: volume,
@@ -277,10 +279,11 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
       vatRatePct: prefill.vatRatePct ?? undefined, vatAdditionalRatePct: prefill.vatAdditionalRatePct ?? undefined,
       gainsRatePct: prefill.gainsRatePct ?? undefined, iibbRatePct: prefill.iibbRatePct ?? undefined,
       purpose: 'unknown', entityType: 'unknown', hasImporterSignature: null, sensitiveCategory: prefill.sensitiveCategory,
-      supplierQuote, budgetUsd: prefill.budgetUsd, moq: draft.moq, strategy: 'test',
+      ...costProfile,
+      supplierQuote, budgetUsd: prefill.budgetUsd, moq: draft.moq, strategy: 'test', purchaseRange,
     })
     return options.affordableCandidates.find(candidate => supplierQuotePrice(supplierQuote, candidate.quantity) !== null) || null
-  }, [classificationReady, draft, supplierQuote, prefill, volume, quoteMissing.length])
+  }, [classificationReady, draft, supplierQuote, prefill, volume, costProfile, purchaseRange])
   const update = <K extends keyof ProductConfirmationData>(key: K, value: ProductConfirmationData[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
   }

@@ -3,6 +3,7 @@ import { customsProfileFor, type CustomsProfile, type NcmTariffProfile } from '.
 import { classifyNcmRemote, mergeFullCustomsProfile } from './authenticatedNcmClient'
 import type { FullNcmApiResult } from './fullNcmClient'
 import type { Inputs } from './types'
+import { ApiAuthError } from './authSession'
 
 export type ProductAnalysisV2 = Omit<ProductAnalysis, 'usageReservationId'> & {
   customs: CustomsProfile
@@ -61,16 +62,16 @@ export async function ingestAlibabaUrlV2(url: string): Promise<ProductAnalysis &
   return { ...base, customs: unclassifiedCustoms(base.product.originCountry) }
 }
 
-async function ensurePaidAnalysis(base: ProductAnalysis): Promise<ProductAnalysis> {
+async function ensurePaidAnalysis(base: ProductAnalysis, operationId?: string): Promise<ProductAnalysis> {
   if (base.usageReservationId?.trim()) return base
-  return startImportAnalysis(base)
+  return startImportAnalysis(base, operationId)
 }
 
-export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<ProductAnalysisV2> {
+export async function enrichProductAnalysisV2(base: ProductAnalysis, operationId?: string): Promise<ProductAnalysisV2> {
   // The credit boundary lives here: this function is reached only when the user
   // asks to actually analyze the confirmed product. Free intake never reserves
   // quota. Once reserved, all NCM clarification iterations reuse the same case.
-  const paidBase = await ensurePaidAnalysis(base)
+  const paidBase = await ensurePaidAnalysis(base, operationId)
 
   // Alibaba often gives us a very descriptive title but no explicit category.
   // The continuation reservation still represents the same product, so using
@@ -98,7 +99,8 @@ export async function enrichProductAnalysisV2(base: ProductAnalysis): Promise<Pr
         maxAttempts: Number(full.refinement.maxAttempts) || 0,
       }
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiAuthError) throw error
     customs = {
       ...localCustoms,
       source: `${localCustoms.source} Full-catalog retrieval no disponible; fallback seed fail-closed.`,

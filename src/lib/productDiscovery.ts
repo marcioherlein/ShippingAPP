@@ -50,10 +50,10 @@ export type ProductDiscoveryResponse = {
   warnings?: string[]
 }
 
-export async function discoverProducts(query: string, userText: string = query): Promise<ProductDiscoveryResponse> {
+export async function discoverProducts(query: string, userText: string = query, operationId?: string): Promise<ProductDiscoveryResponse> {
   const response = await apiFetch('/api/opportunity-search', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(operationId ? { 'idempotency-key': operationId } : {}) },
     body: JSON.stringify({ query, userText }),
   })
   const data = await response.json() as ProductDiscoveryResponse & { error?: string }

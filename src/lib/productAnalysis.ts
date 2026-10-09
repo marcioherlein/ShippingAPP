@@ -89,10 +89,10 @@ export async function readAlibabaProduct(url: string): Promise<ProductAnalysis> 
  * reserves exactly one credit, hydrates live market/FX evidence, and returns a
  * reservation that authorizes the NCM continuation for this same product.
  */
-export async function startImportAnalysis(base: ProductAnalysis): Promise<ProductAnalysis> {
+export async function startImportAnalysis(base: ProductAnalysis, operationId?: string): Promise<ProductAnalysis> {
   const response = await apiFetch('/api/analyze', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(operationId ? { 'idempotency-key': operationId } : {}) },
     body: JSON.stringify({
       sourceUrl: base.sourceUrl,
       fetched: base.fetched,

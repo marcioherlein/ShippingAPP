@@ -13,6 +13,11 @@ const base = {
 }
 
 describe('Stage 8 production config override', () => {
+  it('keeps the live domain allowed even when a stale repository override only lists workers.dev', () => {
+    const next = applyStage8ProductionConfig(base, { STAGE8_CLERK_AUTHORIZED_PARTIES: 'https://shippingapp.marciofabrizio.workers.dev' })
+    expect(next.vars.CLERK_AUTHORIZED_PARTIES.split(',')).toContain('https://globalshipping.app')
+    expect(next.vars.CLERK_AUTHORIZED_PARTIES.split(',')).toContain('https://www.globalshipping.app')
+  })
   it('applies server-owned production identity values while repository variables cannot enable sending', () => {
     const next = applyStage8ProductionConfig(base, {
       STAGE8_PUBLIC_BASE_URL: 'https://app.shippingapp.com.ar/path',

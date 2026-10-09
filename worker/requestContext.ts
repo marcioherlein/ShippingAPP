@@ -97,6 +97,13 @@ export async function withRequestContext(request: Request, env: EnvLike, handler
   }
 
   const sanitized = await sanitizeResponse(response, requestId, env, apiLike)
+  let authCode: string | undefined
+  if (sanitized.status === 401 || sanitized.status === 503) {
+    try {
+      const code = (await sanitized.clone().json() as { code?: unknown }).code
+      if (typeof code === 'string' && ['unauthorized', 'auth_origin_rejected', 'auth_session_expired', 'auth_not_configured', 'auth_store_not_configured', 'auth_identity_unavailable'].includes(code)) authCode = code
+    } catch { /* A non-JSON provider error is not an authentication diagnosis. */ }
+  }
   console.info(JSON.stringify({
     event: 'request.completed',
     requestId,
@@ -106,6 +113,7 @@ export async function withRequestContext(request: Request, env: EnvLike, handler
     targetAccess: route?.targetAccess ?? 'unclassified',
     targetMetered: route?.targetMetered ?? false,
     status: sanitized.status,
+    ...(authCode ? { authCode } : {}),
     durationMs: Date.now() - startedAt,
   }))
   return sanitized

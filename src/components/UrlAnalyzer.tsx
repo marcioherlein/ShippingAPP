@@ -8,6 +8,8 @@ import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
 import { buildDiscoveryQuery, isGenericAlibabaSearchRequest } from '../lib/searchIntent'
 import { translateProductLabel } from '../lib/productTranslation'
 import UiIcon from './UiIcon'
+import { ApiAuthError, getSessionState, subscribeSession } from '../lib/authSession'
+import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from '../lib/pendingOperation'
 
 type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
@@ -20,6 +22,7 @@ type Props = {
 type SearchDraft = { draft?: string; lastSearch?: string; discovery?: ProductDiscoveryResponse | null; messages?: ThreadMessage[]; selectedConstraints?: DiscoveryConstraints | null; pendingAuth?: boolean }
 
 type ThreadMessage = { role: 'user' | 'assistant'; content: string }
+type SearchOperation = { value: string; selectedUrl?: string; constraints?: DiscoveryConstraints | null }
 
 const starters = [
   'Paletas de pádel de carbono',
@@ -58,6 +61,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   const [loading, setLoading] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'search' | 'extract'>('idle')
   const pendingAuth = useRef(savedSearch?.pendingAuth || false)
+  const busy = useRef(false)
   const [error, setError] = useState('')
   const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(null)
 
@@ -68,9 +72,10 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     [analysis, selectedConstraints],
   )
 
-  const analyzeRealUrl = async (url: string, fromDiscovery = false, constraints: DiscoveryConstraints | null = null) => {
+  const analyzeRealUrl = async (url: string, fromDiscovery: boolean, constraints: DiscoveryConstraints | null, operationId: string) => {
     setPhase('extract')
     const next = await ingestAlibabaUrlV2(url)
+    if (!operationIsCurrent('search', operationId)) return
     setSelectedConstraints(fromDiscovery ? constraints : null)
     setFailedSourceUrl(null)
     onAnalysis(next)
@@ -83,10 +88,11 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     }])
   }
 
-  const runDiscoverySearch = async (query: string, userText: string) => {
+  const runDiscoverySearch = async (query: string, userText: string, operationId: string) => {
     setFailedSourceUrl(null)
     setPhase('search')
-    const live = await discoverProducts(query, userText)
+    const live = await discoverProducts(query, userText, operationId)
+    if (!operationIsCurrent('search', operationId)) return
     setDiscovery(live)
     setMessages((current) => [...current, {
       role: 'assistant',
@@ -98,11 +104,13 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     }])
   }
 
-  const submitValue = async (raw: string) => {
+  const submitValue = async (raw: string, resumed = false) => {
     const value = raw.trim()
-    if (!value || loading) return
+    if (!value || busy.current) return
+    busy.current = true
+    const operation = beginOperation<SearchOperation>('search', { value })
 
-    setMessages((current) => [...current, { role: 'user', content: value }])
+    if (!resumed) setMessages((current) => [...current, { role: 'user', content: value }])
     setLastSearch(value)
     setDraft(value)
     // Save before the request can open sign-in or navigate away. Restoring text
@@ -115,7 +123,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
     try {
       if (isAlibabaUrl(value)) {
-        await analyzeRealUrl(value)
+        await analyzeRealUrl(value, false, null, operation.id)
         return
       }
 
@@ -128,30 +136,43 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         return
       }
 
-      await runDiscoverySearch(query, value)
+      await runDiscoverySearch(query, value, operation.id)
     } catch (err) {
+      if (!operationIsCurrent('search', operation.id)) return
       if (isAlibabaUrl(value)) setFailedSourceUrl(value)
       const message = err instanceof Error ? err.message : 'No pude completar la búsqueda en este momento.'
-      pendingAuth.current = /Ingresá a tu cuenta|validar tu sesión/.test(message)
+      pendingAuth.current = err instanceof ApiAuthError
+      operation.status = pendingAuth.current ? 'waiting_auth' : 'failed'
       writeProductDraft('search', { draft: value, lastSearch: value, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current })
       setError(message)
     } finally {
+      if (operation.status === 'running') operation.status = 'complete'
+      if (operation.status === 'complete') pendingAuth.current = false
+      settleOperation('search', operation)
+      busy.current = false
       setLoading(false)
       setPhase('idle')
     }
   }
 
-  const selectDiscovery = async (url: string) => {
-    if (loading || !discovery) return
+  const selectDiscovery = async (url: string, constraints: DiscoveryConstraints | null = discovery?.constraints ?? null) => {
+    if (busy.current) return
+    busy.current = true
+    const operation = beginOperation<SearchOperation>('search', { value: lastSearch, selectedUrl: url, constraints })
     setLoading(true)
     setError('')
     setFailedSourceUrl(null)
     try {
-      await analyzeRealUrl(url, true, discovery.constraints)
+      await analyzeRealUrl(url, true, constraints, operation.id)
     } catch (err) {
+      if (!operationIsCurrent('search', operation.id)) return
+      operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
       setFailedSourceUrl(url)
       setError(err instanceof Error ? err.message : 'No pude analizar la publicación seleccionada.')
     } finally {
+      if (operation.status === 'running') operation.status = 'complete'
+      settleOperation('search', operation)
+      busy.current = false
       setLoading(false)
       setPhase('idle')
     }
@@ -168,18 +189,28 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   // event re-runs the search — plain text restore never repeats it on its own.
   const submitValueRef = useRef(submitValue)
   submitValueRef.current = submitValue
+  const selectDiscoveryRef = useRef(selectDiscovery)
+  selectDiscoveryRef.current = selectDiscovery
   useEffect(() => {
     const onAuthResolved = () => {
+      if (busy.current) return
+      const operation = readOperation<SearchOperation>('search')
+      if (canResume(operation) && operation) {
+        if (operation.payload.selectedUrl) void selectDiscoveryRef.current(operation.payload.selectedUrl, operation.payload.constraints ?? null)
+        else void submitValueRef.current(operation.payload.value, true)
+        return
+      }
       const pending = readProductDraft<SearchDraft>('search')
       const query = pending?.lastSearch?.trim()
       if (!pending?.pendingAuth || !query) return
-      pendingAuth.current = false
-      writeProductDraft('search', { ...pending, pendingAuth: false })
-      void submitValueRef.current(query)
+      if (!operation) void submitValueRef.current(query, true)
     }
     window.addEventListener('shippingapp:auth-resolved', onAuthResolved)
-    return () => window.removeEventListener('shippingapp:auth-resolved', onAuthResolved)
-  }, [])
+    const checkReady = () => { if (getSessionState() === 'ready') onAuthResolved() }
+    const unsubscribe = subscribeSession(checkReady)
+    checkReady()
+    return () => { unsubscribe(); window.removeEventListener('shippingapp:auth-resolved', onAuthResolved) }
+  }, [loading])
 
   const modeClass = mode === 'discovery' ? ' discovery-search-mode' : ' search-first-mode'
 

@@ -1,6 +1,8 @@
 import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { useEffect, useRef, useState } from 'react'
 import UiIcon from './UiIcon'
+import { ApiAuthError, getSessionState, subscribeSession } from '../lib/authSession'
+import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from '../lib/pendingOperation'
 import { isAlibabaUrl } from '../lib/productIntake'
 import type { ManualProductChatData } from '../lib/productConfirmation'
 import { inferSensitiveCategoryFromName } from '../lib/productConfirmation'
@@ -141,6 +143,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const [pendingChatAnswers, setPendingChatAnswers] = useState<Partial<Record<ChatStep, string>>>(draft?.pendingChatAnswers || {})
   const inputRef = useRef<HTMLInputElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
+  const busy = useRef(false)
 
   useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers }) }, [mode, link, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers])
 
@@ -157,28 +160,48 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     }
   }, [mode, chatStep])
 
-  const submitLink = async (event: React.FormEvent) => {
-    event.preventDefault()
-    const value = link.trim()
-    if (!value || loading) return
+  const runLink = async (value: string) => {
+    if (!value || busy.current) return
     if (!isAlibabaUrl(value)) {
       setError('Pegá una URL de producto de Alibaba. Si no tenés link, elegí "Describir el producto".')
       return
     }
+    busy.current = true
+    const operation = beginOperation('owned-link', value)
+    writeProductDraft('entry', { mode: 'link', link: value, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers })
     setLoading(true)
     setError('')
     try {
       await onAlibabaLink(value)
     } catch (err) {
+      if (!operationIsCurrent('owned-link', operation.id)) return
+      operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
       const raw = err instanceof Error ? err.message : ''
       const message = /expected pattern|string did not match/i.test(raw)
         ? 'Falló transitoriamente la sesión del navegador. Reintená; el enlace es válido y no se consumió ningún análisis.'
         : raw || 'No pude leer esa publicación.'
       setError(`${message} También podés describir el producto sin link.`)
     } finally {
+      if (operation.status === 'running') operation.status = 'complete'
+      settleOperation('owned-link', operation)
+      busy.current = false
       setLoading(false)
     }
   }
+  const submitLink = (event: React.FormEvent) => { event.preventDefault(); void runLink(link.trim()) }
+  const runLinkRef = useRef(runLink)
+  runLinkRef.current = runLink
+  useEffect(() => {
+    const resume = () => {
+      const operation = readOperation<string>('owned-link')
+      if (operation && canResume(operation) && !busy.current) void runLinkRef.current(operation.payload)
+    }
+    const checkReady = () => { if (getSessionState() === 'ready') resume() }
+    const unsubscribe = subscribeSession(checkReady)
+    window.addEventListener('shippingapp:auth-resolved', resume)
+    checkReady()
+    return () => { unsubscribe(); window.removeEventListener('shippingapp:auth-resolved', resume) }
+  }, [loading])
 
   const answeredSteps = ALL_STEPS.filter(
     (s) => ALL_STEPS.indexOf(s) < ALL_STEPS.indexOf(chatStep) && chatAnswers[s] !== undefined,

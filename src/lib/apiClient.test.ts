@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch, setApiTokenProvider } from './apiClient'
+import { getSessionState, setSessionState } from './authSession'
 
 describe('apiFetch authentication and metering transport boundary', () => {
   afterEach(() => {
     setApiTokenProvider(null)
+    setSessionState('unmanaged')
     vi.unstubAllGlobals()
   })
 
@@ -39,7 +41,7 @@ describe('apiFetch authentication and metering transport boundary', () => {
     expect(headers.get('authorization')).toBe('Bearer session-token')
   })
 
-  it('reuses the current in-memory session when Clerk throws a transient browser DOMException', async () => {
+  it('does not reuse an old token when Clerk cannot provide the current session', async () => {
     const provider = vi.fn()
       .mockResolvedValueOnce('working-session-token')
       .mockRejectedValueOnce(new DOMException('The string did not match the expected pattern'))
@@ -48,10 +50,8 @@ describe('apiFetch authentication and metering transport boundary', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await apiFetch('/api/me')
-    await apiFetch('/api/product-read', { method: 'POST', body: '{}' })
-
-    const secondHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers)
-    expect(secondHeaders.get('authorization')).toBe('Bearer working-session-token')
+    await expect(apiFetch('/api/product-read', { method: 'POST', body: '{}' })).rejects.toMatchObject({ code: 'auth_token_unavailable' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('explains authentication failures and never reuses a rejected token', async () => {
@@ -60,8 +60,8 @@ describe('apiFetch authentication and metering transport boundary', () => {
     const fetchMock = vi.fn(async () => new Response('{"error":"Unauthorized."}', { status: 401 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(apiFetch('/api/opportunity-search', { method: 'POST' })).rejects.toThrow('Ingresá a tu cuenta para continuar')
-    await expect(apiFetch('/api/intake', { method: 'POST' })).rejects.toThrow('No pude validar tu sesión')
+    await expect(apiFetch('/api/opportunity-search', { method: 'POST' })).rejects.toMatchObject({ code: 'auth_token_unavailable' })
+    await expect(apiFetch('/api/intake', { method: 'POST' })).rejects.toMatchObject({ code: 'auth_session_pending' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -70,14 +70,61 @@ describe('apiFetch authentication and metering transport boundary', () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     await apiFetch('/api/me')
-    await apiFetch('/api/me')
-    await expect(apiFetch('/api/intake')).rejects.toThrow('No pude validar tu sesión')
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await expect(apiFetch('/api/me')).rejects.toMatchObject({ code: 'auth_session_pending' })
+    await expect(apiFetch('/api/intake')).rejects.toMatchObject({ code: 'auth_token_unavailable' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('leaves third-party authentication responses untouched', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('Unauthorized', { status: 401 })))
     expect((await apiFetch('https://example.com/api/products')).status).toBe(401)
+  })
+
+  it('waits for server-confirmed identity before sending a customer operation', async () => {
+    setSessionState('verifying')
+    setApiTokenProvider(async () => 'valid-token')
+    const fetchMock = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = apiFetch('/api/opportunity-search', { method: 'POST' })
+    await Promise.resolve()
+    expect(fetchMock).not.toHaveBeenCalled()
+    setSessionState('ready')
+    await request
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes a rejected token once and preserves the operation key and body', async () => {
+    const provider = vi.fn(async (fresh?: boolean) => fresh ? 'new-token' : 'expired-token')
+    setApiTokenProvider(provider)
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('{"code":"auth_session_expired"}', { status: 401 })).mockResolvedValueOnce(new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+    await apiFetch('/api/analyze', { method: 'POST', body: '{"product":"motorcycle"}' })
+    expect(provider.mock.calls).toEqual([[false], [true]])
+    const first = new Headers(fetchMock.mock.calls[0][1].headers)
+    const second = new Headers(fetchMock.mock.calls[1][1].headers)
+    expect(second.get('idempotency-key')).toBe(first.get('idempotency-key'))
+    expect(second.get('authorization')).toBe('Bearer new-token')
+    expect(fetchMock.mock.calls[1][1].body).toBe('{"product":"motorcycle"}')
+  })
+
+  it('does not retry a domain configuration error or call it a signed-out session', async () => {
+    setSessionState('ready')
+    const provider = vi.fn(async () => 'valid-token')
+    setApiTokenProvider(provider)
+    const fetchMock = vi.fn(async () => new Response('{"code":"auth_origin_rejected"}', { status: 401 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(apiFetch('/api/analyze', { method: 'POST' })).rejects.toMatchObject({ code: 'auth_origin_rejected' })
+    expect(provider).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(getSessionState()).toBe('error')
+  })
+
+  it('bounds a repeated 401 to two requests', async () => {
+    setApiTokenProvider(async () => 'token')
+    const fetchMock = vi.fn(async () => new Response('{"code":"unauthorized"}', { status: 401 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(apiFetch('/api/analyze', { method: 'POST' })).rejects.toMatchObject({ code: 'unauthorized' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('adds an opaque idempotency key to metered POSTs without trusting the browser for entitlement data', async () => {

@@ -2,7 +2,7 @@ import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { useEffect, useRef, useState } from 'react'
 import UiIcon from './UiIcon'
 import { ApiAuthError, getSessionState, subscribeSession } from '../lib/authSession'
-import { beginOperation, canResume, readOperation, saveOperation } from '../lib/pendingOperation'
+import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from '../lib/pendingOperation'
 import { isAlibabaUrl } from '../lib/productIntake'
 import type { ManualProductChatData } from '../lib/productConfirmation'
 import { inferSensitiveCategoryFromName } from '../lib/productConfirmation'
@@ -174,6 +174,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     try {
       await onAlibabaLink(value)
     } catch (err) {
+      if (!operationIsCurrent('owned-link', operation.id)) return
       operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
       const raw = err instanceof Error ? err.message : ''
       const message = /expected pattern|string did not match/i.test(raw)
@@ -182,7 +183,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       setError(`${message} También podés describir el producto sin link.`)
     } finally {
       if (operation.status === 'running') operation.status = 'complete'
-      saveOperation('owned-link', operation)
+      settleOperation('owned-link', operation)
       busy.current = false
       setLoading(false)
     }

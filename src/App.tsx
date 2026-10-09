@@ -1,7 +1,7 @@
 import { readProductDraft, writeProductDraft, clearProductDraft } from './lib/productDraft'
 import { savePendingConfirm, loadPendingConfirm, clearPendingConfirm } from './lib/sessionDraft'
 import { ApiAuthError, getSessionState, subscribeSession } from './lib/authSession'
-import { beginOperation, canResume, readOperation, saveOperation } from './lib/pendingOperation'
+import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from './lib/pendingOperation'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { supplierQuotePrice } from './lib/supplierQuote'
 import { startImportAnalysis } from './lib/productAnalysis'
@@ -356,11 +356,15 @@ export default function App() {
   }
 
   const handleManualFallback = (sourceUrl?: string) => {
+    const pending = readOperation('search')
+    if (pending) settleOperation('search', { ...pending, status: 'failed' })
     handleAnalysis(createManualProductAnalysis(sourceUrl || 'manual://product'))
   }
 
   const handleOwnedProductLink = async (url: string) => {
+    const operationId = readOperation('owned-link')?.id
     const next = await ingestAlibabaUrlV2(url)
+    if (operationId && !operationIsCurrent('owned-link', operationId)) return
     handleAnalysis(next)
   }
 
@@ -426,6 +430,7 @@ export default function App() {
         : hasUsableClassification(confirmedAnalysis) && confirmedAnalysis.customs.missingFacts.length === 0
           ? confirmedAnalysis
           : await enrichProductAnalysisV2(confirmedAnalysis, operation.id)
+      if (!operationIsCurrent('confirmation', operation.id)) return
       setAnalysis(refreshed)
       clearPendingConfirm()
 
@@ -559,6 +564,7 @@ export default function App() {
       setCalculationStatus('ready')
       setStep(4)
     } catch (error) {
+      if (!operationIsCurrent('confirmation', operation.id)) return
       const message = error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.'
       operation.status = error instanceof ApiAuthError ? 'waiting_auth' : 'failed'
       if (!(error instanceof ApiAuthError)) clearPendingConfirm()
@@ -566,7 +572,7 @@ export default function App() {
       setCalculationStatus('blocked')
     } finally {
       if (operation.status === 'running') operation.status = 'complete'
-      saveOperation('confirmation', operation)
+      settleOperation('confirmation', operation)
       confirmationBusy.current = false
     }
   }

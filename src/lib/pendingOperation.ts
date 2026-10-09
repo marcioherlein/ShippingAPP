@@ -10,3 +10,8 @@ export function beginOperation<T>(stage: string, payload: T) {
 }
 export function saveOperation<T>(stage: string, operation: PendingOperation<T>) { writeProductDraft(`operation-${stage}`, operation) }
 export function canResume<T>(operation: PendingOperation<T> | null) { return operation?.status === 'running' || operation?.status === 'waiting_auth' }
+export function operationIsCurrent(stage: string, id: string) { return readOperation(stage)?.id === id }
+export function settleOperation<T>(stage: string, operation: PendingOperation<T>) {
+  // Reset/new-case must not be undone by a late response from the previous case.
+  if (operationIsCurrent(stage, operation.id)) saveOperation(stage, operation)
+}

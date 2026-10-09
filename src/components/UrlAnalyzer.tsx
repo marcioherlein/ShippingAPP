@@ -9,7 +9,7 @@ import { buildDiscoveryQuery, isGenericAlibabaSearchRequest } from '../lib/searc
 import { translateProductLabel } from '../lib/productTranslation'
 import UiIcon from './UiIcon'
 import { ApiAuthError, getSessionState, subscribeSession } from '../lib/authSession'
-import { beginOperation, canResume, readOperation, saveOperation } from '../lib/pendingOperation'
+import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from '../lib/pendingOperation'
 
 type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
@@ -72,9 +72,10 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     [analysis, selectedConstraints],
   )
 
-  const analyzeRealUrl = async (url: string, fromDiscovery = false, constraints: DiscoveryConstraints | null = null) => {
+  const analyzeRealUrl = async (url: string, fromDiscovery: boolean, constraints: DiscoveryConstraints | null, operationId: string) => {
     setPhase('extract')
     const next = await ingestAlibabaUrlV2(url)
+    if (!operationIsCurrent('search', operationId)) return
     setSelectedConstraints(fromDiscovery ? constraints : null)
     setFailedSourceUrl(null)
     onAnalysis(next)
@@ -91,6 +92,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     setFailedSourceUrl(null)
     setPhase('search')
     const live = await discoverProducts(query, userText, operationId)
+    if (!operationIsCurrent('search', operationId)) return
     setDiscovery(live)
     setMessages((current) => [...current, {
       role: 'assistant',
@@ -121,7 +123,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
     try {
       if (isAlibabaUrl(value)) {
-        await analyzeRealUrl(value)
+        await analyzeRealUrl(value, false, null, operation.id)
         return
       }
 
@@ -136,6 +138,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
       await runDiscoverySearch(query, value, operation.id)
     } catch (err) {
+      if (!operationIsCurrent('search', operation.id)) return
       if (isAlibabaUrl(value)) setFailedSourceUrl(value)
       const message = err instanceof Error ? err.message : 'No pude completar la búsqueda en este momento.'
       pendingAuth.current = err instanceof ApiAuthError
@@ -145,14 +148,14 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     } finally {
       if (operation.status === 'running') operation.status = 'complete'
       if (operation.status === 'complete') pendingAuth.current = false
-      saveOperation('search', operation)
+      settleOperation('search', operation)
       busy.current = false
       setLoading(false)
       setPhase('idle')
     }
   }
 
-  const selectDiscovery = async (url: string, constraints = discovery?.constraints) => {
+  const selectDiscovery = async (url: string, constraints: DiscoveryConstraints | null = discovery?.constraints ?? null) => {
     if (busy.current) return
     busy.current = true
     const operation = beginOperation<SearchOperation>('search', { value: lastSearch, selectedUrl: url, constraints })
@@ -160,14 +163,15 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     setError('')
     setFailedSourceUrl(null)
     try {
-      await analyzeRealUrl(url, true, constraints ?? null)
+      await analyzeRealUrl(url, true, constraints, operation.id)
     } catch (err) {
+      if (!operationIsCurrent('search', operation.id)) return
       operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
       setFailedSourceUrl(url)
       setError(err instanceof Error ? err.message : 'No pude analizar la publicación seleccionada.')
     } finally {
       if (operation.status === 'running') operation.status = 'complete'
-      saveOperation('search', operation)
+      settleOperation('search', operation)
       busy.current = false
       setLoading(false)
       setPhase('idle')
@@ -192,7 +196,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       if (busy.current) return
       const operation = readOperation<SearchOperation>('search')
       if (canResume(operation) && operation) {
-        if (operation.payload.selectedUrl) void selectDiscoveryRef.current(operation.payload.selectedUrl, operation.payload.constraints ?? undefined)
+        if (operation.payload.selectedUrl) void selectDiscoveryRef.current(operation.payload.selectedUrl, operation.payload.constraints ?? null)
         else void submitValueRef.current(operation.payload.value, true)
         return
       }

@@ -6,6 +6,7 @@ import UrlAnalyzer from './UrlAnalyzer'
 import { setApiTokenProvider } from '../lib/apiClient'
 import { setSessionState } from '../lib/authSession'
 import { readOperation, saveOperation } from '../lib/pendingOperation'
+import { clearProductDraft } from '../lib/productDraft'
 
 let root: Root
 let container: HTMLDivElement
@@ -63,4 +64,18 @@ it('recovers the selected supplier URL instead of rerunning product discovery', 
   expect(fetchMock.mock.calls[0][0]).toBe('/api/product-read')
   expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).url).toBe(url)
   expect(onAnalysis).toHaveBeenCalledTimes(1)
+})
+it('does not restore a pending operation or product after the user resets the case', async () => {
+  const url = 'https://www.alibaba.com/product-detail/Moto_1600000000001.html'
+  saveOperation('search', { id: 'op-reset-late-response', payload: { value: url }, status: 'waiting_auth' })
+  setApiTokenProvider(async () => 'token')
+  setSessionState('ready')
+  let resolve!: (response: Response) => void
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(r => { resolve = r })))
+  const onAnalysis = vi.fn()
+  await act(async () => root.render(<UrlAnalyzer onAnalysis={onAnalysis} />))
+  clearProductDraft()
+  await act(async () => resolve(new Response(JSON.stringify({ sourceUrl: url, product: { name: 'Moto', category: '', originCountry: 'China' } }))))
+  expect(onAnalysis).not.toHaveBeenCalled()
+  expect(readOperation('search')).toBeNull()
 })

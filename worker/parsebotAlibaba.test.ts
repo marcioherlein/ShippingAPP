@@ -91,6 +91,7 @@ describe('Parse.bot Alibaba extraction', () => {
     expect(result.facts.unitPriceUsd).toBe(78)
     expect(result.facts.moq).toBe(1)
     expect(result.facts.packedWeightKg).toBe(3)
+    expect(result.facts.supplierEvidence).toMatchObject({ priceText: '$76-78', currency: null, weightText: '3.0', moqText: 'Min. order: 1 sets' })
     expect(result.facts.volumeCbm).toBeCloseTo(0.005508, 6)
     expect(result.facts.imageUrl).toBe('https://sc04.alicdn.com/kf/H78d2e944cd984fafbcae555c783b645fG.jpg')
     expect(result.facts.supplier).toBe('Shenzhen Outdoor Special Display Equipment Co., Ltd.')

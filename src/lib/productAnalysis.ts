@@ -1,3 +1,4 @@
+import type { SupplierEvidence } from './supplierEvidence'
 import type { SupplierQuote } from './supplierQuote'
 import type { Inputs } from './types'
 import { apiFetch } from './apiClient'
@@ -36,7 +37,7 @@ export type ProductAnalysis = {
     unitPriceUsd: number | null
     purchaseQuantity?: number
     supplierQuote?: SupplierQuote
-    supplierEvidence?: { priceText: string | null; currency: string | null; quantityUnit: string | null; variant: string | null }
+    supplierEvidence?: SupplierEvidence
     moq: number | null
     packedWeightKg: number
     volumeCbm: number

@@ -21,6 +21,9 @@
 .supplier-review h3 { margin: 0 0 8px; font-size: 18px; }
 .supplier-review :is(p, a), .supplier-logistics-review { font-size: 15px; line-height: 1.55; color: var(--ds-text-secondary); }
 .supplier-review a { color: var(--ds-brand-strong); }
+.supplier-original-evidence { font-size: 15px; line-height: 1.55; overflow-wrap: anywhere; }
+.supplier-original-evidence dt { font-weight: 600; color: var(--ds-text-strong); }
+.supplier-original-evidence dd { margin: 0 0 12px; color: var(--ds-text-secondary); }
 .supplier-logistics-review summary { cursor: pointer; padding: 12px 0; }
 .search-operation-state { color: var(--ds-text-secondary); font-size: 15px; line-height: 1.5; }
 .pipeline-known-fact small, .pipeline-known-fact span, .pipeline-confirm-field small { color: var(--ds-text-secondary); }

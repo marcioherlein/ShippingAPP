@@ -79,6 +79,23 @@ const nativeOut: NativeAlibabaResult = {
 }
 
 describe('Alibaba self-scrape-first orchestration', () => {
+  it('keeps the retained direct price currency while supplementing original weight from Browser Run', async () => {
+    const prior = direct({ packedWeightKg: null, volumeCbm: null, supplierEvidence: {
+      priceText: 'EUR 71.50 / piece', currency: 'EUR', quantityUnit: 'piece', variant: 'Green',
+      priceSource: 'Lectura directa', moqText: '5 pieces', moqSource: 'Lectura directa',
+    } })
+    ;(prior as any).status = 'partial'
+    const result = await resolveAlibabaSelfFirst(url, env, { directReader: async () => prior,
+      nativeReader: async () => native({ unitPriceUsd: 99, supplierEvidence: {
+        priceText: 'USD 99 / box', currency: 'USD', quantityUnit: 'box', variant: 'Black',
+        weightText: '210 g', volumeText: '12x10x9 cm', moqText: '100 pieces',
+      } }), parsebotReader: async () => parsebotOut })
+    expect(result.product.unitPriceUsd).toBe(71.5)
+    expect(result.product.supplierEvidence).toMatchObject({ currency: 'EUR', variant: 'Green', quantityUnit: 'piece',
+      priceText: 'EUR 71.50 / piece', weightText: '210 g', weightSource: 'Lectura en navegador', moqText: '5 pieces' })
+    expect(result.product.packedWeightKg).toBe(.21)
+    expect(result.product.moq).toBe(5)
+  })
   it('uses zero-Parse-credit direct extraction first and skips every supplement when complete', async () => {
     const directReader = vi.fn(async () => direct())
     const parsebotReader = vi.fn(async () => parsebot())

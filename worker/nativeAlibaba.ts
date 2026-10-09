@@ -1,3 +1,4 @@
+import { originalSupplierText, mergeSupplierEvidence } from '../src/lib/supplierEvidence'
 import { parseWeightKg } from './weightUnits'
 import type { BrowserRun } from './alibabaSource'
 import { extractAlibabaDirectFacts, type AlibabaDirectFacts } from './alibabaDirectExtract'
@@ -106,6 +107,14 @@ function normalizeResult(raw: any, url: URL): ParsebotAlibabaFacts {
     category: cleanString(root.product_type, 250) || categoryPath[categoryPath.length - 1] || categoryFromSpecs || null,
     categoryPath,
     unitPriceUsd: positiveNumber(root.unit_price) || firstTierPrice,
+    supplierEvidence: {
+      priceText: originalSupplierText(root.price_display) || originalSupplierText(root.unit_price) || originalSupplierText(priceTiers.find((tier: any) => positiveNumber(tier?.price_value ?? tier?.unit_price))?.unit_price) || originalSupplierText(firstTierPrice),
+      currency: cleanString(root.price_currency, 30), quantityUnit: cleanString(root.quantity_unit, 80), variant: cleanString(root.variant, 300),
+      weightText: originalSupplierText(root.unit_weight) || originalSupplierText(packaging.package_weight),
+      moqText: originalSupplierText(root.moq) || (firstTierMoq ? `${firstTierMoq} (mínimo del tramo de precio; confirmar MOQ)` : null),
+      volumeText: originalSupplierText(root.unit_volume) || unitSize,
+      priceSource: 'Lectura en navegador', weightSource: 'Lectura en navegador', moqSource: 'Lectura en navegador', volumeSource: 'Lectura en navegador',
+    },
     moq: positiveNumber(root.moq) || firstTierMoq,
     packedWeightKg: weightKg(root.unit_weight) || weightKg(packaging.package_weight),
     volumeCbm: explicitVolume || dimensionsToCbm(unitSize),
@@ -133,6 +142,7 @@ function directFactsToNative(facts: AlibabaDirectFacts, url: URL): ParsebotAliba
     category: facts.category || facts.categoryPath.at(-1) || null,
     categoryPath: facts.categoryPath,
     unitPriceUsd: facts.unitPriceUsd,
+    supplierEvidence: facts.supplierEvidence,
     moq: facts.moq,
     packedWeightKg: facts.packedWeightKg,
     volumeCbm: facts.volumeCbm,
@@ -161,6 +171,9 @@ function mergeFacts(primary: ParsebotAlibabaFacts | null, supplement: ParsebotAl
     category: primary.category || supplement.category,
     categoryPath: primary.categoryPath.length ? primary.categoryPath : supplement.categoryPath,
     unitPriceUsd: primary.unitPriceUsd || supplement.unitPriceUsd,
+    supplierEvidence: mergeSupplierEvidence(primary.supplierEvidence, supplement.supplierEvidence, {
+      price: !primary.unitPriceUsd, weight: !primary.packedWeightKg, moq: !primary.moq, volume: !primary.volumeCbm,
+    }, 'Lectura en navegador'),
     moq: primary.moq || supplement.moq,
     packedWeightKg: primary.packedWeightKg || supplement.packedWeightKg,
     volumeCbm: primary.volumeCbm || supplement.volumeCbm,
@@ -194,7 +207,7 @@ function explicitTierPrice(raw: any) {
   for (const tier of tiers) {
     const minQuantity = positiveNumber(tier?.min_quantity ?? tier?.minQuantity ?? tier?.min_qty)
     const price = positiveNumber(tier?.price_value ?? tier?.unit_price)
-    if (minQuantity && price) return price
+    if (minQuantity && price) return { price, text: originalSupplierText(tier?.price_value ?? tier?.unit_price) }
   }
   return null
 }
@@ -236,6 +249,9 @@ const responseSchema = {
         required: ['name', 'value'],
       },
     },
+    price_currency: { type: ['string', 'null'] },
+    price_display: { type: ['string', 'null'] },
+    variant: { type: ['string', 'null'] },
     price_tiers: {
       type: 'array',
       items: {
@@ -264,6 +280,7 @@ const responseSchema = {
 const browserExtractionPrompt = [
   'Extract ONLY facts explicitly visible or embedded in this Alibaba product page. Never infer or estimate missing values.',
   'Inspect the rendered offer, structured page data, breadcrumb, product attributes/specifications, price tiers and logistics/package information when present.',
+  'Retain the original price display, explicit currency code, quantity unit, variant and weight unit. A bare $ or ¥ does not establish a currency; return null for price_currency unless explicitly identified.',
   'For unit_price, return only the merchandise offer price. Never use coupons, new-buyer incentives, sample prices, shipping/freight charges or unrelated currency amounts.',
   'Prefer logistics/package facts for unit_weight, unit_volume and unit_size; do not confuse product physical dimensions with packed shipping dimensions.',
   'Use category_path for the Alibaba breadcrumb from broadest to most specific. product_type should be the concrete merchandise type, not a marketing phrase.',
@@ -433,7 +450,8 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
 
   const raw = body?.result ?? body
   const structured = normalizeResult(raw, url)
-  const tierPrice = explicitTierPrice(raw)
+  const explicitTier = explicitTierPrice(raw)
+  const tierPrice = explicitTier?.price ?? null
   const isolatedStructuredPrice = positiveNumber(raw?.unit_price)
   const renderedPrice = rendered.facts?.unitPriceUsd ?? null
 
@@ -444,7 +462,14 @@ export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promi
   const structuredPrice = tierPrice || (renderedPrice && isolatedStructuredPrice && pricesAgree(renderedPrice, isolatedStructuredPrice)
     ? isolatedStructuredPrice
     : null)
-  const structuredSafe = { ...structured, unitPriceUsd: structuredPrice }
+  const structuredSafe = {
+    ...structured,
+    unitPriceUsd: structuredPrice,
+    supplierEvidence: structured.supplierEvidence && {
+      ...structured.supplierEvidence,
+      priceText: explicitTier ? explicitTier.text : structured.supplierEvidence.priceText,
+    },
+  }
 
   if (!renderedPrice && isolatedStructuredPrice && !tierPrice) {
     warnings.push('Browser Run expuso un unit_price sin precio determinístico ni tier con cantidad; GlobalShipping lo retuvo como no corroborado y solicita confirmación del proveedor.')

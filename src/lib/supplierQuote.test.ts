@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { optimizeQuantity } from './quantityOptimizer'
-import { initialSupplierQuote, supplierQuotePrice } from './supplierQuote'
+import { initialSupplierQuote, supplierQuotePrice, type SupplierQuote } from './supplierQuote'
 import { applyProductConfirmation, createManualProductAnalysis, createPrefilledAnalysis, productConfirmationFromAnalysis } from './productConfirmation'
 
 describe('supplier confirmation and purchase quantity', () => {
+  it('rejects unsupported persisted currency and basis instead of treating them as a unit quote', () => {
+    const quote = initialSupplierQuote(20, true)
+    expect(supplierQuotePrice({ ...quote, currency: 'XYZ', usdPerCurrency: 1, fxSource: 'source', fxDate: '2026-10-06' } as unknown as SupplierQuote, 2)).toBeNull()
+    expect(supplierQuotePrice({ ...quote, basis: 'unknown' } as unknown as SupplierQuote, 2)).toBeNull()
+  })
+  it('requires a real calendar date and finite conversion for foreign prices', () => {
+    const quote: SupplierQuote = { ...initialSupplierQuote(100, true), currency: 'CNY', usdPerCurrency: .14, fxSource: 'Supplier cross rate', fxDate: '2026-02-30' }
+    expect(supplierQuotePrice(quote, 2)).toBeNull()
+    expect(supplierQuotePrice({ ...quote, fxDate: '2026-13-01' }, 2)).toBeNull()
+    expect(supplierQuotePrice({ ...quote, fxDate: '2024-02-29' }, 2)).toBeCloseTo(14)
+    expect(supplierQuotePrice({ ...quote, fxDate: '2026-10-06', amount: Number.MAX_VALUE, usdPerCurrency: 10 }, 2)).toBeNull()
+    for (const quantity of [0, -1, 2.5, NaN]) expect(supplierQuotePrice(initialSupplierQuote(20, true), quantity)).toBeNull()
+  })
   it('never treats extracted price as USD or a unit price without explicit correction', () => {
     expect(supplierQuotePrice(initialSupplierQuote(85), 20)).toBeNull()
   })

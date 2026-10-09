@@ -1,3 +1,4 @@
+import { originalSupplierText, type SupplierEvidence } from '../src/lib/supplierEvidence'
 import { parseWeightKg } from './weightUnits'
 type ParsebotEnv = {
   PARSEBOT_API_KEY?: string
@@ -13,7 +14,7 @@ export type ParsebotAlibabaFacts = {
   name?: string | null
   category?: string | null
   categoryPath?: string[]
-  supplierEvidence?: { priceText: string | null; currency: string | null; quantityUnit: string | null; variant: string | null }
+  supplierEvidence?: SupplierEvidence
   unitPriceUsd?: number | null
   moq?: number | null
   packedWeightKg?: number | null
@@ -255,7 +256,16 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
     category: cleanString(categoryValue, 300),
     categoryPath,
     unitPriceUsd: numberOrNull(priceValue),
-    supplierEvidence: { priceText: cleanString(firstPresent(product, ['price_display', 'priceDisplay', 'unit_price', 'unitPrice']), 300), currency: cleanString(firstPresent(product, ['priceCurrency', 'currency', 'currency_code']), 30), quantityUnit: cleanString(firstPresent(product, ['quantity_unit', 'quantityUnit']), 80), variant: cleanString(firstPresent(product, ['sku_name', 'model']), 300) },
+    supplierEvidence: {
+      priceText: cleanString(firstPresent(product, ['price_display', 'priceDisplay', 'unit_price', 'unitPrice']), 300) || originalSupplierText(priceValue),
+      currency: cleanString(firstPresent(product, ['priceCurrency', 'currency', 'currency_code']), 30),
+      quantityUnit: cleanString(firstPresent(product, ['quantity_unit', 'quantityUnit']), 80),
+      variant: cleanString(firstPresent(product, ['sku_name', 'model']), 300),
+      weightText: originalSupplierText(weightValue), moqText: originalSupplierText(moqValue),
+      volumeText: originalSupplierText(volumeValue) || originalSupplierText(dimensionsValue),
+      priceSource: 'Datos estructurados del proveedor', weightSource: 'Datos estructurados del proveedor',
+      moqSource: 'Datos estructurados del proveedor', volumeSource: 'Datos estructurados del proveedor',
+    },
     moq: numberOrNull(moqValue),
     packedWeightKg: weightKg(weightValue),
     volumeCbm: volumeToCbm(volumeValue) ?? dimensionsToCbm(dimensionsValue),

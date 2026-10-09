@@ -72,8 +72,9 @@ function withReservation(response: Response, data: ProductAnalysis) {
  * supplier ficha; it does not classify NCM, query the Argentina market, or
  * consume one of the user's analysis credits.
  */
-export async function readAlibabaProduct(url: string): Promise<ProductAnalysis> {
+export async function readAlibabaProduct(url: string, signal?: AbortSignal): Promise<ProductAnalysis> {
   const response = await apiFetch('/api/product-read', {
+    signal,
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url }),

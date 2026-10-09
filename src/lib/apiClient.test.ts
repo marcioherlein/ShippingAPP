@@ -167,6 +167,19 @@ describe('apiFetch authentication and metering transport boundary', () => {
 })
 
 describe('request deadline', () => {
+  it('cancels immediately even when the token provider never resolves', async () => {
+    setApiTokenProvider(() => new Promise(() => {}))
+    const controller = new AbortController()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const request = apiFetch('/api/opportunity-search', { signal: controller.signal })
+    const assertion = expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    controller.abort()
+    await assertion
+    expect(fetchMock).not.toHaveBeenCalled()
+    setApiTokenProvider(null)
+    vi.unstubAllGlobals()
+  })
   it('releases a stalled provider request after 30 seconds', async () => {
     vi.useFakeTimers()
     let signal: AbortSignal | null = null

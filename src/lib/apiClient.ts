@@ -134,8 +134,14 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   init?.signal?.addEventListener('abort', abort, { once: true })
   if (init?.signal?.aborted) abort()
   let timer: ReturnType<typeof setTimeout> | undefined
+  let rejectOnAbort: (() => void) | undefined
   try {
     return await Promise.race([
+      new Promise<never>((_, reject) => {
+        rejectOnAbort = () => reject(controller.signal.reason || new DOMException('Operación cancelada', 'AbortError'))
+        controller.signal.addEventListener('abort', rejectOnAbort, { once: true })
+        if (controller.signal.aborted) rejectOnAbort()
+      }),
       apiFetchInternal(input, { ...init, signal: controller.signal }).then(async response => {
         if (!response.body) return response
         const body = await response.arrayBuffer()
@@ -150,6 +156,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
     ])
   } finally {
     clearTimeout(timer)
+    if (rejectOnAbort) controller.signal.removeEventListener('abort', rejectOnAbort)
     init?.signal?.removeEventListener('abort', abort)
   }
 }

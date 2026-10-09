@@ -19,7 +19,7 @@ type Props = {
   deferCalculation?: boolean
 }
 
-type SearchDraft = { draft?: string; lastSearch?: string; discovery?: ProductDiscoveryResponse | null; messages?: ThreadMessage[]; selectedConstraints?: DiscoveryConstraints | null; pendingAuth?: boolean }
+type SearchDraft = { draft?: string; lastSearch?: string; discovery?: ProductDiscoveryResponse | null; messages?: ThreadMessage[]; selectedConstraints?: DiscoveryConstraints | null; pendingAuth?: boolean; failedSourceUrl?: string | null; lastError?: string }
 
 type ThreadMessage = { role: 'user' | 'assistant'; content: string }
 type SearchOperation = { value: string; selectedUrl?: string; constraints?: DiscoveryConstraints | null }
@@ -62,20 +62,22 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   const [phase, setPhase] = useState<'idle' | 'search' | 'extract'>('idle')
   const pendingAuth = useRef(savedSearch?.pendingAuth || false)
   const busy = useRef(false)
-  const [error, setError] = useState('')
-  const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(null)
+  const activeRequest = useRef<AbortController | null>(null)
+  useEffect(() => () => activeRequest.current?.abort(), [])
+  const [error, setError] = useState(savedSearch?.lastError || '')
+  const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(savedSearch?.failedSourceUrl || null)
 
-  useEffect(() => { writeProductDraft('search', { draft, lastSearch, discovery, messages: messages.slice(-12), selectedConstraints, pendingAuth: pendingAuth.current }) }, [draft, lastSearch, discovery, messages, selectedConstraints])
+  useEffect(() => { writeProductDraft('search', { draft, lastSearch, discovery, messages: messages.slice(-12), selectedConstraints, pendingAuth: pendingAuth.current, failedSourceUrl, lastError: error }) }, [draft, lastSearch, discovery, messages, selectedConstraints, failedSourceUrl, error])
 
   const constraintChecks = useMemo(
     () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],
     [analysis, selectedConstraints],
   )
 
-  const analyzeRealUrl = async (url: string, fromDiscovery: boolean, constraints: DiscoveryConstraints | null, operationId: string) => {
+  const analyzeRealUrl = async (url: string, fromDiscovery: boolean, constraints: DiscoveryConstraints | null, operationId: string, signal: AbortSignal) => {
     setPhase('extract')
-    const next = await ingestAlibabaUrlV2(url)
-    if (!operationIsCurrent('search', operationId)) return
+    const next = await ingestAlibabaUrlV2(url, signal)
+    if (signal.aborted || !operationIsCurrent('search', operationId)) return
     setSelectedConstraints(fromDiscovery ? constraints : null)
     setFailedSourceUrl(null)
     onAnalysis(next)
@@ -88,11 +90,11 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     }])
   }
 
-  const runDiscoverySearch = async (query: string, userText: string, operationId: string) => {
+  const runDiscoverySearch = async (query: string, userText: string, operationId: string, signal: AbortSignal) => {
     setFailedSourceUrl(null)
     setPhase('search')
-    const live = await discoverProducts(query, userText, operationId)
-    if (!operationIsCurrent('search', operationId)) return
+    const live = await discoverProducts(query, userText, operationId, signal)
+    if (signal.aborted || !operationIsCurrent('search', operationId)) return
     setDiscovery(live)
     setMessages((current) => [...current, {
       role: 'assistant',
@@ -108,6 +110,8 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     const value = raw.trim()
     if (!value || busy.current) return
     busy.current = true
+    const controller = new AbortController()
+    activeRequest.current = controller
     const operation = beginOperation<SearchOperation>('search', { value })
 
     if (!resumed) setMessages((current) => [...current, { role: 'user', content: value }])
@@ -123,7 +127,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
     try {
       if (isAlibabaUrl(value)) {
-        await analyzeRealUrl(value, false, null, operation.id)
+        await analyzeRealUrl(value, false, null, operation.id, controller.signal)
         return
       }
 
@@ -136,9 +140,9 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         return
       }
 
-      await runDiscoverySearch(query, value, operation.id)
+      await runDiscoverySearch(query, value, operation.id, controller.signal)
     } catch (err) {
-      if (!operationIsCurrent('search', operation.id)) return
+      if (controller.signal.aborted || !operationIsCurrent('search', operation.id)) return
       if (isAlibabaUrl(value)) setFailedSourceUrl(value)
       const message = err instanceof Error ? err.message : 'No pude completar la búsqueda en este momento.'
       pendingAuth.current = err instanceof ApiAuthError
@@ -146,36 +150,76 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       writeProductDraft('search', { draft: value, lastSearch: value, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current })
       setError(message)
     } finally {
-      if (operation.status === 'running') operation.status = 'complete'
-      if (operation.status === 'complete') pendingAuth.current = false
-      settleOperation('search', operation)
-      busy.current = false
-      setLoading(false)
-      setPhase('idle')
+      if (!controller.signal.aborted) {
+        if (operation.status === 'running') operation.status = 'complete'
+        if (operation.status === 'complete') pendingAuth.current = false
+        settleOperation('search', operation)
+      }
+      if (activeRequest.current === controller) {
+        activeRequest.current = null
+        busy.current = false
+        setLoading(false)
+        setPhase('idle')
+      }
     }
   }
 
   const selectDiscovery = async (url: string, constraints: DiscoveryConstraints | null = discovery?.constraints ?? null) => {
     if (busy.current) return
     busy.current = true
+    const controller = new AbortController()
+    activeRequest.current = controller
     const operation = beginOperation<SearchOperation>('search', { value: lastSearch, selectedUrl: url, constraints })
     setLoading(true)
     setError('')
     setFailedSourceUrl(null)
     try {
-      await analyzeRealUrl(url, true, constraints, operation.id)
+      await analyzeRealUrl(url, true, constraints, operation.id, controller.signal)
     } catch (err) {
-      if (!operationIsCurrent('search', operation.id)) return
+      if (controller.signal.aborted || !operationIsCurrent('search', operation.id)) return
       operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
       setFailedSourceUrl(url)
       setError(err instanceof Error ? err.message : 'No pude analizar la publicación seleccionada.')
     } finally {
-      if (operation.status === 'running') operation.status = 'complete'
-      settleOperation('search', operation)
-      busy.current = false
-      setLoading(false)
-      setPhase('idle')
+      if (!controller.signal.aborted) {
+        if (operation.status === 'running') operation.status = 'complete'
+        settleOperation('search', operation)
+      }
+      if (activeRequest.current === controller) {
+        activeRequest.current = null
+        busy.current = false
+        setLoading(false)
+        setPhase('idle')
+      }
     }
+  }
+
+  const stopRequest = () => {
+    activeRequest.current?.abort()
+    activeRequest.current = null
+    const operation = readOperation<SearchOperation>('search')
+    if (operation) {
+      settleOperation('search', { ...operation, status: 'failed' })
+      const url = operation.payload.selectedUrl || (isAlibabaUrl(operation.payload.value) ? operation.payload.value : null)
+      if (url) setFailedSourceUrl(url)
+    }
+    pendingAuth.current = false
+    busy.current = false
+    setLoading(false)
+    setPhase('idle')
+  }
+
+  const enterManual = (sourceUrl = readOperation<SearchOperation>('search')?.payload.selectedUrl || failedSourceUrl || (isAlibabaUrl(lastSearch) ? lastSearch : undefined)) => {
+    stopRequest()
+    if (sourceUrl && onManualFallback) onManualFallback(sourceUrl)
+    else onAnalysis(createManualProductAnalysis(sourceUrl || 'manual://product', isAlibabaUrl(lastSearch) ? '' : lastSearch))
+  }
+
+  const retryLast = () => {
+    const operation = readOperation<SearchOperation>('search')
+    if (operation?.payload.selectedUrl) void selectDiscovery(operation.payload.selectedUrl, operation.payload.constraints ?? null)
+    else if (failedSourceUrl) void submitValue(failedSourceUrl)
+    else void submitValue(lastSearch)
   }
 
   const submit = (event: React.FormEvent) => {
@@ -230,7 +274,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         <span>{message.role === 'user' ? 'Vos' : 'GlobalShipping'}</span>
         <p>{message.content}</p>
       </div>)}
-      {loading && <div className="intake-message assistant"><span>GlobalShipping</span><p>{phase === 'extract' ? 'Leyendo los datos de la publicación…' : 'Buscando proveedores y publicaciones…'}</p><div className="search-loading-bar" role="progressbar" aria-label="Buscando productos"><span /></div></div>}
+      {loading && <div className="intake-message assistant"><span>GlobalShipping</span><p>{phase === 'extract' ? 'Leyendo los datos de la publicación…' : 'Buscando proveedores y publicaciones…'}</p><div className="search-loading-bar" role="progressbar" aria-label={phase === 'extract' ? 'Leyendo publicación' : 'Buscando productos'}><span /></div></div>}
     </div>}
 
     {loading && <p className="search-operation-state" role="status">{phase === 'extract' ? '2. Extracción del producto' : '1. Búsqueda de proveedor'} · límite de 30 segundos. La clasificación NCM empieza después de tu confirmación.</p>}
@@ -244,20 +288,22 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
           disabled={loading}
           aria-label="Buscar productos en Alibaba"
         />
-        <button type="submit" disabled={loading || !draft.trim()}>{loading ? 'Buscando…' : 'Buscar'}</button>
+        <button type="submit" disabled={loading || !draft.trim()}>{loading ? (phase === 'extract' ? 'Leyendo…' : 'Buscando…') : 'Buscar'}</button>
       </div>
       <small>También podés pegar directamente una URL de producto de Alibaba.</small>
       {error && <div className="analyzer-error manual-fallback-error" role="alert">
         <span>{error}</span>
-        {failedSourceUrl && onManualFallback && <button type="button" onClick={() => onManualFallback(failedSourceUrl)}>Cargar este producto manualmente</button>}
+        {failedSourceUrl && onManualFallback && <button type="button" onClick={() => enterManual(failedSourceUrl)}>Cargar este producto manualmente</button>}
       </div>}
     </form>
 
-    {!loading && lastSearch && (error || (discovery && discovery.results.length === 0)) && <div className="search-recovery">
+    {lastSearch && (loading || error || (discovery && (discovery.results.length === 0 || discovery.status !== 'live'))) && <div className="search-recovery">
       <p>Podés continuar sin esperar la búsqueda automática.</p>
       <a href={`https://www.alibaba.com/trade/search?SearchText=${encodeURIComponent(buildDiscoveryQuery(lastSearch))}`} target="_blank" rel="noopener noreferrer">Buscar directamente en Alibaba</a>
-      <button type="button" onClick={() => onAnalysis(createManualProductAnalysis('manual://product', isAlibabaUrl(lastSearch) ? '' : lastSearch))}>Completar la ficha manualmente</button>
-      <button type="button" onClick={() => void submitValue(lastSearch)}>Reintentar búsqueda</button>
+      <button type="button" onClick={() => enterManual()}>Completar la ficha manualmente</button>
+      {loading
+        ? <button type="button" onClick={() => { stopRequest(); setError('Operación cancelada. Conservamos tu consulta y los resultados. Podés reintentar o completar la ficha manualmente.') }}>Cancelar operación</button>
+        : <button type="button" onClick={retryLast}>{failedSourceUrl ? 'Reintentar lectura' : 'Reintentar búsqueda'}</button>}
     </div>}
     {discovery && <section className="discovery-card">
       <div className="discovery-head">

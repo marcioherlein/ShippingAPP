@@ -1,0 +1,816 @@
+/* =================================================================
+   ACE DESIGN LANGUAGE — GlobalShipping Landing
+   Dark cinematic hero, frosted nav, scroll reveal, chat FAB,
+   chat bubble polish. Scoped to .gs-landing and .gs-* namespace.
+   ================================================================= */
+
+/* ── Fonts ────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
+
+/* ── Root tokens (dark hero palette) ─────────────────────────── */
+.gs-landing {
+  --gs-accent:       #4f5de4;
+  --gs-accent-light: #7b87ef;
+  --gs-accent-ring:  rgba(79, 93, 228, 0.28);
+  --gs-dark-bg:      #070b18;
+  --gs-dark-mid:     #0c1227;
+  --gs-dark-card:    rgba(255, 255, 255, 0.055);
+  --gs-text-bright:  rgba(255, 255, 255, 0.92);
+  --gs-text-muted:   rgba(255, 255, 255, 0.55);
+  --gs-text-faint:   rgba(255, 255, 255, 0.32);
+  --gs-border-light: rgba(255, 255, 255, 0.10);
+  --gs-border-faint: rgba(255, 255, 255, 0.06);
+  --gs-ease-expo:    cubic-bezier(0.16, 1, 0.3, 1);
+  --gs-t1: 160ms;
+  --gs-t2: 240ms;
+  --gs-t3: 380ms;
+  --gs-t4: 520ms;
+}
+
+/* ── Keyframes ────────────────────────────────────────────────── */
+
+@keyframes gs-orb-1 {
+  0%   { transform: translate(0, 0)     scale(1);    }
+  33%  { transform: translate(60px, -40px) scale(1.08); }
+  66%  { transform: translate(-30px, 50px) scale(0.95); }
+  100% { transform: translate(0, 0)     scale(1);    }
+}
+
+@keyframes gs-orb-2 {
+  0%   { transform: translate(0, 0)       scale(1);    }
+  40%  { transform: translate(-80px, 30px) scale(1.12); }
+  80%  { transform: translate(40px, -60px) scale(0.92); }
+  100% { transform: translate(0, 0)       scale(1);    }
+}
+
+@keyframes gs-orb-3 {
+  0%   { transform: translate(0, 0)     scale(1);    }
+  50%  { transform: translate(50px, 70px) scale(1.06); }
+  100% { transform: translate(0, 0)     scale(1);    }
+}
+
+@keyframes gs-blur-up {
+  from { opacity: 0; transform: translateY(28px); filter: blur(8px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0);   }
+}
+
+@keyframes gs-fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+@keyframes gs-scroll-cue {
+  0%, 100% { transform: translateY(0) translateX(-50%);  opacity: 0.9; }
+  50%       { transform: translateY(8px) translateX(-50%); opacity: 0.4; }
+}
+
+@keyframes gs-pulse-ring {
+  0%   { transform: scale(1);   opacity: 1; }
+  60%  { transform: scale(1.9); opacity: 0; }
+  100% { transform: scale(1);   opacity: 0; }
+}
+
+@keyframes gs-msg-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1);       }
+}
+
+@keyframes gs-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0);   opacity: 0.4; }
+  30%           { transform: translateY(-6px); opacity: 1;   }
+}
+
+/* ── Global landing reset ─────────────────────────────────────── */
+.gs-landing {
+  overflow-x: hidden;
+  /* layout.css adds padding: 0 28px 56px to all <main> — reset it here
+     so full-bleed sections and margin-auto centering work correctly. */
+  padding: 0 !important;
+  /* layout.css also adds margin: 0 auto on <main> which is fine to keep */
+}
+
+/* ── FROSTED-GLASS NAV ────────────────────────────────────────── */
+.gs-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  background: transparent;
+  transition:
+    background var(--gs-t2) var(--gs-ease-expo),
+    backdrop-filter var(--gs-t2) var(--gs-ease-expo),
+    box-shadow var(--gs-t2) var(--gs-ease-expo),
+    border-color var(--gs-t2) var(--gs-ease-expo);
+  border-bottom: 1px solid transparent;
+}
+
+.gs-nav--scrolled {
+  background: rgba(7, 11, 24, 0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.32);
+}
+
+.gs-nav__inner {
+  width: min(1140px, calc(100% - 40px));
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gs-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--gs-text-bright);
+  text-decoration: none;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.gs-brand b { color: var(--gs-accent-light); }
+
+.gs-brand .journey-brand-mark {
+  background: linear-gradient(160deg, var(--gs-accent-light), var(--gs-accent));
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.3), 0 4px 12px var(--gs-accent-ring);
+}
+
+.gs-nav__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 18px;
+  background: var(--gs-accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 14px var(--gs-accent-ring);
+  transition: transform var(--gs-t1) var(--gs-ease-expo), background var(--gs-t1) ease;
+}
+
+.gs-nav__cta:hover { background: var(--ds-brand-strong, #4454dc); transform: translateY(-1px); }
+.gs-nav__cta:active { transform: scale(0.97); }
+
+/* ── DARK CINEMATIC HERO ──────────────────────────────────────── */
+.gs-hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding-top: 60px;
+  isolation: isolate;
+}
+
+/* Background layer */
+.gs-hero__bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse 120% 80% at 60% 10%, #0d1740 0%, var(--gs-dark-bg) 70%);
+}
+
+/* Animated orbs */
+.gs-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(80px);
+}
+
+.gs-orb--1 {
+  width: clamp(340px, 40vw, 580px);
+  height: clamp(340px, 40vw, 580px);
+  top: -10%;
+  left: -8%;
+  background: radial-gradient(circle, rgba(79, 93, 228, 0.30), transparent 70%);
+  animation: gs-orb-1 22s ease-in-out infinite;
+}
+
+.gs-orb--2 {
+  width: clamp(280px, 34vw, 480px);
+  height: clamp(280px, 34vw, 480px);
+  top: 30%;
+  right: -5%;
+  background: radial-gradient(circle, rgba(110, 80, 220, 0.22), transparent 70%);
+  animation: gs-orb-2 28s ease-in-out infinite;
+}
+
+.gs-orb--3 {
+  width: clamp(200px, 25vw, 360px);
+  height: clamp(200px, 25vw, 360px);
+  bottom: 10%;
+  left: 25%;
+  background: radial-gradient(circle, rgba(40, 80, 200, 0.18), transparent 70%);
+  animation: gs-orb-3 18s ease-in-out infinite;
+}
+
+/* Gradient scrim */
+.gs-hero__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(7,11,24,0.45) 0%, rgba(7,11,24,0) 40%, rgba(7,11,24,0.5) 85%, var(--gs-dark-bg) 100%),
+    linear-gradient(90deg, rgba(7,11,24,0.25) 0%, transparent 40%);
+}
+
+/* Noise grain overlay */
+.gs-hero__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+  pointer-events: none;
+}
+
+/* Fine blueprint grid */
+.gs-hero__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.024) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  mask-image: radial-gradient(ellipse 100% 80% at 50% 0%, rgba(0,0,0,0.55) 0%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 100% 80% at 50% 0%, rgba(0,0,0,0.55) 0%, transparent 80%);
+}
+
+/* Hero content wrapper */
+.gs-hero__inner {
+  width: min(1140px, calc(100% - 40px));
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: clamp(40px, 6vw, 80px) 0 clamp(60px, 8vw, 100px);
+}
+
+/* Eyebrow badge */
+.gs-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--gs-border-light);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(12px);
+  color: var(--gs-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  margin-bottom: 26px;
+  animation: gs-blur-up var(--gs-t3) 0.04s var(--gs-ease-expo) both;
+}
+
+.gs-hero__badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gs-accent-light);
+  box-shadow: 0 0 0 4px rgba(123, 135, 239, 0.18);
+  flex-shrink: 0;
+}
+
+/* Headline — Playfair Display */
+.gs-hero__headline {
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+  font-size: clamp(40px, 6.2vw, 70px);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  color: var(--gs-text-bright);
+  max-width: 16ch;
+  margin: 0 0 22px;
+  text-wrap: balance;
+  animation: gs-blur-up var(--gs-t3) 0.12s var(--gs-ease-expo) both;
+}
+
+.gs-hero__headline em {
+  font-style: italic;
+  background: linear-gradient(135deg, var(--gs-accent-light) 0%, #a090ff 50%, var(--gs-accent-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Sub headline */
+.gs-hero__sub {
+  max-width: 44ch;
+  color: var(--gs-text-muted);
+  font-size: clamp(16px, 1.8vw, 19px);
+  line-height: 1.6;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  margin: 0 auto 32px;
+  text-wrap: balance;
+  animation: gs-blur-up var(--gs-t3) 0.20s var(--gs-ease-expo) both;
+}
+
+/* CTA row */
+.gs-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 48px;
+  animation: gs-blur-up var(--gs-t3) 0.28s var(--gs-ease-expo) both;
+}
+
+/* Primary CTA */
+.gs-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  padding: 15px 30px;
+  background: var(--gs-accent);
+  color: #fff;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 6px 22px var(--gs-accent-ring), 0 1px 4px rgba(79, 93, 228, 0.22);
+  transition:
+    transform var(--gs-t1) var(--gs-ease-expo),
+    box-shadow var(--gs-t1) ease,
+    background var(--gs-t1) ease;
+  will-change: transform;
+}
+
+.gs-btn-primary svg { transition: transform var(--gs-t1) var(--gs-ease-expo); }
+.gs-btn-primary:hover {
+  background: #4454dc;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px var(--gs-accent-ring), 0 2px 8px rgba(79, 93, 228, 0.22);
+}
+.gs-btn-primary:hover svg { transform: translateX(4px); }
+.gs-btn-primary:active { transform: translateY(0) scale(0.98); }
+
+/* Secondary CTA */
+.gs-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--gs-border-light);
+  border-radius: 999px;
+  padding: 15px 26px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--gs-text-bright);
+  font-size: 15.5px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  backdrop-filter: blur(12px);
+  transition:
+    background var(--gs-t1) ease,
+    border-color var(--gs-t1) ease,
+    transform var(--gs-t1) var(--gs-ease-expo);
+  will-change: transform;
+}
+
+.gs-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.20);
+  transform: translateY(-1px);
+}
+
+/* Glass stats bar */
+.gs-hero__stats {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--gs-border-light);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  overflow: hidden;
+  animation: gs-blur-up var(--gs-t4) 0.40s var(--gs-ease-expo) both;
+}
+
+.gs-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px clamp(20px, 2.8vw, 40px);
+}
+
+.gs-stat-divider {
+  width: 1px;
+  background: var(--gs-border-faint);
+  margin: 14px 0;
+  flex-shrink: 0;
+}
+
+.gs-stat__value {
+  font-size: clamp(20px, 2.2vw, 27px);
+  font-weight: 700;
+  color: var(--gs-text-bright);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.gs-stat__label {
+  font-size: 12px;
+  color: var(--gs-text-faint);
+  margin-top: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+/* Scroll cue */
+.gs-scroll-cue {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--gs-text-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  animation: gs-scroll-cue 2.2s ease-in-out 1.8s infinite;
+  transition: color var(--gs-t1) ease;
+}
+
+.gs-scroll-cue:hover { color: var(--gs-text-muted); }
+
+/* Mountain wave bottom */
+.gs-hero__wave {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: clamp(60px, 8vw, 110px);
+  background: #f8faff;
+  clip-path: polygon(
+    0% 100%, 100% 100%, 100% 55%,
+    88% 30%, 78% 50%, 68% 22%, 58% 42%,
+    48% 15%, 38% 38%, 28% 18%, 18% 40%,
+    8% 20%, 0% 42%
+  );
+}
+
+/* ── DEMO CARD BRIDGE ─────────────────────────────────────────── */
+
+/* Flex wrapper pulls demo card up to overlap the hero wave and centers it */
+.gs-demo-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0 20px clamp(24px, 4vw, 48px);
+  margin-top: -60px;
+  position: relative;
+  z-index: 10;
+}
+
+/* Demo card fills the wrapper */
+.gs-demo-wrap .journey-demo {
+  width: min(580px, 100%);
+  margin: 0;
+}
+
+/* ── HOW IT WORKS ─────────────────────────────────────────────── */
+.gs-how {
+  background: #f8faff;
+  padding: clamp(48px, 7vw, 96px) 20px;
+}
+
+.gs-how__inner {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.gs-how__title {
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+  font-size: clamp(26px, 3.8vw, 44px);
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 clamp(32px, 5vw, 56px);
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.gs-how__steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(20px, 2.8vw, 36px);
+  position: relative;
+}
+
+.gs-how-step {
+  position: relative;
+  background: #fff;
+  border: 1px solid rgba(203, 213, 225, 0.65);
+  border-radius: 20px;
+  padding: clamp(24px, 3vw, 36px);
+  box-shadow: 0 4px 16px rgba(48, 59, 91, 0.06);
+  transition: transform var(--gs-t2) var(--gs-ease-expo), box-shadow var(--gs-t2) ease;
+  overflow: visible;
+}
+
+.gs-how-step:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(48, 59, 91, 0.12);
+}
+
+/* Process connector between cards */
+.gs-how-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: calc(30px + 22px);
+  left: 100%;
+  width: clamp(20px, 2.8vw, 36px);
+  height: 2px;
+  background: linear-gradient(90deg, rgba(79,93,228,0.35) 0%, transparent 100%);
+  border-radius: 1px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .gs-how-step:not(:last-child)::after { display: none; }
+}
+
+.gs-how-step__number {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: inline-grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(79,93,228,0.12), rgba(79,93,228,0.06));
+  color: #4f5de4;
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 16px;
+  transition: background var(--gs-t2) ease, transform var(--gs-t2) var(--gs-ease-expo);
+}
+
+.gs-how-step:hover .gs-how-step__number {
+  background: linear-gradient(135deg, #4f5de4, #7b87ef);
+  color: #fff;
+  transform: scale(1.06);
+}
+
+.gs-how-step b {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  color: #0f172a;
+  margin-bottom: 10px;
+}
+
+.gs-how-step p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.gs-how__cta {
+  display: flex;
+  justify-content: center;
+  margin-top: clamp(32px, 5vw, 52px);
+}
+
+/* ── TRUST STRIP ──────────────────────────────────────────────── */
+/* Existing .journey-trust-strip is fine; just add vertical padding */
+.gs-landing .journey-trust-strip {
+  padding-block: 20px;
+}
+
+/* ── DARK FOOTER ──────────────────────────────────────────────── */
+.gs-footer {
+  background: linear-gradient(160deg, #060a16 0%, #0b1224 55%, #060916 100%);
+  padding: clamp(40px, 6vw, 72px) 20px clamp(28px, 4vw, 44px);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.gs-footer__inner {
+  max-width: 1140px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.gs-footer__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.gs-footer__brand b { color: var(--gs-accent-light); }
+
+.gs-footer__brand .journey-brand-mark {
+  background: linear-gradient(160deg, var(--gs-accent-light), var(--gs-accent));
+}
+
+.gs-footer__copy {
+  color: rgba(255, 255, 255, 0.30);
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+.gs-footer__links {
+  display: flex;
+  gap: 24px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gs-footer__links a {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 13px;
+  text-decoration: none;
+  transition: color var(--gs-t1) ease;
+}
+
+.gs-footer__links a:hover { color: rgba(255, 255, 255, 0.72); }
+
+/* ── CHAT FAB ────────────────────────────────────────────────── */
+.gs-chat-fab {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  right: calc(24px + env(safe-area-inset-right));
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, var(--gs-accent), var(--gs-accent-light));
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow:
+    0 8px 24px var(--gs-accent-ring),
+    0 2px 8px rgba(79, 93, 228, 0.24),
+    0 1px 2px rgba(0,0,0,0.12);
+  transition:
+    transform var(--gs-t1) var(--gs-ease-expo),
+    box-shadow var(--gs-t1) ease;
+  -webkit-tap-highlight-color: transparent;
+  animation: gs-fade-up var(--gs-t3) 1.2s var(--gs-ease-expo) both;
+}
+
+.gs-chat-fab::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--gs-accent), var(--gs-accent-light));
+  opacity: 0;
+  animation: gs-pulse-ring 2.8s var(--gs-ease-expo) 2s infinite;
+  z-index: -1;
+}
+
+.gs-chat-fab:hover {
+  transform: scale(1.04);
+  box-shadow: 0 12px 32px var(--gs-accent-ring), 0 3px 10px rgba(79, 93, 228, 0.28);
+}
+
+.gs-chat-fab:active { transform: scale(0.97); }
+
+@media (max-width: 600px) {
+  .gs-chat-fab span { display: none; }
+  .gs-chat-fab {
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+}
+
+/* ── SCROLL REVEAL ───────────────────────────────────────────── */
+.gs-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity var(--gs-t4) var(--gs-ease-expo),
+    transform var(--gs-t4) var(--gs-ease-expo);
+}
+
+.gs-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.gs-reveal-d1 { transition-delay: 60ms; }
+.gs-reveal-d2 { transition-delay: 120ms; }
+.gs-reveal-d3 { transition-delay: 180ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gs-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .gs-chat-fab::before { animation: none; }
+  .gs-orb--1, .gs-orb--2, .gs-orb--3 { animation: none; }
+  .gs-scroll-cue { animation: none; }
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────────── */
+@media (max-width: 920px) {
+  .gs-how__steps { grid-template-columns: 1fr; }
+  .gs-how-step:not(:last-child)::after { display: none; }
+}
+
+@media (max-width: 640px) {
+  .gs-hero__stats {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 300px;
+  }
+  .gs-stat-divider { width: 100%; height: 1px; margin: 0 16px; }
+  .gs-stat { flex-direction: row; justify-content: space-between; padding: 12px 20px; }
+  .gs-stat__value { font-size: 18px; }
+  .gs-footer__inner { flex-direction: column; align-items: center; text-align: center; }
+  .gs-nav__cta { display: none; }
+}
+
+/* ── CHATBOT CONVERSATION UPGRADE ───────────────────────────── */
+/*
+ * Apply ACE's chat bubble polish to the existing ShippingAPP
+ * conversation UI without changing HTML structure.
+ */
+
+/* Bot bubble — frosted glass surface */
+.journey-bubble.assistant > div {
+  border-radius: 6px 18px 18px 18px !important;
+  background: rgba(248, 250, 252, 0.88) !important;
+  border-color: rgba(203, 213, 225, 0.45) !important;
+  box-shadow: 0 3px 10px rgba(48, 59, 91, 0.07) !important;
+  animation: gs-msg-in 220ms cubic-bezier(0.16,1,0.3,1) both;
+}
+
+/* User bubble */
+.journey-bubble.user > div {
+  border-radius: 18px 6px 18px 18px !important;
+  box-shadow: 0 6px 18px rgba(79, 93, 228, 0.20) !important;
+  animation: gs-msg-in 220ms cubic-bezier(0.16,1,0.3,1) both;
+}
+
+/* Typing indicator dots */
+.gs-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 11px 14px;
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(203, 213, 225, 0.45);
+  border-radius: 6px 18px 18px 18px;
+  width: fit-content;
+  margin: 8px 0 8px 46px;
+}
+
+.gs-typing__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94a3b8;
+  animation: gs-typing-bounce 1.2s ease-in-out infinite;
+}
+
+.gs-typing__dot:nth-child(2) { animation-delay: 0.16s; }
+.gs-typing__dot:nth-child(3) { animation-delay: 0.32s; }

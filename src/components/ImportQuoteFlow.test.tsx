@@ -4,6 +4,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import ImportQuoteFlow from './ImportQuoteFlow'
 import type { QuotePrefill } from '../lib/hotProducts'
+import { initialSupplierQuote } from '../lib/supplierQuote'
+import { compareLandedCost } from '../lib/landedCostEngine'
+import { usd } from '../lib/format'
 
 const prefill: QuotePrefill = {
   productName: 'Raqueta de aluminio', originCountry: 'China', quantity: 20,
@@ -46,6 +49,23 @@ async function fill(label: string, value: string) {
 }
 
 describe('quotation evidence in rendered results', () => {
+  it('recalculates confirmed tier, freight, taxes and unit cost when adopting a recommended quantity', async () => {
+    const supplierQuote = { ...initialSupplierQuote(10, true), maxQuantity: 49, additionalTiers: [{ minQuantity: 50, maxQuantity: 99, amount: 5 }] }
+    await act(async () => root.render(<ImportQuoteFlow prefill={prefill} setup={{ purpose: 'resale', entityType: 'company', hasImporterSignature: 'yes' }} supplierQuote={supplierQuote} purchaseRange={{ min: 60, max: 60 }} />))
+    expect(input('Precio FOB unitario').value).toBe('10')
+    const button = [...container.querySelectorAll('button')].find(el => el.textContent === 'Usar esta cantidad en la simulación')!
+    await act(async () => button.click())
+    expect(input('Cantidad base').value).toBe('60')
+    expect(input('Precio FOB unitario').value).toBe('5')
+    const expected = compareLandedCost({ originCountry: 'China', quantity: 60, unitPriceUsd: 5, unitWeightKg: 0.5, unitVolumeCbm: 0.01, dutyRatePct: 35, purpose: 'resale', entityType: 'company', hasImporterSignature: true, sensitiveCategory: 'none' })
+    expect(expected.bestMode).not.toBeNull()
+    expect(container.querySelector('.result-hero-number')?.textContent).toBe(usd(expected.modes[expected.bestMode!].unitCostUsd))
+    await fill('Cantidad base', '100')
+    expect(container.querySelector('.result-hero-number')).toBeNull()
+    expect(container.textContent).toContain('La oferta confirmada no cubre esta cantidad')
+    await fill('Cantidad base', '60')
+    expect(container.querySelector('.result-hero-number')?.textContent).toBe(usd(expected.modes[expected.bestMode!].unitCostUsd))
+  })
   it('keeps absent MOQ empty and allows clearing a known supplier minimum', async () => {
     await render()
     expect(input('MOQ proveedor').value).toBe('')

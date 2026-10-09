@@ -772,6 +772,7 @@ export default function App() {
         status={effectiveCalculationStatus}
         activeStage={pipelineStage}
         purchaseRange={budgetMode === 'units' ? { min: unitsMin, max: unitsMax } : undefined}
+        costProfile={{ purpose: purpose || 'unknown', entityType: entityType || 'unknown', hasImporterSignature: signature === 'unknown' || signature === null ? null : signature === 'yes', sensitiveCategory: sensitiveCategory || 'unknown' }}
         summary={pipelineSummary}
         blocker={pipelineBlocker}
         onConfirm={(product) => void confirmAndCalculate(product)}
@@ -785,7 +786,7 @@ export default function App() {
     </section>}
 
     {analysisPrefill && effectiveCalculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
-      <ImportQuoteFlow supplierQuote={analysis?.product.supplierQuote} onReviewProduct={reviewProductData} onQuantityChange={quantity => {
+      <ImportQuoteFlow purchaseRange={budgetMode === 'units' ? { min: unitsMin, max: unitsMax } : undefined} supplierQuote={analysis?.product.supplierQuote} onReviewProduct={reviewProductData} onQuantityChange={quantity => {
         setAnalysis({ ...analysis!, product: { ...analysis!.product, purchaseQuantity: quantity }, suggestedQuantities: [quantity] })
         reviewProductData()
       }} key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={{ ...quoteSetup, quantity: pipelineSummary?.baseQuantity ?? quoteSetup.quantity }} />

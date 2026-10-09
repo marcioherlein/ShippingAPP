@@ -6,7 +6,8 @@ export default function Landing({ onStart }: Props) {
   const [navScrolled, setNavScrolled] = useState(false)
 
   const scrollToHow = () => {
-    document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    document.getElementById('como-funciona')?.scrollIntoView({ behavior, block: 'start' })
   }
 
   // Frosted-glass nav on scroll
@@ -44,7 +45,6 @@ export default function Landing({ onStart }: Props) {
       <header className={`gs-nav${navScrolled ? ' gs-nav--scrolled' : ''}`} role="banner">
         <div className="gs-nav__inner">
           <a className="gs-brand" href="#home" aria-label="GlobalShipping inicio">
-            <span className="journey-brand-mark" aria-hidden="true">G</span>
             <span>Global<b>Shipping</b></span>
           </a>
           <button type="button" className="gs-nav__cta" onClick={onStart}>
@@ -181,7 +181,6 @@ export default function Landing({ onStart }: Props) {
         <div className="gs-footer__inner">
           <div>
             <a className="gs-footer__brand" href="#home" aria-label="GlobalShipping inicio">
-              <span className="journey-brand-mark" aria-hidden="true" style={{ width: '26px', height: '26px', fontSize: '13px', borderRadius: '8px' }}>G</span>
               <span>Global<b>Shipping</b></span>
             </a>
             <p className="gs-footer__copy">&#xA9; {new Date().getFullYear()} GlobalShipping. Calculadora de costos de importaci&#xF3;n.</p>

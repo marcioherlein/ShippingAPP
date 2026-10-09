@@ -1,4 +1,4 @@
-import type { SupplierQuote } from '../lib/supplierQuote'
+import { supplierQuotePrice, type SupplierQuote } from '../lib/supplierQuote'
 import React, { useMemo, useState } from 'react'
 import { importFreightValues } from '../data/importFreightValues'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type ModeCostBreakdown, type SensitiveProductCategory, type TransportMode } from '../lib/landedCostEngine'
@@ -44,6 +44,7 @@ type NumberFieldProps = {
   min?: number
   step?: number
   suffix?: string
+  readOnly?: boolean
   onChange: (value: number) => void
 }
 
@@ -62,10 +63,11 @@ type ImportQuoteFlowProps = {
   onQuantityChange?: (quantity: number) => void
   onReviewProduct?: () => void
   supplierQuote?: SupplierQuote
+  purchaseRange?: { min: number; max: number }
 }
 
-function NumberField({ label, hint, value, min = 0, step = 1, suffix, onChange }: NumberFieldProps) {
-  return <label className="field"><span>{label}</span>{hint && <small>{hint}</small>}<div className="input-wrap"><input type="number" min={min} step={step} value={Number.isFinite(value) ? value : 0} onChange={(e) => onChange(Number(e.target.value))} />{suffix && <small>{suffix}</small>}</div></label>
+function NumberField({ label, hint, value, min = 0, step = 1, suffix, onChange, readOnly = false }: NumberFieldProps) {
+  return <label className="field"><span>{label}</span>{hint && <small>{hint}</small>}<div className="input-wrap"><input type="number" min={min} step={step} readOnly={readOnly} value={Number.isFinite(value) ? value : 0} onChange={(e) => onChange(Number(e.target.value))} />{suffix && <small>{suffix}</small>}</div></label>
 }
 
 function checklistSignal(ok: boolean, label: string) {
@@ -207,11 +209,13 @@ function unitBreakdown(mode: ModeCostBreakdown, quantity: number) {
   ] as const
 }
 
-export default function ImportQuoteFlow({ prefill = null, setup = null, onQuantityChange, onReviewProduct, supplierQuote }: ImportQuoteFlowProps) {
+export default function ImportQuoteFlow({ prefill = null, setup = null, onQuantityChange, onReviewProduct, supplierQuote, purchaseRange }: ImportQuoteFlowProps) {
   const [productName, setProductName] = useState(prefill?.productName ?? '')
   const [originCountry, setOriginCountry] = useState(prefill?.originCountry ?? 'China')
   const [quantity, setQuantity] = useState(setup?.quantity ?? prefill?.quantity ?? 100)
-  const [unitPriceUsd, setUnitPriceUsd] = useState(prefill?.unitPriceUsd ?? 0)
+  const [manualUnitPriceUsd, setUnitPriceUsd] = useState(prefill?.unitPriceUsd ?? 0)
+  const confirmedPrice = supplierQuote ? supplierQuotePrice(supplierQuote, quantity) : manualUnitPriceUsd
+  const unitPriceUsd = confirmedPrice ?? 0
   const [unitWeightKg, setUnitWeightKg] = useState(prefill?.unitWeightKg ?? 0)
   const [unitVolumeCbm, setUnitVolumeCbm] = useState(prefill?.unitVolumeCbm ?? 0)
   const [dutyRatePct, setDutyRatePct] = useState(prefill?.dutyRatePct ?? 16)
@@ -265,7 +269,8 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
     strategy,
     localSellPriceUsd,
     supplierQuote,
-  }), [originCountry, quantity, unitPriceUsd, unitWeightKg, unitVolumeCbm, dutyRatePct, statisticsRatePct, vatRatePct, vatAdditionalRatePct, gainsRatePct, iibbRatePct, purpose, entityType, hasImporterSignature, sensitiveCategory, capitalGoodEligible, capitalGoodUse, budgetUsd, moq, monthlyDemand, strategy, localSellPriceUsd, supplierQuote])
+    purchaseRange,
+  }), [originCountry, quantity, unitPriceUsd, unitWeightKg, unitVolumeCbm, dutyRatePct, statisticsRatePct, vatRatePct, vatAdditionalRatePct, gainsRatePct, iibbRatePct, purpose, entityType, hasImporterSignature, sensitiveCategory, capitalGoodEligible, capitalGoodUse, budgetUsd, moq, monthlyDemand, strategy, localSellPriceUsd, supplierQuote, purchaseRange])
 
   const lcl = quote.modes.lcl
   const air = quote.modes.air
@@ -283,6 +288,8 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
 
   const summary = useMemo(() => buildImporterSummary(quote, quantity, localSellPriceUsd, optimizer, marketIsEstimate), [quote, quantity, localSellPriceUsd, optimizer, marketIsEstimate])
   const verdictSignals = useMemo(() => buildVerdictSignals(summary, quote, budgetUsd, effectiveMarketPrefill), [summary, quote, budgetUsd, effectiveMarketPrefill])
+
+  if (supplierQuote && confirmedPrice === null) return <section className="manual-quote-shell" role="alert"><p>La oferta confirmada no cubre esta cantidad. Revisá el tramo de precio antes de calcular.</p>{onReviewProduct ? <button type="button" className="secondary" onClick={onReviewProduct}>Editar ficha del producto</button> : <NumberField label="Cantidad base" value={quantity} min={1} onChange={setQuantity} suffix="u." />}</section>
 
   return <section className="manual-quote-shell journey-quote-shell">
     <div className="journey-result-source-label"><small>{prefill?.sourceLabel ?? importFreightValues.meta.source}</small></div>
@@ -308,7 +315,7 @@ export default function ImportQuoteFlow({ prefill = null, setup = null, onQuanti
           <label className="field field-wide"><span>Origen</span><DsSelect ariaLabel="País de origen" value={originCountry} onChange={setOriginCountry} options={originCountries.map((country) => ({ value: country, label: country }))} /></label>
           <div className="field-grid">
             <NumberField label="Cantidad base" hint="El costo unitario de arriba corresponde a esta cantidad, no a importar literalmente 1 unidad." value={quantity} min={Math.max(1, moq ?? 1)} onChange={next => { if (Number.isInteger(next) && next >= Math.max(1, moq ?? 1)) { if (onQuantityChange) onQuantityChange(next); else setQuantity(next) } }} suffix="u." />
-            <NumberField label="Precio FOB unitario" value={unitPriceUsd} onChange={setUnitPriceUsd} step={0.01} suffix="USD" />
+            <NumberField label="Precio FOB unitario" hint={supplierQuote ? 'Precio del tramo confirmado para esta cantidad.' : undefined} readOnly={!!supplierQuote} value={unitPriceUsd} onChange={setUnitPriceUsd} step={0.01} suffix="USD" />
             <NumberField label="Peso unitario" value={unitWeightKg} onChange={setUnitWeightKg} step={0.01} suffix="kg" />
             <NumberField label="Volumen unitario" value={unitVolumeCbm} onChange={setUnitVolumeCbm} step={0.001} suffix="m³" />
           </div></>}

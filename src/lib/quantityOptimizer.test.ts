@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { generateQuantityCandidates, optimizeQuantity, unitPriceForQuantity } from './quantityOptimizer'
+import { initialSupplierQuote } from './supplierQuote'
 
 const base = {
   originCountry: 'China',
@@ -25,6 +26,25 @@ const base = {
 }
 
 describe('quantity optimizer', () => {
+  it('finds affordable quantities inside a discounted band after an unaffordable first band', () => {
+    const supplierQuote = { ...initialSupplierQuote(1000, true), minQuantity: 10, maxQuantity: 19, additionalTiers: [{ amount: 10, minQuantity: 20, maxQuantity: 199 }] }
+    const result = optimizeQuantity({ ...base, moq: 10, budgetUsd: 3000, supplierQuote, monthlyDemand: 0 })
+    const affordable = result.affordableCandidates
+    expect(affordable.some(candidate => candidate.quantity > 20 && candidate.quantity < 199)).toBe(true)
+    expect(affordable.every(candidate => candidate.unitPriceUsd === 10 && candidate.totalCostUsd <= 3000)).toBe(true)
+  })
+
+  it('keeps proposals within the buyer range and aligned with the supplier increment', () => {
+    const result = optimizeQuantity({ ...base, moq: 5, unitIncrement: 5, purchaseRange: { min: 21, max: 67 } })
+    expect(result.candidates.length).toBeGreaterThan(0)
+    expect(result.candidates.every(candidate => candidate.quantity >= 21 && candidate.quantity <= 67 && candidate.quantity % 5 === 0)).toBe(true)
+    expect(generateQuantityCandidates({ ...base, purchaseRange: { min: 10, max: 20 } })).toEqual([])
+  })
+
+  it('does not mark missing-origin calculations as affordable zero-cost orders', () => {
+    const result = optimizeQuantity({ ...base, originCountry: '', budgetUsd: 10000 })
+    expect(result.affordableCandidates).toHaveLength(0)
+  })
   it('can reduce the initial quantity to meet budget when MOQ is unknown', () => {
     const result = optimizeQuantity({ ...base, quantity: 100, moq: undefined, budgetUsd: 3000 })
     expect(result.affordableCandidates.some(candidate => candidate.quantity < 100)).toBe(true)

@@ -845,7 +845,7 @@ body {
   top: 0 !important;
   z-index: 100 !important;
   /* Clearly visible white frosted glass — distinct from light grey page */
-  background: rgba(255, 255, 255, 0.94) !important;
+  background: var(--ds-surface) !important;
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-bottom: 1px solid rgba(79, 93, 228, 0.14) !important;
@@ -873,7 +873,7 @@ h2.pipeline-confirm-head,
 /* Main "Tu cotización" title — bolder presence */
 .journey-task-title {
   font-size: clamp(24px, 3vw, 36px) !important;
-  color: #1d1d1f !important;
+  color: var(--ds-text-strong) !important;
 }
 
 /* Bot bubble title — Playfair for the first bold line */
@@ -882,7 +882,7 @@ h2.pipeline-confirm-head,
   font-size: 14px !important;
   font-weight: 700 !important;
   letter-spacing: -0.01em !important;
-  color: #1d1d1f !important;
+  color: var(--ds-text-strong) !important;
 }
 
 /* Question card section labels — Playfair light serif treatment */
@@ -913,7 +913,7 @@ h2.pipeline-confirm-head,
   transform: translateY(-3px) !important;
   box-shadow: 0 20px 48px rgba(65, 78, 139, 0.14) !important;
   border-color: rgba(79, 93, 228, 0.4) !important;
-  background: #fff !important;
+  background: var(--ds-surface) !important;
 }
 
 /* 5. Active question card — ACE blue glow ring */
@@ -949,4 +949,15 @@ h2.pipeline-confirm-head,
 .journey-chip-row button:hover {
   transform: translateY(-1px) !important;
   border-color: rgba(79, 93, 228, 0.35) !important;
+}
+
+/* Keep the late-loaded design overrides consistent with motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  #root *, #root *::before, #root *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+  .journey-choice-grid > button:hover,
+  .journey-primary-action:not(:disabled):hover,
+  .journey-chip-row button:hover { transform: none !important; }
 }

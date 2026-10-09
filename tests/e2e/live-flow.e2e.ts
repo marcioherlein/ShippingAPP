@@ -57,12 +57,16 @@ test('electric motorcycle: unknown MOQ, persisted confirmation, validated manual
 test('supplier search retains successful results and query after Alibaba extraction and retry failures', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 })
   let searches = 0
+  let reads = 0
   await page.route('**/api/opportunity-search', async route => {
     searches++
     if (searches > 1) return route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'Alibaba no respondió. Reintentá o continuá manualmente.' }) })
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ status: 'live', mode: 'parsebot', query: 'motorcycle', note: 'Publicación de prueba', constraints: { maxUnitPriceUsd: null, maxMoq: null, originCountry: null, excludedOriginCountries: [], lowMoqPreference: false }, constraintsNote: '', results: [{ title: 'Electric motorcycle M5', url: 'https://www.alibaba.com/product-detail/M5_1600000001234.html', unitPriceUsd: 500, priceDisplay: '$500 / set', moq: null }] }) })
   })
-  await page.route('**/api/product-read', async route => route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'No pude leer esta publicación de Alibaba.' }) }))
+  await page.route('**/api/product-read', async route => {
+    reads++
+    await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'No pude leer esta publicación de Alibaba.' }) })
+  })
   await setup(page, true)
   const input = page.getByRole('textbox', { name: 'Buscar productos en Alibaba' })
   const query = 'Motocicleta eléctrica sin pedales modelo M5'
@@ -72,16 +76,34 @@ test('supplier search retains successful results and query after Alibaba extract
   await page.getByRole('button', { name: 'Usar este producto' }).click()
   await expect(page.getByRole('alert')).toContainText('No pude leer')
   await expect(page.getByRole('heading', { name: 'Electric motorcycle M5' })).toBeVisible()
-  await page.getByRole('button', { name: 'Reintentar búsqueda' }).click()
-  await expect(page.getByRole('alert')).toContainText('Alibaba no respondió')
+  await page.reload()
+  await page.getByRole('button', { name: 'Reintentar lectura' }).click()
+  await expect(page.getByRole('alert')).toContainText('No pude leer')
   await expect(input).toHaveValue(query)
   await expect(page.getByRole('button', { name: 'Buscar', exact: true })).toBeEnabled()
   await page.reload()
   await expect(input).toHaveValue(query)
   await expect(page.getByRole('heading', { name: 'Electric motorcycle M5' })).toBeVisible()
-  expect(searches).toBe(2)
+  expect(searches).toBe(1)
+  expect(reads).toBe(2)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('supplier-recovery-390.png'), fullPage: true })
+})
+
+test('stalled supplier search allows immediate manual intake at 320px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 780 })
+  await page.route('**/api/opportunity-search', () => {})
+  await setup(page, true)
+  const query = 'Motocicleta eléctrica completa para circular'
+  await page.getByRole('textbox', { name: 'Buscar productos en Alibaba' }).fill(query)
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('1. Búsqueda de proveedor')
+  await page.getByRole('button', { name: 'Completar la ficha manualmente', exact: true }).click()
+  await expect(page.locator('#case-confirmation')).toBeVisible()
+  await page.getByRole('button', { name: 'Corregir datos del producto', exact: true }).click()
+  await expect(page.getByLabel('¿Qué producto es?', { exact: true })).toHaveValue(query)
+  await expect(page.getByRole('progressbar', { name: 'Buscando productos' })).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
 
 test('ambiguous supplier currency blocks costs; documented pack conversion and tier edit recalculate', async ({ page }, testInfo) => {

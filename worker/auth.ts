@@ -9,6 +9,8 @@ export const TRUSTED_AUTH_KIND_HEADER = 'x-shippingapp-auth-kind'
 export const INTERNAL_TOKEN_HEADER = 'x-shippingapp-internal-token'
 
 const DEFAULT_AUTHORIZED_PARTIES = [
+  'https://globalshipping.app',
+  'https://www.globalshipping.app',
   'https://shippingapp.marciofabrizio.workers.dev',
 ] as const
 
@@ -117,9 +119,18 @@ export async function verifyClerkSession(request: Request, env: EnvLike): Promis
     authorizedParties: authorizedParties(env),
     jwtKey,
   })
-  if (!state.isAuthenticated) return null
+  if (!state.isAuthenticated) {
+    const reason = String(state.reason || '')
+    if (reason.includes('authorized-parties')) throw new SessionVerificationError('auth_origin_rejected')
+    if (reason.includes('expired')) throw new SessionVerificationError('auth_session_expired')
+    return null
+  }
   const auth = state.toAuth()
   return typeof auth.userId === 'string' && auth.userId ? { subject: auth.userId } : null
+}
+
+export class SessionVerificationError extends Error {
+  constructor(public code: 'auth_origin_rejected' | 'auth_session_expired') { super(code) }
 }
 
 async function resolveUserIdentity(
@@ -209,22 +220,22 @@ export async function authorizeRequest(
   if (!env.DB) {
     return { ok: false, response: jsonError(503, 'auth_store_not_configured', 'Authentication storage is not configured.') }
   }
-
-  const resolvedIdentity = await resolveUserIdentity(incomingRequest, request, env, dependencies)
-  if (!resolvedIdentity) {
-    // Keep the enforced path fail-closed even though the same resolver is deliberately
-    // fail-open in shadow mode.
-    const verify = dependencies.verifySession ?? verifyClerkSession
-    try {
-      const verified = await verify(incomingRequest, env)
-      if (!verified?.subject) return { ok: false, response: jsonError(401, 'unauthorized', 'Unauthorized.') }
-    } catch {
-      return { ok: false, response: jsonError(401, 'unauthorized', 'Unauthorized.') }
-    }
+  const verify = dependencies.verifySession ?? verifyClerkSession
+  let verified: VerifiedSession | null
+  try { verified = await verify(incomingRequest, env) } catch (error) {
+    const code = error instanceof SessionVerificationError ? error.code : 'unauthorized'
+    return { ok: false, response: jsonError(401, code, 'Unauthorized.') }
+  }
+  if (!verified?.subject) return { ok: false, response: jsonError(401, 'unauthorized', 'Unauthorized.') }
+  const ensure = dependencies.ensureUser ?? ((db, input) => ensureAuthUser(db, input))
+  let user: { id: string }
+  try {
+    user = await ensure(env.DB, { id: (dependencies.randomId ?? (() => crypto.randomUUID()))(), provider: 'clerk', subject: verified.subject })
+  } catch {
     return { ok: false, response: jsonError(503, 'auth_identity_unavailable', 'Authentication identity is temporarily unavailable.') }
   }
-
-  return { ok: true, request: resolvedIdentity.request, identity: resolvedIdentity.identity }
+  const identity: Extract<AuthIdentity, { kind: 'user' }> = { kind: 'user', provider: 'clerk', subject: verified.subject, userId: user.id }
+  return { ok: true, request: withTrustedIdentity(request, identity), identity }
 }
 
 export function readTrustedUserId(request: Request) {

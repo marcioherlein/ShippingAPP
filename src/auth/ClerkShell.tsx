@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Show, SignInButton, SignUpButton, UserButton, useAuth, useClerk } from '@clerk/react'
 import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
 import { saveCompletedAnalysis } from '../lib/analysisHistory'
@@ -8,6 +8,7 @@ import UsageBadge from '../components/UsageBadge'
 import EmailPreferences from '../components/EmailPreferences'
 import './auth.css'
 import { AccountControlsContext } from './AccountControls'
+import { getSessionState, setSessionState, subscribeSession } from '../lib/authSession'
 
 type AccountSyncState = 'idle' | 'syncing' | 'ready' | 'error'
 type HistorySaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -17,32 +18,47 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
   const clerk = useClerk()
   const [accountSync, setAccountSync] = useState<AccountSyncState>('idle')
   const [historySave, setHistorySave] = useState<HistorySaveState>('idle')
+  const [syncAttempt, setSyncAttempt] = useState(0)
+  const [syncError, setSyncError] = useState('')
+  useEffect(() => subscribeSession(() => {
+    if (getSessionState() === 'error') setAccountSync('error')
+  }), [])
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
       setApiTokenProvider(null)
+      setSessionState(isLoaded ? 'signed_out' : 'loading')
       setAccountSync('idle')
       setHistorySave('idle')
       return
     }
 
     let active = true
-    setApiTokenProvider(() => getToken())
+    const controller = new AbortController()
+    setApiTokenProvider((fresh) => getToken({ skipCache: !!fresh }))
+    setSessionState('verifying')
     setAccountSync('syncing')
+    setSyncError('')
 
-    void apiFetch('/api/me')
+    void apiFetch('/api/me', { signal: controller.signal })
       .then((response) => {
-        if (active) setAccountSync(response.ok ? 'ready' : 'error')
+        if (!active) return
+        setAccountSync(response.ok ? 'ready' : 'error')
+        setSessionState(response.ok ? 'ready' : 'error')
       })
-      .catch(() => {
-        if (active) setAccountSync('error')
+      .catch((error) => {
+        if (!active) return
+        setAccountSync('error')
+        setSyncError(error instanceof Error ? error.message : 'No pudimos conectar tu cuenta.')
+        setSessionState('error')
       })
 
     return () => {
       active = false
+      controller.abort()
       setApiTokenProvider(null)
     }
-  }, [getToken, isLoaded, isSignedIn])
+  }, [getToken, isLoaded, isSignedIn, syncAttempt])
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return
@@ -74,22 +90,10 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
   }, [isLoaded, isSignedIn])
 
   useEffect(() => {
-    const requestSignIn = () => clerk.openSignIn({})
+    const requestSignIn = () => { if (isLoaded && !isSignedIn) clerk.openSignIn({}) }
     window.addEventListener('shippingapp:auth-required', requestSignIn)
     return () => window.removeEventListener('shippingapp:auth-required', requestSignIn)
-  }, [clerk])
-
-  // Announce the sign-in transition so a search interrupted by the sign-in
-  // modal can resume where the user left off. Only the signed-out → signed-in
-  // edge fires it, so an already-signed-in reload never re-runs a metered call.
-  const wasSignedIn = useRef(false)
-  useEffect(() => {
-    if (!isLoaded) return
-    if (isSignedIn && !wasSignedIn.current) {
-      window.dispatchEvent(new CustomEvent('shippingapp:auth-resolved'))
-    }
-    wasSignedIn.current = !!isSignedIn
-  }, [isLoaded, isSignedIn])
+  }, [clerk, isLoaded, isSignedIn])
 
   const accountLabel = accountSync === 'ready'
     ? historySave === 'saving'
@@ -100,7 +104,7 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
           ? 'Cuenta conectada · el último análisis no se guardó'
           : 'Cuenta conectada · tus análisis quedan guardados'
     : accountSync === 'error'
-      ? 'No pudimos sincronizar la cuenta'
+      ? syncError || 'No pudimos sincronizar la cuenta'
       : 'Conectando cuenta…'
 
   const controls = <div className="auth-account-control" role="group" aria-label="Cuenta">
@@ -117,10 +121,11 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
           <summary>Mi cuenta</summary>
           <div className="app-account-panel">
         <span className="auth-saved-label" data-account-sync={accountSync} data-history-save={historySave}>{accountLabel}</span>
+        {accountSync === 'error' && <button type="button" className="auth-secondary" onClick={() => setSyncAttempt(attempt => attempt + 1)}>Reintentar conectar cuenta</button>}
         {accountSync === 'ready' && <UsageBadge />}
         {accountSync === 'ready' && <EmailPreferences />}
-        <Watchlist />
-        <AnalysisHistory />
+        {accountSync === 'ready' && <Watchlist />}
+        {accountSync === 'ready' && <AnalysisHistory />}
         <UserButton />
           </div>
         </details>

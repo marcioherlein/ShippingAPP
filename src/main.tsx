@@ -4,6 +4,7 @@ import { ClerkProvider } from '@clerk/react'
 import { esES } from '@clerk/localizations/es-ES'
 import App from './App'
 import ClerkShell from './auth/ClerkShell'
+import { setSessionState } from './lib/authSession'
 import { installJourneySemantics } from './lib/journeySemantics'
 import { installJourneyPersistence } from './lib/journeyPersistence'
 import './styles.css'
@@ -26,6 +27,7 @@ import './styles/app-header.css'
 
 const root = document.getElementById('root')
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.trim()
+if (clerkPublishableKey) setSessionState('loading')
 
 if (!root) {
   throw new Error('Root element not found')

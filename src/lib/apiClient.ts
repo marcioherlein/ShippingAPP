@@ -1,7 +1,7 @@
-export type ApiTokenProvider = () => Promise<string | null>
+import { authenticationError, getSessionState, setSessionState, waitForVerifiedSession } from './authSession'
+export type ApiTokenProvider = (fresh?: boolean) => Promise<string | null>
 
 let tokenProvider: ApiTokenProvider | null = null
-let lastUsableToken: string | null = null
 
 const IDEMPOTENT_METERED_POSTS = new Set([
   '/api/analyze',
@@ -15,7 +15,6 @@ const IDEMPOTENT_METERED_POSTS = new Set([
 
 export function setApiTokenProvider(provider: ApiTokenProvider | null) {
   tokenProvider = provider
-  if (!provider) lastUsableToken = null
 }
 
 function inputUrl(input: RequestInfo | URL) {
@@ -37,7 +36,7 @@ function requestMethod(input: RequestInfo | URL, init?: RequestInit) {
   return (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
 }
 
-function newOperationKey() {
+export function newOperationKey() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return `op-${crypto.randomUUID()}`
   return `op-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
@@ -62,6 +61,12 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
   if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value))
 
   const url = inputUrl(input)
+  if (shouldAttach && url?.pathname !== '/api/me') {
+    try { await waitForVerifiedSession(init?.signal ?? undefined) } catch (error) {
+      if (getSessionState() === 'signed_out') signalAuthenticationRequired()
+      throw error
+    }
+  }
   if (
     shouldAttach
     && url
@@ -72,29 +77,51 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
     headers.set('idempotency-key', newOperationKey())
   }
 
-  if (shouldAttach && tokenProvider) {
-    let token: string | null = null
-    try {
-      token = await tokenProvider()
-      lastUsableToken = token
-    } catch {
-      // Clerk/browser storage can fail transiently (Safari reports a cryptic DOMException:
-      // "The string did not match the expected pattern"). Reuse only the in-memory token
-      // already accepted for this signed-in page; never persist it or send it off-origin.
-      token = lastUsableToken
-      if (!token) {
-        signalAuthenticationRequired()
-        throw new Error('No pude validar tu sesión. Volvé a ingresar y reintentá; no se consumió ningún análisis.')
-      }
+  const provider = shouldAttach ? tokenProvider : null
+  const attachToken = async (fresh = false) => {
+    if (init?.signal?.aborted) throw init.signal.reason
+    if (!provider) return
+    let token: string | null
+    try { token = await provider(fresh) } catch {
+      if (init?.signal?.aborted) throw init.signal.reason
+      if (getSessionState() !== 'unmanaged') setSessionState('error')
+      throw authenticationError('auth_token_unavailable', true)
     }
-    if (token) headers.set('authorization', `Bearer ${token}`)
+    if (init?.signal?.aborted) throw init.signal.reason
+    if (!token) {
+      if (getSessionState() !== 'unmanaged') setSessionState('error')
+      throw authenticationError('auth_session_pending', true)
+    }
+    headers.set('authorization', `Bearer ${token}`)
   }
-
-  const response = await fetch(input, { ...init, headers })
+  await attachToken()
+  // Clone Request inputs before their body is consumed by the first fetch.
+  const replay = input instanceof Request ? input.clone() : input
+  let response = await fetch(input, { ...init, headers })
+  let code = ''
+  const responseCode = async () => {
+    try { return String((await response.clone().json()).code || '') } catch { return '' }
+  }
   if (shouldAttach && response.status === 401) {
-    lastUsableToken = null
-    signalAuthenticationRequired()
-    throw new Error('Ingresá a tu cuenta para continuar. Después, reintentá la operación.')
+    code = await responseCode()
+    if (provider && code !== 'auth_origin_rejected') {
+      await attachToken(true)
+      if (init?.signal?.aborted) throw init.signal.reason
+      response = await fetch(replay, { ...init, headers })
+      code = await responseCode()
+    }
+  }
+  if (shouldAttach && response.status === 401) {
+    if (!provider) { signalAuthenticationRequired(); throw authenticationError('session_required') }
+    if (getSessionState() !== 'unmanaged') setSessionState('error')
+    throw authenticationError(code || 'auth_session_rejected', true)
+  }
+  if (shouldAttach && response.status === 503) {
+    code = await responseCode()
+    if (code.startsWith('auth_')) {
+      if (getSessionState() !== 'unmanaged') setSessionState('error')
+      throw authenticationError(code, !!provider)
+    }
   }
   if (shouldAttach) signalUsageUpdated(response)
   return response

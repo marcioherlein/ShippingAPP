@@ -18,7 +18,7 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile-webkit',
-      testMatch: ['**/journey-persistence.e2e.ts', '**/live-flow.e2e.ts', '**/intake-recovery.e2e.ts', '**/dossier-screenshots.e2e.ts', '**/accessibility.e2e.ts', '**/header.e2e.ts'],
+      testMatch: ['**/journey-persistence.e2e.ts', '**/live-flow.e2e.ts', '**/intake-recovery.e2e.ts', '**/auth-recovery.e2e.ts', '**/dossier-screenshots.e2e.ts', '**/accessibility.e2e.ts', '**/header.e2e.ts'],
       use: { ...devices['iPhone 13'], launchOptions: { executablePath: process.env.PW_WEBKIT_EXECUTABLE_PATH } },
     },
     {

@@ -12,5 +12,8 @@ export function writeProductDraft(key: string, data: unknown) {
   try { sessionStorage.setItem(PREFIX + key, JSON.stringify({ v: 1, at: Date.now(), data })) } catch { /* Storage can be unavailable in private browsing. */ }
 }
 export function clearProductDraft() {
-  try { for (const key of ['analysis', 'entry', 'search', 'pipeline', 'confirmation']) sessionStorage.removeItem(PREFIX + key) } catch { /* Optional recovery. */ }
+  try {
+    const keys = Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i))
+    for (const key of keys) if (key?.startsWith(PREFIX)) sessionStorage.removeItem(key)
+  } catch { /* Optional recovery. */ }
 }

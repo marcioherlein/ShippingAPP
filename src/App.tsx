@@ -1,5 +1,7 @@
 import { readProductDraft, writeProductDraft, clearProductDraft } from './lib/productDraft'
 import { savePendingConfirm, loadPendingConfirm, clearPendingConfirm } from './lib/sessionDraft'
+import { ApiAuthError, getSessionState, subscribeSession } from './lib/authSession'
+import { beginOperation, canResume, readOperation, saveOperation } from './lib/pendingOperation'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { supplierQuotePrice } from './lib/supplierQuote'
 import { startImportAnalysis } from './lib/productAnalysis'
@@ -236,16 +238,23 @@ export default function App() {
   // When auth resolves (modal sign-in completes), auto-retry any pending confirmation that was
   // interrupted by the auth gate — saves the user from clicking "Confirmar" a second time.
   const confirmAndCalculateRef = useRef<((data: ProductConfirmationData) => Promise<void>) | null>(null)
+  const confirmationBusy = useRef(false)
   useEffect(() => {
     const onAuthResolved = () => {
+      if (!analysis || confirmationBusy.current) return
+      const operation = readOperation<ProductConfirmationData>('confirmation')
+      if (operation && !canResume(operation)) return
       const pending = loadPendingConfirm()
-      if (!pending || !confirmAndCalculateRef.current) return
-      clearPendingConfirm()
-      void confirmAndCalculateRef.current(pending)
+      const data = operation?.payload ?? pending
+      if (!data || !confirmAndCalculateRef.current) return
+      void confirmAndCalculateRef.current(data)
     }
     window.addEventListener('shippingapp:auth-resolved', onAuthResolved)
-    return () => window.removeEventListener('shippingapp:auth-resolved', onAuthResolved)
-  }, [])
+    const checkReady = () => { if (getSessionState() === 'ready') onAuthResolved() }
+    const unsubscribe = subscribeSession(checkReady)
+    checkReady()
+    return () => { unsubscribe(); window.removeEventListener('shippingapp:auth-resolved', onAuthResolved) }
+  }, [analysis])
 
   // Clear the restore guard even if no journey-restored event ever arrives.
   useEffect(() => {
@@ -386,7 +395,7 @@ export default function App() {
   }
 
   const confirmAndCalculate = async (confirmedProduct: ProductConfirmationData) => {
-    if (!analysis) return
+    if (!analysis || confirmationBusy.current) return
 
     const classificationMissing = missingClassificationConfirmationFields(confirmedProduct)
     if (classificationMissing.length > 0) {
@@ -398,6 +407,8 @@ export default function App() {
 
     // Persist confirmation data so auth-resolved can auto-retry if the API gate interrupts this call.
     savePendingConfirm(confirmedProduct)
+    const operation = beginOperation('confirmation', confirmedProduct)
+    confirmationBusy.current = true
 
     const runInputKey = currentCalculationInputKey
     const confirmedAnalysis = applyProductConfirmation(analysis, confirmedProduct)
@@ -411,10 +422,10 @@ export default function App() {
     try {
       const manualSelection = confirmedAnalysis.customs.source.includes('selección confirmada por el usuario')
       const refreshed = manualSelection && !confirmedAnalysis.usageReservationId && !confirmedAnalysis.fx
-        ? { ...await startImportAnalysis(confirmedAnalysis), customs: confirmedAnalysis.customs }
+        ? { ...await startImportAnalysis(confirmedAnalysis, operation.id), customs: confirmedAnalysis.customs }
         : hasUsableClassification(confirmedAnalysis) && confirmedAnalysis.customs.missingFacts.length === 0
           ? confirmedAnalysis
-          : await enrichProductAnalysisV2(confirmedAnalysis)
+          : await enrichProductAnalysisV2(confirmedAnalysis, operation.id)
       setAnalysis(refreshed)
       clearPendingConfirm()
 
@@ -549,9 +560,14 @@ export default function App() {
       setStep(4)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.'
-      if (!/Ingresá a tu cuenta|validar tu sesión/.test(message)) clearPendingConfirm()
+      operation.status = error instanceof ApiAuthError ? 'waiting_auth' : 'failed'
+      if (!(error instanceof ApiAuthError)) clearPendingConfirm()
       setPipelineBlocker(message)
       setCalculationStatus('blocked')
+    } finally {
+      if (operation.status === 'running') operation.status = 'complete'
+      saveOperation('confirmation', operation)
+      confirmationBusy.current = false
     }
   }
   confirmAndCalculateRef.current = confirmAndCalculate

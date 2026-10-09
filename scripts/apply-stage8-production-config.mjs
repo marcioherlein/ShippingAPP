@@ -38,7 +38,13 @@ export function applyStage8ProductionConfig(baseConfig, env = process.env) {
 
   const authorizedParties = clean(env.STAGE8_CLERK_AUTHORIZED_PARTIES, 4096)
   if (env.STAGE8_CLERK_AUTHORIZED_PARTIES && !authorizedParties) throw new Error('stage8_authorized_parties_invalid')
-  if (authorizedParties) vars.CLERK_AUTHORIZED_PARTIES = authorizedParties
+  const requiredOrigins = ['https://globalshipping.app', 'https://www.globalshipping.app', 'https://shippingapp.marciofabrizio.workers.dev']
+  const origins = (authorizedParties || vars.CLERK_AUTHORIZED_PARTIES || '').split(',').map(value => value.trim()).filter(Boolean)
+  for (const origin of origins) {
+    if (origin !== 'http://localhost:5173' && httpsOrigin(origin) !== origin) throw new Error('stage8_authorized_parties_invalid')
+  }
+  if (publicOrigin) requiredOrigins.push(publicOrigin)
+  vars.CLERK_AUTHORIZED_PARTIES = [...new Set([...requiredOrigins, ...origins])].join(',')
 
   for (const [source, target] of [
     ['STAGE8_EMAIL_FROM', 'EMAIL_FROM'],
@@ -69,4 +75,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const [inputPath = '.wrangler.production.json', outputPath = inputPath] = process.argv.slice(2)
   const next = applyStage8ProductionConfigFile(inputPath, outputPath)
   console.log(`Stage 8 production vars prepared; sending=${next.vars?.EMAIL_SENDING_ENABLED}`)
+  console.log(`Clerk authorized origins: ${next.vars.CLERK_AUTHORIZED_PARTIES}`)
 }

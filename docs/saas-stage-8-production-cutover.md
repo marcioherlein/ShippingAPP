@@ -17,7 +17,7 @@ This stage moves ShippingAPP from the development/default Worker identity to a f
 
 Configure these under **Settings → Secrets and variables → Actions → Variables**. They are not credentials.
 
-- `APP_PRODUCTION_URL` — final HTTPS app origin, e.g. `https://app.example.com`.
+- The final HTTPS app origin is `https://globalshipping.app`, version-controlled in `wrangler.jsonc` and the deployment/readiness workflows. `APP_PRODUCTION_URL` no longer overrides it; domain changes must update these reviewed files together.
 - `EMAIL_APP_NAME` — sender/application display name.
 - `CLERK_AUTHORIZED_PARTIES` — comma-separated allowed origins. Keep localhost only if deliberately required; include the final app origin.
 - `EMAIL_FROM` — verified sender identity, e.g. `ShippingAPP <noreply@example.com>`.

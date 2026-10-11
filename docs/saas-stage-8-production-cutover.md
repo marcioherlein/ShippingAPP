@@ -81,6 +81,7 @@ It must prove:
 
 - final HTTPS app host resolves;
 - final public origin is included in Clerk authorized parties;
+- Clerk frontend/backend keys are from the production environment, the JWT key is configured and authentication enforcement is enabled;
 - Resend provider is configured in the Worker;
 - sender, reply-to and support identities are configured and domain-aligned;
 - unsubscribe signing/base URL is configured;
@@ -93,6 +94,8 @@ It must prove:
 Any failure blocks activation.
 
 ## Phase C — Clerk production-session validation
+
+The strict readiness gate now rejects development, mixed, missing or partial Clerk configuration. A green automatic gate with `require_ready=false` verifies the internal boundary only; it does not approve launch. Key prefixes cannot prove that live keys and the JWT belong to the same instance. Replace all three together and validate a real session. Production accounts are a separate environment; account continuity must be checked before retiring development.
 
 On the final production host:
 

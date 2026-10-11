@@ -1,4 +1,5 @@
 import { emailRuntimeStatus } from './emailService'
+import { clerkEnvironmentStatus } from '../scripts/lib/clerkEnvironment.mjs'
 
 export type ProductionIdentityStatus = {
   appName: string
@@ -8,6 +9,8 @@ export type ProductionIdentityStatus = {
   finalDomainConfigured: boolean
   authorizedParties: string[]
   authPartyIncludesPublicOrigin: boolean
+  authEnvironment: ReturnType<typeof clerkEnvironmentStatus>['environment']
+  authProductionConfigured: boolean
   providerConfigured: boolean
   senderConfigured: boolean
   replyToConfigured: boolean
@@ -105,6 +108,8 @@ export function productionIdentityStatus(env: Record<string, unknown>): Producti
   const supportDomain = domainOfMailbox(text(env, 'EMAIL_SUPPORT_EMAIL', 320))
   const parties = authorizedParties(env)
   const authPartyIncludesPublicOrigin = Boolean(publicOrigin && parties.includes(publicOrigin))
+  const auth = clerkEnvironmentStatus(env)
+  const authProductionConfigured = auth.environment === 'production' && env.AUTH_ENFORCEMENT === 'true'
   const finalDomainConfigured = finalHost(publicHost)
   const senderDomainAligned = isSubdomainOrEqual(senderDomain, publicHost)
   const replyToDomainAligned = isSubdomainOrEqual(replyToDomain, publicHost)
@@ -115,6 +120,9 @@ export function productionIdentityStatus(env: Record<string, unknown>): Producti
   const blockers: string[] = []
   if (!finalDomainConfigured) blockers.push('final_public_domain_required')
   if (!authPartyIncludesPublicOrigin) blockers.push('authorized_party_missing_public_origin')
+  if (!auth.configurationValid) blockers.push(`clerk_configuration_${auth.environment}`)
+  else if (auth.environment !== 'production') blockers.push('clerk_production_instance_required')
+  if (env.AUTH_ENFORCEMENT !== 'true') blockers.push('auth_enforcement_required')
   if (!email.providerConfigured) blockers.push('email_provider_not_configured')
   if (!email.senderConfigured) blockers.push('email_sender_not_configured')
   if (!replyToConfigured) blockers.push('email_reply_to_not_configured')
@@ -138,6 +146,8 @@ export function productionIdentityStatus(env: Record<string, unknown>): Producti
     finalDomainConfigured,
     authorizedParties: parties,
     authPartyIncludesPublicOrigin,
+    authEnvironment: auth.environment,
+    authProductionConfigured,
     providerConfigured: email.providerConfigured,
     senderConfigured: email.senderConfigured,
     replyToConfigured,

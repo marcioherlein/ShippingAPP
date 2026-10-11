@@ -28,6 +28,9 @@ for (const key of forbiddenKeys) {
 
 if (typeof trusted.body.sendingEnabled !== 'boolean') throw new Error('Stage 8 readiness missing sendingEnabled boolean.')
 if (!Array.isArray(trusted.body.blockers)) throw new Error('Stage 8 readiness missing blocker list.')
+if (typeof trusted.body.authProductionConfigured !== 'boolean' || typeof trusted.body.authEnvironment !== 'string') {
+  throw new Error('Stage 8 readiness missing Clerk environment status.')
+}
 if (trusted.body.sendingEnabled !== false && !requireReady) {
   throw new Error('Pre-cutover Stage 8 gate requires EMAIL_SENDING_ENABLED=false.')
 }
@@ -35,6 +38,9 @@ if (requireReady) {
   if (trusted.body.configurationReady !== true) throw new Error(`Stage 8 configuration is not ready: ${JSON.stringify(trusted.body.blockers)}`)
   if (trusted.body.finalDomainConfigured !== true) throw new Error('Stage 8 final public domain is not configured.')
   if (trusted.body.authPartyIncludesPublicOrigin !== true) throw new Error('Stage 8 Clerk authorized parties do not include final public origin.')
+  if (trusted.body.authProductionConfigured !== true || trusted.body.authEnvironment !== 'production') {
+    throw new Error('Stage 8 requires a production Clerk instance with authentication enforcement enabled.')
+  }
   if (trusted.body.providerConfigured !== true) throw new Error('Stage 8 email provider is not configured.')
   if (trusted.body.senderDomainAligned !== true || trusted.body.replyToDomainAligned !== true || trusted.body.supportDomainAligned !== true) {
     throw new Error('Stage 8 sender/reply/support domains are not aligned with the final public identity.')
@@ -47,6 +53,8 @@ console.log(JSON.stringify({
   publicHost: trusted.body.publicHost ?? null,
   finalDomainConfigured: trusted.body.finalDomainConfigured,
   configurationReady: trusted.body.configurationReady,
+  authEnvironment: trusted.body.authEnvironment,
+  authProductionConfigured: trusted.body.authProductionConfigured,
   sendingEnabled: trusted.body.sendingEnabled,
   blockers: trusted.body.blockers,
 }))

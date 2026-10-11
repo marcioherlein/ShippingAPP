@@ -5,6 +5,10 @@ const READY = {
   EMAIL_APP_NAME: 'GlobalShipping',
   EMAIL_PUBLIC_BASE_URL: 'https://app.shippingapp.com.ar',
   CLERK_AUTHORIZED_PARTIES: 'http://localhost:5173,https://app.shippingapp.com.ar',
+  CLERK_PUBLISHABLE_KEY: 'pk_live_fixture',
+  CLERK_SECRET_KEY: 'sk_live_fixture',
+  CLERK_JWT_KEY: 'fixture-public-key',
+  AUTH_ENFORCEMENT: 'true',
   RESEND_API_KEY: 're_test_stage8',
   EMAIL_FROM: 'GlobalShipping <noreply@shippingapp.com.ar>',
   EMAIL_REPLY_TO: 'soporte@shippingapp.com.ar',
@@ -14,10 +18,34 @@ const READY = {
 }
 
 describe('Stage 8 production identity readiness', () => {
+  it.each([
+    ['development', { CLERK_PUBLISHABLE_KEY: 'pk_test_fixture', CLERK_SECRET_KEY: 'sk_test_fixture' }, 'clerk_production_instance_required'],
+    ['mixed', { CLERK_SECRET_KEY: 'sk_test_fixture' }, 'clerk_configuration_mixed'],
+    ['incomplete', { CLERK_JWT_KEY: '' }, 'clerk_configuration_incomplete'],
+    ['missing', { CLERK_PUBLISHABLE_KEY: '', CLERK_SECRET_KEY: '', CLERK_JWT_KEY: '' }, 'clerk_configuration_missing'],
+  ])('does not approve launch with %s Clerk configuration', (environment, overrides, blocker) => {
+    const status = productionIdentityStatus({ ...READY, ...overrides })
+    expect(status.authEnvironment).toBe(environment)
+    expect(status.authProductionConfigured).toBe(false)
+    expect(status.configurationReady).toBe(false)
+    expect(status.blockers).toContain(blocker)
+    expect(JSON.stringify(status)).not.toContain('fixture')
+  })
+
+  it('does not approve production keys when authentication enforcement is disabled', () => {
+    const status = productionIdentityStatus({ ...READY, AUTH_ENFORCEMENT: 'false' })
+    expect(status.authEnvironment).toBe('production')
+    expect(status.authProductionConfigured).toBe(false)
+    expect(status.configurationReady).toBe(false)
+    expect(status.blockers).toContain('auth_enforcement_required')
+  })
+
   it('accepts a final HTTPS app domain and aligned mail identities without enabling sends', () => {
     const status = productionIdentityStatus(READY)
     expect(status.finalDomainConfigured).toBe(true)
     expect(status.authPartyIncludesPublicOrigin).toBe(true)
+    expect(status.authEnvironment).toBe('production')
+    expect(status.authProductionConfigured).toBe(true)
     expect(status.providerConfigured).toBe(true)
     expect(status.senderDomainAligned).toBe(true)
     expect(status.replyToDomainAligned).toBe(true)

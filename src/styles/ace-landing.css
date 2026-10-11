@@ -784,7 +784,7 @@
   background: var(--ds-surface-subtle) !important;
   border: 1px solid var(--ds-border) !important;
   box-shadow: 0 4px 20px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04) !important;
-  overflow: hidden !important;
+  overflow: visible !important;
 }
 
 /* ── Panel header ─────────────────────────────────────────── */
@@ -796,6 +796,9 @@
   background: var(--ds-surface);
   border-bottom: 1px solid var(--ds-border);
   flex-shrink: 0;
+  border-radius: inherit;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .gs-chat-panel-title {
@@ -911,7 +914,7 @@
 
 .journey-bubble.assistant > div p {
   color: var(--ds-text-secondary) !important;
-  font-size: 14px !important;
+  font-size: 16px !important;
   line-height: 1.55 !important;
   font-family: "Inter", sans-serif !important;
 }

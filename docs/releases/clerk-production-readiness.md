@@ -8,6 +8,10 @@ The published login was observed showing Clerk **Development mode**. Google sign
 - Internal production readiness reports the Clerk environment and blocks launch readiness unless live frontend/backend credentials, a JWT key and authentication enforcement are configured. Only categories and booleans are returned, never key values.
 - The strict Stage 8 gate requires this status. The automatic non-strict gate remains a boundary check and must not be reported as launch acceptance.
 
+## Concurrent chat regression repair
+
+The chat redesign added on main during this review used fixed white card backgrounds alongside dark-mode text and a low-contrast grey panel title. The existing semantic surface, border and text colors now apply to those new panels/cards in both modes, preserving the new layout and user bubbles. Existing browser contrast gates validate the integrated change.
+
 ## External cutover still required
 
 1. Activate the production instance in Clerk for `globalshipping.app`; complete its DNS verification and provider OAuth configuration.

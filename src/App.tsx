@@ -639,6 +639,14 @@ export default function App() {
 
     <section className="journey-workspace">
       <div className="journey-conversation">
+        <div className="gs-chat-panel-header">
+          <span className="gs-chat-panel-title">GLOBALSHIPPING</span>
+          <span className="gs-chat-panel-status">
+            <span className="gs-chat-panel-dot" aria-hidden="true" />
+            {effectiveCalculationStatus === 'processing' ? 'CALCULANDO' : effectiveCalculationStatus === 'ready' ? 'LISTO' : 'EN LÍNEA'}
+          </span>
+        </div>
+        <div className="gs-chat-body">
         <div className="journey-bubble assistant">
           <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
           <div><b>Primero: ¿desde dónde arrancamos?</b><p>Del link del proveedor al costo unitario puesto en Argentina. GlobalShipping clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p></div>
@@ -740,6 +748,7 @@ export default function App() {
             {(intent === 'search_product' || intent === 'discover') && <div className="journey-product-surface"><UrlAnalyzer deferCalculation mode={intent === 'discover' ? 'discovery' : 'intake'} onAnalysis={handleAnalysis} onManualFallback={handleManualFallback} analysis={analysis} /></div>}
           </>}
         </>}
+        </div>{/* gs-chat-body */}
       </div>
 
       <aside className="journey-case-summary">

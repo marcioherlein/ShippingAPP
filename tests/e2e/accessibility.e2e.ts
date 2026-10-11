@@ -6,11 +6,14 @@ import type { Locator, Page } from '@playwright/test'
 // computes contrast against the *current* frame, so sampling mid-fade blends
 // every foreground toward the background and reports false contrast failures
 // (e.g. #62626d muted text appears as #7d7d87). Wait for all running
-// animations/transitions to finish so axe sees the settled, user-visible state.
+// finite animations/transitions to finish. Decorative loops have no settled
+// endpoint and must not block the accessibility audit forever.
 async function waitForAnimationsToSettle(page: Page) {
   await page.evaluate(() =>
     Promise.all(
-      document.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
+      document.getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+        .map((animation) => animation.finished.catch(() => undefined)),
     ).then(() => undefined),
   )
 }

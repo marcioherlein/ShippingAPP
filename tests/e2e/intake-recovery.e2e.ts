@@ -1,6 +1,9 @@
 import { test, expect } from './fixtures'
 for (const width of [390, 1280]) {
   test(`manual nomenclature and editable supplier data at ${width}px`, async ({ page }) => {
+    // Eight chat steps plus operation setup need enough time for WebKit's
+    // actionability checks. Keep every click and the final confirmation check.
+    test.setTimeout(90_000)
     await page.setViewportSize({ width, height: 900 })
     await page.goto('/')
     await page.getByRole('button', { name: /Ya tengo un producto/i }).click()

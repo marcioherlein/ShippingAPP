@@ -361,9 +361,10 @@ export default function App() {
     handleAnalysis(createManualProductAnalysis(sourceUrl || 'manual://product'))
   }
 
-  const handleOwnedProductLink = async (url: string) => {
+  const handleOwnedProductLink = async (url: string, signal?: AbortSignal) => {
     const operationId = readOperation('owned-link')?.id
-    const next = await ingestAlibabaUrlV2(url)
+    const next = await ingestAlibabaUrlV2(url, signal)
+    if (signal?.aborted) return
     if (operationId && !operationIsCurrent('owned-link', operationId)) return
     handleAnalysis(next)
   }

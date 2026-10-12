@@ -274,11 +274,11 @@
   .pipeline-warning { flex-direction: column; }
 }
 
-.manual-ncm-picker { padding: 20px; border: 1px solid #cbd7e2; border-radius: 16px; margin: 16px 0; }
+.manual-ncm-picker { padding: 20px; border: 1px solid var(--ds-border); border-radius: 16px; margin: 16px 0; }
 .manual-ncm-picker > label { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
-.manual-ncm-picker input:not([type=radio]):not([type=checkbox]), .manual-ncm-picker select { padding: 12px; border: 1px solid #b4c1ce; border-radius: 10px; width: 100%; }
-.manual-ncm-results { max-height: 320px; overflow-y: auto; border-block: 1px solid #d5dee7; margin: 12px 0; }
-.manual-ncm-results label { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 1px solid #e8edf2; cursor: pointer; }
+.manual-ncm-picker input:not([type=radio]):not([type=checkbox]), .manual-ncm-picker select { padding: 12px; border: 1px solid var(--ds-border); border-radius: 10px; width: 100%; background: var(--ds-surface); color: var(--ds-text); }
+.manual-ncm-results { max-height: 320px; overflow-y: auto; border-block: 1px solid var(--ds-border); margin: 12px 0; }
+.manual-ncm-results label { display: flex; align-items: flex-start; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--ds-border-soft); cursor: pointer; }
 .manual-ncm-results input { margin-top: 4px; flex-shrink: 0; }
 .manual-ncm-picker button { min-height: 44px; }
 
@@ -320,14 +320,14 @@
 }
 .manual-ncm-load-error {
   padding: 16px 18px;
-  border: 1px solid #f0c9a3;
+  border: 1px solid var(--ds-border);
   border-radius: 14px;
-  background: #fef6ec;
+  background: var(--ds-warning-soft);
   margin: 12px 0;
 }
-.manual-ncm-load-error b { color: #92400e; }
-.manual-ncm-load-error p { color: #785311; font-size: 13px; line-height: 1.55; margin: 8px 0 12px; }
-.manual-ncm-selection-error { color: #b42318; font-size: 13px; margin: 6px 0 0; }
+.manual-ncm-load-error b { color: var(--ds-warning); }
+.manual-ncm-load-error p { color: var(--ds-text-secondary); font-size: var(--ds-type-body); line-height: 1.55; margin: 8px 0 12px; }
+.manual-ncm-selection-error { color: var(--ds-danger); font-size: var(--ds-type-body); margin: 6px 0 0; }
 
 /* ── Silent mode: minimal spinner shown to end-users instead of technical pipeline boxes ── */
 

@@ -2,26 +2,28 @@ import React, { useEffect, useId, useMemo, useState } from 'react'
 import { manualNcmProfile, searchManualNcm, type ManualNcmIndex } from '../lib/manualNcm'
 import type { CustomsProfile } from '../lib/customsClassification'
 import DsSelect from './DsSelect'
-export default function ManualNcmPicker({ customs, onSelect }: { customs: CustomsProfile; onSelect: (value: CustomsProfile) => void }) {
+import { loadManualNcmIndex } from '../lib/loadManualNcmIndex'
+import { readProductDraft, writeProductDraft } from '../lib/productDraft'
+export default function ManualNcmPicker({ customs, recoveryKey = customs.description || '', onSelect }: { customs: CustomsProfile; recoveryKey?: string; onSelect: (value: CustomsProfile) => void }) {
   const selectionName = useId()
+  const storageKey = `manual-ncm:${recoveryKey}`
+  const [saved] = useState(() => readProductDraft<{ query: string; chapter: string; selected: string; confirmed: boolean }>(storageKey))
   const [index, setIndex] = useState<ManualNcmIndex | null>(null)
   const [error, setError] = useState('')
-  const [query, setQuery] = useState('')
-  const [chapter, setChapter] = useState('')
-  const [selected, setSelected] = useState('')
-  const [confirmed, setConfirmed] = useState(false)
+  const [query, setQuery] = useState(saved?.query || '')
+  const [chapter, setChapter] = useState(saved?.chapter || '')
+  const [selected, setSelected] = useState(saved?.selected || '')
+  const [confirmed, setConfirmed] = useState(saved?.confirmed || false)
   const [retry, setRetry] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
     setError('')
-    fetch('/data/ncm-index.json', { signal: controller.signal }).then(async response => {
-      if (!response.ok) throw new Error('No pude cargar el nomenclador.')
-      const data = await response.json()
-      if (!Array.isArray(data.records) || !data.meta?.sourceDate) throw new Error('El nomenclador no está disponible.')
-      setIndex(data)
+    loadManualNcmIndex(controller.signal).then(data => {
+      if (!controller.signal.aborted) setIndex(data)
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) })
     return () => controller.abort()
   }, [retry])
+  useEffect(() => { writeProductDraft(storageKey, { query, chapter, selected, confirmed }) }, [storageKey, query, chapter, selected, confirmed])
   const chapters = useMemo(() => index ? [...new Set(index.records.map(row => row[0].slice(0, 2)))].sort() : [], [index])
   const results = useMemo(() => index ? searchManualNcm(index, query, chapter) : [], [index, query, chapter])
   return <section className="manual-ncm-picker">
@@ -34,6 +36,7 @@ export default function ManualNcmPicker({ customs, onSelect }: { customs: Custom
       <button type="button" className="pipeline-secondary" onClick={() => setRetry(value => value + 1)}>Reintentar</button>
     </div>}
     {index && <>
+      <p className="ncm-catalog-source">Fuente: {index.meta.source} · Actualización: {index.meta.sourceDate}</p>
       <label>Producto o código NCM<input value={query} onChange={event => { setQuery(event.target.value); setSelected(''); setConfirmed(false) }} type="search" autoComplete="off" placeholder="Ej. crema, raquetas, 3304" /></label>
       <label>Capítulo<DsSelect ariaLabel="Capítulo del nomenclador" value={chapter} onChange={value => { setChapter(value); setSelected(''); setConfirmed(false) }} options={[{ value: '', label: 'Todos los capítulos' }, ...chapters.map(value => ({ value, label: `Capítulo ${value}` }))]} /></label>
       <p role="status">{results.length === 60 ? 'Primeras 60 posiciones. Agregá palabras para acotar.' : `${results.length} posiciones encontradas.`}</p>

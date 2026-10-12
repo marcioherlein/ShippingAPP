@@ -341,7 +341,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
         </div></details>
         <SupplierQuoteReview quote={supplierQuote} quantity={draft.quantity} sourceUrl={analysis.sourceUrl} evidence={analysis.product.supplierEvidence} onChange={setSupplierQuote} />
         <button type="button" className="pipeline-secondary" aria-expanded={showManualNcm} onClick={() => setShowManualNcm(value => !value)}>Buscar o cambiar posición en el nomenclador</button>
-        {showManualNcm && <ManualNcmPicker customs={analysis.customs} onSelect={customs => { onManualNcm(customs, { ...draft, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 }); setShowManualNcm(false) }} />}
+        {showManualNcm && <ManualNcmPicker key={`manual:${analysis.sourceUrl}:${analysis.product.name}`} recoveryKey={`${analysis.sourceUrl}:${analysis.product.name}`} customs={analysis.customs} onSelect={customs => { onManualNcm(customs, { ...draft, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 }); setShowManualNcm(false) }} />}
         {!classificationReady ? <>
           <div className="pipeline-understood-card">
             <span className="eyebrow">Producto detectado</span>
@@ -370,6 +370,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           </div>}
 
           {hasDisambiguation && <NcmDisambiguation
+            key={`questions:${analysis.sourceUrl}:${analysis.product.name}`}
+            recoveryKey={`${analysis.sourceUrl}:${analysis.product.name}`}
             disambiguation={disambiguation!}
             customs={analysis.customs}
             onPickCandidate={pickDisambiguationCandidate}
@@ -423,6 +425,8 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
           {!classificationResolved && hasDisambiguation && <details className="pipeline-disambiguation-details">
             <summary>¿Querés afinar la clasificación? (opcional)</summary>
             <NcmDisambiguation
+              key={`questions:${analysis.sourceUrl}:${analysis.product.name}`}
+              recoveryKey={`${analysis.sourceUrl}:${analysis.product.name}`}
               disambiguation={disambiguation!}
               customs={analysis.customs}
               onPickCandidate={pickDisambiguationCandidate}

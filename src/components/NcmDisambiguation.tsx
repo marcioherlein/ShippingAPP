@@ -3,6 +3,8 @@ import type { CustomsProfile, NcmDisambiguationData } from '../lib/customsClassi
 import { manualNcmProfile, type ManualNcmIndex } from '../lib/manualNcm'
 import { composeClarificationNote, hasActionableAnswers, type DisambiguationAnswers } from '../lib/ncmDisambiguation'
 import UiIcon from './UiIcon'
+import { loadManualNcmIndex } from '../lib/loadManualNcmIndex'
+import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 
 type Props = {
   disambiguation: NcmDisambiguationData
@@ -14,31 +16,35 @@ type Props = {
   // Decision 1 fallback: proceed with the conservative estimate instead of narrowing further.
   onContinueEstimate?: () => void
   provisionalAvailable?: boolean
+  recoveryKey?: string
 }
 
 /**
- * Guided NCM disambiguation. The user never sees or types an NCM code: they either pick the
+ * Guided NCM disambiguation. The user reviews the code without needing to type it: they pick the
  * candidate position that best matches their product (resolved deterministically against the
  * nomenclador) or answer a few yes/no/no-sé questions that re-run the classifier with the added
  * facts. When a conservative estimate exists, a "continuar con el estimado" escape hatch means
  * this is never a dead-end.
  */
-export default function NcmDisambiguation({ disambiguation, customs, onPickCandidate, onAnswer, onContinueEstimate, provisionalAvailable }: Props) {
+export default function NcmDisambiguation({ disambiguation, customs, onPickCandidate, onAnswer, onContinueEstimate, provisionalAvailable, recoveryKey = customs.description || '' }: Props) {
+  const storageKey = `ncm-answers:${recoveryKey}`
   const [index, setIndex] = useState<ManualNcmIndex | null>(null)
-  const [answers, setAnswers] = useState<DisambiguationAnswers>({})
+  const [answers, setAnswers] = useState<DisambiguationAnswers>(() => readProductDraft<DisambiguationAnswers>(storageKey) || {})
   const [pickError, setPickError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     // Load the nomenclador lazily so a direct pick resolves to validated tariffs. A failure is
     // non-fatal: the questions path and the estimate escape hatch still work without it.
     const controller = new AbortController()
-    fetch('/data/ncm-index.json', { signal: controller.signal }).then(async (response) => {
-      if (!response.ok) return
-      const data = await response.json()
-      if (Array.isArray(data.records) && data.meta?.sourceDate) setIndex(data)
-    }).catch(() => { /* direct pick simply falls back to the estimate */ })
+    setLoadError('')
+    loadManualNcmIndex(controller.signal).then(data => {
+      if (!controller.signal.aborted) setIndex(data)
+    }).catch(error => { if (!controller.signal.aborted) setLoadError(error.message) })
     return () => controller.abort()
-  }, [])
+  }, [retry])
+  useEffect(() => { writeProductDraft(storageKey, answers) }, [storageKey, answers])
 
   const questions = disambiguation.questions
   const actionable = useMemo(() => hasActionableAnswers(questions, answers), [questions, answers])
@@ -46,13 +52,13 @@ export default function NcmDisambiguation({ disambiguation, customs, onPickCandi
   const pickCandidate = (code: string) => {
     setPickError('')
     if (!index) {
-      setPickError('No pude cargar el nomenclador para confirmar la posición. Podés responder las preguntas o continuar con el estimado.')
+      setPickError('Todavía no pude validar esa posición. Reintentá la carga del nomenclador o respondé las preguntas.')
       return
     }
     try {
       onPickCandidate(manualNcmProfile(customs, index, code))
     } catch {
-      setPickError('Esa posición no tiene aranceles completos para usar directamente. Respondé las preguntas para afinar la clasificación o continuá con el estimado.')
+      setPickError('Esa posición no tiene aranceles completos para usar directamente. Respondé las preguntas o buscá una posición en el nomenclador.')
     }
   }
 
@@ -68,10 +74,15 @@ export default function NcmDisambiguation({ disambiguation, customs, onPickCandi
       <small>Elegí la descripción que mejor describe lo que vas a importar. No necesitás conocer el código: lo resolvemos nosotros.</small>
     </div>
 
+    {!index && !loadError && <p role="status">Cargando aranceles del nomenclador para validar las opciones…</p>}
+    {loadError && <div role="alert"><p>{loadError}</p><button type="button" className="pipeline-secondary" onClick={() => setRetry(value => value + 1)}>Reintentar carga del nomenclador</button></div>}
+    {index && <p className="ncm-catalog-source">Fuente: {index.meta.source} · Actualización: {index.meta.sourceDate}</p>}
+
     <div className="ncm-disambiguation-candidates journey-choice-grid" role="group" aria-label="Posiciones candidatas">
       {disambiguation.candidates.map((candidate) => (
-        <button type="button" key={candidate.code} className="ncm-disambiguation-candidate" onClick={() => pickCandidate(candidate.code)}>
+        <button type="button" key={candidate.code} className="ncm-disambiguation-candidate" disabled={!index} onClick={() => pickCandidate(candidate.code)}>
           <b>{candidate.plainLabel}</b>
+          <small>NCM {candidate.code}</small>
           <small>Elegir esta descripción</small>
         </button>
       ))}

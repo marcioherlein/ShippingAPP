@@ -14,7 +14,7 @@
   padding: var(--ds-space-5);
   border: 1px solid var(--ds-border);
   border-radius: var(--ds-radius-xl);
-  background: rgba(255, 255, 255, 0.76);
+  background: var(--ds-surface);
   box-shadow: none;
 }
 
@@ -61,7 +61,7 @@
 .calculation-pipeline .pipeline-clarification-card {
   gap: var(--ds-space-4);
   border-color: rgba(79, 93, 228, 0.24);
-  background: linear-gradient(145deg, rgba(246, 247, 255, 0.96), rgba(255, 255, 255, 0.88));
+  background: var(--ds-surface-subtle);
 }
 
 .calculation-pipeline .pipeline-clarification-copy h3 {
@@ -192,7 +192,7 @@
   }
 }
 
-/* Decision 2 — guided NCM disambiguation (never shows/asks for a raw code). */
+/* Guided choices expose their code and catalog source for review. */
 .ncm-disambiguation {
   display: flex;
   flex-direction: column;
@@ -216,6 +216,16 @@
 }
 .ncm-disambiguation-candidate b { font-weight: 600; }
 .ncm-disambiguation-candidate small { color: var(--ds-text-muted); font-size: 0.78rem; }
+.ncm-disambiguation-candidate:disabled { cursor: wait; opacity: 0.65; }
+.ncm-catalog-source,
+.supplier-original-evidence {
+  color: var(--ds-text-secondary);
+  font-size: var(--ds-type-body);
+  line-height: var(--ds-leading-body);
+  overflow-wrap: anywhere;
+}
+.manual-ncm-results label > span { min-width: 0; overflow-wrap: anywhere; }
+.supplier-review, .supplier-tier, .ncm-disambiguation { min-width: 0; }
 
 .ncm-disambiguation-error {
   margin: 0;

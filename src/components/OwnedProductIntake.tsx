@@ -9,7 +9,7 @@ import { inferSensitiveCategoryFromName } from '../lib/productConfirmation'
 import type { SensitiveProductCategory } from '../lib/landedCostEngine'
 
 type Props = {
-  onAlibabaLink: (url: string) => Promise<void>
+  onAlibabaLink: (url: string, signal?: AbortSignal) => Promise<void>
   onStructuredData: (data: ManualProductChatData) => void
 }
 
@@ -144,6 +144,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const inputRef = useRef<HTMLInputElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
   const busy = useRef(false)
+  const activeRequest = useRef<AbortController | null>(null)
+  useEffect(() => () => activeRequest.current?.abort(), [])
 
   useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers }) }, [mode, link, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers])
 
@@ -167,14 +169,16 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       return
     }
     busy.current = true
+    const controller = new AbortController()
+    activeRequest.current = controller
     const operation = beginOperation('owned-link', value)
     writeProductDraft('entry', { mode: 'link', link: value, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers })
     setLoading(true)
     setError('')
     try {
-      await onAlibabaLink(value)
+      await onAlibabaLink(value, controller.signal)
     } catch (err) {
-      if (!operationIsCurrent('owned-link', operation.id)) return
+      if (controller.signal.aborted || !operationIsCurrent('owned-link', operation.id)) return
       operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
       const raw = err instanceof Error ? err.message : ''
       const message = /expected pattern|string did not match/i.test(raw)
@@ -182,11 +186,24 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         : raw || 'No pude leer esa publicación.'
       setError(`${message} También podés describir el producto sin link.`)
     } finally {
-      if (operation.status === 'running') operation.status = 'complete'
-      settleOperation('owned-link', operation)
-      busy.current = false
-      setLoading(false)
+      if (activeRequest.current === controller) {
+        if (operation.status === 'running') operation.status = 'complete'
+        settleOperation('owned-link', operation)
+        activeRequest.current = null
+        busy.current = false
+        setLoading(false)
+      }
     }
+  }
+  const leaveLink = (nextMode: Mode) => {
+    activeRequest.current?.abort()
+    activeRequest.current = null
+    const operation = readOperation('owned-link')
+    if (operation) settleOperation('owned-link', { ...operation, status: 'failed' })
+    busy.current = false
+    setLoading(false)
+    setError('')
+    setMode(nextMode)
   }
   const submitLink = (event: React.FormEvent) => { event.preventDefault(); void runLink(link.trim()) }
   const runLinkRef = useRef(runLink)
@@ -276,19 +293,6 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     }
   }
 
-  const resetDescribe = () => {
-    setChatStep('name')
-    setChatAnswers({})
-    setChatInput('')
-    setVolumeMode('dims')
-    setDimL('')
-    setDimW('')
-    setDimH('')
-    setDimUnit('cm')
-    setAwaitingSensitive(false)
-    setPendingChatAnswers({})
-  }
-
   const dimsAreValid = () => {
     const l = parseFloat(dimL), w = parseFloat(dimW), h = parseFloat(dimH)
     return l > 0 && w > 0 && h > 0
@@ -321,7 +325,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         <small>Intento traer título, tipo, specs, precio, MOQ, peso, volumen y origen. Después sólo confirmás o completás faltantes.</small>
         <em>Lectura gratis</em>
       </button>
-      <button type="button" onClick={() => { resetDescribe(); setMode('describe') }}>
+      <button type="button" onClick={() => setMode('describe')}>
         <span className="owned-product-option-icon"><UiIcon name="edit" size={19} /></span>
         <b>Describir el producto</b>
         <small>Te guío una pregunta por vez. Si no conocés el mínimo del proveedor, podés omitirlo.</small>
@@ -331,7 +335,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     {mode === 'link' && <form className="owned-product-entry" onSubmit={(event) => void submitLink(event)}>
       <div className="owned-product-entry-head">
         <div><b>Pegá la publicación de Alibaba</b><small>Revisaremos los datos de la publicación con vos. Esta lectura no consume un análisis.</small></div>
-        <button type="button" onClick={() => { setMode(null); setError('') }}>Cambiar</button>
+        <button type="button" onClick={() => leaveLink(null)}>Cambiar</button>
       </div>
       <div className="owned-product-link-row">
         <input
@@ -346,6 +350,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : 'Leer producto'} <UiIcon name="arrow-right" size={16} /></button>
       </div>
       {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
+      <button type="button" className="pipeline-secondary" onClick={() => leaveLink('describe')}>Continuar con descripción manual</button>
     </form>}
 
     {mode === 'describe' && !awaitingSensitive && <div className="product-chatbot">
@@ -420,6 +425,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && validateChatInput('volume', chatInput)) advanceVolumeStep() }}
                   placeholder="ej. 0.008"
+                  aria-label="Volumen por unidad en metros cúbicos"
                   autoFocus
                 />
                 <span className="chatbot-dock-unit" aria-hidden="true">m³</span>

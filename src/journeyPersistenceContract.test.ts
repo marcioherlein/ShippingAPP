@@ -44,7 +44,7 @@ describe('journey persistence contract', () => {
 
   it('installs persistence only after the React application render call', () => {
     expect(main).toContain("import { installJourneyPersistence } from './lib/journeyPersistence'")
-    const renderIndex = main.indexOf('createRoot(root).render(')
+    const renderIndex = main.lastIndexOf('reactRoot.render(')
     const persistenceIndex = main.indexOf('installJourneyPersistence()')
     expect(renderIndex).toBeGreaterThan(-1)
     expect(persistenceIndex).toBeGreaterThan(renderIndex)

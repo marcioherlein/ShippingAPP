@@ -350,6 +350,12 @@ async function dispatchAuthorizedRequest(request: Request, env: Record<string, u
 const application = {
   async fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
     return withRequestContext(request, env, async () => {
+      if (request.method === 'GET' && new URL(request.url).pathname === '/api/public-auth-config') {
+        const value = env.CLERK_PUBLISHABLE_KEY
+        const publishableKey = typeof value === 'string' && /^pk_(test|live)_[A-Za-z0-9+/=_-]+$/.test(value.trim()) ? value.trim() : null
+        // Publishable keys are client configuration. Never include secret/JWT keys.
+        return Response.json({ publishableKey }, { headers: { 'cache-control': 'no-store' } })
+      }
       const gate = await authorizeRequest(request, env)
       if (!gate.ok) return gate.response
 

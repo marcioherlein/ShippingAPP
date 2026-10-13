@@ -5,6 +5,7 @@ import { esES } from '@clerk/localizations/es-ES'
 import App from './App'
 import ClerkShell from './auth/ClerkShell'
 import { setSessionState } from './lib/authSession'
+import { readPublicAuthKey } from './lib/publicAuthConfig'
 import { installJourneySemantics } from './lib/journeySemantics'
 import { installJourneyPersistence } from './lib/journeyPersistence'
 import './styles.css'
@@ -27,25 +28,27 @@ import './styles/app-header.css'
 import './styles/ace-landing.css'
 
 const root = document.getElementById('root')
-const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.trim()
-if (clerkPublishableKey) setSessionState('loading')
-
 if (!root) {
   throw new Error('Root element not found')
 }
 
 installJourneySemantics()
 
+const reactRoot = createRoot(root)
+reactRoot.render(<p role="status">Cargando aplicación…</p>)
+void readPublicAuthKey(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY).then(clerkPublishableKey => {
+if (clerkPublishableKey) setSessionState('loading')
 const application = clerkPublishableKey
   ? <ClerkProvider publishableKey={clerkPublishableKey} localization={esES}>
       <ClerkShell><App /></ClerkShell>
     </ClerkProvider>
   : <App />
 
-createRoot(root).render(
+reactRoot.render(
   <React.StrictMode>
     {application}
   </React.StrictMode>,
 )
 
 installJourneyPersistence()
+})

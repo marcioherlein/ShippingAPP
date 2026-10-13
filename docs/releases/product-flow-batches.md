@@ -18,6 +18,15 @@ The prior #204 deployment failed during Cloudflare's service lookup with HTTP 50
 after its tests/build passed. Those changes must be included in the next verified
 publication. The user's prior request to omit browser acceptance remains in force;
 real-account completion is not claimed by component checks or build success.
+
+Runtime bootstrap follow-up: publication inspection found a frontend bundle built
+without a Clerk key, so its build-time branch removed Clerk entirely. The app now
+reads the backend's public key from a small anonymous, non-cached configuration
+endpoint before mounting the provider (bounded to eight seconds). Only `pk_test_`
+or `pk_live_` values are returned; secret and JWT credentials are never exposed.
+This retains Clerk code even when the build variable is absent and selects the
+same instance as the backend. A valid build key remains a fallback for older
+deployments or temporary configuration-endpoint failure.
 Baseline main: d04ed3e0e71252e3f87e02191bd31cf7eb49811b.
 
 ## 1. Unblock product intake and classification

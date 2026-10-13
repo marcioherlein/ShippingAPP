@@ -9,6 +9,17 @@ const quietConsole = () => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('Stage 0 Worker boundary', () => {
+  it('serves only a valid public Clerk key without authentication, never secret credentials', async () => {
+    quietConsole()
+    const response = await worker.fetch(new Request('https://shipping.test/api/public-auth-config'), {
+      AUTH_ENFORCEMENT: 'true', CLERK_PUBLISHABLE_KEY: 'pk_test_public', CLERK_SECRET_KEY: 'sk_test_private', CLERK_JWT_KEY: 'private-jwt',
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ publishableKey: 'pk_test_public' })
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const invalid = await worker.fetch(new Request('https://shipping.test/api/public-auth-config'), { CLERK_PUBLISHABLE_KEY: 'sk_test_private' })
+    expect(await invalid.json()).toEqual({ publishableKey: null })
+  })
   it('handles malformed JSON without executing provider work or leaking internals', async () => {
     quietConsole()
     const response = await worker.fetch(new Request('https://shipping.test/api/chat', {

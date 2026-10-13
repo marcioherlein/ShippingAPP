@@ -121,7 +121,21 @@ jobs:
           put_secret EMAIL_UNSUBSCRIBE_SECRET "${EMAIL_UNSUBSCRIBE_SECRET:-}"
 
       - name: Deploy to Cloudflare Workers
-        run: npx --yes wrangler@latest deploy --config "$WRANGLER_PRODUCTION_CONFIG"
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploy_log=$(mktemp)
+          trap 'rm -f "$deploy_log"' EXIT
+          for attempt in 1 2 3; do
+            if npx --yes wrangler@latest deploy --config "$WRANGLER_PRODUCTION_CONFIG" 2>&1 | tee "$deploy_log"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ] || ! rg -q '50[234] (Gateway|Bad|Service)|ETIMEDOUT|ECONNRESET|fetch failed' "$deploy_log"; then
+              exit 1
+            fi
+            echo "::warning::Cloudflare returned a transient network error; retrying the same deployment ($attempt/3)."
+            sleep 10
+          done
 
       - name: Apply production D1 migrations
         run: npx --yes wrangler@latest d1 migrations apply DB --remote --config "$WRANGLER_PRODUCTION_CONFIG"

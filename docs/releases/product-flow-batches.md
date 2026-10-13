@@ -1,6 +1,23 @@
 # ShippingAPP — launch recovery batches
 
-Updated October 6, 2026. No new paid services. Clerk production cutover remains deferred.
+Updated October 13, 2026. No new paid services. Clerk production cutover remains deferred.
+
+## Blocking login follow-up (batches 1 and 5)
+
+Reported: account access disappeared from the redesigned landing page; completed
+product intake requested login without offering a usable Clerk form. The landing
+now renders account controls, including while the SDK loads. Authentication
+blocks in the calculation render the same account actions directly beside the
+message. Signed-out actions open an app-owned dialog containing Clerk's SignIn
+form; the dialog remains visible while Clerk loads and offers reload recovery
+after 15 seconds without a form. Signed-in server errors continue to offer account
+reconnection rather than sending users back through sign-in. Missing frontend
+configuration exposes an explicit unavailable message instead of hiding access.
+
+The prior #204 deployment failed during Cloudflare's service lookup with HTTP 504
+after its tests/build passed. Those changes must be included in the next verified
+publication. The user's prior request to omit browser acceptance remains in force;
+real-account completion is not claimed by component checks or build success.
 Baseline main: d04ed3e0e71252e3f87e02191bd31cf7eb49811b.
 
 ## 1. Unblock product intake and classification

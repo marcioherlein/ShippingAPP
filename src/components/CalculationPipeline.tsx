@@ -1,5 +1,6 @@
 import { optimizeQuantity } from '../lib/quantityOptimizer'
 import type { LandedCostInput } from '../lib/landedCostEngine'
+import AccountControls from '../auth/AccountControls'
 import ManualNcmPicker from './ManualNcmPicker'
 import NcmDisambiguation from './NcmDisambiguation'
 import DsSelect from './DsSelect'
@@ -42,6 +43,7 @@ type Props = {
   costProfile?: Pick<LandedCostInput, 'purpose' | 'entityType' | 'hasImporterSignature' | 'sensitiveCategory'>
   summary?: CalculationPipelineSummary | null
   blocker?: string | null
+  authRequired?: boolean
   onConfirm: (product: ProductConfirmationData) => void
   onManualNcm: (customs: CustomsProfile, product: ProductConfirmationData) => void
   onEditProduct: () => void
@@ -204,7 +206,7 @@ function NomencladorGuidance({ onManualSearch }: { onManualSearch?: () => void }
   </div>
 }
 
-export default function CalculationPipeline({ analysis, prefill, status, activeStage, purchaseRange, costProfile, summary, blocker, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
+export default function CalculationPipeline({ analysis, prefill, status, activeStage, purchaseRange, costProfile, summary, blocker, authRequired = false, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
   const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
@@ -312,7 +314,7 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   return <section className="calculation-pipeline" id="case-confirmation" aria-busy={status === 'processing'}>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>
     {(status === 'confirm' || status === 'blocked') ? <>
-      {status === 'blocked' && blocker && <div className="pipeline-blocker" role="alert" aria-atomic="true">{blocker}{analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.map(fact => <li key={fact}>{fact}</li>)}</ul>}</div>}
+      {status === 'blocked' && blocker && <div className="pipeline-blocker" role="alert" aria-atomic="true"><p>{blocker}</p>{authRequired ? <AccountControls /> : analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.map(fact => <li key={fact}>{fact}</li>)}</ul>}</div>}
       <div className="pipeline-confirm-head progressive-confirm-head">
         <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : provisionalAvailable ? 'Estimado listo para cotizar' : 'Confirmación inteligente'}</span>
         <h2>{classificationResolved

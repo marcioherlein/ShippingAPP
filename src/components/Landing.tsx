@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import AccountControls from '../auth/AccountControls'
 
 type Props = { onStart: () => void }
 
@@ -47,9 +48,9 @@ export default function Landing({ onStart }: Props) {
           <a className="gs-brand" href="#home" aria-label="GlobalShipping inicio">
             <span>Global<b>Shipping</b></span>
           </a>
-          <button type="button" className="gs-nav__cta" onClick={onStart}>
+          <div className="gs-nav__actions"><AccountControls /><button type="button" className="gs-nav__cta" onClick={onStart}>
             Calculá ahora →
-          </button>
+          </button></div>
         </div>
       </header>
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Show, SignInButton, SignUpButton, UserButton, useAuth, useClerk } from '@clerk/react'
+import { UserButton, useAuth } from '@clerk/react'
+import LoginDialog from './LoginDialog'
 import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
 import { saveCompletedAnalysis } from '../lib/analysisHistory'
 import AnalysisHistory from '../components/AnalysisHistory'
@@ -15,7 +16,7 @@ type HistorySaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function ClerkShell({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn } = useAuth()
-  const clerk = useClerk()
+  const [loginOpen, setLoginOpen] = useState(false)
   const [accountSync, setAccountSync] = useState<AccountSyncState>('idle')
   const [historySave, setHistorySave] = useState<HistorySaveState>('idle')
   const [syncAttempt, setSyncAttempt] = useState(0)
@@ -92,10 +93,11 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
   }, [isLoaded, isSignedIn])
 
   useEffect(() => {
-    const requestSignIn = () => { if (isLoaded && !isSignedIn) clerk.openSignIn({}) }
+    const requestSignIn = () => { if (!isSignedIn) setLoginOpen(true) }
     window.addEventListener('shippingapp:auth-required', requestSignIn)
     return () => window.removeEventListener('shippingapp:auth-required', requestSignIn)
-  }, [clerk, isLoaded, isSignedIn])
+  }, [isSignedIn])
+  useEffect(() => { if (isSignedIn) setLoginOpen(false) }, [isSignedIn])
 
   const accountLabel = accountSync === 'ready'
     ? historySave === 'saving'
@@ -110,15 +112,10 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
       : 'Conectando cuenta…'
 
   const controls = <div className="auth-account-control" role="group" aria-label="Cuenta">
-      <Show when="signed-out">
-        <SignInButton mode="modal">
-          <button type="button" className="auth-secondary">Ingresar</button>
-        </SignInButton>
-        <SignUpButton mode="modal">
-          <button type="button" className="auth-primary">Crear cuenta</button>
-        </SignUpButton>
-      </Show>
-      <Show when="signed-in">
+      {!isSignedIn ? <>
+        <button type="button" className="auth-secondary" onClick={() => setLoginOpen(true)}>Ingresar</button>
+        <button type="button" className="auth-primary" onClick={() => setLoginOpen(true)}>Crear cuenta</button>
+      </> : <>
         <details className="app-account-menu">
           <summary>Mi cuenta</summary>
           <div className="app-account-panel">
@@ -131,8 +128,8 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
         <UserButton />
           </div>
         </details>
-      </Show>
+      </>}
     </div>
 
-  return <AccountControlsContext value={controls}>{children}</AccountControlsContext>
+  return <AccountControlsContext value={controls}>{children}{loginOpen && <LoginDialog loaded={!!isLoaded} onClose={() => setLoginOpen(false)} />}</AccountControlsContext>
 }

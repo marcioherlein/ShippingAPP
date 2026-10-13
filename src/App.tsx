@@ -198,6 +198,7 @@ export default function App() {
   const [pipelineStage, setPipelineStage] = useState(0)
   const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
+  const [pipelineAuthRequired, setPipelineAuthRequired] = useState(false)
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
   const [entered, setEntered] = useState<boolean>(readInitialEntered)
 
@@ -334,6 +335,7 @@ export default function App() {
   }
 
   const resetPipeline = () => {
+    setPipelineAuthRequired(false)
     setCalculationStatus('confirm')
     setPipelineStage(0)
     setPipelineSummary(null)
@@ -401,6 +403,7 @@ export default function App() {
 
   const confirmAndCalculate = async (confirmedProduct: ProductConfirmationData) => {
     if (!analysis || confirmationBusy.current) return
+    setPipelineAuthRequired(false)
 
     const classificationMissing = missingClassificationConfirmationFields(confirmedProduct)
     if (classificationMissing.length > 0) {
@@ -568,6 +571,7 @@ export default function App() {
       if (!operationIsCurrent('confirmation', operation.id)) return
       const message = error instanceof Error ? error.message : 'El pipeline no pudo completar el cálculo.'
       operation.status = error instanceof ApiAuthError ? 'waiting_auth' : 'failed'
+      setPipelineAuthRequired(error instanceof ApiAuthError)
       if (!(error instanceof ApiAuthError)) clearPendingConfirm()
       setPipelineBlocker(message)
       setCalculationStatus('blocked')
@@ -785,6 +789,7 @@ export default function App() {
         costProfile={{ purpose: purpose || 'unknown', entityType: entityType || 'unknown', hasImporterSignature: signature === 'unknown' || signature === null ? null : signature === 'yes', sensitiveCategory: sensitiveCategory || 'unknown' }}
         summary={pipelineSummary}
         blocker={pipelineBlocker}
+        authRequired={pipelineAuthRequired}
         onConfirm={(product) => void confirmAndCalculate(product)}
         onManualNcm={(customs, product) => {
           setAnalysis({ ...applyProductConfirmation(analysis, product), customs })

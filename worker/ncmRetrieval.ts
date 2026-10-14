@@ -1,3 +1,4 @@
+import { compatibleNcmChapters } from '../src/lib/ncmFamilyGuard'
 import { ncmAppTariffOverride } from './ncmTariffOverrides'
 import {
   deriveClarifications,
@@ -142,6 +143,7 @@ type AiRanking = { ranking: Array<{ code: string; reason?: string }>; confidence
 const STOPWORDS = new Set([
   'de','del','la','las','el','los','un','una','unos','unas','y','o','e','para','por','con','sin','en','al','se','su','sus','que','como','tipo','otro','otra','dema',
   'the','of','and','or','for','with','without','in','a','an','to','other','product','producto','articulo','material','equipment','equipo',
+  'clasificar','clasificado','clasificados','clasificada','clasificadas','identificado','identificada','trabajado','trabajados','incluido','incluidos',
 ])
 
 export function normalizeText(value: string | null | undefined) {
@@ -206,6 +208,8 @@ function automaticMechanicalCommonMetalWristwatch(facts: NcmProductFacts) {
 // be added here only with regression coverage.
 function allowedChapterPrefixes(facts: NcmProductFacts): string[] | null {
   if (conventionalWristwatchText(facts)) return ['91']
+  const compatible = compatibleNcmChapters(facts)
+  if (compatible) return compatible
   const concepts = deriveSemanticConcepts(facts).concepts
   if (concepts.includes('cooking_appliance') && concepts.includes('solid_fuel')) return ['73']
   return null
@@ -257,23 +261,6 @@ export function plainSpanishLabel(label: string): string {
   return leaf
 }
 
-/**
- * The CONSERVATIVE provisional tariff: among the top shortlisted candidates, pick the one with
- * the highest `diePct` (the most expensive import duty the importer could face). This never
- * confirms a position — it bounds the tax exposure so a best-effort cost can be shown with a
- * clear "verificá antes de operar" warning. Returns null when no candidate resolves a tariff.
- */
-function conservativeProvisionalTariff(index: NcmSearchIndex, ordered: NcmRetrievalCandidate[]) {
-  let best: { code: string; label: string; tariff: NcmTariff } | null = null
-  for (const candidate of ordered.slice(0, 4)) {
-    const tariff = tariffForCode(index, candidate.code)
-    if (!tariff) continue
-    if (!best || tariff.diePct > best.tariff.diePct) {
-      best = { code: candidate.code, label: candidate.label, tariff }
-    }
-  }
-  return best
-}
 
 /**
  * Build the plain-Spanish disambiguation payload from the already-ranked shortlist plus the
@@ -474,7 +461,7 @@ function prepareIndex(index: NcmSearchIndex): PreparedNcmRecord[] {
 export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string[], facts: NcmProductFacts, limit = 25, exclusionTerms: string[] = []): NcmRetrievalCandidate[] {
   if (!index || ![3, 4].includes(index.meta.indexSchema) || !Array.isArray(index.records)) return []
   const rawPhrases = [...safeTerms(searchTerms), facts.name || '', facts.category || '', facts.functionText || '', facts.material || ''].filter(Boolean)
-  const phraseNorms = [...new Set(rawPhrases.map(normalizeText).filter((phrase) => phrase.length >= 4))]
+  const phraseNorms = [...new Set(rawPhrases.map(normalizeText).filter((phrase) => phrase.length >= 4 && tokens(phrase).length > 0))]
   const queryTokens = [...new Set(rawPhrases.flatMap(tokens))]
   if (queryTokens.length < 2 && phraseNorms.every((phrase) => phrase.split(' ').length < 2)) return []
 
@@ -679,17 +666,16 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
     ...shortlist.filter((candidate) => !orderedCodes.includes(candidate.code)),
   ]
   const top = ordered[0]
-  const confidence = ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
   const reason = ranked.ranking.find((item) => item.code === top.code)?.reason
   const combinedMissingFacts = [...new Set([...expansion.missingFacts, ...(ranked.missingFacts || [])])].slice(0, 8)
+  const unresolvedFunction = !facts.functionText?.trim() && combinedMissingFacts.some(fact => /funcion|uso principal|principal function|main use/.test(normalizeText(fact)))
+  const confidence = unresolvedFunction ? 'low' : ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
 
   if (confidence === 'low') {
     const confidenceReason = top.code !== shortlist[0].code
       ? `AI rerank (${top.code}) discrepó del top determinístico (${shortlist[0].code}); fail-closed.`
       : `Evidencia insuficiente para superar el umbral de confianza (score ${shortlist[0].score}).`
-    // Best-effort sibling data: a conservative (highest-duty) estimate from the shortlist and
-    // plain-Spanish disambiguation. The fail-closed fields below stay null/low verbatim.
-    const provisional = conservativeProvisionalTariff(index, ordered)
+    // Weak candidates remain available for clarification, never for pricing.
     return {
       status: 'missing',
       code: null,
@@ -712,13 +698,11 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
       retrievalMode: 'missing',
       tariff: null,
       diagnostics: buildDiagnostics(concepts, searchTerms, exclusionTerms, ordered, confidenceReason, combinedMissingFacts[0] ?? 'confianza insuficiente'),
-      provisional: !!provisional,
-      provisionalCode: provisional?.code ?? null,
-      provisionalLabel: provisional ? plainSpanishLabel(provisional.label) : null,
-      provisionalTariff: provisional?.tariff ?? null,
-      provisionalBasis: provisional
-        ? `Estimación conservadora: aplicamos el derecho de importación más alto (${provisional.tariff.diePct}%) entre las posiciones más probables (NCM ${provisional.code} · ${plainSpanishLabel(provisional.label)}). Es un estimado para no frenar el cálculo — verificá la posición antes de operar.`
-        : null,
+      provisional: false,
+      provisionalCode: null,
+      provisionalLabel: null,
+      provisionalTariff: null,
+      provisionalBasis: null,
       disambiguation: buildDisambiguation(ordered, concepts),
     }
   }

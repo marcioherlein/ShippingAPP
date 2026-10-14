@@ -14,7 +14,7 @@ import AppHeader from './components/AppHeader'
 import DsSelect from './components/DsSelect'
 import UiIcon from './components/UiIcon'
 import type { QuotePrefill } from './lib/hotProducts'
-import { enrichProductAnalysisV2, ingestAlibabaUrlV2, hasConfirmedClassification, hasProvisionalClassification, effectiveDutyRatePct, effectiveTariffProfile, type ProductAnalysisV2 } from './lib/productAnalysisV2'
+import { enrichProductAnalysisV2, ingestAlibabaUrlV2, hasConfirmedClassification, effectiveDutyRatePct, effectiveTariffProfile, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
 import { getJourneyBudgetError } from './lib/journeyValidation'
 import { scrollIntoViewIfNeeded, scrollWindowToTop } from './lib/motionPreference'
@@ -131,10 +131,10 @@ function makeAnalysisPrefill(
     customsSourceDate: analysis.customs.catalogSourceDate || analysis.customs.reviewedAt,
     customsMissingFacts: analysis.customs.missingFacts,
     customsRationale: analysis.customs.rationale,
-    provisional: !hasConfirmedClassification(analysis.customs) && hasProvisionalClassification(analysis.customs),
-    provisionalBasis: analysis.customs.provisionalBasis ?? null,
-    provisionalCode: analysis.customs.provisionalCode ?? null,
-    provisionalLabel: analysis.customs.provisionalLabel ?? null,
+    provisional: false,
+    provisionalBasis: null,
+    provisionalCode: null,
+    provisionalLabel: null,
   }
 }
 
@@ -143,9 +143,7 @@ function nextPaint(ms = 180) {
 }
 
 function hasUsableClassification(analysis: ProductAnalysisV2) {
-  // Confirmed OR provisional both count as "usable" so a second confirm (e.g. after filling
-  // quote fields) reuses the analysis instead of re-running the classifier for the same product.
-  return hasConfirmedClassification(analysis.customs) || hasProvisionalClassification(analysis.customs)
+  return hasConfirmedClassification(analysis.customs)
 }
 
 const ENTERED_KEY = 'shippingapp:entered'
@@ -219,7 +217,7 @@ export default function App() {
         // Bring back a finished quote when the saved inputs still match what the
         // replayed answers produced; otherwise fall back to the review step.
         const pipe = readProductDraft<PipelineDraft>('pipeline')
-        if (pipe?.status === 'ready' && pipe.calculationInputKey === currentCalculationInputKeyRef.current) {
+        if (hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && pipe.calculationInputKey === currentCalculationInputKeyRef.current) {
           setPipelineSummary(pipe.pipelineSummary)
           setPipelineStage(pipe.pipelineStage ?? 3)
           setCalculationInputKey(pipe.calculationInputKey)
@@ -292,7 +290,9 @@ export default function App() {
   const currentCalculationInputKeyRef = useRef(currentCalculationInputKey)
   currentCalculationInputKeyRef.current = currentCalculationInputKey
 
-  const effectiveCalculationStatus: CalculationPipelineStatus = calculationInputKey && calculationInputKey !== currentCalculationInputKey
+  const effectiveCalculationStatus: CalculationPipelineStatus = analysis && calculationStatus === 'ready' && !hasConfirmedClassification(analysis.customs)
+    ? 'confirm'
+    : calculationInputKey && calculationInputKey !== currentCalculationInputKey
     ? 'confirm'
     : calculationStatus
 
@@ -439,19 +439,16 @@ export default function App() {
       clearPendingConfirm()
 
       const confirmedClassification = hasConfirmedClassification(refreshed.customs)
-      const provisionalClassification = hasProvisionalClassification(refreshed.customs)
       const duty = effectiveDutyRatePct(refreshed.customs)
       const effectiveTariff = effectiveTariffProfile(refreshed.customs)
 
-      // Dead-end ONLY when there is neither a confirmed position NOR a conservative estimate.
-      // Otherwise we proceed best-effort (Decision 1) with a clearly-labeled provisional tariff;
-      // the confirm view still offers disambiguation (Decision 2) so the user can tighten it.
-      if (!confirmedClassification && !provisionalClassification) {
+      // Unverified candidate tariffs cannot feed a customer quotation.
+      if (!confirmedClassification) {
         setPipelineStage(0)
         const noCandidate = !refreshed.customs.ncmCandidate || refreshed.customs.classificationConfidence === 'missing'
         setPipelineBlocker(noCandidate
           ? 'No pude cerrar una NCM con la identidad disponible. Elegí la descripción que más se parezca a tu producto o sumá un detalle técnico que distinga la posición.'
-          : 'La clasificación quedó con confianza baja y sin un estimado seguro. Elegí la descripción que más se parezca o sumá un detalle técnico antes de cotizar.')
+          : 'La clasificación no tiene evidencia suficiente. Completá la función o el material, o buscá y validá una posición en el nomenclador.')
         setCalculationStatus('blocked')
         return
       }

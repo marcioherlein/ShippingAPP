@@ -199,6 +199,7 @@ export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiR
   if (full.status !== 'candidate' || !full.code || !full.label) {
     return withProvisional({
       ...local,
+      missingFacts: [...new Set([...full.missingFacts, ...local.missingFacts])],
       source: `${local.source} Full-catalog retrieval no produjo candidato suficiente; se conserva el clasificador seed sin ampliar certeza.`,
       rationale: [...local.rationale, ...full.rationale],
       catalogScope: `${local.catalogScope} · Full ARCA snapshot consulted: ${full.catalogRecordCount} records`,

@@ -9,7 +9,7 @@ export default function SupplierQuoteReview({ quote, quantity, sourceUrl, eviden
   const set = <K extends keyof SupplierQuote>(key: K, value: SupplierQuote[K]) => onChange({ ...quote, [key]: value })
   const price = supplierQuotePrice(quote, quantity)
   return <section className="supplier-review" aria-label="Confirmación del precio del proveedor">
-    <h3>Revisá la oferta del proveedor</h3>
+    <h3>2. Revisá la oferta del proveedor</h3>
     <p>Confirmá moneda, variante y si el importe es por unidad o lote. Un símbolo $ solo no identifica la moneda.</p>
     {sourceUrl.startsWith('https://') ? <a href={sourceUrl} target="_blank" rel="noreferrer">Ver publicación original</a> : <p>Fuente: datos ingresados manualmente.</p>}
     {evidence && <p className="supplier-original-evidence">Oferta original: {evidence.priceText || 'Importe sin texto disponible'} · Moneda: {evidence.currency || 'sin identificar'} · Unidad: {evidence.quantityUnit || 'sin identificar'} · Variante: {evidence.variant || 'sin identificar'}{evidence.priceSource && ` · Fuente: ${evidence.priceSource}`}</p>}

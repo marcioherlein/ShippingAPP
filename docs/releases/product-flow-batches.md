@@ -169,3 +169,27 @@ Validation: rendered component regressions cover basis selection, unit/carton co
 unknown carton count, draft remount, and successful account reconnection without a
 second sign-in. Real authenticated supplier completion and physical iPhone acceptance
 remain outstanding; these changes do not close those requirements.
+
+## October 14 manual acceptance failure — classification is reopened
+
+The user completed Clerk login and supplier extraction on iPhone, but could not
+answer the requested function and then received diamonds/paper candidates for a
+portable RGB phone light. This real case invalidates any claim that classification
+was launch-ready based on fixture or deployment checks alone.
+
+Cause: LOW retrieval candidates emitted an automatic highest-duty provisional
+tariff. The client accepted that estimate as classification-ready, hid the primary
+identity editor, and suppressed free-text clarification when candidate cards existed.
+
+Correction: unresolved/LOW candidates never feed effective tax rates or economics;
+restored provisional results return to review. The worker emits no automatic estimate.
+The review keeps identity/function, source offer and packaging visibly editable;
+missing-fact questions coexist with candidate cards. Missing facts from an empty
+full-catalog result are retained. Generic classification-status words cannot
+retrieve positions. An RGB/LED lighting identity excludes chapters outside 85/90/94
+without selecting a code; this applies to retrieval and old saved suggestions.
+
+Regression evidence includes the actual 10,504-record catalog, poisoned vocabulary,
+repeated weak classification, persisted diamond/paper suggestions, editable function
+and clarification submission. This does not certify a particular NCM for the light;
+if evidence is insufficient, the result stays pending with manual nomenclature search.

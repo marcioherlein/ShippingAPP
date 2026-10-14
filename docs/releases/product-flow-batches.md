@@ -1,6 +1,6 @@
 # ShippingAPP — launch recovery batches
 
-Updated October 13, 2026. No new paid services. Clerk production cutover remains deferred.
+Updated October 14, 2026. No new paid services. Clerk production cutover remains deferred.
 
 ## Blocking login follow-up (batches 1 and 5)
 
@@ -193,3 +193,93 @@ Regression evidence includes the actual 10,504-record catalog, poisoned vocabula
 repeated weak classification, persisted diamond/paper suggestions, editable function
 and clarification submission. This does not certify a particular NCM for the light;
 if evidence is insufficient, the result stays pending with manual nomenclature search.
+
+## 6. Rediseño del recorrido y del resultado — pendiente de implementar
+
+Requisitos reportados por el usuario el 14 de octubre después de la prueba real.
+Este lote reabre los lotes 3, 4 y 5. Los controles anteriores aprobados no equivalen
+al cierre de esta experiencia. No se agregan herramientas de marketing antes de resolverlo.
+
+### 6A. Un chat que complete el caso y conserve el historial
+
+- Después de extraer un enlace o recibir una descripción, presentar lo entendido
+  y preguntar sólo los datos necesarios que falten o sean ambiguos. No trasladar
+  al usuario una ficha larga como único camino para avanzar.
+- Mantener editables función, tipo, material, variante, precio/moneda/base,
+  MOQ opcional, peso y embalaje. Preguntar por la función dentro del chat cuando
+  haga falta; una lista de candidatos no reemplaza esa pregunta.
+- Confirmar los datos extraídos mediante un resumen breve y editable dentro del
+  recorrido. Identificar fuente, valores sin confirmar y faltantes. No usar
+  inferencias como si fueran datos confirmados.
+- Conservar la elección inicial de presupuesto, unidades o exploración. No
+  preguntar cantidad otra vez si ya fue respondida. Si se ingresó un rango,
+  conservarlo y explicar qué cantidad del rango se utiliza.
+- El historial del chat permanece arriba del resultado, con las preguntas,
+  respuestas, correcciones y confirmaciones. Permitir editar una respuesta y
+  recalcular lo dependiente sin reiniciar la operación ni conservar resultados
+  viejos. Mantener el recorrido al volver, recargar o iniciar sesión.
+
+### 6B. Tres intenciones, tres políticas de cálculo
+
+| Elección | Comportamiento requerido | Explicación visible |
+| --- | --- | --- |
+| Tengo un presupuesto | Buscar una cantidad entera viable dentro del presupuesto total puesto en destino, incluyendo mercadería, flete, impuestos y gastos aplicables. Evaluar descuentos por tramo y alternativas de flete. | Cantidad que alcanza, costo por unidad, total y saldo disponible; si una cantidad menor mejora el costo unitario por el flete, presentarla como alternativa. |
+| Sé cuántas unidades quiero | Calcular exactamente la cantidad pedida y buscar cuántas unidades adicionales entran en el mismo costo de flete para la modalidad comparada. Recalcular precio por tramo, impuestos, total y costo unitario de la alternativa. | Pediste N; podés traer M con el mismo flete. Indicar el desembolso adicional y el nuevo costo unitario. Igual flete no significa igual costo total. |
+| Quiero ver | Mostrar la referencia de una unidad, sin inventar presupuesto ni una compra inicial. Ofrecer pocas cantidades alternativas justificadas por los tramos confirmados y el flete. | Costo por unidad para una unidad y para la alternativa sugerida; permitir elegir otra cantidad y recalcular. |
+
+Reglas comunes:
+
+- El presupuesto es un límite, no sólo el importe de mercadería. No recomendar
+  una cantidad que lo exceda sin señalar la diferencia y pedir elección explícita.
+  Si no alcanza para una compra viable, mostrar el mínimo necesario y el faltante.
+- Respetar el MOQ confirmado, incrementos de compra y precios válidos para cada
+  cantidad. No extrapolar un precio mayorista a una unidad sin evidencia.
+- Si una unidad no puede comprarse por MOQ, falta de precio aplicable o restricciones
+  de la modalidad, mostrar que esa referencia no está disponible o que es sólo un
+  prorrateo explícito; nunca presentarla como una compra ejecutable.
+- Para prometer el mismo costo de flete, verificarlo con la tarifa, modalidad,
+  peso facturable, volumen y límites utilizados. Si sólo hay una tarifa estimada,
+  identificar la estimación; si cambia el flete, mostrar la diferencia real.
+- Si faltan datos para cotizar, preguntar lo faltante. Si no hay NCM validada,
+  seguir con aclaración o búsqueda manual; no inventar un arancel para producir
+  una cifra ni bloquear la edición de las respuestas.
+
+### 6C. Resultado corto y presupuesto guardable
+
+- Dos comparaciones principales: costo por unidad al traer una unidad, y costo
+  por unidad para la cantidad pedida o la propuesta según presupuesto/exploración.
+  No duplicar el escenario cuando ambos sean una unidad.
+- Cuando exista una mejora de flete distinta de la cantidad pedida, agregar una
+  única propuesta breve con unidades, costo unitario y desembolso adicional.
+  No mostrar una colección de cuarenta tarjetas, indicadores o tablas.
+- Jerarquía: costo puesto por unidad, cantidad y total de esa compra. Los impuestos,
+  fuentes, NCM, supuestos y desglose quedan accesibles en un detalle contraído.
+  Una limitación que invalide el precio debe ser visible, no escondida allí.
+- Historial del chat arriba y resultado debajo, sin recortes ni navegación que
+  tape contenido en móvil. Acciones principales: editar el caso y guardar presupuesto.
+- Guardar un presupuesto con intención inicial, presupuesto/rango/cantidad,
+  producto y variante, datos confirmados, fuentes, NCM y estado de validación,
+  tipo de cambio/fecha, tarifa de flete, escenarios calculados e historial del chat.
+  El usuario puede identificarlo y abrirlo desde su cuenta.
+- Si guardar requiere login, ofrecerlo ahí y retomar el guardado tras validar la
+  sesión, sin perder el resultado. Mostrar éxito sólo cuando el servidor confirme
+  persistencia. Un fallo permite reintentar el mismo guardado sin duplicar registros.
+- Al abrir un presupuesto, mostrar la fecha de cotización. Recalcular con nuevas
+  tarifas/tipos de cambio crea una revisión identificable; no alterar silenciosamente
+  el presupuesto guardado ni presentar precios antiguos como vigentes.
+
+### Criterios de cierre del lote 6
+
+| Caso | Evidencia necesaria |
+| --- | --- |
+| Extracción incompleta o descripción manual | Chat pregunta función/precio/embalaje faltantes, admite correcciones, confirma el resumen y conserva el producto. |
+| Presupuesto | Cantidad viable dentro del límite; considera descuentos y flete; informa cuando no alcanza para el mínimo. |
+| Unidades | Conserva N en chat, ficha, cálculo y guardado; compara M con igual flete cuando exista y explicita el gasto adicional. |
+| Quiero ver | Referencia de una unidad válida o limitación explícita, más pocas alternativas justificadas. |
+| Resultado móvil | Comparación unitaria breve, historial arriba, desglose contraído y acciones alcanzables con teclado y texto largo. |
+| Editar una respuesta | Invalida el resultado anterior y recalcula precio por tramo, flete, impuestos y costo unitario sin perder el resto del chat. |
+| Guardar y reabrir | Presupuesto e historial completos y coherentes con el resultado; login y reintentos conservan el caso y no duplican el guardado. |
+
+Orden de implementación: 6A (chat y estado único) → 6B (políticas de cantidad y
+optimización) → 6C (resultado breve y guardado). Estado actual: especificado,
+no implementado ni aceptado. La prueba manual que encontró los errores sigue abierta.

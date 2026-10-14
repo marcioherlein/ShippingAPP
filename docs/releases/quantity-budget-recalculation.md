@@ -9,3 +9,13 @@ Regression coverage includes discounted-band affordability, range/increment cons
 The intervening landing redesign changed its markup/copy without updating existing tests and restored the removed G mark. This change updates those tests and removes both restored marks.
 
 The first browser run passed the new budget/range cases, but exposed existing design overrides that forced a light header and dark title in dark mode and overrode reduced-motion transitions. The follow-up retains the intervening full-width navigation/font changes, uses semantic surfaces/text colors and restores motion preferences, including landing scroll behavior. These regressions must pass the unchanged accessibility gates before merge.
+
+## Requisitos pendientes agregados el 14 de octubre de 2026
+
+Los comportamientos descritos arriba no cierran el nuevo recorrido solicitado.
+El lote 6 de [product-flow-batches.md](product-flow-batches.md) define el contrato
+pendiente: chat con historial conservado, tres intenciones (presupuesto, unidades,
+quiero ver), optimización de cantidades con igual flete verificable, comparación
+breve de costo unitario y guardado/reapertura del presupuesto completo. El cálculo
+para una unidad debe respetar el precio aplicable y advertir si no cumple MOQ.
+La implementación y aceptación de ese lote siguen pendientes.

@@ -83,3 +83,7 @@
 @media (prefers-color-scheme: dark) {
   .journey-app .journey-question-card:not(.active) .journey-question-head > span { color: #b9b3ff; }
 }
+
+.chatbot-volume-basis { border: 1px solid var(--ds-border); border-radius: 10px; margin: 0 0 12px; padding: 12px; min-width: 0; color: var(--ds-text); }
+.chatbot-volume-basis label { display: flex; align-items: center; gap: 8px; min-height: 44px; line-height: 1.5; }
+.chatbot-volume-basis input { width: 20px; height: 20px; flex-shrink: 0; }

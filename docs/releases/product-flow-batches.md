@@ -151,3 +151,21 @@ Require the expanded CI browser suite to pass before merging, then verify produc
 Remaining launch acceptance: real authenticated Alibaba extraction (including the
 reported gram/kilogram case), realistic budget-based selection, physical iPhone
 keyboard/zoom, and visual approval of the ComplyDo-inspired navigation/layout.
+
+## October 14 follow-up — visible account recovery and packaging basis
+
+Account reconnection is now a visible action beside Mi cuenta, including the account
+controls rendered at a blocked calculation. It no longer requires opening a closed
+menu. Missing public configuration offers reload recovery without clearing the draft.
+
+Manual product intake explicitly asks whether packaging dimensions/volume represent
+one packed unit or a shared carton. Per-unit volume is preserved; shared-carton
+volume divides only by a supplied positive integer count. Omitting that count leaves
+unit volume unknown instead of assuming one. Unit packaging skips the carton question.
+The selected basis persists through reload; legacy carton-step drafts return to the
+volume question to resolve their ambiguous basis.
+
+Validation: rendered component regressions cover basis selection, unit/carton conversion,
+unknown carton count, draft remount, and successful account reconnection without a
+second sign-in. Real authenticated supplier completion and physical iPhone acceptance
+remain outstanding; these changes do not close those requirements.

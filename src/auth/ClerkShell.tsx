@@ -116,11 +116,11 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
         <button type="button" className="auth-secondary" onClick={() => setLoginOpen(true)}>Ingresar</button>
         <button type="button" className="auth-primary" onClick={() => setLoginOpen(true)}>Crear cuenta</button>
       </> : <>
+        {accountSync === 'error' && <button type="button" className="auth-secondary" onClick={() => setSyncAttempt(attempt => attempt + 1)}>Reintentar conectar cuenta</button>}
         <details className="app-account-menu">
           <summary>Mi cuenta</summary>
           <div className="app-account-panel">
         <span className="auth-saved-label" data-account-sync={accountSync} data-history-save={historySave}>{accountLabel}</span>
-        {accountSync === 'error' && <button type="button" className="auth-secondary" onClick={() => setSyncAttempt(attempt => attempt + 1)}>Reintentar conectar cuenta</button>}
         {accountSync === 'ready' && <UsageBadge />}
         {accountSync === 'ready' && <EmailPreferences />}
         {accountSync === 'ready' && <Watchlist />}

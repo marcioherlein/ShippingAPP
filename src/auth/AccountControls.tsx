@@ -13,6 +13,6 @@ function UnavailableAccountControls() {
   const [requested, setRequested] = useState(false)
   return <div className="auth-account-control">
     <button type="button" className="auth-secondary" onClick={() => setRequested(true)}>Ingresar</button>
-    {requested && <p role="alert">El acceso a cuentas no está disponible en este momento. Tu ficha queda guardada.</p>}
+    {requested && <div role="alert"><p>El acceso a cuentas no está disponible en este momento. Tu ficha queda guardada.</p><button type="button" className="auth-secondary" onClick={() => window.location.reload()}>Reintentar cargar acceso</button></div>}
   </div>
 }

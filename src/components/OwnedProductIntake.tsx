@@ -27,7 +27,7 @@ const CHAT_LABELS: Record<ChatStep, string> = {
   origin: '¿De dónde viene?',
   weight: '¿Cuánto pesa por unidad?',
   moq: '¿Cuál es el mínimo del proveedor?',
-  volume: '¿Cuánto ocupa por unidad?',
+  volume: '¿Qué medidas tiene el embalaje?',
   carton: '¿Cuántas unidades van en esa caja?',
 }
 const CHAT_PLACEHOLDERS: Record<ChatStep, string> = {
@@ -122,7 +122,9 @@ function validateChatInput(step: ChatStep, value: string): boolean {
   return Number.isFinite(n) && n > 0
 }
 
-type EntryDraft = { mode: Mode; link: string; chatStep?: ChatStep; chatAnswers?: Partial<Record<ChatStep, string>>; chatInput?: string; volumeMode?: 'dims' | 'cbm'; dimL?: string; dimW?: string; dimH?: string; dimUnit?: 'cm' | 'm'; awaitingSensitive?: boolean; pendingChatAnswers?: Partial<Record<ChatStep, string>> }
+type VolumeBasis = 'unit' | 'carton'
+
+type EntryDraft = { volumeBasis?: VolumeBasis | null; mode: Mode; link: string; chatStep?: ChatStep; chatAnswers?: Partial<Record<ChatStep, string>>; chatInput?: string; volumeMode?: 'dims' | 'cbm'; dimL?: string; dimW?: string; dimH?: string; dimUnit?: 'cm' | 'm'; awaitingSensitive?: boolean; pendingChatAnswers?: Partial<Record<ChatStep, string>> }
 
 export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: Props) {
   const [draft] = useState(() => readProductDraft<EntryDraft>('entry'))
@@ -131,9 +133,10 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const [chatStep, setChatStep] = useState<ChatStep>(draft?.chatStep || 'name')
+  const [chatStep, setChatStep] = useState<ChatStep>(draft?.chatStep === 'carton' && !draft.volumeBasis ? 'volume' : draft?.chatStep || 'name')
   const [chatAnswers, setChatAnswers] = useState<Partial<Record<ChatStep, string>>>(draft?.chatAnswers || {})
-  const [chatInput, setChatInput] = useState(draft?.chatInput || '')
+  const [chatInput, setChatInput] = useState(draft?.chatStep === 'carton' && !draft.volumeBasis ? draft.chatAnswers?.volume || '' : draft?.chatInput || '')
+  const [volumeBasis, setVolumeBasis] = useState<VolumeBasis | null>(draft?.volumeBasis || null)
   const [volumeMode, setVolumeMode] = useState<'dims' | 'cbm'>(draft?.volumeMode || 'dims')
   const [dimL, setDimL] = useState(draft?.dimL || '')
   const [dimW, setDimW] = useState(draft?.dimW || '')
@@ -147,7 +150,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const activeRequest = useRef<AbortController | null>(null)
   useEffect(() => () => activeRequest.current?.abort(), [])
 
-  useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers }) }, [mode, link, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers])
+  useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers }) }, [mode, link, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers])
 
   useEffect(() => {
     if (mode === 'describe') {
@@ -172,7 +175,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     const controller = new AbortController()
     activeRequest.current = controller
     const operation = beginOperation('owned-link', value)
-    writeProductDraft('entry', { mode: 'link', link: value, chatStep, chatAnswers, chatInput, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers })
+    writeProductDraft('entry', { mode: 'link', link: value, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers })
     setLoading(true)
     setError('')
     try {
@@ -234,7 +237,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       }
       sensitiveCategory = inferred
     }
-    const unitsPerCarton = answers.carton ? Math.max(1, Math.round(Number(answers.carton)) || 1) : 1
+    const unitsPerCarton = volumeBasis === 'unit' ? 1 : Number(answers.carton)
+    const hasConfirmedBasis = volumeBasis !== null && Number.isInteger(unitsPerCarton) && unitsPerCarton > 0
     const rawVolumeCbm = answers.volume && Number(answers.volume) > 0 ? Number(answers.volume) : null
     const data: ManualProductChatData = {
       name: (answers.name || '').trim(),
@@ -244,7 +248,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       originCountry: (answers.origin || '').trim(),
       packedWeightKg: Number(answers.weight) || 0,
       moq: Number(answers.moq) || 0,
-      volumeCbm: rawVolumeCbm !== null ? parseFloat((rawVolumeCbm / unitsPerCarton).toFixed(6)) : null,
+      volumeCbm: rawVolumeCbm !== null && hasConfirmedBasis ? parseFloat((rawVolumeCbm / unitsPerCarton).toFixed(6)) : null,
       sensitiveCategory,
     }
     onStructuredData(data)
@@ -262,7 +266,9 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     setChatAnswers(newAnswers)
     setChatInput('')
     const nextIdx = ALL_STEPS.indexOf(chatStep) + 1
-    if (nextIdx >= ALL_STEPS.length) {
+    if (chatStep === 'volume' && volumeBasis === 'unit') {
+      finalizeChat({ ...newAnswers, carton: '1' })
+    } else if (nextIdx >= ALL_STEPS.length) {
       finalizeChat(newAnswers)
     } else {
       setChatStep(ALL_STEPS[nextIdx])
@@ -371,7 +377,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
                 title={`${CHAT_LABELS[step]} — tocá para editar`}
               >
                 <span className="chatbot-receipt-chip-label">{CHAT_STEP_LABELS_SHORT[step]}</span>
-                <span className="chatbot-receipt-chip-value">{CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')}</span>
+                <span className="chatbot-receipt-chip-value">{step === 'volume' ? `${chatAnswers[step]} m³ / ${volumeBasis === 'carton' ? 'caja' : 'unidad'}` : CHAT_RECEIPT_FMT[step](chatAnswers[step] || '')}</span>
               </button>
             ))}
           </div>
@@ -384,6 +390,11 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
 
       <div className="chatbot-input-dock">
         {chatStep === 'volume' ? <>
+          <fieldset className="chatbot-volume-basis">
+            <legend>Estas medidas o este volumen corresponden a:</legend>
+            <label><input type="radio" name="volume-basis" checked={volumeBasis === 'unit'} onChange={() => setVolumeBasis('unit')} /> Una unidad embalada</label>
+            <label><input type="radio" name="volume-basis" checked={volumeBasis === 'carton'} onChange={() => setVolumeBasis('carton')} /> Una caja con varias unidades</label>
+          </fieldset>
           <div className="chatbot-vol-tabs">
             <button type="button" className={`chatbot-vol-tab${volumeMode === 'dims' ? ' active' : ''}`} onClick={() => setVolumeMode('dims')}>Medidas</button>
             <button type="button" className={`chatbot-vol-tab${volumeMode === 'cbm' ? ' active' : ''}`} onClick={() => setVolumeMode('cbm')}>Volumen m³</button>
@@ -403,14 +414,14 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
                 <input
                   type="number" min="0.001" step="any" value={dimH}
                   onChange={(e) => setDimH(e.target.value)} placeholder="30"
-                  onKeyDown={(e) => { if (e.key === 'Enter' && dimsAreValid()) advanceVolumeStep() }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && volumeBasis && dimsAreValid()) advanceVolumeStep() }}
                 />
               </label>
               <div className="chatbot-dim-unit-toggle">
                 <button type="button" className={dimUnit === 'cm' ? 'active' : ''} onClick={() => setDimUnit('cm')}>cm</button>
                 <button type="button" className={dimUnit === 'm' ? 'active' : ''} onClick={() => setDimUnit('m')}>m</button>
               </div>
-              <button type="button" className="chatbot-send-btn chatbot-dims-send" disabled={!dimsAreValid()} onClick={advanceVolumeStep}>
+              <button type="button" className="chatbot-send-btn chatbot-dims-send" disabled={!volumeBasis || !dimsAreValid()} onClick={advanceVolumeStep}>
                 Continuar <UiIcon name="arrow-right" size={14} />
               </button>
             </div>
@@ -423,19 +434,19 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
                   type="number" min="0.0001" step="any"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && validateChatInput('volume', chatInput)) advanceVolumeStep() }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && volumeBasis && validateChatInput('volume', chatInput)) advanceVolumeStep() }}
                   placeholder="ej. 0.008"
-                  aria-label="Volumen por unidad en metros cúbicos"
+                  aria-label="Volumen del embalaje en metros cúbicos"
                   autoFocus
                 />
                 <span className="chatbot-dock-unit" aria-hidden="true">m³</span>
               </div>
-              <button type="button" className="chatbot-send-btn" disabled={!validateChatInput('volume', chatInput)} onClick={advanceVolumeStep}>
+              <button type="button" className="chatbot-send-btn" disabled={!volumeBasis || !validateChatInput('volume', chatInput)} onClick={advanceVolumeStep}>
                 Continuar <UiIcon name="arrow-right" size={14} />
               </button>
             </div>
           )}
-          <button type="button" className="chatbot-skip-btn" onClick={() => finalizeChat(chatAnswers)}>
+          <button type="button" className="chatbot-skip-btn" onClick={() => finalizeChat({ ...chatAnswers, volume: '', carton: '' })}>
             No sé / omitir
           </button>
         </> : <>
@@ -473,7 +484,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
           )}
           {chatStep === 'carton' && (
             <button type="button" className="chatbot-skip-btn" onClick={() => advanceStep('')}>
-              1 unidad / omitir
+              No sé: dejar volumen unitario pendiente
             </button>
           )}
         </>}

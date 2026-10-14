@@ -169,7 +169,7 @@ test('stalled supplier search allows immediate manual intake at 320px', async ({
   await expect(page.getByRole('status')).toContainText('1. Búsqueda de proveedor')
   await page.getByRole('button', { name: 'Completar la ficha manualmente', exact: true }).click()
   await expect(page.locator('#case-confirmation')).toBeVisible()
-  await page.getByRole('button', { name: 'Corregir datos del producto', exact: true }).click()
+  await expect(page.getByLabel('Función principal', { exact: true })).toBeVisible()
   await expect(page.getByLabel('¿Qué producto es?', { exact: true })).toHaveValue(query)
   await expect(page.getByRole('progressbar', { name: 'Buscando productos' })).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)

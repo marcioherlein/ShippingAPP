@@ -22,7 +22,7 @@ function fakeAi(outputs: unknown[]) {
 }
 
 describe('full NCM LOW branch — conservative provisional estimate', () => {
-  it('keeps fail-closed fields null/low while emitting the highest-duty provisional', async () => {
+  it('keeps weak candidates out of tariffs even when the shortlist contains higher duties', async () => {
     const ai = fakeAi([
       { searchTerms: ['raqueta tenis deportiva', 'raqueta similar bádminton'], missingFacts: [] },
       { ranking: [{ code: '9506.51.00', reason: 'AI prefers tennis' }, { code: '9506.59.00' }], confidence: 'high' },
@@ -36,12 +36,10 @@ describe('full NCM LOW branch — conservative provisional estimate', () => {
     expect(result.tariff).toBeNull()
     expect(result.rationale.join(' ')).toContain('FAIL-CLOSED')
 
-    // Best-effort provisional: highest diePct among the shortlisted candidates.
-    expect(result.provisional).toBe(true)
-    expect(result.provisionalTariff?.diePct).toBe(35)
-    expect(result.provisionalCode).toBe('9506.51.00')
-    expect(result.provisionalBasis).toContain('35%')
-    expect(result.provisionalBasis).toContain('verificá')
+    expect(result.provisional).toBe(false)
+    expect(result.provisionalTariff).toBeNull()
+    expect(result.provisionalCode).toBeNull()
+
   })
 
   it('surfaces plain-Spanish disambiguation candidates without exposing them as confirmed', async () => {

@@ -56,15 +56,15 @@ describe('productAnalysisV2 classification gating', () => {
     expect(hasProvisionalClassification(unclassified)).toBe(false)
   })
 
-  it('effectiveDutyRatePct prefers confirmed, falls back to provisional, else null', () => {
+  it('effectiveDutyRatePct rejects provisional metadata until classification is validated', () => {
     expect(effectiveDutyRatePct(confirmed)).toBe(16)
-    expect(effectiveDutyRatePct(provisional)).toBe(20)
+    expect(effectiveDutyRatePct(provisional)).toBeNull()
     expect(effectiveDutyRatePct(unclassified)).toBeNull()
   })
 
   it('effectiveTariffProfile mirrors the same precedence', () => {
     expect(effectiveTariffProfile(confirmed)).toBe(confirmedTariff)
-    expect(effectiveTariffProfile(provisional)).toBe(provisionalTariff)
+    expect(effectiveTariffProfile(provisional)).toBeNull()
     expect(effectiveTariffProfile(unclassified)).toBeNull()
   })
 

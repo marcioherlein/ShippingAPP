@@ -19,9 +19,8 @@ export type ProductAnalysisV2 = Omit<ProductAnalysis, 'usageReservationId'> & {
 /**
  * Classification gating helpers. The fail-closed invariant stays intact:
  * `hasConfirmedClassification` is the ONLY predicate that reads a confirmed
- * high/medium duty. `effectiveDutyRatePct`/`effectiveTariffProfile` fall back to
- * the conservative provisional estimate so the UI can proceed with a labeled
- * best-effort cost instead of dead-ending — never promoting it to "confirmed".
+ * high/medium duty. Provisional metadata is diagnostic only: effective rates
+ * remain unavailable until a position is validated.
  */
 export function hasConfirmedClassification(customs: CustomsProfile): boolean {
   return !!customs.ncmCandidate
@@ -38,13 +37,11 @@ export function hasProvisionalClassification(customs: CustomsProfile): boolean {
 
 export function effectiveDutyRatePct(customs: CustomsProfile): number | null {
   if (hasConfirmedClassification(customs)) return customs.dutyRatePct ?? null
-  if (hasProvisionalClassification(customs)) return customs.provisionalDutyRatePct ?? null
   return null
 }
 
 export function effectiveTariffProfile(customs: CustomsProfile): NcmTariffProfile | null {
   if (hasConfirmedClassification(customs)) return customs.tariff ?? null
-  if (hasProvisionalClassification(customs)) return customs.provisionalTariff ?? customs.tariff ?? null
   return null
 }
 

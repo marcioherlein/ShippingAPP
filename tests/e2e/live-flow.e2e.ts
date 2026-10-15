@@ -37,6 +37,8 @@ async function readFixture(page: import('@playwright/test').Page, capacity: 'unk
   await page.getByRole('button',{name:'Usar esta posición',exact:true}).click()
   await expect(page.locator('.case-question h2')).toContainText('Desde cuántas unidades')
   await page.getByRole('button',{name:'Continuar',exact:true}).click()
+  await expect(page.locator('.case-question h2')).toContainText('Hasta cuántas unidades')
+  await page.getByRole('button',{name:'Continuar',exact:true}).click()
   await expect(page.getByRole('button',{name:'Confirmar y calcular mis opciones',exact:true})).toBeVisible()
   await page.getByRole('button',{name:'Confirmar y calcular mis opciones',exact:true}).click()
   await expect(page.getByRole('region',{name:'Tu presupuesto de importación'})).toBeVisible()

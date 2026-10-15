@@ -58,6 +58,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
     offerQuestion('basis', '¿Ese precio es por unidad o por lote?', [['unit','Por una unidad'],['pack','Por un lote / caja']]),
     offerQuestion('unitsPerPack', '¿Cuántas unidades incluye ese lote?', undefined, true), offerQuestion('variant','¿A qué variante o modelo corresponde esa oferta?'),
     offerQuestion('minQuantity', '¿Desde cuántas unidades es válido ese precio?', undefined, true),
+    { ...offerQuestion('maxQuantity', '¿Hasta cuántas unidades vale ese precio? Dejá vacío sólo si confirmaste que no tiene límite.'), type: 'number', valid: v => v === '' || integer(v), apply: v => onQuote({ ...quote, maxQuantity: v === '' ? null : Number(v) }) },
     offerQuestion('usdPerCurrency', `¿Cuántos USD equivalen a 1 ${quote.currency}?`, undefined, true), offerQuestion('fxSource','¿Cuál es la fuente de ese tipo de cambio?'),
     { ...offerQuestion('fxDate', '¿De qué fecha es el tipo de cambio? (AAAA-MM-DD)'), valid: v => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) },
     productQuestion('originCountry','¿Cuál es el país de origen de la mercadería?'), productQuestion('unitWeightKg','¿Cuánto pesa una unidad embalada, en kg?','number'),
@@ -65,12 +66,16 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
     { ...productQuestion('quantity', capacity.mode === 'units' ? `Cantidad elegida (tu rango: ${capacity.min}–${capacity.max})` : 'Cantidad elegida'), value: String(draft.quantity ?? (capacity.mode === 'units' ? capacity.min : '')), valid: integer },
     { ...productQuestion('moq','¿Cuál es el mínimo del proveedor? Si no lo sabés, dejalo sin dato.','number'), valid: v => v === '' || integer(v) },
   ]
+  const hasConfirmedAnswer = (question: Question) => {
+    const messages = readCaseConversation(source)
+    return messages.some((message, index) => message.role === 'assistant' && message.text === question.prompt && messages[index + 1]?.role === 'user' && messages[index + 1].text !== 'No lo sé todavía')
+  }
   const needs = (question: Question) => {
     if (question.id === 'quantity') return false
     if (question.id === 'category' || question.id === 'description') return askedForMore && clarificationTarget === question.id && answeredAttempt !== attempt
     if (question.id === 'material') return askedForMore && clarificationTarget === 'material' && answeredAttempt !== attempt
-    if (question.id === 'quote.unitsPerPack') return quote.basis === 'pack' && !integer(String(quote.unitsPerPack))
-    if (question.id === 'quote.minQuantity') return !readCaseConversation(source).some(m => m.role === 'assistant' && m.text === question.prompt)
+    if (question.id === 'quote.unitsPerPack') return quote.basis === 'pack' && (!integer(String(quote.unitsPerPack)) || !hasConfirmedAnswer(question))
+    if (question.id === 'quote.minQuantity' || question.id === 'quote.maxQuantity') return !hasConfirmedAnswer(question)
     if (['quote.usdPerCurrency','quote.fxSource','quote.fxDate'].includes(question.id) && (!quote.currency || quote.currency === 'USD')) return false
     if (question.id === 'unitVolumeCbm') return resolvedProductVolumeCbm(draft) <= 0
     if (question.id === 'moq') return !draft.moq && !skipped.includes('moq')
@@ -83,7 +88,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const answer = () => {
     if (!question || !question.valid(value)) return
     question.apply(value)
-    recordCaseAnswer(source, question.prompt, question.options?.find(([key]) => key === value)?.[1] || value || 'Sin dato')
+    recordCaseAnswer(source, question.prompt, question.options?.find(([key]) => key === value)?.[1] || value || (question.id === 'quote.maxQuantity' ? 'Confirmo que no tiene límite' : 'Sin dato'))
     if (forced?.id === question.id) setAnsweredAttempt(attempt)
     setSkipped(current => current.filter(id => id !== question.id)); setEdit(null)
     if (question.id === 'moq' && !value) setSkipped(current => [...current, 'moq'])
@@ -102,7 +107,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
         {question.id === 'moq' || (!classified && !forced && !['productName','functionText'].includes(question.id)) ? <button type="button" className="pipeline-secondary" onClick={() => { recordCaseAnswer(source,question.prompt,'No lo sé todavía'); setSkipped(current => [...current,question.id]); setEdit(null) }}>No sé todavía</button> : null}
         {question.id === 'unitVolumeCbm' && <button type="button" className="pipeline-secondary" onClick={() => setAdvanced(true)}>Tengo medidas en lugar de volumen</button>}
       </div> : <div className="case-review"><h2>Revisá y confirmá</h2><p>Tu elección: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : 'explorar desde una unidad'}. No volvemos a preguntarte la cantidad.</p>
-        <dl>{all.filter(q => !['quote.usdPerCurrency','quote.fxSource','quote.fxDate','quote.unitsPerPack'].includes(q.id) || needs(q)).map(q => <div key={q.id}><dt>{q.prompt}</dt><dd>{q.options?.find(([key]) => key === q.value)?.[1] || q.value || 'Sin dato'} <button type="button" onClick={() => setEdit(q.id)}>Editar</button></dd></div>)}</dl>
+        <dl>{all.filter(q => q.id === 'quote.unitsPerPack' ? quote.basis === 'pack' : ['quote.usdPerCurrency','quote.fxSource','quote.fxDate'].includes(q.id) ? !!quote.currency && quote.currency !== 'USD' : true).map(q => <div key={q.id}><dt>{q.prompt}</dt><dd>{q.options?.find(([key]) => key === q.value)?.[1] || q.value || (q.id === 'quote.maxQuantity' && hasConfirmedAnswer(q) ? 'Sin límite confirmado' : 'Sin dato')} <button type="button" onClick={() => setEdit(q.id)}>Editar</button></dd></div>)}</dl>
         {!classified && <p>Los datos comerciales que todavía no conocés quedan pendientes; no inventamos el costo.</p>}
         <button type="button" className="journey-primary-action" disabled={exhausted && !classified} onClick={() => { recordCaseAnswer(source,'¿Confirmás estos datos?\n' + all.filter(q => q.value).map(q => `${q.prompt} ${q.value}`).join('\n'),classified ? 'Confirmo y calculo mi compra.' : 'Confirmo y clasifico el producto.'); onConfirm() }}>{classified ? 'Confirmar y calcular mis opciones' : 'Confirmar y clasificar'}</button>
       </div>}

@@ -194,7 +194,7 @@ repeated weak classification, persisted diamond/paper suggestions, editable func
 and clarification submission. This does not certify a particular NCM for the light;
 if evidence is insufficient, the result stays pending with manual nomenclature search.
 
-## 6. Rediseño del recorrido y del resultado — pendiente de implementar
+## 6. Rediseño del recorrido y del resultado — implementación del 15 de octubre
 
 Requisitos reportados por el usuario el 14 de octubre después de la prueba real.
 Este lote reabre los lotes 3, 4 y 5. Los controles anteriores aprobados no equivalen
@@ -280,6 +280,20 @@ Reglas comunes:
 | Editar una respuesta | Invalida el resultado anterior y recalcula precio por tramo, flete, impuestos y costo unitario sin perder el resto del chat. |
 | Guardar y reabrir | Presupuesto e historial completos y coherentes con el resultado; login y reintentos conservan el caso y no duplican el guardado. |
 
-Orden de implementación: 6A (chat y estado único) → 6B (políticas de cantidad y
-optimización) → 6C (resultado breve y guardado). Estado actual: especificado,
-no implementado ni aceptado. La prueba manual que encontró los errores sigue abierta.
+Implementación del 15 de octubre: el recorrido principal usa preguntas de chat
+sobre la misma ficha, con historial persistido y resumen editable; el formulario
+completo queda como edición avanzada. Las políticas de presupuesto, unidades y
+exploración usan el motor existente, precios confirmados y lotes completos. La
+alternativa con igual flete se verifica en la misma modalidad y muestra la diferencia
+de desembolso; la búsqueda se limita a 250.000 unidades y no promete un óptimo global.
+El resultado principal muestra una o dos referencias unitarias y una única mejora,
+con el desglose contraído. Guardar es explícito; conserva conversación, escenarios,
+fuentes y fecha en el historial privado. Un guardado pendiente sobrevive a login y
+recarga con el mismo contenido/idempotencia. Reabrir muestra el cálculo original;
+recalcular exige una acción explícita y crea una revisión sin modificar el registro.
+
+Validación local: regresiones de políticas, chat, resultado y guardado pasan, junto
+con el build. Los casos de navegador del recorrido principal se adaptaron a esta
+experiencia; no se presenta su preparación como una prueba ejecutada. La aceptación
+manual y visual en iPhone del nuevo recorrido sigue abierta. Las herramientas
+gratuitas de marketing siguen fuera de este lote.

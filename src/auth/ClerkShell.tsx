@@ -106,7 +106,7 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
         ? 'Cuenta conectada · análisis guardado'
         : historySave === 'error'
           ? 'Cuenta conectada · el último análisis no se guardó'
-          : 'Cuenta conectada · tus análisis quedan guardados'
+          : 'Cuenta conectada · podés guardar tus presupuestos'
     : accountSync === 'error'
       ? syncError || 'No pudimos sincronizar la cuenta'
       : 'Conectando cuenta…'

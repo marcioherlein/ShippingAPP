@@ -1,3 +1,4 @@
+import { ApiAuthError } from './authSession'
 import { apiFetch } from './apiClient'
 
 export type AnalysisHistorySummary = {
@@ -55,6 +56,7 @@ export async function saveCompletedAnalysis(input: unknown, result: unknown) {
       })
       break
     } catch (error) {
+      if (error instanceof ApiAuthError) throw error
       lastNetworkError = error
     }
   }
@@ -62,6 +64,7 @@ export async function saveCompletedAnalysis(input: unknown, result: unknown) {
   if (!response) throw lastNetworkError instanceof Error ? lastNetworkError : new Error('No pudimos guardar el análisis.')
   if (!response.ok) throw new Error(await responseError(response, 'No pudimos guardar el análisis.'))
   const data = await response.json() as { item: AnalysisHistorySummary }
+  if (!data.item || typeof data.item.id !== 'string' || !data.item.id) throw new Error('El servidor no confirmó el guardado del presupuesto.')
   return data.item
 }
 

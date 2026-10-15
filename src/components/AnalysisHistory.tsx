@@ -115,6 +115,7 @@ export default function AnalysisHistory() {
 
       {detail ? <div className="analysis-history-detail">
         <button type="button" className="analysis-history-back" onClick={() => setDetail(null)}>← Volver al historial</button>
+        {detailResult?.version === 1 && detailResult?.purchasePlan && <button type="button" onClick={() => { window.dispatchEvent(new CustomEvent('shippingapp:open-quote', { detail: { input: detail.input, result: detail.result } })); setOpen(false) }}>Abrir presupuesto con su conversación</button>}
         <h3>{detailAnalysis?.product?.name || 'Análisis guardado'}</h3>
         <div className="analysis-history-metrics">
           <span><small>Costo total</small><b>{money(detailPipeline?.totalCostUsd)}</b></span>
@@ -133,7 +134,7 @@ export default function AnalysisHistory() {
           <button type="button" className="danger" onClick={() => void remove(detail.id)} disabled={deletingId === detail.id}>{deletingId === detail.id ? 'Eliminando…' : 'Eliminar de mi historial'}</button>
         </div>
       </div> : <>
-        {!loading && items.length === 0 && !error && <div className="analysis-history-empty"><b>Todavía no hay análisis guardados.</b><span>Cuando una cotización llegue a resultado, se guarda automáticamente acá.</span></div>}
+        {!loading && items.length === 0 && !error && <div className="analysis-history-empty"><b>Todavía no hay análisis guardados.</b><span>Tocá Guardar presupuesto al terminar una cotización para conservarla acá.</span></div>}
 
         <div className="analysis-history-list">
           {items.map((item) => <article className="analysis-history-item" key={item.id}>

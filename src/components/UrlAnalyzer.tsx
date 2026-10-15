@@ -67,7 +67,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   const [error, setError] = useState(savedSearch?.lastError || '')
   const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(savedSearch?.failedSourceUrl || null)
 
-  useEffect(() => { writeProductDraft('search', { draft, lastSearch, discovery, messages: messages.slice(-12), selectedConstraints, pendingAuth: pendingAuth.current, failedSourceUrl, lastError: error }) }, [draft, lastSearch, discovery, messages, selectedConstraints, failedSourceUrl, error])
+  useEffect(() => { writeProductDraft('search', { draft, lastSearch, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current, failedSourceUrl, lastError: error }) }, [draft, lastSearch, discovery, messages, selectedConstraints, failedSourceUrl, error])
 
   const constraintChecks = useMemo(
     () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],

@@ -1,3 +1,5 @@
+import GuidedCaseReview from './GuidedCaseReview'
+import type { PurchaseCapacity } from '../lib/purchasePlan'
 import { compatibleNcmChapters } from '../lib/ncmFamilyGuard'
 import { optimizeQuantity } from '../lib/quantityOptimizer'
 import type { LandedCostInput } from '../lib/landedCostEngine'
@@ -36,6 +38,7 @@ export type CalculationPipelineSummary = {
 }
 
 type Props = {
+  capacity?: PurchaseCapacity
   analysis: ProductAnalysisV2
   prefill: QuotePrefill
   status: CalculationPipelineStatus
@@ -201,7 +204,7 @@ function NomencladorGuidance({ onManualSearch }: { onManualSearch?: () => void }
   </div>
 }
 
-export default function CalculationPipeline({ analysis, prefill, status, activeStage, purchaseRange, costProfile, summary, blocker, authRequired = false, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
+export default function CalculationPipeline({ capacity, analysis, prefill, status, activeStage, purchaseRange, costProfile, summary, blocker, authRequired = false, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
   const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
@@ -212,14 +215,14 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
   const [showManualNcm, setShowManualNcm] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
   const [clarification, setClarification] = useState('')
-  const [supplierQuote, setSupplierQuote] = useState(() => draft.supplierQuote || initialSupplierQuote(analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product'))
+  const [supplierQuote, setSupplierQuote] = useState(() => draft.supplierQuote || initialSupplierQuote(analysis.product.supplierEvidence?.currency && analysis.product.supplierEvidence.currency !== 'USD' ? 0 : analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product'))
   const lastAnalysis = useRef(analysis)
   useEffect(() => {
     if (lastAnalysis.current === analysis) return
     lastAnalysis.current = analysis
     const initial = productConfirmationFromAnalysis(analysis)
     setDraft(initial)
-    setSupplierQuote(initial.supplierQuote || initialSupplierQuote(analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product'))
+    setSupplierQuote(initial.supplierQuote || initialSupplierQuote(analysis.product.supplierEvidence?.currency && analysis.product.supplierEvidence.currency !== 'USD' ? 0 : analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product'))
     setClarification('')
   }, [analysis])
   useEffect(() => {
@@ -303,6 +306,18 @@ export default function CalculationPipeline({ analysis, prefill, status, activeS
     onManualNcm(customs, { ...draft, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 })
   }
 
+
+  if (capacity && status !== 'ready') return <GuidedCaseReview
+    profileContext={`${costProfile?.purpose === 'resale' ? 'Para revender' : costProfile?.purpose === 'own_use' ? 'Uso personal' : 'Uso por confirmar'} · ${costProfile?.entityType === 'company' ? 'Empresa' : 'Persona'} · ${costProfile?.hasImporterSignature === true ? 'Con firma de importador' : costProfile?.hasImporterSignature === false ? 'Sin firma de importador' : 'Firma por confirmar'}`}
+    analysis={analysis} draft={draft} quote={supplierQuote} capacity={capacity}
+    classified={classificationResolved && !identityEdited} askedForMore={classifierAskedForMore}
+    clarificationTarget={clarificationTarget} exhausted={refinementExhausted}
+    status={status} blocker={blocker} authRequired={authRequired}
+    onDraft={setDraft} onQuote={setSupplierQuote} onConfirm={submitConfirmation}
+    onManual={pickDisambiguationCandidate}
+    candidates={hasDisambiguation ? <NcmDisambiguation recoveryKey={`${analysis.sourceUrl}:${analysis.product.name}`} disambiguation={disambiguation!} customs={analysis.customs} onPickCandidate={pickDisambiguationCandidate} onAnswer={submitDisambiguationAnswer} /> : null}
+  />
+  if (capacity && status === 'ready') return null
 
   return <section className="calculation-pipeline" id="case-confirmation" aria-busy={status === 'processing'}>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>

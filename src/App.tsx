@@ -1,3 +1,6 @@
+import PurchaseQuoteResult, { type PurchaseQuoteSnapshot } from './components/PurchaseQuoteResult'
+import { buildPurchasePlan, type PurchaseCapacity } from './lib/purchasePlan'
+import { readCaseConversation, writeCaseConversation } from './lib/caseConversation'
 import { readProductDraft, writeProductDraft, clearProductDraft } from './lib/productDraft'
 import { savePendingConfirm, loadPendingConfirm, clearPendingConfirm } from './lib/sessionDraft'
 import { ApiAuthError, getSessionState, subscribeSession } from './lib/authSession'
@@ -173,6 +176,7 @@ function readInitialEntered() {
 }
 
 type PipelineDraft = {
+  approvedQuantity?: number | null
   status: 'ready'
   pipelineSummary: CalculationPipelineSummary
   pipelineStage: number
@@ -191,6 +195,9 @@ export default function App() {
   const [budgetUsd, setBudgetUsd] = useState(10000)
   const [unitsMin, setUnitsMin] = useState(50)
   const [unitsMax, setUnitsMax] = useState(200)
+  const [approvedQuantity, setApprovedQuantity] = useState<number | null>(null)
+  const [showSetup, setShowSetup] = useState(false)
+  const [frozenQuote, setFrozenQuote] = useState<PurchaseQuoteSnapshot | null>(null)
   const [analysis, setAnalysis] = useState<ProductAnalysisV2 | null>(null)
   const [calculationStatus, setCalculationStatus] = useState<CalculationPipelineStatus>('confirm')
   const [pipelineStage, setPipelineStage] = useState(0)
@@ -218,6 +225,7 @@ export default function App() {
         // replayed answers produced; otherwise fall back to the review step.
         const pipe = readProductDraft<PipelineDraft>('pipeline')
         if (hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && pipe.calculationInputKey === currentCalculationInputKeyRef.current) {
+          setApprovedQuantity(pipe.approvedQuantity ?? null)
           setPipelineSummary(pipe.pipelineSummary)
           setPipelineStage(pipe.pipelineStage ?? 3)
           setCalculationInputKey(pipe.calculationInputKey)
@@ -268,9 +276,9 @@ export default function App() {
 
   useEffect(() => {
     if (calculationStatus === 'ready' && pipelineSummary && calculationInputKey) {
-      writeProductDraft('pipeline', { status: 'ready', pipelineSummary, pipelineStage, calculationInputKey } satisfies PipelineDraft)
+      writeProductDraft('pipeline', { status: 'ready', pipelineSummary, pipelineStage, calculationInputKey, approvedQuantity } satisfies PipelineDraft)
     }
-  }, [calculationStatus, pipelineSummary, pipelineStage, calculationInputKey])
+  }, [calculationStatus, pipelineSummary, pipelineStage, calculationInputKey, approvedQuantity])
 
   const operationAnswered = purpose !== null && entityType !== null && signature !== null
   const profileStep = purpose === null ? 1 : entityType === null ? 2 : signature === null ? 3 : 4
@@ -312,6 +320,38 @@ export default function App() {
     sensitiveCategory: sensitiveCategory || 'unknown',
   }), [budgetMode, budgetUsd, unitsMin, unitsMax, purpose, entityType, signature, sensitiveCategory])
 
+  const capacity: PurchaseCapacity = { mode: budgetMode || 'unknown', budgetUsd: budgetMode === 'budget' ? budgetUsd : 0, min: unitsMin, max: unitsMax }
+  const resultPlan = analysis && analysisPrefill && hasConfirmedClassification(analysis.customs) && analysis.product.supplierQuote ? buildPurchasePlan({
+    costs: { originCountry: analysisPrefill.originCountry, unitWeightKg: analysisPrefill.unitWeightKg, unitVolumeCbm: analysisPrefill.unitVolumeCbm, dutyRatePct: analysis.customs.dutyRatePct!, statisticsRatePct: analysisPrefill.statisticsRatePct ?? undefined, vatRatePct: analysisPrefill.vatRatePct ?? undefined, vatAdditionalRatePct: analysisPrefill.vatAdditionalRatePct ?? undefined, gainsRatePct: analysisPrefill.gainsRatePct ?? undefined, iibbRatePct: analysisPrefill.iibbRatePct ?? undefined, purpose: purpose || 'unknown', entityType: entityType || 'unknown', hasImporterSignature: signature === 'yes' ? true : signature === 'no' ? false : null, sensitiveCategory: sensitiveCategory || 'unknown', capitalGoodEligible: analysis.customs.capitalGoodEligible || false, capitalGoodUse: false },
+    quote: analysis.product.supplierQuote, moq: analysis.product.moq || 0, capacity, quantity: capacity.mode === 'units' && approvedQuantity !== analysis.product.purchaseQuantity && ((analysis.product.purchaseQuantity || 0) < capacity.min || (analysis.product.purchaseQuantity || 0) > capacity.max) ? undefined : analysis.product.purchaseQuantity, quantityApproved: approvedQuantity === analysis.product.purchaseQuantity,
+  }) : null
+
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ input: Record<string,unknown>; result: PurchaseQuoteSnapshot }>).detail
+      const saved = detail?.result; const input = detail?.input
+      if (!input || saved?.version !== 1 || !saved.analysis?.product || !saved.analysis?.customs || !saved.pipelineSummary || !saved.purchasePlan || !Array.isArray(saved.conversation)) return
+      if (!['have_product','search_product','discover'].includes(String(input.intent)) || !['budget','units','unknown'].includes(String(input.budgetMode))) return
+      const active = readOperation('confirmation'); if (active) settleOperation('confirmation', { ...active, status: 'failed' })
+      const nextPurpose = input.purpose as ImportPurpose
+      const nextEntity = input.entityType as ImportEntityType
+      const nextSignature = input.signature as SignatureAnswer
+      const nextCategory = input.sensitiveCategory as SensitiveProductCategory
+      const nextMode = input.budgetMode as BudgetMode
+      const nextBudget = Number(input.budgetUsd) || 0, nextMin = Number(input.unitsMin) || 1, nextMax = Number(input.unitsMax) || 1
+      setIntent(input.intent as EntryIntent); setPurpose(nextPurpose); setEntityType(nextEntity); setSignature(nextSignature); setSensitiveCategory(nextCategory)
+      setBudgetMode(nextMode); setBudgetUsd(nextBudget); setUnitsMin(nextMin); setUnitsMax(nextMax)
+      setApprovedQuantity(Number(input.approvedQuantity) || null)
+      writeCaseConversation(saved.analysis.sourceUrl, saved.conversation)
+      setAnalysis(saved.analysis); setFrozenQuote(saved); setPipelineSummary(saved.pipelineSummary as CalculationPipelineSummary); setPipelineStage(3)
+      setCalculationInputKey(JSON.stringify([nextPurpose,nextEntity,nextSignature,nextCategory,nextMode,nextBudget,nextMin,nextMax]))
+      setPipelineBlocker(null); setPipelineAuthRequired(false); setCalculationStatus('ready'); setStep(4); setEntered(true); setShowSetup(false)
+      pendingResultReveal.current = true
+    }
+    window.addEventListener('shippingapp:open-quote', open)
+    return () => window.removeEventListener('shippingapp:open-quote', open)
+  }, [])
+
   const progressStep = effectiveCalculationStatus === 'ready' ? 4 : step
 
   // Reveal a freshly shown card, but never during a persistence replay.
@@ -335,6 +375,9 @@ export default function App() {
   }
 
   const resetPipeline = () => {
+    setFrozenQuote(null)
+    setApprovedQuantity(null)
+    setShowSetup(false)
     setPipelineAuthRequired(false)
     setCalculationStatus('confirm')
     setPipelineStage(0)
@@ -393,6 +436,9 @@ export default function App() {
   }
 
   const reviewProductData = () => {
+    writeProductDraft('quote-result', null)
+    writeProductDraft('pending-quote-save', null)
+    setFrozenQuote(null)
     setCalculationStatus('confirm')
     setPipelineStage(0)
     setPipelineSummary(null)
@@ -401,7 +447,7 @@ export default function App() {
     revealSection(document.getElementById('case-confirmation'))
   }
 
-  const confirmAndCalculate = async (confirmedProduct: ProductConfirmationData) => {
+  const confirmAndCalculate = async (confirmedProduct: ProductConfirmationData, approved = false) => {
     if (!analysis || confirmationBusy.current) return
     setPipelineAuthRequired(false)
 
@@ -483,17 +529,8 @@ export default function App() {
         setCalculationStatus('blocked')
         return
       }
-      const baseQuantity = confirmedProduct.quantity ?? quoteSetup.quantity ?? prefill.quantity
-      if (!baseQuantity || baseQuantity <= 0) {
-        setPipelineBlocker('Necesito una cantidad base positiva para distribuir flete y gastos por unidad.')
-        setCalculationStatus('blocked')
-        return
-      }
-
-      const comparison = compareLandedCost({
+      const costs = {
         originCountry: prefill.originCountry,
-        quantity: baseQuantity,
-        unitPriceUsd: prefill.unitPriceUsd,
         unitWeightKg: prefill.unitWeightKg,
         unitVolumeCbm: prefill.unitVolumeCbm,
         dutyRatePct: duty,
@@ -508,7 +545,17 @@ export default function App() {
         sensitiveCategory: sensitiveCategory || 'unknown',
         capitalGoodEligible: effectiveTariff?.capitalGoodEligible ?? refreshed.customs.capitalGoodEligible ?? false,
         capitalGoodUse: false,
-      })
+      }
+      const plan = buildPurchasePlan({ costs, quote: priceEvidence, moq: confirmedProduct.moq, capacity, quantity: capacity.mode === 'budget' && !approved && approvedQuantity !== confirmedProduct.quantity ? undefined : capacity.mode === 'units' && !approved && approvedQuantity !== confirmedProduct.quantity && ((confirmedProduct.quantity || 0) < capacity.min || (confirmedProduct.quantity || 0) > capacity.max) ? undefined : confirmedProduct.quantity, quantityApproved: approved || approvedQuantity === confirmedProduct.quantity })
+      if (!plan.selected) {
+        setPipelineBlocker(plan.error || 'No hay una compra viable con estos datos.')
+        setCalculationStatus('blocked')
+        return
+      }
+      const baseQuantity = plan.selected.quantity
+      const comparison = compareLandedCost({ ...costs, quantity: baseQuantity, unitPriceUsd: plan.selected.priceUsd })
+      const quotedAnalysis = { ...refreshed, product: { ...refreshed.product, purchaseQuantity: baseQuantity, unitPriceUsd: plan.selected.priceUsd } }
+      setAnalysis(quotedAnalysis)
 
       if (comparison.status !== 'ok' || !comparison.bestMode) {
         setPipelineBlocker(comparison.status === 'missing_origin'
@@ -538,27 +585,7 @@ export default function App() {
       }
 
       setPipelineSummary(completedSummary)
-      window.dispatchEvent(new CustomEvent('shippingapp:analysis-completed', {
-        detail: {
-          input: {
-            intent,
-            purpose: purpose || 'unknown',
-            entityType: entityType || 'unknown',
-            signature: signature || 'unknown',
-            sensitiveCategory: sensitiveCategory || 'unknown',
-            budgetMode: budgetMode || 'unknown',
-            budgetUsd,
-            unitsMin,
-            unitsMax,
-            productName: refreshed.product.name,
-            sourceUrl: refreshed.sourceUrl,
-          },
-          result: {
-            analysis: refreshed,
-            pipelineSummary: completedSummary,
-          },
-        },
-      }))
+
       await nextPaint(120)
       clearPendingConfirm()
       pendingResultReveal.current = true
@@ -639,7 +666,7 @@ export default function App() {
       </div>
     </section>
 
-    <section className="journey-workspace">
+    <section className="journey-workspace" hidden={!!analysis && !showSetup}>
       <div className="journey-conversation">
         <div className="gs-chat-panel-header">
           <span className="gs-chat-panel-title">GLOBALSHIPPING</span>
@@ -685,12 +712,12 @@ export default function App() {
               <div className="journey-question-head"><span>02</span><div><b>Presupuesto o rango</b><small>Esto limita las cantidades que vale la pena simular.</small></div>{step > 2 && <button type="button" onClick={() => setStep(2)}>Editar</button>}</div>
               {step === 2 ? <div className="journey-question-fields">
                 <div className="journey-choice-grid budget">
-                  <button className={budgetMode === 'budget' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('budget')}><b>Tengo presupuesto</b><small>Quiero maximizar lo que puedo traer sin pasarme.</small></button>
-                  <button className={budgetMode === 'units' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('units')}><b>Tengo rango de unidades</b><small>Sé más o menos cuántas quiero probar.</small></button>
-                  <button className={budgetMode === 'unknown' ? 'selected' : ''} type="button" onClick={() => setBudgetMode('unknown')}><b>Todavía no sé</b><small>Quiero entender primero el orden de magnitud.</small></button>
+                  <button className={budgetMode === 'budget' ? 'selected' : ''} type="button" onClick={() => { setApprovedQuantity(null); setBudgetMode('budget') }}><b>Tengo presupuesto</b><small>Quiero maximizar lo que puedo traer sin pasarme.</small></button>
+                  <button className={budgetMode === 'units' ? 'selected' : ''} type="button" onClick={() => { setApprovedQuantity(null); setBudgetMode('units') }}><b>Tengo rango de unidades</b><small>Sé más o menos cuántas quiero probar.</small></button>
+                  <button className={budgetMode === 'unknown' ? 'selected' : ''} type="button" onClick={() => { setApprovedQuantity(null); setBudgetMode('unknown') }}><b>Todavía no sé</b><small>Quiero entender primero el orden de magnitud.</small></button>
                 </div>
-                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" step="500" value={budgetUsd || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; setBudgetUsd(Number.isFinite(v) && v >= 0 ? v : 0) }} /></div><em>Incluye compra, flete e impuestos estimados.</em></label>}
-                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" step="1" value={unitsMin || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; setUnitsMin(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label><label><span>Máximo de unidades</span><input type="number" step="1" value={unitsMax || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { const v = event.target.valueAsNumber; setUnitsMax(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label></div>}
+                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" step="500" value={budgetUsd || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setBudgetUsd(Number.isFinite(v) && v >= 0 ? v : 0) }} /></div><em>Incluye compra, flete e impuestos estimados.</em></label>}
+                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" step="1" value={unitsMin || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setUnitsMin(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label><label><span>Máximo de unidades</span><input type="number" step="1" value={unitsMax || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setUnitsMax(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label></div>}
                 {budgetError && <div className="pipeline-warning" id="journey-budget-error" role="alert"><b>Revisá presupuesto o rango.</b><span>{budgetError}</span></div>}
                 <button className="journey-primary-action" type="button" disabled={!budgetAnswered} onClick={continueBudget}>Seguir con el producto <span><UiIcon name="arrow-right" size={18} /></span></button>
               </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : analysis?.product.purchaseQuantity ? `${analysis.product.purchaseQuantity} unidades seleccionadas` : 'Todavía sin cantidad definida'}</span>{analysis?.product.purchaseQuantity && budgetMode !== 'unknown' ? <span>{analysis.product.purchaseQuantity} unidades seleccionadas</span> : null}</div>}
@@ -776,9 +803,11 @@ export default function App() {
       </aside>
     </section>
 
+    {analysis && <div className="simple-quote"><button type="button" className="pipeline-secondary" onClick={() => { setShowSetup(value => !value); reviewProductData() }}>{showSetup ? 'Volver a la conversación' : 'Editar objetivo o perfil'}</button></div>}
     {analysis && analysisPrefill && <section className="journey-pipeline-section">
       <CalculationPipeline
         analysis={analysis}
+        capacity={capacity}
         prefill={analysisPrefill}
         status={effectiveCalculationStatus}
         activeStage={pipelineStage}
@@ -797,11 +826,10 @@ export default function App() {
       />
     </section>}
 
-    {analysisPrefill && effectiveCalculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
-      <ImportQuoteFlow purchaseRange={budgetMode === 'units' ? { min: unitsMin, max: unitsMax } : undefined} supplierQuote={analysis?.product.supplierQuote} onReviewProduct={reviewProductData} onQuantityChange={quantity => {
-        setAnalysis({ ...analysis!, product: { ...analysis!.product, purchaseQuantity: quantity }, suggestedQuantities: [quantity] })
-        reviewProductData()
-      }} key={`${analysisPrefill.productName}-${analysisPrefill.ncmCode}-${budgetMode}-${budgetUsd}-${unitsMin}-${unitsMax}-${purpose}-${entityType}-${signature}-${sensitiveCategory}`} prefill={analysisPrefill} setup={{ ...quoteSetup, quantity: pipelineSummary?.baseQuantity ?? quoteSetup.quantity }} />
+    {analysis && analysisPrefill && resultPlan && pipelineSummary && effectiveCalculationStatus === 'ready' && <section className="journey-calculator-section" id="calculator">
+      <PurchaseQuoteResult key={`${analysis.sourceUrl}:${pipelineSummary.baseQuantity}:${pipelineSummary.totalCostUsd}:${frozenQuote?.quotedAt || 'live'}`} analysis={analysis} plan={frozenQuote?.purchasePlan || resultPlan} capacity={capacity} summary={pipelineSummary} saved={frozenQuote} input={{ intent, purpose, entityType, signature, sensitiveCategory, budgetMode, budgetUsd, unitsMin, unitsMax, approvedQuantity, productName: analysis.product.name, sourceUrl: analysis.sourceUrl }} onEdit={reviewProductData} onChoose={quantity => {
+        setApprovedQuantity(quantity); reviewProductData(); void confirmAndCalculate({ ...productConfirmationFromAnalysis(analysis), quantity }, true)
+      }} />
     </section>}
 
     {!intent && <footer className="journey-footer">

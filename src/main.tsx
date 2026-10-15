@@ -26,6 +26,7 @@ import './styles/dark-mode.css'
 import './styles/live-flow.css'
 import './styles/app-header.css'
 import './styles/ace-landing.css'
+import './styles/guided-case.css'
 
 const root = document.getElementById('root')
 if (!root) {

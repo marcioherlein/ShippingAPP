@@ -15,7 +15,7 @@ beforeEach(()=>{Object.assign(globalThis,{React,IS_REACT_ACT_ENVIRONMENT:true});
 afterEach(async()=>{await act(async()=>root.unmount());container.remove();sessionStorage.clear()})
 async function click(text:string){await act(async()=>[...container.querySelectorAll('button')].find(b=>b.textContent===text)!.click())}
 it('asks missing function, preserves the budget, and waits for explicit structured confirmation',async()=>{
- await act(async()=>root.render(<Harness/>));expect(container.querySelector('.case-question h2')?.textContent).toContain('¿Para qué se usa principalmente?')
+ await act(async()=>root.render(<Harness/>));await click('Asistencia paso a paso');expect(container.querySelector('.case-question h2')?.textContent).toContain('¿Para qué se usa principalmente?')
  expect(confirm).not.toHaveBeenCalled()
  const input=container.querySelector<HTMLInputElement>('.case-question input')!
  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'Iluminar fotografías con celular');input.dispatchEvent(new Event('input',{bubbles:true}))})
@@ -28,9 +28,17 @@ it('asks missing function, preserves the budget, and waits for explicit structur
 })
 
 it('requires an explicit pack count instead of using the default one-unit pack',async()=>{
- await act(async()=>root.render(<Harness pack/>));expect(container.querySelector('.case-question h2')?.textContent).toContain('Cuántas unidades incluye ese lote')
+ await act(async()=>root.render(<Harness pack/>));await click('Asistencia paso a paso');expect(container.querySelector('.case-question h2')?.textContent).toContain('Cuántas unidades incluye ese lote')
  const input=container.querySelector<HTMLInputElement>('.case-question input')!
  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'5');input.dispatchEvent(new Event('input',{bubbles:true}))})
  await click('Continuar');expect(container.querySelector('.case-question h2')?.textContent).toContain('Desde cuántas unidades')
  expect(readCaseConversation(analysis.sourceUrl).some(message=>message.role==='user'&&message.text==='5')).toBe(true)
+})
+
+it('opens an editable dashboard by default and never confirms automatically',async()=>{
+ await act(async()=>root.render(<Harness/>));expect(container.querySelector('.case-question')).toBeNull();expect(container.querySelector('.case-advanced')).not.toBeNull();expect(container.textContent).toContain('5,000');expect(confirm).not.toHaveBeenCalled();
+ const submit=[...container.querySelectorAll('button')].find(b=>b.textContent==='Confirmar y clasificar')!;expect(submit.disabled).toBe(true);
+ const field=[...container.querySelectorAll('label')].find(l=>l.textContent?.includes('¿Para qué se usa principalmente?'))!.querySelector('input')!;
+ await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,'Iluminar fotografías ');field.dispatchEvent(new Event('input',{bubbles:true}))});
+ expect(field.value).toBe('Iluminar fotografías ');await click('Confirmar y clasificar');expect(confirm).toHaveBeenCalledTimes(1);expect(readCaseConversation(analysis.sourceUrl).some(m=>m.text.includes('Iluminar fotografías'))).toBe(true);
 })

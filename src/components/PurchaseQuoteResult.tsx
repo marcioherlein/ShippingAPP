@@ -11,20 +11,31 @@ export type PurchaseQuoteSnapshot = { version: 1; quotedAt: string; analysis: Pr
 const modes = { lcl: 'Marítimo LCL', air: 'Aéreo', courier: 'Courier comercial' }
 export function PurchaseQuoteSummary({ snapshot, onChoose }: { snapshot: PurchaseQuoteSnapshot; onChoose?: (quantity: number) => void }) {
   const { purchasePlan: plan, analysis } = snapshot
+  const cost = plan.selected?.cost
+  const composition: Array<[string, number]> = cost ? [
+    ['Mercadería', cost.fobUsd],
+    ['Flete y destino', cost.freightCostUsd + cost.fixedDestinationUsd],
+    ['Impuestos y tasas', cost.dutyUsd + cost.statisticsUsd + cost.vatUsd + cost.vatAdditionalUsd + cost.gainsUsd + cost.iibbUsd],
+    ['Firma e intervenciones', cost.noImporterSignatureUsd + cost.sensitiveCategoryUsd],
+  ] : []
   return <>
-    <CaseConversation sourceUrl={analysis.sourceUrl} messages={snapshot.conversation} />
+
     <section className="simple-quote" aria-label="Tu presupuesto de importación">
-      <h2>{analysis.product.name}</h2><p>Cotización del {new Date(snapshot.quotedAt).toLocaleString('es-AR')}. Las tarifas corresponden a esta versión guardada del cálculo.</p>
+      <span className="eyebrow">Panel de decisión · Importación a Argentina</span><h2>{analysis.product.name}</h2><p>Cotización del {new Date(snapshot.quotedAt).toLocaleString('es-AR')}. Las tarifas corresponden a esta versión guardada del cálculo.</p>
+      {plan.selected && <div className="workspace-result-overview" aria-label="Resumen de la compra"><div><span>Inversión total estimada · USD</span><strong>{usd(plan.selected.cost.totalCostUsd)}</strong></div><div><span>Cantidad elegida</span><strong>{plan.selected.quantity} u.</strong></div><div><span>Modalidad comparada</span><strong>{modes[plan.selected.mode]}</strong></div></div>}
+      <p className="workspace-result-note">Estimación para decidir, sujeta a validación comercial y aduanera. Revisá los pendientes antes de comprar.</p>
       {plan.note && <p>{plan.note}</p>}{plan.error && <p role="alert">{plan.error}</p>}
       <div className="simple-quote-grid">
-        <article className="simple-quote-card"><h3>Si traés una unidad</h3>{plan.single ? <><strong>{usd(plan.single.cost.unitCostUsd)}</strong><span>por unidad · {modes[plan.single.mode]}</span></> : <p>{plan.singleReason}</p>}</article>
-        {plan.selected && plan.selected.quantity !== 1 && <article className="simple-quote-card"><h3>Si traés {plan.selected.quantity} unidades</h3><strong>{usd(plan.selected.cost.unitCostUsd)}</strong><span>por unidad · {modes[plan.selected.mode]}</span><p>Total de esta compra: {usd(plan.selected.cost.totalCostUsd)}</p></article>}
+        <article className="simple-quote-card"><h3>Si traés una unidad</h3>{plan.single ? <><strong>{usd(plan.single.cost.unitCostUsd)}</strong><span>USD por unidad · {modes[plan.single.mode]}</span></> : <p>{plan.singleReason}</p>}</article>
+        {plan.selected && plan.selected.quantity !== 1 && <article className="simple-quote-card"><h3>Si traés {plan.selected.quantity} unidades</h3><strong>{usd(plan.selected.cost.unitCostUsd)}</strong><span>USD por unidad · {modes[plan.selected.mode]}</span><p>Total de esta compra: {usd(plan.selected.cost.totalCostUsd)}</p></article>}
       </div>
+      {cost && <section className="workspace-cost-composition" aria-label="Distribución de la inversión"><h3>Cómo se compone tu inversión (USD)</h3><dl>{composition.map(([label,amount]) => <div key={label}><dt>{label}</dt><dd>{usd(amount)}</dd><span className="workspace-cost-track" aria-hidden="true"><span style={{width:`${cost.totalCostUsd > 0 ? Math.min(100,Math.max(0,amount / cost.totalCostUsd * 100)) : 0}%`}} /></span></div>)}</dl></section>}
       {plan.improvement && plan.selected && plan.improvement.quantity !== plan.selected.quantity && <aside className="case-alert" aria-label="Otra opción de compra">
         <p><b>{plan.improvement.quantity} unidades a {usd(plan.improvement.cost.unitCostUsd)} por unidad.</b> {plan.improvement.mode === plan.selected.mode && Math.abs(plan.improvement.cost.freightCostUsd - plan.selected.cost.freightCostUsd) < 0.005 ? 'Con el mismo costo de flete estimado.' : 'Una alternativa con menor costo unitario.'} Total: {usd(plan.improvement.cost.totalCostUsd)}. Diferencia de desembolso: {usd(plan.improvement.cost.totalCostUsd - plan.selected.cost.totalCostUsd)}.</p>
         {onChoose && <button type="button" className="pipeline-secondary" onClick={() => onChoose(plan.improvement!.quantity)}>Elegir esta cantidad y recalcular</button>}
       </aside>}
       {!analysis.product.moq && <p>Mínimo del proveedor sin confirmar. Las cantidades requieren validación comercial.</p>}
+      <details className="workspace-audit"><summary>Ver historial de datos y cambios</summary><CaseConversation sourceUrl={analysis.sourceUrl} messages={snapshot.conversation} /></details>
       <details><summary>Ver desglose, fuentes y supuestos</summary>
         <p>NCM: {analysis.customs.ncmCandidate} · {analysis.customs.source}</p>
         {analysis.sourceUrl.startsWith('https://') && <a href={analysis.sourceUrl} target="_blank" rel="noreferrer">Publicación del proveedor</a>}
@@ -75,8 +86,8 @@ export default function PurchaseQuoteResult({ analysis, plan, capacity, input, s
   }, [])
   return <><PurchaseQuoteSummary snapshot={snapshot} onChoose={onChoose} /><div className="simple-quote">
     <button type="button" className="journey-primary-action" disabled={state === 'saving' || state === 'saved'} onClick={() => void save()}>{state === 'saving' ? 'Guardando…' : state === 'saved' ? 'Presupuesto guardado' : 'Guardar presupuesto'}</button>
-    <button type="button" className="pipeline-secondary" onClick={onEdit}>{saved ? 'Recalcular con datos y tarifas actuales' : 'Editar respuestas'}</button>
+    <button type="button" className="pipeline-secondary" onClick={onEdit}>{saved ? 'Recalcular con datos y tarifas actuales' : 'Editar ficha'}</button>
     {error && <p role="alert">{error} Conservamos el presupuesto para reintentar.</p>}
-    {state === 'saved' && <p role="status">Disponible en Mi cuenta → Historial, con los datos y la conversación de esta cotización.</p>}
+    {state === 'saved' && <p role="status">Disponible en Mi cuenta → Historial, con los datos y el historial de esta cotización.</p>}
   </div></>
 }

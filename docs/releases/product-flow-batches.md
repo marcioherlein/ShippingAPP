@@ -297,3 +297,14 @@ con el build. Los casos de navegador del recorrido principal se adaptaron a esta
 experiencia; no se presenta su preparación como una prueba ejecutada. La aceptación
 manual y visual en iPhone del nuevo recorrido sigue abierta. Las herramientas
 gratuitas de marketing siguen fuera de este lote.
+
+## October 16 — dashboard supersedes the required-chat interaction
+
+The current product request reopens the interface decision in batch 6A. Product
+review now defaults to an editable sheet; step-by-step assistance remains optional.
+Results lead with decision metrics and retain conversation/data history in a
+collapsed section. Supplier evidence, fail-closed NCM, quantity policies, auth
+recovery and immutable saved snapshots remain required. See
+[the workspace release audit](import-decision-workspace.md) for the complete batch
+assessment, reference review and production gates. Prior permission to
+omit browser acceptance does not apply to the current request to test all changes.

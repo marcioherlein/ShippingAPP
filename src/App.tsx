@@ -644,7 +644,7 @@ export default function App() {
 
   if (!entered) return <Landing onStart={enterApp} />
 
-  return <main className="journey-app" id="home">
+  return <main className="journey-app workspace-app" id="home">
     <a className="skip-to-quote" href="#cotizador">Ir al cotizador</a>
     <dialog ref={resetDialog} className="journey-reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
       <h2 id="reset-title">¿Empezar un caso nuevo?</h2>
@@ -657,7 +657,8 @@ export default function App() {
     <AppHeader onNewCase={requestReset} hasProduct={!!analysis} />
 
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
-      <h1 className="journey-task-title">{progressStep === 4 ? 'Cotización lista' : 'Tu cotización'}</h1>
+      <h1 className="journey-task-title">{progressStep === 4 ? 'Tu panel de resultados' : 'Planificá tu importación'}</h1>
+      <p className="workspace-intro">Evaluá cuánto invertir, cuánto cuesta cada unidad y qué falta validar antes de comprar.</p>
       <div className="journey-progress-bar" role="progressbar" aria-valuenow={progressStep} aria-valuemin={0} aria-valuemax={4} aria-label={progressStep === 4 ? 'Cotización lista' : `Paso ${progressStep + 1} de 4: ${stepLabels[progressStep]}`}>
         <div className="journey-progress-track">
           <div className="journey-progress-fill" style={{ width: `${(progressStep / 4) * 100}%` }} />
@@ -669,16 +670,16 @@ export default function App() {
     <section className="journey-workspace" hidden={!!analysis && !showSetup}>
       <div className="journey-conversation">
         <div className="gs-chat-panel-header">
-          <span className="gs-chat-panel-title">GLOBALSHIPPING</span>
+          <span className="gs-chat-panel-title">NUEVA IMPORTACIÓN</span>
           <span className="gs-chat-panel-status">
             <span className="gs-chat-panel-dot" aria-hidden="true" />
-            {effectiveCalculationStatus === 'processing' ? 'CALCULANDO' : effectiveCalculationStatus === 'ready' ? 'LISTO' : 'EN LÍNEA'}
+            {effectiveCalculationStatus === 'processing' ? 'CALCULANDO' : effectiveCalculationStatus === 'ready' ? 'LISTO' : 'BORRADOR'}
           </span>
         </div>
         <div className="gs-chat-body">
         <div className="journey-bubble assistant">
           <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
-          <div><b>Primero: ¿desde dónde arrancamos?</b><p>Del link del proveedor al costo unitario puesto en Argentina. GlobalShipping clasifica el NCM, carga aranceles e impuestos, compara LCL vs. a&#xE9;reo y te da la mejor alternativa para tu importaci&#xF3;n.</p></div>
+          <div><b>1. Elegí tu punto de partida</b><p>Definí tu producto y tu operación. Revisá la clasificación, compará costos estimados y elegí un plan de compra con sus fuentes y datos pendientes.</p></div>
         </div>
 
         {intent === null ? <div className="journey-choice-grid three">
@@ -690,7 +691,7 @@ export default function App() {
         {intent && <>
           <div className="journey-bubble assistant">
             <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
-            <div><b>Contame cómo vas a importar.</b><p>Estas respuestas afectan impuestos, gastos y trámites. Si no sabés algo, podés marcar “No sé”.</p></div>
+            <div><b>2. Definí tu operación</b><p>Estas respuestas afectan impuestos, gastos y trámites. Si no sabés algo, podés marcar “No sé”.</p></div>
           </div>
 
           <section className={`journey-question-card${step === 1 ? ' active' : ''}`}>
@@ -706,7 +707,7 @@ export default function App() {
           {step >= 2 && <>
             <div className="journey-bubble assistant">
               <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
-              <div><b>¿Cuánto querés invertir?</b><p>Presupuesto total, rango de unidades, o dejalo en abierto por ahora.</p></div>
+              <div><b>3. Definí tu capacidad de compra</b><p>Presupuesto total, rango de unidades, o dejalo en abierto por ahora.</p></div>
             </div>
             <section className={`journey-question-card${step === 2 ? ' active' : ''}`}>
               <div className="journey-question-head"><span>02</span><div><b>Presupuesto o rango</b><small>Esto limita las cantidades que vale la pena simular.</small></div>{step > 2 && <button type="button" onClick={() => setStep(2)}>Editar</button>}</div>
@@ -782,7 +783,7 @@ export default function App() {
 
       <aside className="journey-case-summary">
         <div className="journey-summary-sticky">
-          <span className="eyebrow">Caso en construcción</span>
+          <span className="eyebrow">Resumen de la operación</span>
           <h2>{analysisPrefill?.productName || (intent === 'have_product' ? 'Tu producto' : 'Nueva importación')}</h2>
           {(() => {
             const label = analysisPrefill?.productName ? translateProductLabel(analysisPrefill.productName) : null
@@ -798,12 +799,12 @@ export default function App() {
             <div><span>Capacidad</span><b>{budgetMode === 'budget' ? `USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} u.` : budgetMode === 'unknown' ? 'Todavía no definida' : 'Sin responder'}</b></div>
             <div><span>Producto</span><b>{productStatusLabel}</b></div>
           </div>
-          <div className="journey-summary-note"><span>La lógica</span><p>Producto real → confirmar identidad → NCM → pedir sólo datos faltantes de compra/flete → costo puesto → optimización.</p></div>
+          <div className="journey-summary-note"><span>Qué vas a obtener</span><p>Costo puesto por unidad, inversión total y alternativas de compra. Las fuentes, estimaciones y datos pendientes quedan identificados.</p></div>
         </div>
       </aside>
     </section>
 
-    {analysis && <div className="simple-quote"><button type="button" className="pipeline-secondary" onClick={() => { setShowSetup(value => !value); reviewProductData() }}>{showSetup ? 'Volver a la conversación' : 'Editar objetivo o perfil'}</button></div>}
+    {analysis && <div className="simple-quote"><button type="button" className="pipeline-secondary" onClick={() => { setShowSetup(value => !value); reviewProductData() }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
     {analysis && analysisPrefill && <section className="journey-pipeline-section">
       <CalculationPipeline
         analysis={analysis}

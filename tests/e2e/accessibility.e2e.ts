@@ -43,7 +43,7 @@ async function chooseByKeyboard(page: Page, target: Locator) {
 
 test('initial journey has no serious or critical axe violations', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: /Tu cotización/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Planificá tu importación/i })).toBeVisible()
   await expectNoSeriousAxeViolations(page)
 })
 

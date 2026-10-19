@@ -70,7 +70,7 @@ jobs:
           fi
           node scripts/validate-clerk-deployment.mjs
 
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
 
       - name: Unit and integration tests
         run: npx --yes vitest@3.2.4 run
@@ -90,8 +90,8 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Validate Cloudflare configuration
-        run: npx --yes wrangler@latest check
+      - name: Validate Cloudflare deployment bundle
+        run: npx --yes wrangler@latest deploy --dry-run --outdir .wrangler-dry-run
 
       - name: Resolve existing production D1 binding
         shell: bash

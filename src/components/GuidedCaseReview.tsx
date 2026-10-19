@@ -20,6 +20,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const [skipped, setSkipped] = useState<string[]>(() => readProductDraft<string[]>(`guide-skipped:${source}`) || [])
   const [manual, setManual] = useState(false)
   const [advanced, setAdvanced] = useState(false)
+  const [view, setView] = useState<'dashboard' | 'guided'>('dashboard')
   const [edit, setEdit] = useState<string | null>(null)
   const [value, setValue] = useState('')
   const [answeredAttempt, setAnsweredAttempt] = useState(-1)
@@ -49,7 +50,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const textValid = (s: string) => s.trim().length >= 3
   const positive = (s: string) => Number.isFinite(Number(s)) && Number(s) > 0
   const integer = (s: string) => positive(s) && Number.isInteger(Number(s))
-  const productQuestion = (id: keyof ProductConfirmationData, prompt: string, type: 'text' | 'number' = 'text'): Question => ({ id, prompt, value: String(draft[id] || ''), type, valid: type === 'number' ? positive : textValid, apply: v => onDraft({ ...draft, [id]: type === 'number' ? Number(v) : v.trim() }) })
+  const productQuestion = (id: keyof ProductConfirmationData, prompt: string, type: 'text' | 'number' = 'text'): Question => ({ id, prompt, value: String(draft[id] || ''), type, valid: type === 'number' ? positive : textValid, apply: v => onDraft({ ...draft, [id]: type === 'number' ? Number(v) : v }) })
   const offerQuestion = (id: keyof SupplierQuote, prompt: string, options?: Array<[string,string]>, numeric = false): Question => ({ id: `quote.${id}`, prompt, value: String(quote[id] || ''), type: numeric ? 'number' : 'text', options, valid: options ? v => options.some(([key]) => key === v) : numeric ? (id === 'minQuantity' || id === 'unitsPerPack' ? integer : positive) : textValid, apply: v => onQuote({ ...quote, [id]: numeric ? Number(v) : v.trim() }) })
   const all: Question[] = [
     productQuestion('productName', '¿Qué producto es?'), productQuestion('functionText', '¿Para qué se usa principalmente?'), productQuestion('category', '¿Qué tipo de producto es?'), productQuestion('description', '¿Qué detalle técnico distingue el producto?'), productQuestion('material', '¿Cuál es su material o composición principal?'),
@@ -95,12 +96,16 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   }
   const processing = status === 'processing'
   return <section className="guided-case" id="case-confirmation" aria-busy={processing}>
-    <CaseConversation sourceUrl={source} />
+    <div className="workspace-section-heading"><span className="eyebrow">Tu ficha de importación</span><h2>Revisá los datos. Decidí con evidencia.</h2><p>Completá lo que conozcas y corregí cualquier dato antes de confirmar. La clasificación y el costo se validan por separado.</p></div>
+    <p className="workspace-capacity">Tu compra: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : 'explorar desde una unidad'}.</p>
+    <div className="workspace-view-switch" role="group" aria-label="Forma de completar la ficha"><button type="button" aria-pressed={view === 'dashboard'} onClick={() => setView('dashboard')}>Ficha completa</button><button type="button" aria-pressed={view === 'guided'} onClick={() => setView('guided')}>Asistencia paso a paso</button></div>
+    <details className="workspace-audit"><summary>Ver historial de datos y cambios</summary><CaseConversation sourceUrl={source} /></details>
+    <div className={`workspace-classification-status ${classified ? 'is-confirmed' : ''}`}><b>{classified ? `NCM validada: ${analysis.customs.ncmCandidate}` : 'Clasificación pendiente de validar'}</b><span>{classified ? analysis.customs.source : 'Revisá la identidad del producto o seleccioná una posición del nomenclador. Sin una clasificación válida no mostramos un costo de importación.'}</span></div>
     {blocker && <p role="alert" className="case-alert">{blocker}</p>}
     {authRequired && <AccountControls />}
     {processing ? <p role="status">{classified ? 'Calculando tus opciones de compra…' : 'Validando la clasificación del producto…'}</p> : <>
       {exhausted && !classified && <p role="alert">No hay una clasificación validada. Podés revisar tu ficha o buscar en el nomenclador, sin cambiar de producto.</p>}
-      {question ? <div className="case-question">
+      {view === 'guided' && (question ? <div className="case-question">
         <h2>{question.prompt}</h2>
         {question.options ? <div className="case-choices" role="group" aria-label={question.prompt}>{question.options.map(([key,label]) => <button type="button" key={key} aria-pressed={value === key} onClick={() => setValue(key)}>{label}</button>)}</div> : <label><span>{question.prompt}</span><input key={question.id} type={question.type || 'text'} inputMode={question.type === 'number' ? 'decimal' : 'text'} step="any" value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') answer() }} /></label>}
         <button type="button" className="journey-primary-action" disabled={!question.valid(value)} onClick={answer}>Continuar</button>
@@ -110,15 +115,21 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
         <dl>{all.filter(q => q.id === 'quote.unitsPerPack' ? quote.basis === 'pack' : ['quote.usdPerCurrency','quote.fxSource','quote.fxDate'].includes(q.id) ? !!quote.currency && quote.currency !== 'USD' : true).map(q => <div key={q.id}><dt>{q.prompt}</dt><dd>{q.options?.find(([key]) => key === q.value)?.[1] || q.value || (q.id === 'quote.maxQuantity' && hasConfirmedAnswer(q) ? 'Sin límite confirmado' : 'Sin dato')} <button type="button" onClick={() => setEdit(q.id)}>Editar</button></dd></div>)}</dl>
         {!classified && <p>Los datos comerciales que todavía no conocés quedan pendientes; no inventamos el costo.</p>}
         <button type="button" className="journey-primary-action" disabled={exhausted && !classified} onClick={() => { recordCaseAnswer(source,'¿Confirmás estos datos?\n' + all.filter(q => q.value).map(q => `${q.prompt} ${q.value}`).join('\n'),classified ? 'Confirmo y calculo mi compra.' : 'Confirmo y clasifico el producto.'); onConfirm() }}>{classified ? 'Confirmar y calcular mis opciones' : 'Confirmar y clasificar'}</button>
-      </div>}
+      </div>)}
       {!classified && candidates}
       <button type="button" className="pipeline-secondary" aria-expanded={manual} onClick={() => setManual(v => !v)}>Buscar en el nomenclador</button>
       {manual && <ManualNcmPicker customs={analysis.customs} recoveryKey={source} onSelect={customs => { onManual(customs); setManual(false) }} />}
-      <button type="button" className="pipeline-secondary" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>Editar ficha y tramos de precio</button>
-      {advanced && <div className="case-advanced"><SupplierQuoteReview quote={quote} quantity={draft.quantity} sourceUrl={source} evidence={analysis.product.supplierEvidence} onChange={onQuote} />
+      <button hidden={view === 'dashboard'} type="button" className="pipeline-secondary" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>Editar ficha y tramos de precio</button>
+      {(advanced || view === 'dashboard') && <div className="case-advanced"><h3 className="workspace-form-heading">Oferta comercial y datos del producto</h3><SupplierQuoteReview quote={quote} quantity={draft.quantity} sourceUrl={source} evidence={analysis.product.supplierEvidence} onChange={onQuote} />
         {all.filter(q => !q.id.startsWith('quote.')).map(q => <label key={q.id}><span>{q.prompt}</span><input value={q.value} type={q.type || 'text'} step="any" onChange={event => q.apply(event.target.value)} /></label>)}
         <div className="pipeline-dimensions">{(['packageLengthCm','packageWidthCm','packageHeightCm'] as const).map((key,index) => <label key={key}><span>{['Largo (cm)','Ancho (cm)','Alto (cm)'][index]}</span><input type="number" min="0" step="any" value={draft[key] || ''} onChange={event => onDraft({ ...draft, unitVolumeCbm: 0, [key]: Number(event.target.value) })} /></label>)}</div>
-        <p>Medidas de una unidad embalada. Volumen: {resolvedProductVolumeCbm(draft).toFixed(6)} m³.</p><button type="button" className="pipeline-secondary" onClick={() => { recordCaseAnswer(source, '¿Desde cuántas unidades es válido ese precio?', String(quote.minQuantity)); setAdvanced(false) }}>Volver al chat</button>
+        <p>Medidas de una unidad embalada. Volumen: {resolvedProductVolumeCbm(draft).toFixed(6)} m³.</p>{view === 'guided' && <button type="button" className="pipeline-secondary" onClick={() => { recordCaseAnswer(source, '¿Desde cuántas unidades es válido ese precio?', String(quote.minQuantity)); setAdvanced(false) }}>Volver a la asistencia</button>}
+        {view === 'dashboard' && <div className="workspace-confirm"><p>{classified ? 'Clasificación validada. Confirmá la oferta y el embalaje para calcular.' : 'Primero validamos la clasificación. Los datos comerciales pueden completarse después.'}</p><button type="button" className="journey-primary-action" disabled={exhausted && !classified || !draft.productName.trim() || !draft.functionText?.trim()} onClick={() => {
+          recordCaseAnswer(source, 'Ficha confirmada por el usuario', all.filter(q => q.value).map(q => `${q.prompt} ${q.value}`).join('\n'))
+          recordCaseAnswer(source, '¿Desde cuántas unidades es válido ese precio?', String(quote.minQuantity))
+          recordCaseAnswer(source, '¿Hasta cuántas unidades vale ese precio? Dejá vacío sólo si confirmaste que no tiene límite.', quote.maxQuantity === null ? 'Confirmo que no tiene límite' : String(quote.maxQuantity))
+          onConfirm()
+        }}>{classified ? 'Confirmar y calcular mis opciones' : 'Confirmar y clasificar'}</button></div>}
       </div>}
     </>}
   </section>

@@ -49,9 +49,9 @@ function enhanceRadioGroup(group: HTMLElement) {
 }
 
 function enhanceDisabledAction(button: HTMLButtonElement) {
-  const isOperationAction = button.textContent?.includes('Seguir con presupuesto')
+  const isOperationAction = !!button.closest('[data-profile-page]')
   const reason = isOperationAction
-    ? 'Completá las tres respuestas de esta sección para continuar.'
+    ? 'Elegí una respuesta para continuar.'
     : 'Elegí una modalidad válida o corregí el presupuesto o rango para continuar.'
 
   if (button.disabled) {

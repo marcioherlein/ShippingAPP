@@ -215,14 +215,14 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
   const [showManualNcm, setShowManualNcm] = useState(false)
   const [showAllQuoteFields, setShowAllQuoteFields] = useState(false)
   const [clarification, setClarification] = useState('')
-  const [supplierQuote, setSupplierQuote] = useState(() => draft.supplierQuote || initialSupplierQuote(analysis.product.supplierEvidence?.currency && analysis.product.supplierEvidence.currency !== 'USD' ? 0 : analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product'))
+  const [supplierQuote, setSupplierQuote] = useState(() => draft.supplierQuote || initialSupplierQuote(analysis.product.supplierEvidence?.currency && analysis.product.supplierEvidence.currency !== 'USD' ? 0 : analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product' && (analysis.product.unitPriceUsd || 0) > 0))
   const lastAnalysis = useRef(analysis)
   useEffect(() => {
     if (lastAnalysis.current === analysis) return
     lastAnalysis.current = analysis
     const initial = productConfirmationFromAnalysis(analysis)
     setDraft(initial)
-    setSupplierQuote(initial.supplierQuote || initialSupplierQuote(analysis.product.supplierEvidence?.currency && analysis.product.supplierEvidence.currency !== 'USD' ? 0 : analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product'))
+    setSupplierQuote(initial.supplierQuote || initialSupplierQuote(analysis.product.supplierEvidence?.currency && analysis.product.supplierEvidence.currency !== 'USD' ? 0 : analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product' && (analysis.product.unitPriceUsd || 0) > 0))
     setClarification('')
   }, [analysis])
   useEffect(() => {

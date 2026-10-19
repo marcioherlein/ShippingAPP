@@ -66,7 +66,9 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   // journeySemantics.ts applies role="radio"/radiogroup to chip rows at runtime.
   // Only the first (or selected) radio in each group has tabIndex=0 and is Tab-reachable.
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Reventa', exact: true }))
+  await chooseByKeyboard(page, page.getByRole('button',{name:'Continuar',exact:true}))
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Empresa', exact: true }))
+  await chooseByKeyboard(page, page.getByRole('button',{name:'Continuar',exact:true}))
   // Firma group index-0 is "Sí" (tabIndex=0); choose it to keep Tab navigation simple
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Sí', exact: true }))
 
@@ -80,8 +82,8 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   await chooseByKeyboard(page, page.getByRole('button', { name: /Seguir con el producto/i }))
 
   await expect(page.getByRole('heading', { name: 'Elegí la forma más fácil.' })).toBeVisible()
-  await expect(page.getByText('Tu operación', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Editar', exact: true }).first()).toBeVisible()
+  await expect(page.locator('.journey-question-card.active')).toHaveCount(0)
+  await expect(page.locator('.journey-product-surface')).toBeVisible()
 
   await expectNoSeriousAxeViolations(page)
 })

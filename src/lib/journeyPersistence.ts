@@ -334,12 +334,15 @@ async function selectDsOption(triggerId: string, value: string) {
 
 async function restoreOperation(state: PersistedJourneyState) {
   await selectRadio('¿Para qué lo traés?', state.purpose ? purposeCopy[state.purpose] : undefined)
+  if (state.entityType && document.querySelector('[data-profile-page="1"]')) { buttonContaining('Continuar')?.click(); await waitFor(() => document.querySelector('[data-profile-page="2"]')) }
   await selectRadio('¿Quién importa?', state.entityType ? entityCopy[state.entityType] : undefined)
+  if (state.signature && document.querySelector('[data-profile-page="2"]')) { buttonContaining('Continuar')?.click(); await waitFor(() => document.querySelector('[data-profile-page="3"]')) }
   await selectRadio('¿Tenés firma/importador para operar?', state.signature ? signatureCopy[state.signature] : undefined)
 }
 
 async function restoreBudget(state: PersistedJourneyState) {
   await selectRadio('Presupuesto o rango', state.budgetMode ? budgetCopy[state.budgetMode] : undefined)
+  if (state.budgetMode && state.budgetMode !== 'unknown' && !document.querySelector('.journey-number-field input,.journey-range-fields input')) { buttonContaining('Continuar')?.click() }
   if (state.budgetMode === 'budget' && state.budgetUsd) {
     const input = await waitFor(() => document.querySelector<HTMLInputElement>('.journey-number-field input'))
     dispatchControlledChange(input, String(state.budgetUsd))

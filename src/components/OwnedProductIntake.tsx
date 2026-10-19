@@ -327,7 +327,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
 
     {mode === 'form' && <><ProductWorkspaceForm onSubmit={onStructuredData} /><button type="button" className="pipeline-secondary" onClick={() => setMode(null)}>Cambiar forma de carga</button></>}
     {mode === null && <div className="owned-product-options">
-      <button type="button" onClick={() => setMode('form')}><span className="owned-product-option-icon"><UiIcon name="product" size={19} /></span><b>Completar ficha</b><small>Todos los datos en un panel editable. Empezá por nombre y función.</small><em>Recomendado</em></button>
+      <button type="button" onClick={() => setMode('form')}><span className="owned-product-option-icon"><UiIcon name="product" size={19} /></span><b>Completar ficha</b><small>Una pregunta por pantalla. Empezá por el nombre del producto.</small><em>Recomendado</em></button>
       <button type="button" onClick={() => setMode('link')}>
         <span className="owned-product-option-icon"><UiIcon name="external-link" size={19} /></span>
         <b>Pegar link de Alibaba</b>

@@ -261,7 +261,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   return <section className={`url-analyzer${modeClass}`}>
     <div className="analyzer-copy">
       <span className="eyebrow">Búsqueda real en Alibaba</span>
-      <h1>Buscá un producto o pegá un link.</h1>
+      <h2>Buscá un producto o pegá un link.</h2>
       <p>La app muestra sólo publicaciones reales. Si un dato no está disponible, no lo rellena con “pendiente”: te lo pide después únicamente si es necesario para calcular.</p>
     </div>
 

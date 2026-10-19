@@ -16,11 +16,13 @@ test('journey choices expose grouped radio semantics and arrow-key selection', a
   await expect(ownUse).toBeFocused()
   await expect(ownUse).toHaveAttribute('aria-checked', 'true')
 
+  await page.getByRole('button',{name:'Continuar',exact:true}).click()
   const entityGroup = page.getByRole('radiogroup', { name: '¿Quién importa?' })
   await expect(entityGroup.getByRole('radio')).toHaveCount(3)
   // Click an entity option to advance profileStep and reveal the signature group
   await entityGroup.getByRole('radio', { name: 'Empresa', exact: true }).click()
 
+  await page.getByRole('button',{name:'Continuar',exact:true}).click()
   const signatureGroup = page.getByRole('radiogroup', { name: '¿Tenés firma/importador para operar?' })
   await expect(signatureGroup.getByRole('radio')).toHaveCount(3)
 
@@ -37,19 +39,19 @@ test('disabled primary actions explain what is missing', async ({ page }) => {
 
   const operationAction = page.locator('.journey-question-card.active .journey-primary-action')
   await expect(operationAction).toBeDisabled()
-  await expect(operationAction).toHaveAttribute('data-disabled-reason', /Completá las tres respuestas/)
-  await expect(operationAction).toHaveAttribute('aria-label', /Completá las tres respuestas/)
+  await expect(operationAction).toHaveAttribute('data-disabled-reason', /Elegí una respuesta/)
+  await expect(operationAction).toHaveAttribute('aria-label', /Elegí una respuesta/)
 
   const visibleReason = await operationAction.evaluate((element) => getComputedStyle(element, '::after').content)
-  expect(visibleReason).toContain('Completá las tres respuestas')
+  expect(visibleReason).toContain('Elegí una respuesta')
 })
 
 test('budget mode is an accessible radio group with a contextual disabled reason', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
 
-  await page.getByRole('radiogroup', { name: '¿Para qué lo traés?' }).getByRole('radio', { name: 'Reventa' }).click()
-  await page.getByRole('radiogroup', { name: '¿Quién importa?' }).getByRole('radio', { name: 'Empresa' }).click()
+  await page.getByRole('radiogroup', { name: '¿Para qué lo traés?' }).getByRole('radio', { name: 'Reventa' }).click(); await page.getByRole('button',{name:'Continuar',exact:true}).click()
+  await page.getByRole('radiogroup', { name: '¿Quién importa?' }).getByRole('radio', { name: 'Empresa' }).click(); await page.getByRole('button',{name:'Continuar',exact:true}).click()
   await page.getByRole('radiogroup', { name: '¿Tenés firma/importador para operar?' }).getByRole('radio', { name: 'Sí' }).click()
   await page.getByRole('button', { name: /Seguir con presupuesto/i }).click()
 

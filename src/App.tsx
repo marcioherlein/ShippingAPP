@@ -187,6 +187,8 @@ export default function App() {
   const resetDialog = useRef<HTMLDialogElement>(null)
   const [intent, setIntent] = useState<EntryIntent>(null)
   const [step, setStep] = useState(0)
+  const [profilePage, setProfilePage] = useState(1)
+  const [budgetPage, setBudgetPage] = useState(false)
   const [purpose, setPurpose] = useState<ImportPurpose | null>(null)
   const [entityType, setEntityType] = useState<ImportEntityType | null>(null)
   const [signature, setSignature] = useState<SignatureAnswer | null>(null)
@@ -281,7 +283,7 @@ export default function App() {
   }, [calculationStatus, pipelineSummary, pipelineStage, calculationInputKey, approvedQuantity])
 
   const operationAnswered = purpose !== null && entityType !== null && signature !== null
-  const profileStep = purpose === null ? 1 : entityType === null ? 2 : signature === null ? 3 : 4
+  const profileStep = profilePage
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
   const budgetAnswered = budgetMode !== null && budgetError === null
 
@@ -436,6 +438,7 @@ export default function App() {
   }
 
   const reviewProductData = () => {
+    setStep(3)
     writeProductDraft('quote-result', null)
     writeProductDraft('pending-quote-save', null)
     setFrozenQuote(null)
@@ -614,6 +617,7 @@ export default function App() {
   const continueBudget = () => {
     if (!budgetAnswered) return
     setStep(3)
+    if (analysis) setShowSetup(false)
   }
 
   const resetJourney = () => {
@@ -622,6 +626,8 @@ export default function App() {
     resetDialog.current?.close()
     window.dispatchEvent(new Event('shippingapp:journey-reset'))
     setIntent(null)
+    setProfilePage(1)
+    setBudgetPage(false)
     setStep(0)
     setPurpose(null)
     setEntityType(null)
@@ -659,15 +665,15 @@ export default function App() {
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
       <h1 className="journey-task-title">{progressStep === 4 ? 'Tu panel de resultados' : 'Planificá tu importación'}</h1>
       <p className="workspace-intro">Evaluá cuánto invertir, cuánto cuesta cada unidad y qué falta validar antes de comprar.</p>
-      <div className="journey-progress-bar" role="progressbar" aria-valuenow={progressStep} aria-valuemin={0} aria-valuemax={4} aria-label={progressStep === 4 ? 'Cotización lista' : `Paso ${progressStep + 1} de 4: ${stepLabels[progressStep]}`}>
+      <div className="journey-progress-bar" role="progressbar" aria-valuenow={progressStep} aria-valuemin={0} aria-valuemax={4} aria-label={progressStep === 4 ? 'Cotización lista' : progressStep === 0 ? 'Elegí tu punto de partida' : `Paso ${progressStep} de 4: ${stepLabels[progressStep]}`}>
         <div className="journey-progress-track">
           <div className="journey-progress-fill" style={{ width: `${(progressStep / 4) * 100}%` }} />
         </div>
-        <span className="journey-progress-label">{progressStep === 4 ? <><UiIcon name="check" size={14} />{' '}¡Listo!</> : `Paso ${progressStep + 1} de 4 · ${stepLabels[progressStep]}`}</span>
+        <span className="journey-progress-label">{progressStep === 4 ? <><UiIcon name="check" size={14} />{' '}¡Listo!</> : progressStep === 0 ? 'Para empezar · Elegí tu punto de partida' : `Paso ${progressStep} de 4 · ${stepLabels[progressStep]}`}</span>
       </div>
     </section>
 
-    <section className="journey-workspace" hidden={!!analysis && !showSetup}>
+    <section className={`journey-workspace focus-stage-${step}`} hidden={!!analysis && !showSetup}>
       <div className="journey-conversation">
         <div className="gs-chat-panel-header">
           <span className="gs-chat-panel-title">NUEVA IMPORTACIÓN</span>
@@ -696,11 +702,12 @@ export default function App() {
 
           <section className={`journey-question-card${step === 1 ? ' active' : ''}`}>
             <div className="journey-question-head"><span>01</span><div><b>Tu operación</b><small>Afecta impuestos y trámites.</small></div>{step > 1 && <button type="button" onClick={() => setStep(1)}>Editar</button>}</div>
-            {step === 1 ? <div className="journey-question-fields">
-              <div><label>¿Para qué lo traés?</label><div className="journey-chip-row"><button className={purpose === 'resale' ? 'selected' : ''} onClick={() => setPurpose('resale')} type="button">Reventa</button><button className={purpose === 'own_use' ? 'selected' : ''} onClick={() => setPurpose('own_use')} type="button">Uso propio</button><button className={purpose === 'unknown' ? 'selected' : ''} onClick={() => setPurpose('unknown')} type="button">No sé</button></div></div>
-              {profileStep >= 2 && <div><label>¿Quién importa?</label><div className="journey-chip-row"><button className={entityType === 'company' ? 'selected' : ''} onClick={() => setEntityType('company')} type="button">Empresa</button><button className={entityType === 'individual' ? 'selected' : ''} onClick={() => setEntityType('individual')} type="button">Persona</button><button className={entityType === 'unknown' ? 'selected' : ''} onClick={() => setEntityType('unknown')} type="button">No sé</button></div></div>}
-              {profileStep >= 3 && <div><label>¿Tenés firma/importador para operar?</label><div className="journey-chip-row"><button className={signature === 'yes' ? 'selected' : ''} onClick={() => setSignature('yes')} type="button">Sí</button><button className={signature === 'no' ? 'selected' : ''} onClick={() => setSignature('no')} type="button">No</button><button className={signature === 'unknown' ? 'selected' : ''} onClick={() => setSignature('unknown')} type="button">No sé</button></div></div>}
-              <button className="journey-primary-action" type="button" disabled={!operationAnswered} onClick={continueOperation}>Seguir con presupuesto <span><UiIcon name="arrow-right" size={18} /></span></button>
+            {step === 1 ? <div className="journey-question-fields" data-profile-page={profileStep}>
+              <div hidden={profileStep !== 1}><label>¿Para qué lo traés?</label><div className="journey-chip-row"><button className={purpose === 'resale' ? 'selected' : ''} onClick={() => setPurpose('resale')} type="button">Reventa</button><button className={purpose === 'own_use' ? 'selected' : ''} onClick={() => setPurpose('own_use')} type="button">Uso propio</button><button className={purpose === 'unknown' ? 'selected' : ''} onClick={() => setPurpose('unknown')} type="button">No sé</button></div><p>El uso comercial o personal cambia los impuestos y requisitos aplicables.</p></div>
+              <div hidden={profileStep !== 2}><label>¿Quién importa?</label><div className="journey-chip-row"><button className={entityType === 'company' ? 'selected' : ''} onClick={() => setEntityType('company')} type="button">Empresa</button><button className={entityType === 'individual' ? 'selected' : ''} onClick={() => setEntityType('individual')} type="button">Persona</button><button className={entityType === 'unknown' ? 'selected' : ''} onClick={() => setEntityType('unknown')} type="button">No sé</button></div><p>Elegí quién realizará la importación. El perfil se usa para estimar los gastos y las obligaciones de la operación.</p></div>
+              <div hidden={profileStep !== 3}><label>¿Tenés firma/importador para operar?</label><div className="journey-chip-row"><button className={signature === 'yes' ? 'selected' : ''} onClick={() => setSignature('yes')} type="button">Sí</button><button className={signature === 'no' ? 'selected' : ''} onClick={() => setSignature('no')} type="button">No</button><button className={signature === 'unknown' ? 'selected' : ''} onClick={() => setSignature('unknown')} type="button">No sé</button></div><p>¿Vas a operar con tu propia estructura de importación o necesitás un tercero? Este dato afecta los gastos estimados. Si tenés dudas, elegí No sé.</p></div>
+              {profileStep > 1 && <button type="button" className="pipeline-secondary" onClick={() => setProfilePage(profileStep - 1)}>Atrás</button>}
+              <button className="journey-primary-action" type="button" disabled={profileStep === 1 ? !purpose : profileStep === 2 ? !entityType : !operationAnswered} onClick={() => profileStep < 3 ? setProfilePage(profileStep + 1) : continueOperation()}>{profileStep < 3 ? 'Continuar' : 'Seguir con presupuesto'} <span><UiIcon name="arrow-right" size={18} /></span></button>
             </div> : <div className="journey-complete-row"><span>{purposeLabel(purpose)}</span><span>{entityLabel(entityType)}</span><span>{signatureLabel(signature)}</span></div>}
           </section>
 
@@ -712,15 +719,16 @@ export default function App() {
             <section className={`journey-question-card${step === 2 ? ' active' : ''}`}>
               <div className="journey-question-head"><span>02</span><div><b>Presupuesto o rango</b><small>Esto limita las cantidades que vale la pena simular.</small></div>{step > 2 && <button type="button" onClick={() => setStep(2)}>Editar</button>}</div>
               {step === 2 ? <div className="journey-question-fields">
-                <div className="journey-choice-grid budget">
+                <div hidden={budgetPage} className="journey-choice-grid budget">
                   <button className={budgetMode === 'budget' ? 'selected' : ''} type="button" onClick={() => { setApprovedQuantity(null); setBudgetMode('budget') }}><b>Tengo presupuesto</b><small>Quiero maximizar lo que puedo traer sin pasarme.</small></button>
                   <button className={budgetMode === 'units' ? 'selected' : ''} type="button" onClick={() => { setApprovedQuantity(null); setBudgetMode('units') }}><b>Tengo rango de unidades</b><small>Sé más o menos cuántas quiero probar.</small></button>
                   <button className={budgetMode === 'unknown' ? 'selected' : ''} type="button" onClick={() => { setApprovedQuantity(null); setBudgetMode('unknown') }}><b>Todavía no sé</b><small>Quiero entender primero el orden de magnitud.</small></button>
                 </div>
-                {budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" step="500" value={budgetUsd || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setBudgetUsd(Number.isFinite(v) && v >= 0 ? v : 0) }} /></div><em>Incluye compra, flete e impuestos estimados.</em></label>}
-                {budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" step="1" value={unitsMin || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setUnitsMin(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label><label><span>Máximo de unidades</span><input type="number" step="1" value={unitsMax || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setUnitsMax(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label></div>}
+                {budgetPage && budgetMode === 'budget' && <label className="journey-number-field"><span>Presupuesto máximo total</span><div><small>USD</small><input type="number" step="500" value={budgetUsd || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setBudgetUsd(Number.isFinite(v) && v >= 0 ? v : 0) }} /></div><em>Incluye compra, flete e impuestos estimados.</em></label>}
+                {budgetPage && budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" step="1" value={unitsMin || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setUnitsMin(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label><label><span>Máximo de unidades</span><input type="number" step="1" value={unitsMax || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setUnitsMax(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label></div>}
+                {budgetPage && <button type="button" className="pipeline-secondary" onClick={() => setBudgetPage(false)}>Cambiar presupuesto o cantidad</button>}
                 {budgetError && <div className="pipeline-warning" id="journey-budget-error" role="alert"><b>Revisá presupuesto o rango.</b><span>{budgetError}</span></div>}
-                <button className="journey-primary-action" type="button" disabled={!budgetAnswered} onClick={continueBudget}>Seguir con el producto <span><UiIcon name="arrow-right" size={18} /></span></button>
+                <button className="journey-primary-action" type="button" disabled={budgetPage ? !budgetAnswered : !budgetMode} onClick={() => !budgetPage && budgetMode !== 'unknown' ? setBudgetPage(true) : continueBudget()}>{budgetPage || budgetMode === 'unknown' ? 'Seguir con el producto' : 'Continuar'} <span><UiIcon name="arrow-right" size={18} /></span></button>
               </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : 'Todavía sin cantidad definida'}</span>{analysis?.product.purchaseQuantity && budgetMode !== 'unknown' ? <span>{analysis.product.purchaseQuantity} unidades seleccionadas</span> : null}</div>}
             </section>
           </>}
@@ -804,8 +812,8 @@ export default function App() {
       </aside>
     </section>
 
-    {analysis && <div className="simple-quote"><button type="button" className="pipeline-secondary" onClick={() => { setShowSetup(value => !value); reviewProductData() }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
-    {analysis && analysisPrefill && <section className="journey-pipeline-section">
+    {analysis && <div className="focus-setup-action"><button type="button" className="pipeline-secondary" onClick={() => { const opening = !showSetup; setShowSetup(opening); reviewProductData(); if (opening) { setStep(1); setProfilePage(1); setBudgetPage(false) } }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
+    {analysis && analysisPrefill && <section className="journey-pipeline-section" hidden={showSetup}>
       <CalculationPipeline
         analysis={analysis}
         capacity={capacity}

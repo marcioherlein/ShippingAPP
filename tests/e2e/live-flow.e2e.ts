@@ -108,6 +108,7 @@ test('supplier search retains successful results and query after Alibaba extract
   await expect(page.getByRole('heading', { name: 'Electric motorcycle M5' })).toBeVisible()
   expect(searches).toBe(1)
   expect(reads).toBe(2)
+  await expect(page.locator('.intake-message:visible')).toHaveCount(1)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('supplier-recovery-390.png'), fullPage: true })
 })

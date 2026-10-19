@@ -7,10 +7,10 @@ import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { recordCaseAnswer, readCaseConversation, writeCaseConversation } from '../lib/caseConversation'
 import type { PurchaseCapacity } from '../lib/purchasePlan'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
-import CaseConversation from './CaseConversation'
 import ManualNcmPicker from './ManualNcmPicker'
 import SupplierQuoteReview from './SupplierQuoteReview'
 import AccountControls from '../auth/AccountControls'
+import PackagingWizard from './PackagingWizard'
 import { usd } from '../lib/format'
 
 type Question = { id: string; prompt: string; value: string; type?: 'number' | 'text'; options?: Array<[string,string]>; valid: (value: string) => boolean; apply: (value: string) => void }
@@ -18,9 +18,10 @@ type Props = { profileContext?: string; analysis: ProductAnalysisV2; draft: Prod
 export default function GuidedCaseReview({ profileContext, analysis, draft, quote, capacity, classified, askedForMore, clarificationTarget, exhausted, status, blocker, authRequired, candidates, onDraft, onQuote, onConfirm, onManual }: Props) {
   const source = analysis.sourceUrl
   const [skipped, setSkipped] = useState<string[]>(() => readProductDraft<string[]>(`guide-skipped:${source}`) || [])
+  const [packaging, setPackaging] = useState(false)
+  const [backStack, setBackStack] = useState<string[]>([])
   const [manual, setManual] = useState(false)
   const [advanced, setAdvanced] = useState(false)
-  const [view, setView] = useState<'dashboard' | 'guided'>('dashboard')
   const [edit, setEdit] = useState<string | null>(null)
   const [value, setValue] = useState('')
   const [answeredAttempt, setAnsweredAttempt] = useState(-1)
@@ -63,7 +64,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
     offerQuestion('usdPerCurrency', `¿Cuántos USD equivalen a 1 ${quote.currency}?`, undefined, true), offerQuestion('fxSource','¿Cuál es la fuente de ese tipo de cambio?'),
     { ...offerQuestion('fxDate', '¿De qué fecha es el tipo de cambio? (AAAA-MM-DD)'), valid: v => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) },
     productQuestion('originCountry','¿Cuál es el país de origen de la mercadería?'), productQuestion('unitWeightKg','¿Cuánto pesa una unidad embalada, en kg?','number'),
-    productQuestion('unitVolumeCbm','¿Qué volumen ocupa una unidad embalada, en m³?','number'),
+    { ...productQuestion('unitVolumeCbm','¿Qué volumen ocupa una unidad embalada, en m³?','number'), apply: v => onDraft({ ...draft, unitVolumeCbm: Number(v), packageLengthCm: undefined, packageWidthCm: undefined, packageHeightCm: undefined }) },
     { ...productQuestion('quantity', capacity.mode === 'units' ? `Cantidad elegida (tu rango: ${capacity.min}–${capacity.max})` : 'Cantidad elegida'), value: String(draft.quantity ?? (capacity.mode === 'units' ? capacity.min : '')), valid: integer },
     { ...productQuestion('moq','¿Cuál es el mínimo del proveedor? Si no lo sabés, dejalo sin dato.','number'), valid: v => v === '' || integer(v) },
   ]
@@ -85,9 +86,10 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const forced = askedForMore && !exhausted && answeredAttempt !== attempt ? all.find(q => q.id === clarificationTarget) ?? productQuestion('description', '¿Qué detalle técnico falta para identificarlo?') : null
   const pending = all.find(q => needs(q) && (classified || !skipped.includes(q.id)) && q.id !== 'moq') ?? (all.find(q => q.id === 'moq' && needs(q)) || null)
   const question = edit ? all.find(q => q.id === edit) || null : forced || pending
-  useEffect(() => { setValue(question?.value || '') }, [question?.id, edit, attempt])
+  useEffect(() => { setValue(question?.value || ''); setPackaging(question?.id === 'unitVolumeCbm') }, [question?.id, edit, attempt])
   const answer = () => {
     if (!question || !question.valid(value)) return
+    setBackStack(current => [...current, question.id])
     question.apply(value)
     recordCaseAnswer(source, question.prompt, question.options?.find(([key]) => key === value)?.[1] || value || (question.id === 'quote.maxQuantity' ? 'Confirmo que no tiene límite' : 'Sin dato'))
     if (forced?.id === question.id) setAnsweredAttempt(attempt)
@@ -96,41 +98,33 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   }
   const processing = status === 'processing'
   return <section className="guided-case" id="case-confirmation" aria-busy={processing}>
-    <div className="workspace-section-heading"><span className="eyebrow">Tu ficha de importación</span><h2>Revisá los datos. Decidí con evidencia.</h2><p>Completá lo que conozcas y corregí cualquier dato antes de confirmar. La clasificación y el costo se validan por separado.</p></div>
+    <aside className="quote-progress-rail"><div className="workspace-section-heading"><span className="eyebrow">Tu ficha de importación</span><h2>Un dato a la vez. Tu resultado al final.</h2><p>Completá la pregunta resaltada y tocá Continuar. Guardamos tus respuestas; podés volver para corregirlas.</p></div>
     <p className="workspace-capacity">Tu compra: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : 'explorar desde una unidad'}.</p>
-    <div className="workspace-view-switch" role="group" aria-label="Forma de completar la ficha"><button type="button" aria-pressed={view === 'dashboard'} onClick={() => setView('dashboard')}>Ficha completa</button><button type="button" aria-pressed={view === 'guided'} onClick={() => setView('guided')}>Asistencia paso a paso</button></div>
-    <details className="workspace-audit"><summary>Ver historial de datos y cambios</summary><CaseConversation sourceUrl={source} /></details>
+    <ol aria-label="Etapas de la cotización"><li>✓ Tu operación</li><li>✓ Tu compra</li><li aria-current="step">3. Producto y oferta</li><li>4. Tu resultado</li></ol></aside><div className="quote-focus-content">
     <div className={`workspace-classification-status ${classified ? 'is-confirmed' : ''}`}><b>{classified ? `NCM validada: ${analysis.customs.ncmCandidate}` : 'Clasificación pendiente de validar'}</b><span>{classified ? analysis.customs.source : 'Revisá la identidad del producto o seleccioná una posición del nomenclador. Sin una clasificación válida no mostramos un costo de importación.'}</span></div>
     {blocker && <p role="alert" className="case-alert">{blocker}</p>}
     {authRequired && <AccountControls />}
     {processing ? <p role="status">{classified ? 'Calculando tus opciones de compra…' : 'Validando la clasificación del producto…'}</p> : <>
       {exhausted && !classified && <p role="alert">No hay una clasificación validada. Podés revisar tu ficha o buscar en el nomenclador, sin cambiar de producto.</p>}
-      {view === 'guided' && (question ? <div className="case-question">
-        <h2>{question.prompt}</h2>
-        {question.options ? <div className="case-choices" role="group" aria-label={question.prompt}>{question.options.map(([key,label]) => <button type="button" key={key} aria-pressed={value === key} onClick={() => setValue(key)}>{label}</button>)}</div> : <label><span>{question.prompt}</span><input key={question.id} type={question.type || 'text'} inputMode={question.type === 'number' ? 'decimal' : 'text'} step="any" value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') answer() }} /></label>}
-        <button type="button" className="journey-primary-action" disabled={!question.valid(value)} onClick={answer}>Continuar</button>
+      {(question ? <div className="case-question" aria-live="polite">
+        <span className="eyebrow">Completá este dato para avanzar</span><h2>{question.prompt}</h2><p className="workspace-help">{question.id === 'unitVolumeCbm' ? 'Usá el embalaje de una unidad, no el producto sin caja. Si sólo tenés las medidas, calculamos el volumen por vos.' : question.id === 'unitWeightKg' ? 'Incluí la caja y la protección de una unidad. El peso se usa junto con el volumen para estimar el flete.' : question.id.startsWith('quote.') ? 'Copiá el dato de la oferta del proveedor. No confundas el precio de compra con el costo final de importación.' : 'Este dato permite identificar el producto y calcular sin inventar información.'}</p>
+        {question.id === 'unitVolumeCbm' && packaging ? <PackagingWizard recoveryKey={source} onCancel={() => setPackaging(false)} onComplete={volume => { onDraft({ ...draft, unitVolumeCbm: volume, packageLengthCm: undefined, packageWidthCm: undefined, packageHeightCm: undefined }); recordCaseAnswer(source, question.prompt, `${volume} m³ por unidad, calculado desde medidas`); setPackaging(false) }} /> : question.options ? <div className="case-choices" role="group" aria-label={question.prompt}>{question.options.map(([key,label]) => <button type="button" key={key} aria-pressed={value === key} onClick={() => setValue(key)}>{label}</button>)}</div> : <label><span>{question.prompt}</span><input key={question.id} type={question.type || 'text'} inputMode={question.type === 'number' ? 'decimal' : 'text'} step="any" value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') answer() }} /></label>}
+        <button hidden={packaging} type="button" className="journey-primary-action" disabled={!question.valid(value)} onClick={answer}>Continuar</button>
+        {!!backStack.length && <button type="button" className="pipeline-secondary" onClick={() => { setEdit(backStack[backStack.length - 1]); setBackStack(current => current.slice(0,-1)); setPackaging(false) }}>Atrás</button>}
         {question.id === 'moq' || (!classified && !forced && !['productName','functionText'].includes(question.id)) ? <button type="button" className="pipeline-secondary" onClick={() => { recordCaseAnswer(source,question.prompt,'No lo sé todavía'); setSkipped(current => [...current,question.id]); setEdit(null) }}>No sé todavía</button> : null}
-        {question.id === 'unitVolumeCbm' && <button type="button" className="pipeline-secondary" onClick={() => setAdvanced(true)}>Tengo medidas en lugar de volumen</button>}
+        {question.id === 'unitVolumeCbm' && !packaging && <button type="button" className="pipeline-secondary" onClick={() => setPackaging(true)}>Tengo medidas en lugar de volumen</button>}
       </div> : <div className="case-review"><h2>Revisá y confirmá</h2><p>Tu elección: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : 'explorar desde una unidad'}. No volvemos a preguntarte la cantidad.</p>
-        <dl>{all.filter(q => q.id === 'quote.unitsPerPack' ? quote.basis === 'pack' : ['quote.usdPerCurrency','quote.fxSource','quote.fxDate'].includes(q.id) ? !!quote.currency && quote.currency !== 'USD' : true).map(q => <div key={q.id}><dt>{q.prompt}</dt><dd>{q.options?.find(([key]) => key === q.value)?.[1] || q.value || (q.id === 'quote.maxQuantity' && hasConfirmedAnswer(q) ? 'Sin límite confirmado' : 'Sin dato')} <button type="button" onClick={() => setEdit(q.id)}>Editar</button></dd></div>)}</dl>
+        <details><summary>Revisar respuestas y corregir un dato</summary><dl>{all.filter(q => q.id === 'quote.unitsPerPack' ? quote.basis === 'pack' : ['quote.usdPerCurrency','quote.fxSource','quote.fxDate'].includes(q.id) ? !!quote.currency && quote.currency !== 'USD' : true).map(q => <div key={q.id}><dt>{q.prompt}</dt><dd>{q.options?.find(([key]) => key === q.value)?.[1] || q.value || (q.id === 'quote.maxQuantity' && hasConfirmedAnswer(q) ? 'Sin límite confirmado' : 'Sin dato')} <button type="button" onClick={() => setEdit(q.id)}>Editar</button></dd></div>)}</dl></details>
         {!classified && <p>Los datos comerciales que todavía no conocés quedan pendientes; no inventamos el costo.</p>}
         <button type="button" className="journey-primary-action" disabled={exhausted && !classified} onClick={() => { recordCaseAnswer(source,'¿Confirmás estos datos?\n' + all.filter(q => q.value).map(q => `${q.prompt} ${q.value}`).join('\n'),classified ? 'Confirmo y calculo mi compra.' : 'Confirmo y clasifico el producto.'); onConfirm() }}>{classified ? 'Confirmar y calcular mis opciones' : 'Confirmar y clasificar'}</button>
       </div>)}
       {!classified && candidates}
       <button type="button" className="pipeline-secondary" aria-expanded={manual} onClick={() => setManual(v => !v)}>Buscar en el nomenclador</button>
       {manual && <ManualNcmPicker customs={analysis.customs} recoveryKey={source} onSelect={customs => { onManual(customs); setManual(false) }} />}
-      <button hidden={view === 'dashboard'} type="button" className="pipeline-secondary" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>Editar ficha y tramos de precio</button>
-      {(advanced || view === 'dashboard') && <div className="case-advanced"><h3 className="workspace-form-heading">Oferta comercial y datos del producto</h3><SupplierQuoteReview quote={quote} quantity={draft.quantity} sourceUrl={source} evidence={analysis.product.supplierEvidence} onChange={onQuote} />
-        {all.filter(q => !q.id.startsWith('quote.')).map(q => <label key={q.id}><span>{q.prompt}</span><input value={q.value} type={q.type || 'text'} step="any" onChange={event => q.apply(event.target.value)} /></label>)}
-        <div className="pipeline-dimensions">{(['packageLengthCm','packageWidthCm','packageHeightCm'] as const).map((key,index) => <label key={key}><span>{['Largo (cm)','Ancho (cm)','Alto (cm)'][index]}</span><input type="number" min="0" step="any" value={draft[key] || ''} onChange={event => onDraft({ ...draft, unitVolumeCbm: 0, [key]: Number(event.target.value) })} /></label>)}</div>
-        <p>Medidas de una unidad embalada. Volumen: {resolvedProductVolumeCbm(draft).toFixed(6)} m³.</p>{view === 'guided' && <button type="button" className="pipeline-secondary" onClick={() => { recordCaseAnswer(source, '¿Desde cuántas unidades es válido ese precio?', String(quote.minQuantity)); setAdvanced(false) }}>Volver a la asistencia</button>}
-        {view === 'dashboard' && <div className="workspace-confirm"><p>{classified ? 'Clasificación validada. Confirmá la oferta y el embalaje para calcular.' : 'Primero validamos la clasificación. Los datos comerciales pueden completarse después.'}</p><button type="button" className="journey-primary-action" disabled={exhausted && !classified || !draft.productName.trim() || !draft.functionText?.trim()} onClick={() => {
-          recordCaseAnswer(source, 'Ficha confirmada por el usuario', all.filter(q => q.value).map(q => `${q.prompt} ${q.value}`).join('\n'))
-          recordCaseAnswer(source, '¿Desde cuántas unidades es válido ese precio?', String(quote.minQuantity))
-          recordCaseAnswer(source, '¿Hasta cuántas unidades vale ese precio? Dejá vacío sólo si confirmaste que no tiene límite.', quote.maxQuantity === null ? 'Confirmo que no tiene límite' : String(quote.maxQuantity))
-          onConfirm()
-        }}>{classified ? 'Confirmar y calcular mis opciones' : 'Confirmar y clasificar'}</button></div>}
+      <button type="button" className="pipeline-secondary" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>Editar tramos de precio</button>
+      {advanced && <div className="case-advanced"><h3 className="workspace-form-heading">Oferta comercial y datos del producto</h3><SupplierQuoteReview quote={quote} quantity={draft.quantity} sourceUrl={source} evidence={analysis.product.supplierEvidence} onChange={onQuote} />
+        <button type="button" className="pipeline-secondary" onClick={() => setAdvanced(false)}>Volver a la pregunta</button>
       </div>}
-    </>}
+    </>}</div>
   </section>
 }

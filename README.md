@@ -9,8 +9,9 @@ This repository is the source of truth for the application code and deployment c
 
 GlobalShipping turns a product into an import decision: estimated landed unit cost,
 total investment, quantity alternatives and the evidence still needed before buying.
-The default product review is an editable dashboard. Step-by-step assistance remains
-optional. Confirm supplier currency, variant, price tiers and packaging; validate NCM
+The quote opens as a focused sequence with one active question per screen. The
+decision dashboard appears after completion. Confirm supplier currency, variant,
+price tiers and packaging; validate NCM
 before calculating. Saved quotes retain their original date, sources and scenarios.
 
 See [the workspace release audit](docs/releases/import-decision-workspace.md) for

@@ -13,8 +13,8 @@ async function persistedStep(page: Page) {
 
 async function completeOperation(page: Page) {
   await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
-  await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
-  await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
+  await page.getByRole('radio', { name: 'Reventa', exact: true }).click(); await page.getByRole('button',{name:'Continuar',exact:true}).click()
+  await page.getByRole('radio', { name: 'Empresa', exact: true }).click(); await page.getByRole('button',{name:'Continuar',exact:true}).click()
   await page.getByRole('radio', { name: 'Sí', exact: true }).click()
   await page.getByRole('button', { name: /Seguir con presupuesto/i }).click()
   await expect(page.locator('.journey-question-card.active .journey-question-head > span')).toHaveText('02')
@@ -22,7 +22,7 @@ async function completeOperation(page: Page) {
 }
 
 async function completeBudget(page: Page) {
-  await page.getByRole('radio', { name: /Tengo rango de unidades/i }).click()
+  await page.getByRole('radio', { name: /Tengo rango de unidades/i }).click(); await page.getByRole('button',{name:'Continuar',exact:true}).click()
   const range = page.locator('.journey-range-fields input')
   await range.nth(0).fill('80')
   await range.nth(1).fill('160')
@@ -46,9 +46,9 @@ test('reload restores meaningful journey setup without restoring stale results',
   await page.reload()
 
   await expect(page.getByRole('heading', { name: 'Elegí la forma más fácil.' })).toBeVisible()
-  await expect(receipt(page, '01').getByText('Reventa', { exact: true })).toBeVisible()
-  await expect(receipt(page, '01').getByText('Empresa', { exact: true })).toBeVisible()
-  await expect(receipt(page, '02').getByText('80–160 unidades', { exact: true })).toBeVisible()
+  await expect(receipt(page, '01').getByText('Reventa', { exact: true })).toHaveCount(1)
+  await expect(receipt(page, '01').getByText('Empresa', { exact: true })).toHaveCount(1)
+  await expect(receipt(page, '02').getByText('80–160 unidades', { exact: true })).toHaveCount(1)
   await expect(page.locator('.journey-calculator-section')).toHaveCount(0)
 })
 
@@ -63,7 +63,7 @@ test('journey URL is a deep link independent of local storage', async ({ page })
   await page.goto(deepLink)
 
   await expect(page.getByRole('heading', { name: 'Elegí la forma más fácil.' })).toBeVisible()
-  await expect(receipt(page, '02').getByText('80–160 unidades', { exact: true })).toBeVisible()
+  await expect(receipt(page, '02').getByText('80–160 unidades', { exact: true })).toHaveCount(1)
 })
 
 test('browser back and forward restore journey stages', async ({ page }) => {
@@ -73,11 +73,11 @@ test('browser back and forward restore journey stages', async ({ page }) => {
 
   await page.goBack()
   await expect(page.locator('.journey-question-card.active .journey-question-head > span')).toHaveText('02')
-  await expect(page.getByRole('radio', { name: /Tengo rango de unidades/i })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('radio', { name: /Tengo rango de unidades/i, includeHidden:true })).toHaveAttribute('aria-checked', 'true')
 
   await page.goBack()
   await expect(page.locator('.journey-question-card.active .journey-question-head > span')).toHaveText('01')
-  await expect(page.getByRole('radio', { name: 'Reventa', exact: true })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('radio', { name: 'Reventa', exact: true, includeHidden:true })).toHaveAttribute('aria-checked', 'true')
 
   await page.goBack()
   await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toBeVisible()
@@ -98,7 +98,7 @@ test('new case and change intent clear persisted journey state', async ({ page }
   await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
   await expect.poll(() => persistedStep(page)).toBe(1)
 
-  await page.getByRole('button', { name: 'Cambiar', exact: true }).click()
+  await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
   await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
   await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toBeVisible()
   await expect.poll(() => new URL(page.url()).searchParams.has('journey')).toBe(false)
@@ -210,8 +210,8 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
   })
   await page.goto('/')
   await page.getByRole('button', { name: /Quiero buscarlo/ }).click()
-  await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
-  await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
+  await page.getByRole('radio', { name: 'Reventa', exact: true }).click(); await page.getByRole('button',{name:'Continuar',exact:true}).click()
+  await page.getByRole('radio', { name: 'Empresa', exact: true }).click(); await page.getByRole('button',{name:'Continuar',exact:true}).click()
   await page.getByRole('radio', { name: 'Sí', exact: true }).click()
   await page.getByRole('button', { name: /Seguir con presupuesto/ }).click()
   await page.getByRole('radio', { name: /Todavía no sé/ }).click()

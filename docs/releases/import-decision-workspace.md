@@ -153,3 +153,36 @@ GitHub Actions workflow, which holds the production Cloudflare configuration.
 The previous reference-access blocker is resolved and local design validation
 passed. Legal content and real-user acceptance remain documented limitations;
 this deployment does not assert that those separate items are complete.
+
+
+## Focused quote correction — October 19, 2026
+
+The latest user review supersedes the editable-sheet default described above.
+The workflow now shows one active question, explicit Continue/Back controls,
+navy progress panels inspired by the reference quote dialog, and no accumulated
+chat above the next action. The landing and quote share the same visual language.
+The final dashboard remains the destination, not the data-entry surface.
+
+- Import purpose, importer and signature are separate screens. Budget mode is
+  selected before entering its value. Manual product identity is also sequential.
+- Supplier currency, pack basis, pack count, variant, price applicability, FX
+  source/date and optional MOQ retain the original validation rules.
+- Missing packaging defaults to dimensions: measure the outer shipping package,
+  then enter length, width and height separately in centimetres. A multi-unit
+  carton additionally asks its unit count. The calculated result is m³ per unit.
+  Known volume is an alternative path; stale dimensions are cleared on commit.
+- The result distinguishes supplier purchase price from landed import cost and
+  shows per-unit import expenses, total investment, quantity comparison bars,
+  the cost composition, optimization alternatives and supplier/customs next steps.
+  It does not invent a selling price or promise a margin.
+- Authentication recovery, private session drafts, explicit NCM confirmation,
+  immutable saved quotes and recalculation continue to use the existing engine.
+
+Browser scenarios use controlled supplier responses to verify the UI, including
+successful search, link reading, manual entry and provider failure recovery.
+These are not claims of a live supplier purchase or an authenticated real-user test.
+Production provider checks remain the existing deployment workflow's responsibility.
+No additional billing or Pro-alert batches are required by this UX correction.
+Legal content and operator identification remain the previously documented open items.
+
+Validation counts and publication status will be recorded after the final run.

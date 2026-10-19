@@ -1,6 +1,7 @@
 import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { useEffect, useRef, useState } from 'react'
 import UiIcon from './UiIcon'
+import ProductWorkspaceForm from './ProductWorkspaceForm'
 import { ApiAuthError, getSessionState, subscribeSession } from '../lib/authSession'
 import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from '../lib/pendingOperation'
 import { isAlibabaUrl } from '../lib/productIntake'
@@ -13,7 +14,7 @@ type Props = {
   onStructuredData: (data: ManualProductChatData) => void
 }
 
-type Mode = 'link' | 'describe' | null
+type Mode = 'link' | 'describe' | 'form' | null
 type ChatStep = 'name' | 'use' | 'material' | 'price' | 'origin' | 'weight' | 'moq' | 'volume' | 'carton'
 
 const MANDATORY_STEPS: ChatStep[] = ['name', 'use', 'material', 'price', 'origin', 'weight', 'moq']
@@ -128,7 +129,7 @@ type EntryDraft = { volumeBasis?: VolumeBasis | null; mode: Mode; link: string; 
 
 export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: Props) {
   const [draft] = useState(() => readProductDraft<EntryDraft>('entry'))
-  const [mode, setMode] = useState<Mode>(draft?.mode === 'link' ? 'link' : draft?.mode === 'describe' ? 'describe' : null)
+  const [mode, setMode] = useState<Mode>(draft?.mode === 'link' ? 'link' : draft?.mode === 'describe' ? 'describe' : draft?.mode === 'form' ? 'form' : null)
   const [link, setLink] = useState(draft?.link || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -324,7 +325,9 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       <p>Cargar, leer y completar el producto no consume un análisis. El crédito se usa recién cuando pedís clasificar la NCM y calcular la importación.</p>
     </div>
 
+    {mode === 'form' && <><ProductWorkspaceForm onSubmit={onStructuredData} /><button type="button" className="pipeline-secondary" onClick={() => setMode(null)}>Cambiar forma de carga</button></>}
     {mode === null && <div className="owned-product-options">
+      <button type="button" onClick={() => setMode('form')}><span className="owned-product-option-icon"><UiIcon name="product" size={19} /></span><b>Completar ficha</b><small>Todos los datos en un panel editable. Empezá por nombre y función.</small><em>Recomendado</em></button>
       <button type="button" onClick={() => setMode('link')}>
         <span className="owned-product-option-icon"><UiIcon name="external-link" size={19} /></span>
         <b>Pegar link de Alibaba</b>

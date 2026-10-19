@@ -4,6 +4,35 @@ GlobalShipping is an early-stage web application built with React, TypeScript, V
 
 This repository is the source of truth for the application code and deployment configuration.
 
+
+## Product workflow
+
+GlobalShipping turns a product into an import decision: estimated landed unit cost,
+total investment, quantity alternatives and the evidence still needed before buying.
+The default product review is an editable dashboard. Step-by-step assistance remains
+optional. Confirm supplier currency, variant, price tiers and packaging; validate NCM
+before calculating. Saved quotes retain their original date, sources and scenarios.
+
+See [the workspace release audit](docs/releases/import-decision-workspace.md) for
+pending batches, verification evidence and remaining production gates.
+
+## Development
+
+```sh
+npm ci
+npm test
+npm run build
+npx playwright install --with-deps chromium webkit
+npm run test:e2e
+```
+
+`npm run dev` runs the frontend only. The full application requires the Worker:
+apply D1 migrations with `wrangler d1 migrations apply DB --local`, then run
+`wrangler dev --local` after building assets. Use the same `--persist-to` directory
+for migrations and runtime. Keep local credentials in ignored configuration and
+never run remote migrations as part of development setup. Production provider
+credentials are not required for the deterministic test suites.
+
 ## Mercado Libre market benchmark
 
 GlobalShipping uses the official Mercado Libre Argentina API to build a local market-price benchmark for each analyzed product.

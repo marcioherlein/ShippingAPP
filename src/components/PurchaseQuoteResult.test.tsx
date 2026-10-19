@@ -20,10 +20,10 @@ beforeEach(()=>{Object.assign(globalThis,{React,IS_REACT_ACT_ENVIRONMENT:true});
 afterEach(async()=>{await act(async()=>root.unmount());container.remove();sessionStorage.clear();setSessionState('unmanaged')})
 async function render(){await act(async()=>root.render(<PurchaseQuoteResult analysis={analysis} capacity={capacity} plan={plan} summary={summary} input={{budgetMode:'units'}} onEdit={vi.fn()} onChoose={vi.fn()} />))}
 function save(){return [...container.querySelectorAll('button')].find(b=>b.textContent==='Guardar presupuesto')!}
-it('shows the transcript above two primary scenarios and keeps the breakdown collapsed',async()=>{
+it('shows the decision metrics first and retains the transcript in collapsed history',async()=>{
  await render();expect(container.querySelectorAll('.simple-quote-card')).toHaveLength(2)
  expect(container.querySelector('details')?.open).toBe(false)
- expect(container.querySelector('.case-conversation')!.compareDocumentPosition(container.querySelector('.simple-quote')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+ expect(container.querySelector('.workspace-result-overview')?.textContent).toContain('Inversión total estimada');expect(container.querySelector('.case-conversation')!.closest('details')?.open).toBe(false)
  expect(container.textContent).toContain('Para iluminar fotos.')
 })
 it('reports saved only after server confirmation and retains chat and scenarios in the payload',async()=>{

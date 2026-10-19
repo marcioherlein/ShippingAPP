@@ -70,6 +70,11 @@ test('manual product sheet preserves fields on reload and creates a review witho
  await page.getByRole('button',{name:'Crear ficha de importación'}).click()
  await expect(page.locator('.case-question')).toBeVisible()
  await expect(page.locator('.case-question h2')).toContainText('precio del proveedor')
+ await page.getByRole('button',{name:'Editar objetivo o perfil',exact:true}).click()
+ await expect(page.getByRole('radio',{name:'Reventa',exact:true})).toBeVisible()
+ await expect(page.locator('.case-question')).toBeHidden()
+ await page.getByRole('button',{name:'Volver a la ficha',exact:true}).click()
+ await expect(page.locator('.case-question h2')).toContainText('precio del proveedor')
 })
 
 for (const [width, scheme] of [[320,'light'],[1440,'dark']] as const) browserTest(`landing explains the product with accessible layout at ${width}px ${scheme}`,async({page},testInfo)=>{
@@ -84,6 +89,8 @@ for (const [width, scheme] of [[320,'light'],[1440,'dark']] as const) browserTes
 })
 
 test('manual product reaches the dashboard using carton dimensions, one field at a time',async({page},testInfo)=>{
+ const fixture=createManualProductAnalysis('chatbot://product','Raqueta de tenis de aluminio')
+ await page.route('**/api/analyze',route=>route.fulfill({headers:{'x-shippingapp-usage-reservation':'manual-fixture-reservation'},json:{...fixture,product:route.request().postDataJSON().product}}))
  await page.setViewportSize({width:390,height:844})
  await page.goto('/')
  await page.getByRole('button',{name:/Ya tengo un producto/}).click()
@@ -101,7 +108,7 @@ test('manual product reaches the dashboard using carton dimensions, one field at
  const question=page.locator('.case-question')
  await expect(question.getByRole('textbox')).toHaveCount(0)
  await expect(page.getByRole('button',{name:'Continuar',exact:true})).toBeInViewport()
- await page.screenshot({path:testInfo.outputPath('focused-manual-question.png'),fullPage:true})
+ await page.screenshot({path:testInfo.outputPath('focused-manual-question.png'),fullPage:false})
  await question.getByRole('spinbutton').fill('10');await next()
  await page.getByRole('button',{name:'Dólar estadounidense (USD)',exact:true}).click();await next()
  await page.getByRole('button',{name:'Por una unidad',exact:true}).click();await next()

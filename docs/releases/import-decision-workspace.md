@@ -185,4 +185,13 @@ Production provider checks remain the existing deployment workflow's responsibil
 No additional billing or Pro-alert batches are required by this UX correction.
 Legal content and operator identification remain the previously documented open items.
 
-Validation counts and publication status will be recorded after the final run.
+Validation before publication:
+
+- Unit/integration suite: 182 files and 1,067 tests passed.
+- TypeScript and production build passed; Cloudflare Worker dry run passed.
+- Browser acceptance matrix contains 80 Chromium/mobile-WebKit scenarios. The
+  release requires successful CI for the exact revision before merging.
+- Local manual-entry coverage verifies the primary action is in the viewport,
+  carton conversion, the final dashboard and returning to edit the profile.
+- GitHub PR and production-deploy workflow records are the publication evidence;
+  browser fixtures alone do not assert successful production deployment.

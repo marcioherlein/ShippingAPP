@@ -96,6 +96,25 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
     setSkipped(current => current.filter(id => id !== question.id)); setEdit(null)
     if (question.id === 'moq' && !value) setSkipped(current => [...current, 'moq'])
   }
+  const help: Record<string,string> = {
+    productName: 'Usá el nombre comercial y, si existe, el modelo. Evitá describirlo sólo como accesorio o repuesto.',
+    functionText: 'Contá qué hace y para qué se usa. Esta información ayuda a identificar la posición aduanera correcta.',
+    material: 'Indicá el material principal o la composición. Si combina materiales, contanos cuáles.',
+    'quote.amount': 'Ingresá el importe que figura en la oferta. Después confirmamos moneda y presentación.',
+    'quote.currency': 'Seleccioná la moneda indicada por el proveedor. El símbolo $ por sí solo no alcanza.',
+    'quote.basis': 'Una unidad es una pieza. Un lote o caja puede incluir varias: necesitamos distinguirlos para calcular el precio unitario.',
+    'quote.unitsPerPack': 'Contá cuántas piezas incluye el precio del lote. No ingreses la cantidad total que querés comprar.',
+    'quote.variant': 'Indicá el modelo, tamaño o variante que tiene ese precio. Las fotos pueden mostrar opciones más caras.',
+    'quote.minQuantity': 'Es el inicio del tramo de precio: por ejemplo, USD 10 desde 100 piezas. Después preguntamos el mínimo de compra del proveedor.',
+    'quote.maxQuantity': 'Es el final de ese tramo de precio. Dejalo vacío sólo si el proveedor confirmó que sigue siendo válido sin límite superior.',
+    'quote.usdPerCurrency': 'Usá una conversión a dólares vigente para la moneda de la oferta. No ingreses una cotización en pesos argentinos.',
+    'quote.fxSource': 'Indicá de dónde obtuviste la conversión: banco, proveedor o publicación verificable.',
+    'quote.fxDate': 'Ingresá la fecha de la conversión para que el presupuesto conserve su referencia.',
+    originCountry: 'Es el país de fabricación de la mercadería. Puede ser distinto del país donde está el vendedor.',
+    unitWeightKg: 'Incluí la caja y la protección de una unidad. El peso y el volumen se usan para estimar el flete.',
+    unitVolumeCbm: 'Medí la caja exterior que viaja. Calculamos el volumen desde sus medidas; si ya conocés los m³, podés ingresarlos como alternativa.',
+    moq: 'Es la menor cantidad que el proveedor acepta vender (MOQ). Si no la conocés, dejala pendiente para validarla antes de comprar.',
+  }
   const processing = status === 'processing'
   return <section className="guided-case" id="case-confirmation" aria-busy={processing}>
     <aside className="quote-progress-rail"><div className="workspace-section-heading"><span className="eyebrow">Tu ficha de importación</span><h2>Un dato a la vez. Tu resultado al final.</h2><p>Completá la pregunta resaltada y tocá Continuar. Guardamos tus respuestas; podés volver para corregirlas.</p></div>
@@ -107,8 +126,8 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
     {processing ? <p role="status">{classified ? 'Calculando tus opciones de compra…' : 'Validando la clasificación del producto…'}</p> : <>
       {exhausted && !classified && <p role="alert">No hay una clasificación validada. Podés revisar tu ficha o buscar en el nomenclador, sin cambiar de producto.</p>}
       {(question ? <div className="case-question" aria-live="polite">
-        <span className="eyebrow">Completá este dato para avanzar</span><h2>{question.prompt}</h2><p className="workspace-help">{question.id === 'unitVolumeCbm' ? 'Usá el embalaje de una unidad, no el producto sin caja. Si sólo tenés las medidas, calculamos el volumen por vos.' : question.id === 'unitWeightKg' ? 'Incluí la caja y la protección de una unidad. El peso se usa junto con el volumen para estimar el flete.' : question.id.startsWith('quote.') ? 'Copiá el dato de la oferta del proveedor. No confundas el precio de compra con el costo final de importación.' : 'Este dato permite identificar el producto y calcular sin inventar información.'}</p>
-        {question.id === 'unitVolumeCbm' && packaging ? <PackagingWizard recoveryKey={source} onCancel={() => setPackaging(false)} onComplete={volume => { onDraft({ ...draft, unitVolumeCbm: volume, packageLengthCm: undefined, packageWidthCm: undefined, packageHeightCm: undefined }); recordCaseAnswer(source, question.prompt, `${volume} m³ por unidad, calculado desde medidas`); setPackaging(false) }} /> : question.options ? <div className="case-choices" role="group" aria-label={question.prompt}>{question.options.map(([key,label]) => <button type="button" key={key} aria-pressed={value === key} onClick={() => setValue(key)}>{label}</button>)}</div> : <label><span>{question.prompt}</span><input key={question.id} type={question.type || 'text'} inputMode={question.type === 'number' ? 'decimal' : 'text'} step="any" value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') answer() }} /></label>}
+        <span className="eyebrow">Completá este dato para avanzar</span><h2>{question.prompt}</h2><p className="workspace-help">{help[question.id] || 'Describí el detalle técnico que permite distinguir este producto. No hace falta inventar un dato.'}</p>
+        {question.id === 'unitVolumeCbm' && packaging ? <PackagingWizard recoveryKey={source} onCancel={() => setPackaging(false)} onComplete={volume => { onDraft({ ...draft, unitVolumeCbm: volume, packageLengthCm: undefined, packageWidthCm: undefined, packageHeightCm: undefined }); recordCaseAnswer(source, question.prompt, `${volume} m³ por unidad, calculado desde medidas`); setPackaging(false) }} /> : question.options ? <div className="case-choices" role="group" aria-label={question.prompt}>{question.options.map(([key,label],index) => <button autoFocus={index === 0} type="button" key={key} aria-pressed={value === key} onClick={() => setValue(key)}>{label}</button>)}</div> : <label><span className="sr-only">{question.prompt}</span><input autoFocus key={question.id} type={question.type || 'text'} inputMode={question.type === 'number' ? 'decimal' : 'text'} step="any" value={value} onChange={event => setValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') answer() }} /></label>}
         <button hidden={packaging} type="button" className="journey-primary-action" disabled={!question.valid(value)} onClick={answer}>Continuar</button>
         {!!backStack.length && <button type="button" className="pipeline-secondary" onClick={() => { setEdit(backStack[backStack.length - 1]); setBackStack(current => current.slice(0,-1)); setPackaging(false) }}>Atrás</button>}
         {question.id === 'moq' || (!classified && !forced && !['productName','functionText'].includes(question.id)) ? <button type="button" className="pipeline-secondary" onClick={() => { recordCaseAnswer(source,question.prompt,'No lo sé todavía'); setSkipped(current => [...current,question.id]); setEdit(null) }}>No sé todavía</button> : null}

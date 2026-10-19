@@ -438,6 +438,7 @@ export default function App() {
   }
 
   const reviewProductData = () => {
+    setStep(3)
     writeProductDraft('quote-result', null)
     writeProductDraft('pending-quote-save', null)
     setFrozenQuote(null)
@@ -664,11 +665,11 @@ export default function App() {
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
       <h1 className="journey-task-title">{progressStep === 4 ? 'Tu panel de resultados' : 'Planificá tu importación'}</h1>
       <p className="workspace-intro">Evaluá cuánto invertir, cuánto cuesta cada unidad y qué falta validar antes de comprar.</p>
-      <div className="journey-progress-bar" role="progressbar" aria-valuenow={progressStep} aria-valuemin={0} aria-valuemax={4} aria-label={progressStep === 4 ? 'Cotización lista' : `Paso ${progressStep + 1} de 4: ${stepLabels[progressStep]}`}>
+      <div className="journey-progress-bar" role="progressbar" aria-valuenow={progressStep} aria-valuemin={0} aria-valuemax={4} aria-label={progressStep === 4 ? 'Cotización lista' : progressStep === 0 ? 'Elegí tu punto de partida' : `Paso ${progressStep} de 4: ${stepLabels[progressStep]}`}>
         <div className="journey-progress-track">
           <div className="journey-progress-fill" style={{ width: `${(progressStep / 4) * 100}%` }} />
         </div>
-        <span className="journey-progress-label">{progressStep === 4 ? <><UiIcon name="check" size={14} />{' '}¡Listo!</> : `Paso ${progressStep + 1} de 4 · ${stepLabels[progressStep]}`}</span>
+        <span className="journey-progress-label">{progressStep === 4 ? <><UiIcon name="check" size={14} />{' '}¡Listo!</> : progressStep === 0 ? 'Para empezar · Elegí tu punto de partida' : `Paso ${progressStep} de 4 · ${stepLabels[progressStep]}`}</span>
       </div>
     </section>
 
@@ -811,7 +812,7 @@ export default function App() {
       </aside>
     </section>
 
-    {analysis && <div className="focus-setup-action"><button type="button" className="pipeline-secondary" onClick={() => { setShowSetup(value => !value); reviewProductData() }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
+    {analysis && <div className="focus-setup-action"><button type="button" className="pipeline-secondary" onClick={() => { const opening = !showSetup; setShowSetup(opening); reviewProductData(); if (opening) { setStep(1); setProfilePage(1); setBudgetPage(false) } }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
     {analysis && analysisPrefill && <section className="journey-pipeline-section" hidden={showSetup}>
       <CalculationPipeline
         analysis={analysis}

@@ -18,11 +18,11 @@ Run `npm run build`; it generates a Vite manifest and executes `scripts/measure-
 | JavaScript graph | Raw bytes | gzip bytes |
 |---|---:|---:|
 | Baseline single entry | 693,087 | 197,120 |
-| New entry | 249,657 | 77,628 |
-| New landing including configured authentication | 459,599 | 132,705 |
-| Quote entry including shared static dependencies | 365,164 | 114,330 |
+| New entry | 249,662 | 78,160 |
+| New landing including configured authentication | 459,482 | 133,242 |
+| Quote entry including shared static dependencies | 365,250 | 114,889 |
 
-Entry gzip decreased 60.6%; landing with configured authentication decreased 32.7%. This defers downloads; it does not claim the sum of every eventual chunk decreased by those percentages. Every build enforces budgets of 95 KB gzip for entry and 180 KB for landing with authentication. Hashes and a few bytes may change with later builds.
+Entry gzip decreased 60.3%; landing with configured authentication decreased 32.4%. This defers downloads; it does not claim the sum of every eventual chunk decreased by those percentages. Every build enforces budgets of 95 KB gzip for entry and 180 KB for landing with authentication. Hashes and a few bytes may change with later builds.
 
 No production database latency traces were available. Query-count and index-plan improvements were verified against migrated SQLite/D1-compatible fixtures; no production p95 improvement is asserted.
 

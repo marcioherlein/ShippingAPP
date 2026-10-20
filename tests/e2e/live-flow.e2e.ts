@@ -109,7 +109,10 @@ test('supplier search retains successful results and query after Alibaba extract
   await expect(page.getByRole('heading', { name: 'Electric motorcycle M5' })).toBeVisible()
   expect(searches).toBe(1)
   expect(reads).toBe(2)
-  await expect(page.locator('.intake-message:visible')).toHaveCount(1)
+  // The audit trail remains in the draft, while results and recovery own the screen.
+  await expect(page.locator('.intake-message:visible')).toHaveCount(0)
+  expect(await page.locator('.intake-message').count()).toBeGreaterThan(0)
+  await expect(page.getByRole('alert')).toContainText('No pude leer')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.screenshot({ path: testInfo.outputPath('supplier-recovery-390.png'), fullPage: true })
 })

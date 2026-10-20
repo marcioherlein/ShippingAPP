@@ -42,3 +42,11 @@ it('opens one question by default, preserves spaces, and never confirms automati
  expect(field.value).toBe('Iluminar fotografías ');await click('Continuar');expect(confirm).not.toHaveBeenCalled();expect(readCaseConversation(analysis.sourceUrl).some(m=>m.text.includes('Iluminar fotografías'))).toBe(true);
  await click('Atrás');expect(container.querySelector('.case-question h2')?.textContent).toContain('¿Para qué se usa principalmente?');
 })
+
+it('does not read stored conversation again while typing a pack count',async()=>{
+ await act(async()=>root.render(<Harness pack/>))
+ const reads=vi.spyOn(Storage.prototype,'getItem');reads.mockClear()
+ const field=container.querySelector<HTMLInputElement>('.case-question input')!
+ await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,'5');field.dispatchEvent(new Event('input',{bubbles:true}))})
+ expect(field.value).toBe('5');expect(reads).not.toHaveBeenCalled();reads.mockRestore()
+})

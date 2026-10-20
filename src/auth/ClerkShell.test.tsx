@@ -71,7 +71,7 @@ it('opens sign-in for a genuinely signed-out protected operation', async () => {
   await act(async () => {
     await expect(apiFetch('/api/opportunity-search', { method: 'POST' })).rejects.toMatchObject({ code: 'session_required' })
   })
-  expect(container.querySelector('dialog[open]')).not.toBeNull()
+  await act(async () => { await vi.dynamicImportSettled() }); expect(container.querySelector('dialog[open]')).not.toBeNull()
   expect(container.querySelector('form[aria-label="Clerk access"]')).not.toBeNull()
   expect(fetch).not.toHaveBeenCalled()
 })
@@ -81,7 +81,7 @@ it('keeps landing login visible and queues the form when the Clerk SDK is not lo
   const login = [...container.querySelectorAll('button')].find(button => button.textContent === 'Ingresar')!
   expect(login).toBeDefined()
   await act(async () => login.click())
-  expect(container.querySelector('dialog[open]')).not.toBeNull()
+  await act(async () => { await vi.dynamicImportSettled() }); expect(container.querySelector('dialog[open]')).not.toBeNull()
   expect(container.querySelector('form')).toBeNull()
   auth.isLoaded = true
   await act(async () => root.render(<ClerkShell><Landing onStart={vi.fn()} /></ClerkShell>))
@@ -91,7 +91,7 @@ it('offers account access at a protected-step message, not only in the top bar',
   auth.isSignedIn = false
   await act(async () => root.render(<ClerkShell><section aria-label="blocked step"><AccountControls /></section></ClerkShell>))
   await act(async () => container.querySelector('button')!.click())
-  expect(container.querySelector('dialog[open]')).not.toBeNull()
+  await act(async () => { await vi.dynamicImportSettled() }); expect(container.querySelector('dialog[open]')).not.toBeNull()
 })
 it('offers visible reconnection outside the closed account menu and resumes once identity verifies', async () => {
   const fetcher = vi.fn(async () => new Response('{}'))

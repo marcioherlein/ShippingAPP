@@ -2,6 +2,7 @@ import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { useEffect, useRef, useState } from 'react'
 import UiIcon from './UiIcon'
 import ProductWorkspaceForm from './ProductWorkspaceForm'
+import AccountControls from '../auth/AccountControls'
 import { ApiAuthError, getSessionState, subscribeSession } from '../lib/authSession'
 import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from '../lib/pendingOperation'
 import { isAlibabaUrl } from '../lib/productIntake'
@@ -133,6 +134,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const [link, setLink] = useState(draft?.link || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [authRequired,setAuthRequired] = useState(false)
+  useEffect(() => { if (error) queueMicrotask(() => { const alert = document.querySelector<HTMLElement>('.owned-product-error'); alert?.focus({ preventScroll: true }); alert?.scrollIntoView({ block: 'center', behavior: 'instant' }) }) }, [error])
 
   const [chatStep, setChatStep] = useState<ChatStep>(draft?.chatStep === 'carton' && !draft.volumeBasis ? 'volume' : draft?.chatStep || 'name')
   const [chatAnswers, setChatAnswers] = useState<Partial<Record<ChatStep, string>>>(draft?.chatAnswers || {})
@@ -184,6 +187,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     } catch (err) {
       if (controller.signal.aborted || !operationIsCurrent('owned-link', operation.id)) return
       operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
+      setAuthRequired(err instanceof ApiAuthError)
       const raw = err instanceof Error ? err.message : ''
       const message = /expected pattern|string did not match/i.test(raw)
         ? 'Falló transitoriamente la sesión del navegador. Reintená; el enlace es válido y no se consumió ningún análisis.'
@@ -319,7 +323,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const currentUnit = CHAT_UNITS[chatStep] ?? null
 
   return <section className="owned-product-intake" aria-label="Cómo cargar tu producto">
-    <div className="owned-product-intro">
+    <div className="owned-product-intro" hidden={mode !== null}>
       <span className="eyebrow">Tu producto</span>
       <h2>Elegí la forma más fácil.</h2>
       <p>Cargar, leer y completar el producto no consume un análisis. El crédito se usa recién cuando pedís clasificar la NCM y calcular la importación.</p>
@@ -334,11 +338,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         <small>Intento traer título, tipo, specs, precio, MOQ, peso, volumen y origen. Después sólo confirmás o completás faltantes.</small>
         <em>Lectura gratis</em>
       </button>
-      <button type="button" onClick={() => setMode('describe')}>
-        <span className="owned-product-option-icon"><UiIcon name="edit" size={19} /></span>
-        <b>Describir el producto</b>
-        <small>Te guío una pregunta por vez. Si no conocés el mínimo del proveedor, podés omitirlo.</small>
-      </button>
+
     </div>}
 
     {mode === 'link' && <form className="owned-product-entry" onSubmit={(event) => void submitLink(event)}>
@@ -359,7 +359,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : 'Leer producto'} <UiIcon name="arrow-right" size={16} /></button>
       </div>
       {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
-      <button type="button" className="pipeline-secondary" onClick={() => leaveLink('describe')}>Continuar con descripción manual</button>
+      <button type="button" className="pipeline-secondary" onClick={() => leaveLink('form')}>Completar ficha manualmente</button>
     </form>}
 
     {mode === 'describe' && !awaitingSensitive && <div className="product-chatbot">
@@ -526,6 +526,6 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       </div>
     </div>}
 
-    {error && <div className="pipeline-warning owned-product-error" role="alert"><b>No pude continuar todavía.</b><span>{error}</span></div>}
+    {error && <div className="pipeline-warning owned-product-error" role="alert" tabIndex={-1}><b>No pude continuar todavía.</b><span>{error}</span>{authRequired && <AccountControls />}</div>}
   </section>
 }

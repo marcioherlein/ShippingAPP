@@ -304,4 +304,25 @@ describe('Stage 4 watchlist + trusted snapshots HTTP boundary', () => {
     expect(invalid.status).toBe(400)
     expect((await invalid.json() as any).code).toBe('invalid_idempotency_key')
   })
+  it('lists many items with two owner-scoped indexed reads instead of an N+1 loop', async () => {
+    sqlite.exec(readFileSync('migrations/0008_watchlist_read_indexes.sql','utf8'))
+    const item=sqlite.prepare(`INSERT INTO watchlist_items(id,user_id,analysis_id,title,source_url,active,metadata_json,created_at,updated_at) VALUES(?,?,?,?,?,1,NULL,?,?)`)
+    const snapshot=sqlite.prepare(`INSERT INTO watchlist_snapshots(id,watchlist_item_id,observed_at,market_price_ars,landed_cost_ars,payload_json,idempotency_key,created_at) VALUES(?,?,?,?,?,NULL,?,?)`)
+    for(let i=0;i<100;i++) {
+      const id=`item-${String(i).padStart(3,'0')}`
+      item.run(id,i<80?USER_A:USER_B,i<80?ANALYSIS_A:ANALYSIS_B,id,`https://supplier.test/${id}`,NOW,NOW)
+      for(let j=0;j<20;j++) {const sid=`${id}-snapshot-${String(j).padStart(2,'0')}`;snapshot.run(sid,id,NOW,j,5,sid,NOW)}
+    }
+    const queries:string[]=[]
+    const counted:D1DatabaseLike={prepare(sql){queries.push(sql);return db.prepare(sql)}}
+    const response=await handleWatchlist(userRequest(USER_A,'/api/watchlist'),{DB:counted},{clock})
+    const body=await response.json() as any
+    expect(queries).toHaveLength(2)
+    expect(body.items).toHaveLength(80)
+    for(const item of body.items){expect(item.snapshots).toHaveLength(2);expect(item.latestSnapshot.marketPriceArs).toBe(19);expect(item.previousSnapshot.marketPriceArs).toBe(18);expect(Number(item.id.slice(5))).toBeLessThan(80)}
+    const plan=sqlite.prepare('EXPLAIN QUERY PLAN '+queries[1]).all(USER_A).map(row=>row.detail).join(' ')
+    expect(plan).toContain('idx_watchlist_snapshot_item_time_id')
+    expect(plan).toContain('idx_watchlist_user_active_updated')
+  })
+
 })

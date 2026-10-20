@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { D1DatabaseLike, D1PreparedStatementLike, D1RunResultLike, D1Value } from './persistence/d1'
 import {
   buildWeeklyDigestForUser,
@@ -95,6 +95,23 @@ describe('Stage 7 weekly digest scheduler', () => {
     db = new NodeDatabase(sqlite)
   })
   afterEach(() => sqlite.close())
+
+  it('reads only twelve owned products and their latest snapshots in two statements', async () => {
+    addUser(sqlite, USER_A)
+    addUser(sqlite, USER_B)
+    for (let index = 0; index < 30; index++) addWatch(sqlite, USER_A, String(index).padStart(2, '0'))
+    addWatch(sqlite, USER_B, 'private', { title: 'Other account private product' })
+    const prepare = vi.spyOn(db, 'prepare')
+    const digest = await buildWeeklyDigestForUser(db, USER_A, 'UTC', new Date(NOW))
+    expect(prepare).toHaveBeenCalledTimes(2)
+    expect(prepare.mock.calls[0][0]).toContain('LIMIT ?')
+    expect(prepare.mock.calls[1][0]).toContain('AND wi.id IN (')
+    expect(digest?.itemCount).toBe(12)
+    expect(digest?.summaryLines).toHaveLength(12)
+    expect(digest?.summaryLines.every(line => !line.includes('Other account'))).toBe(true)
+    expect(digest?.summaryLines[0]).toContain('Producto 29')
+    expect(digest?.summaryLines[0]).toContain('+10.0%')
+  })
 
   it('uses one deterministic weekly run key with Monday 11:00 UTC due time', () => {
     expect(weeklyDigestPeriod(new Date('2026-09-07T10:59:59Z'))).toMatchObject({

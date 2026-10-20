@@ -216,8 +216,8 @@ function changes(latest: ReturnType<typeof snapshotView> | null, previous: Retur
   }
 }
 
-async function itemView(repo: WatchlistRepository, row: WatchlistItemRow, userId: string, snapshotLimit = 2) {
-  const snapshots = await repo.listSnapshotsForUser(userId, row.id, snapshotLimit)
+async function itemView(repo: WatchlistRepository, row: WatchlistItemRow, userId: string, snapshotLimit = 2, prefetched?: WatchlistSnapshotRow[]) {
+  const snapshots = prefetched ?? await repo.listSnapshotsForUser(userId, row.id, snapshotLimit)
   const mapped = snapshots.map(snapshotView)
   const metadata = parseWatchlistMetadata(row) as WatchlistBasis | null
   return {
@@ -322,8 +322,13 @@ export async function handleWatchlist(request: Request, env: Env, dependencies: 
 
   if (url.pathname === '/api/watchlist' && request.method === 'GET') {
     const rows = await repo.listActiveForUser(userId)
-    const items = []
-    for (const row of rows) items.push(await itemView(repo, row, userId, 2))
+    const snapshots = rows.length ? await repo.listLatestSnapshotsForUser(userId) : []
+    const grouped = new Map<string, WatchlistSnapshotRow[]>()
+    for (const snapshot of snapshots) {
+      const group = grouped.get(snapshot.watchlist_item_id) ?? []
+      group.push(snapshot); grouped.set(snapshot.watchlist_item_id, group)
+    }
+    const items = await Promise.all(rows.map(row => itemView(repo, row, userId, 2, grouped.get(row.id) ?? [])))
     return json({ items })
   }
 

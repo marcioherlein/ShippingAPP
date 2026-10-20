@@ -193,4 +193,26 @@ describe('request deadline', () => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
+  it('coalesces only simultaneous same-session GETs and returns independent readable bodies', async () => {
+    setSessionState('unmanaged');setApiTokenProvider(async()=> 'same-session')
+    let release!:(response:Response)=>void
+    const fetcher=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve}))
+    vi.stubGlobal('fetch',fetcher)
+    const first=apiFetch('/api/usage'),second=apiFetch('/api/usage')
+    await vi.waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(1))
+    release(new Response('{"count":1}'))
+    const [a,b]=await Promise.all([first,second]);expect(await a.json()).toEqual({count:1});expect(await b.json()).toEqual({count:1})
+    fetcher.mockImplementation(async()=>new Response('{"count":2}'))
+    expect(await (await apiFetch('/api/usage')).json()).toEqual({count:2});expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+  it('does not share a pending read across account provider changes', async () => {
+    setSessionState('unmanaged');setApiTokenProvider(async()=> 'first-session')
+    let release!:(response:Response)=>void
+    const fetcher=vi.fn(()=>new Promise<Response>(resolve=>{release=resolve}));vi.stubGlobal('fetch',fetcher)
+    const first=apiFetch('/api/history');await vi.waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(1))
+    setApiTokenProvider(async()=> 'second-session');fetcher.mockImplementation(async()=>new Response('{"owner":"second"}'))
+    expect(await (await apiFetch('/api/history')).json()).toEqual({owner:'second'})
+    release(new Response('{"owner":"first"}'));expect(await (await first).json()).toEqual({owner:'first'});expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
 })

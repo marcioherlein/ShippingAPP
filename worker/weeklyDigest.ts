@@ -159,12 +159,19 @@ export function digestLineFromSnapshots(input: {
 
 export async function buildWeeklyDigestForUser(db: D1DatabaseLike, userId: string, timezone: string, now: Date): Promise<DigestContent | null> {
   const watchlist = new WatchlistRepository(db, () => now)
-  const items = (await watchlist.listActiveForUser(userId)).slice(0, 12)
+  const items = await watchlist.listActiveForUser(userId, 12)
   if (!items.length) return null
 
+  const rows = await watchlist.listLatestSnapshotsForUser(userId, items.map(item => item.id))
+  const byItem = new Map<string, WatchlistSnapshotRow[]>()
+  for (const row of rows) {
+    const snapshots = byItem.get(row.watchlist_item_id) ?? []
+    snapshots.push(row)
+    byItem.set(row.watchlist_item_id, snapshots)
+  }
   const lines: string[] = []
   for (const item of items) {
-    const snapshots = await watchlist.listSnapshotsForUser(userId, item.id, 2)
+    const snapshots = byItem.get(item.id) ?? []
     lines.push(digestLineFromSnapshots({
       title: item.title,
       latest: snapshots[0] ?? null,

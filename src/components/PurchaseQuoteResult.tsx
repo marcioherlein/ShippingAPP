@@ -9,7 +9,7 @@ import CaseConversation from './CaseConversation'
 import { usd } from '../lib/format'
 export type PurchaseQuoteSnapshot = { version: 1; quotedAt: string; analysis: ProductAnalysisV2; pipelineSummary: { baseQuantity: number; selectedMode: string; totalCostUsd: number; unitCostUsd: number; freightCostUsd: number }; purchasePlan: PurchasePlan; conversation: CaseMessage[] }
 const modes = { lcl: 'Marítimo LCL', air: 'Aéreo', courier: 'Courier comercial' }
-export function PurchaseQuoteSummary({ snapshot, onChoose }: { snapshot: PurchaseQuoteSnapshot; onChoose?: (quantity: number) => void }) {
+export const PurchaseQuoteSummary = React.memo(function PurchaseQuoteSummary({ snapshot, onChoose }: { snapshot: PurchaseQuoteSnapshot; onChoose?: (quantity: number) => void }) {
   const { purchasePlan: plan, analysis } = snapshot
   const cost = plan.selected?.cost
   const composition: Array<[string, number]> = cost ? [
@@ -25,12 +25,13 @@ export function PurchaseQuoteSummary({ snapshot, onChoose }: { snapshot: Purchas
       {plan.selected && <div className="workspace-result-overview" aria-label="Resumen de la compra"><div><span>Inversión total estimada · USD</span><strong>{usd(plan.selected.cost.totalCostUsd)}</strong></div><div><span>Cantidad elegida</span><strong>{plan.selected.quantity} u.</strong></div><div><span>Modalidad comparada</span><strong>{modes[plan.selected.mode]}</strong></div></div>}
       <p className="workspace-result-note">Estimación para decidir, sujeta a validación comercial y aduanera. Revisá los pendientes antes de comprar.</p>
       {plan.note && <p>{plan.note}</p>}{plan.error && <p role="alert">{plan.error}</p>}
-      <div className="simple-quote-grid">
+      <details className="quote-scenarios"><summary>Comparar una unidad con esta compra</summary><div className="simple-quote-grid">
         <article className="simple-quote-card"><h3>Si traés una unidad</h3>{plan.single ? <><strong>{usd(plan.single.cost.unitCostUsd)}</strong><span>USD por unidad · {modes[plan.single.mode]}</span></> : <p>{plan.singleReason}</p>}</article>
         {plan.selected && plan.selected.quantity !== 1 && <article className="simple-quote-card"><h3>Si traés {plan.selected.quantity} unidades</h3><strong>{usd(plan.selected.cost.unitCostUsd)}</strong><span>USD por unidad · {modes[plan.selected.mode]}</span><p>Total de esta compra: {usd(plan.selected.cost.totalCostUsd)}</p></article>}
       </div>
+      </details>
       {cost && plan.selected && <section className="decision-explainer" aria-label="Precio y costo por unidad"><h3>Del precio del proveedor al costo en Argentina</h3><p>Embalaje utilizado: {analysis.product.packedWeightKg} kg y {analysis.product.volumeCbm?.toLocaleString('es-AR', { maximumFractionDigits: 8 })} m³ por unidad. Para {plan.selected.quantity} unidades calculamos {(analysis.product.packedWeightKg * plan.selected.quantity).toLocaleString('es-AR', { maximumFractionDigits: 3 })} kg y {((analysis.product.volumeCbm || 0) * plan.selected.quantity).toLocaleString('es-AR', { maximumFractionDigits: 6 })} m³ de carga.</p><div className="decision-metrics"><article><span>Precio de compra · USD/u.</span><strong>{usd(cost.fobUsd / plan.selected.quantity)}</strong><p>Sólo la mercadería del proveedor.</p></article><article><span>Importación · USD/u.</span><strong>{usd((cost.totalCostUsd - cost.fobUsd) / plan.selected.quantity)}</strong><p>Flete, destino, impuestos y gastos incluidos en este cálculo.</p></article><article><span>Costo puesto estimado · USD/u.</span><strong>{usd(cost.unitCostUsd)}</strong><p>La inversión total dividida por {plan.selected.quantity} unidades.</p></article></div><p>El precio de venta lo definís vos. Para evaluar un margen también necesitás comisiones, logística local, gastos de venta y el tratamiento fiscal de tu operación.</p></section>}
-      {plan.selected && <section className="decision-comparison" aria-label="Comparación de cantidades"><h3>¿Qué cambia al comprar más?</h3><p>Comparamos escenarios calculados. Un menor costo por unidad puede requerir una inversión total mayor.</p><div className="decision-chart">{[plan.single, plan.selected, plan.improvement].filter((item,index,items) => item && items.findIndex(other => other?.quantity === item.quantity) === index).map(item => item && <div key={item.quantity}><span>{item.quantity} u.</span><span className="decision-bar" aria-hidden="true"><span style={{width:`${Math.min(100,item.cost.unitCostUsd / Math.max(plan.single?.cost.unitCostUsd || 0,plan.selected!.cost.unitCostUsd,plan.improvement?.cost.unitCostUsd || 0) * 100)}%`}} /></span><b>{usd(item.cost.unitCostUsd)} /u.</b><small>Total {usd(item.cost.totalCostUsd)} · {modes[item.mode]}</small></div>)}</div></section>}
+      {plan.selected && new Set([plan.single?.quantity,plan.selected.quantity,plan.improvement?.quantity].filter(Boolean)).size > 1 && <section className="decision-comparison" aria-label="Comparación de cantidades"><h3>¿Qué cambia al comprar más?</h3><p>Comparamos escenarios calculados. Un menor costo por unidad puede requerir una inversión total mayor.</p><div className="decision-chart">{[plan.single, plan.selected, plan.improvement].filter((item,index,items) => item && items.findIndex(other => other?.quantity === item.quantity) === index).sort((a,b) => (a?.quantity || 0) - (b?.quantity || 0)).map(item => item && <div key={item.quantity}><span>{item.quantity} u.</span><span className="decision-bar" aria-hidden="true"><span style={{width:`${Math.min(100,item.cost.unitCostUsd / Math.max(plan.single?.cost.unitCostUsd || 0,plan.selected!.cost.unitCostUsd,plan.improvement?.cost.unitCostUsd || 0) * 100)}%`}} /></span><b>{usd(item.cost.unitCostUsd)} /u.</b><small>Total {usd(item.cost.totalCostUsd)} · {modes[item.mode]}</small></div>)}</div></section>}
       {cost && <section className="workspace-cost-composition" aria-label="Distribución de la inversión"><h3>Cómo se compone tu inversión (USD)</h3><dl>{composition.map(([label,amount]) => <div key={label}><dt>{label}</dt><dd>{usd(amount)}</dd><span className="workspace-cost-track" aria-hidden="true"><span style={{width:`${cost.totalCostUsd > 0 ? Math.min(100,Math.max(0,amount / cost.totalCostUsd * 100)) : 0}%`}} /></span></div>)}</dl></section>}
       {plan.improvement && plan.selected && plan.improvement.quantity !== plan.selected.quantity && <aside className="case-alert" aria-label="Otra opción de compra">
         <p><b>{plan.improvement.quantity} unidades a {usd(plan.improvement.cost.unitCostUsd)} por unidad.</b> {plan.improvement.mode === plan.selected.mode && Math.abs(plan.improvement.cost.freightCostUsd - plan.selected.cost.freightCostUsd) < 0.005 ? 'Con el mismo costo de flete estimado.' : 'Una alternativa con menor costo unitario.'} Total: {usd(plan.improvement.cost.totalCostUsd)}. Diferencia de desembolso: {usd(plan.improvement.cost.totalCostUsd - plan.selected.cost.totalCostUsd)}.</p>
@@ -50,7 +51,7 @@ export function PurchaseQuoteSummary({ snapshot, onChoose }: { snapshot: Purchas
       </details>
     </section>
   </>
-}
+})
 export default function PurchaseQuoteResult({ analysis, plan, capacity, input, summary, saved, onEdit, onChoose }: { analysis: ProductAnalysisV2; plan: PurchasePlan; capacity: PurchaseCapacity; input: Record<string,unknown>; summary: PurchaseQuoteSnapshot['pipelineSummary']; saved?: PurchaseQuoteSnapshot | null; onEdit: () => void; onChoose: (quantity: number) => void }) {
   const [pending] = useState(() => readProductDraft<{ input: Record<string,unknown>; snapshot: PurchaseQuoteSnapshot }>('pending-quote-save'))
   const pendingMatches = !saved && JSON.stringify(pending?.input) === JSON.stringify({ ...input, capacity }) && pending?.snapshot.analysis.sourceUrl === analysis.sourceUrl && pending.snapshot.pipelineSummary.baseQuantity === summary.baseQuantity && pending.snapshot.pipelineSummary.totalCostUsd === summary.totalCostUsd
@@ -87,10 +88,10 @@ export default function PurchaseQuoteResult({ analysis, plan, capacity, input, s
     resume()
     return unsubscribe
   }, [])
-  return <><PurchaseQuoteSummary snapshot={snapshot} onChoose={onChoose} /><div className="simple-quote">
+  return <><div className="simple-quote quote-result-actions">
     <button type="button" className="journey-primary-action" disabled={state === 'saving' || state === 'saved'} onClick={() => void save()}>{state === 'saving' ? 'Guardando…' : state === 'saved' ? 'Presupuesto guardado' : 'Guardar presupuesto'}</button>
     <button type="button" className="pipeline-secondary" onClick={onEdit}>{saved ? 'Recalcular con datos y tarifas actuales' : 'Editar ficha'}</button>
     {error && <p role="alert">{error} Conservamos el presupuesto para reintentar.</p>}
     {state === 'saved' && <p role="status">Disponible en Mi cuenta → Historial, con los datos y el historial de esta cotización.</p>}
-  </div></>
+  </div><PurchaseQuoteSummary snapshot={snapshot} onChoose={onChoose} /></>
 }

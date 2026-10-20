@@ -31,6 +31,7 @@ async function readFixture(page: import('@playwright/test').Page, capacity: 'unk
   await page.getByLabel('Enlace de Alibaba').fill(source)
   await page.getByRole('button',{name:/Leer producto/}).click()
   await expect(page.locator('.guided-case')).toBeVisible()
+  await page.getByText('Opciones de clasificación y oferta',{exact:true}).click()
   await page.getByRole('button',{name:'Buscar en el nomenclador',exact:true}).click()
   await page.getByLabel('Producto o código NCM').fill('9506.51.00')
   await page.getByRole('radio',{name:/9506.51.00/}).check()

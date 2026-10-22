@@ -89,6 +89,10 @@ export default function NcmDisambiguation({ disambiguation, customs, onPickCandi
       const fact = question.options.find(option => option.value === answers[identity(question)])?.note
       if (fact) nextFacts[question.attribute] = fact
     }
+    // The parent may unmount this panel in the same batch when processing begins.
+    // Persist before notifying it; effects from this render are not guaranteed to run.
+    writeProductDraft(storageKey + ':submitted', next)
+    writeProductDraft(storageKey + ':facts', nextFacts)
     setFacts(nextFacts); setSubmitted(next); setEditing(null); setCompleted([])
     onAnswer(note, previousOptions)
   }

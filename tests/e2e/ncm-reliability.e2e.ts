@@ -78,6 +78,9 @@ for (const width of [390, 1440]) for (const mode of ['manual', 'search', 'link']
   await expect(page.locator('.guided-case')).toHaveAttribute('aria-busy', 'false')
   await expect(question).toHaveCount(0); await expect(page.locator('.case-question')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Buscar posición en el nomenclador', exact: true })).toBeVisible()
+  await expect(page.locator('.guided-case')).not.toContainText('Elegí la descripción que más se parezca')
+  await expect(page.locator('.guided-case')).not.toContainText('Validá un detalle del producto')
+  await expect(page.locator('.ncm-disambiguation')).toHaveCount(0)
   await page.screenshot({ path: info.outputPath(`ncm-no-${width}.png`) }); return
  }
  await expect(page.locator('.guided-case')).toContainText('NCM validada: 9617.00.10')

@@ -39,3 +39,17 @@ it('lets the user correct a submitted answer and supplies the old fact for repla
  expect(answer.mock.calls[1][0]).toBe('Recipiente aislado por vacío para bebidas.')
  expect(answer.mock.calls[1][1]).toContain('Recipiente sin aislamiento por vacío.')
 })
+
+it('persists submitted facts before the parent unmounts it in the same batch', async () => {
+ const replacePanel = vi.fn(() => root.render(<p>Procesando</p>))
+ await act(async () => root.render(<NcmDisambiguation disambiguation={{ candidates: [], questions: [insulation] }} customs={createManualProductAnalysis('manual://ncm').customs} recoveryKey="same-product" onAnswer={replacePanel} onPickCandidate={vi.fn()} />))
+ await click('No'); await click('Continuar'); await click('Volver a clasificar con mis respuestas')
+ expect(container.textContent).toBe('Procesando')
+ expect(replacePanel).toHaveBeenCalledTimes(1)
+ const facts = JSON.parse(sessionStorage.getItem('shippingapp:product-draft:ncm-answers:same-product:facts') || 'null')
+ expect(facts.data.construccion).toBe('Recipiente sin aislamiento por vacío.')
+ await render()
+ expect(container.querySelector('fieldset')).toBeNull()
+ expect(container.textContent).toContain('ya están respondidas')
+ expect(answer).not.toHaveBeenCalled()
+})

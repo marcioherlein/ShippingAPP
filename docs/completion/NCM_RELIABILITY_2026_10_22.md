@@ -15,11 +15,13 @@ El caso «termo Stanley, acero inoxidable, para mantener el agua caliente y toma
 
 ## Evidencia y gates
 
-- Vitest completo: 187 archivos y 1.105 pruebas aprobadas.
+- Vitest completo: 187 archivos y 1.106 pruebas aprobadas.
 - Regresión con las 10.504 posiciones del asset productivo, competidores reales de acero/partes/maquinaria, idiomas y contraejemplos, IA caída/adversarial/colgada.
 - Endpoint `/api/ncm-classify` real con asset oficial: pregunta → confirmación → candidato y tarifa; ausencia de SIM no inventa sufijo.
 - Gate de producción nuevo: cinco casos contra el backend desplegado (pendiente, confirmado, sin vacío, repuesto, eléctrico). Usa el mecanismo de autenticación de servicio existente y debe aprobar antes de declarar verificado el despliegue.
-- Chromium: ocho recorridos nuevos aprobados (descripción manual sí/no, búsqueda y link, a 390×844 y 1440×1000). Clasificador real y catálogo completo dentro del handler de prueba; búsqueda, proveedor y reserva usan fixtures. Dos solicitudes NCM, sin tercer bucle. Auditor independiente revisó 24 capturas.
+- Chromium: ocho recorridos nuevos aprobados (descripción manual sí/no, búsqueda y link, a 390×844 y 1440×1000). Clasificador real y catálogo completo dentro del handler de prueba; búsqueda, proveedor y reserva usan fixtures. Dos solicitudes NCM, sin tercer bucle. Auditor independiente revisó 24 capturas y dos retomas del estado terminal.
 - Gate de release: suite completa de 96 pruebas WebKit/Chromium, build TypeScript/Vite, presupuestos de bundle, schema y assets. El resultado del head final y del despliegue se registra en CI/PR.
 
 La auditoría visual está en los artefactos de tarea `/workspace/shipping-review/ncm-ui-audit-2026-10-22.md` y `ncm-reliability-final-2026-10-22/`. No establece validación general de todas las mercaderías ni una tasa global de precisión. El conjunto independiente revisado por especialista propuesto en el plan sigue pendiente; no se afirma haber alcanzado sus metas de 95%/99%. Este cambio corrige el incidente y endurece los caminos inseguros, sin certificar toda la nomenclatura.
+
+Las respuestas se persisten síncronamente antes de iniciar procesamiento: una prueba desmonta el panel en el mismo evento y verifica recuperación sin repetir la pregunta. El estado agotado muestra un mensaje y una acción de recuperación, preservando alertas reales de red/autenticación.

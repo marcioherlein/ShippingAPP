@@ -259,6 +259,11 @@ jobs:
           if (body.checks?.simChapter95?.sourceDate !== '2026-08-14') throw new Error('Production SIM asset date mismatch')
           NODE
 
+      - name: Production NCM reliability gate
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+        run: node scripts/smoke-production-ncm-reliability.mjs
+
       - name: Production Alibaba self-scrape smoke test (no Parse.bot)
         env:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs

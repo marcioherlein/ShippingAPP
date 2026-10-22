@@ -196,6 +196,17 @@ function applySimEvidence(base: CustomsProfile, full: FullNcmApiResult): Customs
 }
 
 export function mergeFullCustomsProfile(local: CustomsProfile, full: FullNcmApiResult): CustomsProfile {
+  if (full.disambiguation?.questions.length) {
+    // A known unresolved requirement takes precedence over a stale seed or prior inference.
+    return withProvisional({
+      ...local, ncmCandidate: null, description: null, classificationConfidence: 'missing',
+      tariff: null, dutyRatePct: null, dutyRateStatus: 'missing',
+      simOpeningCandidate: null, simOpeningConfidence: 'missing', simAlternatives: [], alternatives: [],
+      missingFacts: [...new Set([...full.missingFacts, ...full.disambiguation.questions.map(question => question.prompt)])],
+      rationale: [...full.rationale, 'Clasificación pendiente: responder la pregunta técnica antes de aplicar aranceles.'],
+      source: full.source, catalogSourceDate: full.sourceDate,
+    }, { ...full, provisional: false, provisionalTariff: null, provisionalCode: null })
+  }
   if (full.status !== 'candidate' || !full.code || !full.label) {
     return withProvisional({
       ...local,

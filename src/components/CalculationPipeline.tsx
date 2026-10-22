@@ -1,3 +1,4 @@
+import { replaceClarificationFacts } from '../lib/ncmDisambiguation'
 import GuidedCaseReview from './GuidedCaseReview'
 import type { PurchaseCapacity } from '../lib/purchasePlan'
 import { compatibleNcmChapters } from '../lib/ncmFamilyGuard'
@@ -219,8 +220,10 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
   const lastAnalysis = useRef(analysis)
   useEffect(() => {
     if (lastAnalysis.current === analysis) return
+    const previous = lastAnalysis.current
     lastAnalysis.current = analysis
     const initial = productConfirmationFromAnalysis(analysis)
+    if (previous.sourceUrl === analysis.sourceUrl && previous.product.name === analysis.product.name) return
     setDraft(initial)
     setSupplierQuote(initial.supplierQuote || initialSupplierQuote(analysis.product.supplierEvidence?.currency && analysis.product.supplierEvidence.currency !== 'USD' ? 0 : analysis.product.unitPriceUsd || 0, analysis.sourceUrl === 'chatbot://product' && (analysis.product.unitPriceUsd || 0) > 0))
     setClarification('')
@@ -246,16 +249,15 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
   } : null
   const hasDisambiguation = !!disambiguation && (disambiguation.candidates.length > 0 || disambiguation.questions.length > 0)
   const refinement = analysis.classificationRefinement
-  const refinementExhausted = !classificationResolved
-    && refinement?.allowed === false
-    && refinement.maxAttempts > 0
-    && refinement.attempt >= refinement.maxAttempts
+  const refinementLimit = Math.min(2, Math.max(1, refinement?.maxAttempts || 2))
+  const refinementExhausted = !classificationResolved && !!refinement
+    && (refinement.allowed === false || refinement.attempt >= refinementLimit)
   const identityEdited = !sameIdentity(draft, sourceDraft)
   // Fresh intake uses an intentionally unclassified placeholder. Its generic
   // missing facts are not a response from the classifier and must not repeat
   // questions already answered in the chat before the first NCM request.
   const classifierAttempted = !!analysis.usageReservationId || !!refinement
-  const classifierAskedForMore = classifierAttempted && !classificationReady && analysis.customs.missingFacts.length > 0
+  const classifierAskedForMore = classifierAttempted && !classificationReady && (analysis.customs.missingFacts.length > 0 || !!disambiguation?.questions.length)
   const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
   const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
@@ -288,16 +290,22 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
   }
 
   const submitConfirmation = () => {
+    if (refinementExhausted) return
     const note = clarification.replace(/\s+/g, ' ').trim()
     const next = note
       ? applyClassificationClarification(draft, note, analysis.customs.missingFacts)
       : draft
-    onConfirm({ ...next, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, next.quantity) || 0 })
+    const snapshot = { ...next, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, next.quantity) || 0 }
+    setDraft(snapshot)
+    onConfirm(snapshot)
     setClarification('')
   }
 
-  const submitDisambiguationAnswer = (note: string) => {
-    onConfirm({ ...applyClassificationClarification(draft, note, analysis.customs.missingFacts), supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 })
+  const submitDisambiguationAnswer = (note: string, previousOptions: string[] = []) => {
+    if (refinementExhausted) return
+    const snapshot = { ...draft, description: replaceClarificationFacts(draft.description || '', note, previousOptions), supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, draft.quantity) || 0 }
+    setDraft(snapshot)
+    onConfirm(snapshot)
     setClarification('')
   }
   // A direct candidate pick resolves to a confirmed profile and routes through the existing
@@ -315,7 +323,8 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
     status={status} blocker={blocker} authRequired={authRequired}
     onDraft={setDraft} onQuote={setSupplierQuote} onConfirm={submitConfirmation}
     onManual={pickDisambiguationCandidate}
-    candidates={hasDisambiguation ? <NcmDisambiguation recoveryKey={`${analysis.sourceUrl}:${analysis.product.name}`} disambiguation={disambiguation!} customs={analysis.customs} onPickCandidate={pickDisambiguationCandidate} onAnswer={submitDisambiguationAnswer} /> : null}
+    hasPreciseClarification={!!disambiguation?.questions.length}
+    candidates={hasDisambiguation ? <NcmDisambiguation recoveryKey={`${analysis.sourceUrl}:${analysis.product.name}`} refinementExhausted={refinementExhausted} disambiguation={disambiguation!} customs={analysis.customs} onPickCandidate={pickDisambiguationCandidate} onAnswer={submitDisambiguationAnswer} /> : null}
   />
   if (capacity && status === 'ready') return null
 
@@ -363,13 +372,13 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
           {hasDisambiguation && <NcmDisambiguation
             key={`questions:${analysis.sourceUrl}:${analysis.product.name}`}
             recoveryKey={`${analysis.sourceUrl}:${analysis.product.name}`}
-            disambiguation={disambiguation!}
+            refinementExhausted={refinementExhausted} disambiguation={disambiguation!}
             customs={analysis.customs}
             onPickCandidate={pickDisambiguationCandidate}
             onAnswer={submitDisambiguationAnswer}
           />}
 
-          {classifierAskedForMore && !refinementExhausted && <div className="pipeline-clarification-card">
+          {classifierAskedForMore && !disambiguation?.questions.length && !refinementExhausted && <div className="pipeline-clarification-card">
             <span className="eyebrow">Una pregunta para terminar</span>
             <div className="pipeline-clarification-copy">
               <h3>{clarificationUi.question}</h3>
@@ -390,11 +399,11 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
           </div>}
 
           {classificationMissing.length > 0 && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>Todavía no puedo clasificarlo.</b><span>Falta: {classificationMissing.map((item) => item.label).join(' · ')}.</span></div>}
-          {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No pude cerrar una clasificación confiable.</b><span>Se usaron {refinement?.attempt} de {refinement?.maxAttempts} intentos de aclaración. Podés buscar y confirmar una posición en el nomenclador sin iniciar otro caso.</span></div>}
+          {refinementExhausted && <div className="pipeline-warning pipeline-missing-fields" role="alert"><b>No pude cerrar una clasificación confiable.</b><span>Se usaron {refinement?.attempt} de {refinementLimit} intentos de aclaración. Podés buscar y confirmar una posición en el nomenclador sin iniciar otro caso.</span></div>}
           {refinementExhausted && <NomencladorGuidance onManualSearch={() => setShowManualNcm(true)} />}
 
           <div className="pipeline-confirm-actions progressive-confirm-actions">
-            {!refinementExhausted && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <UiIcon name="arrow-right" size={16} /></button>}
+            {!refinementExhausted && !disambiguation?.questions.length && <button type="button" className="journey-primary-action" disabled={!canConfirm} onClick={submitConfirmation}>{classifierAskedForMore ? 'Responder y continuar' : 'Confirmar y clasificar'} <UiIcon name="arrow-right" size={16} /></button>}
             <button type="button" className="pipeline-secondary" onClick={onEditProduct}>{refinementExhausted ? 'Revisar / cambiar producto' : 'Cambiar producto'}</button>
           </div>
         </> : <>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeClarificationNote, hasActionableAnswers } from './ncmDisambiguation'
+import { composeClarificationNote, hasActionableAnswers, replaceClarificationFacts } from './ncmDisambiguation'
 import type { NcmDisambiguationQuestion } from './customsClassification'
 
 const questions: NcmDisambiguationQuestion[] = [
@@ -43,4 +43,13 @@ describe('ncmDisambiguation', () => {
     expect(hasActionableAnswers(questions, { motor: 'no-se', material: 'no-se' })).toBe(false)
     expect(hasActionableAnswers(questions, {})).toBe(false)
   })
+})
+
+it('replaces a corrected insulation fact without erasing the product or unrelated answers', () => {
+ const previous = 'Termo de acero. Aclaración del usuario: Recipiente sin aislamiento por vacío. Es de acero.'
+ const result = replaceClarificationFacts(previous, 'Recipiente aislado por vacío para bebidas.', ['Recipiente sin aislamiento por vacío.', 'Recipiente aislado por vacío para bebidas.'])
+ expect(result).not.toContain('sin aislamiento')
+ expect(result).toContain('Termo de acero')
+ expect(result).toContain('Es de acero.')
+ expect(result).toContain('Recipiente aislado por vacío para bebidas.')
 })

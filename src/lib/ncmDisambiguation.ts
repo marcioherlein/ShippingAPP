@@ -35,3 +35,11 @@ export function hasActionableAnswers(
 ): boolean {
   return composeClarificationNote(questions, answers).length > 0
 }
+
+/** Replace previous option facts on an explicit correction, preserving other product details. */
+export function replaceClarificationFacts(description: string, note: string, previousOptions: string[]): string {
+  let next = description
+  for (const previous of [...previousOptions, note]) if (previous) next = next.replaceAll(previous, '')
+  next = next.replace(/Aclaración del usuario:\s*(?=\.|$)/g, '').replace(/(?:\.\s*){2,}/g, '. ').trim()
+  return [next.replace(/[.\s]+$/, ''), `Aclaración del usuario: ${note}`].filter(Boolean).join('. ')
+}

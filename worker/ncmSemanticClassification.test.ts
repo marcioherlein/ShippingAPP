@@ -38,7 +38,7 @@ describe('language invariance — vacuum thermo converges on 9617.00.10', () => 
     name: '45oz 1350ml Large Capacity Stainless Steel',
     material: 'Stainless Steel',
     functionText: 'direct drinking, travel',
-    description: 'thermal insulation performance: Thermal Insulation, double wall',
+    description: 'thermal insulation performance: Thermal Insulation, double wall, vacuum insulated',
   }
   const spanish = {
     name: 'Termo botella térmica 1350 ml de acero inoxidable',
@@ -82,11 +82,11 @@ describe('negative-evidence scoring — retrieval level', () => {
   const plasticQuery = ['plastico', 'de plastico', 'recipiente', 'para bebidas', 'articulos de uso domestico', 'refrigerador']
   const facts = { name: 'botella de plastico', material: 'plastico' }
 
-  it('ranks refrigeration machinery ABOVE plastic families when no negative evidence is applied', () => {
+  it('excludes machinery for identified finished drinkware even when expansion injects refrigeration', () => {
     const result = retrieveNcmCandidates(index, plasticQuery, facts, 25, [])
     const codes = result.map((c) => c.code)
-    // With the "refrigerador" term and no exclusion, 8419 competes strongly (the old bug).
-    expect(codes).toContain('8419.89.91')
+    expect(codes).not.toContain('8419.89.91')
+    expect(codes.some(code => code.startsWith('3924'))).toBe(true)
   })
 
   it('penalizes the contradicted refrigeration family below plastic families with negative evidence', () => {

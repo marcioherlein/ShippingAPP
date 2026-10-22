@@ -6,7 +6,7 @@ import CalculationPipeline from './CalculationPipeline'
 import { createManualProductAnalysis } from '../lib/productConfirmation'
 import type { ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import type { QuotePrefill } from '../lib/hotProducts'
-vi.mock('./NcmDisambiguation', () => ({ default: ({ disambiguation }: { disambiguation: { candidates: Array<{ label: string }> } }) => <div>{disambiguation.candidates.map(c => c.label).join(' · ')}</div> }))
+vi.mock('./NcmDisambiguation', () => ({ default: ({ disambiguation, onAnswer }: { disambiguation: { candidates: Array<{ label: string }>; questions?: Array<{ prompt: string }> }; onAnswer: (note: string, previousOptions?: string[]) => void }) => <div>{disambiguation.candidates.map(c => c.label).join(' · ')}{disambiguation.questions?.map(q => <p key={q.prompt}>{q.prompt}</p>)}<button onClick={() => onAnswer('Recipiente aislado por vacío para bebidas.', ['Recipiente sin aislamiento por vacío.'])}>Enviar dato preciso</button></div> }))
 let root: Root
 let container: HTMLDivElement
 const confirm = vi.fn()
@@ -52,4 +52,29 @@ it('shows the missing-fact question even when relevant candidates are present', 
   expect(container.textContent).toContain('APARATO DE ALUMBRADO LED')
   expect(container.textContent).toContain('¿Para qué se usa este producto?')
   expect(container.querySelector('#classification-clarification')).not.toBeNull()
+})
+
+it('prioritizes the precise backend question and preserves user facts through refinement', async () => {
+ const value = analysis()
+ value.product = { ...value.product, name: 'Termo de acero', functionText: 'Transportar bebidas', material: 'Acero inoxidable', packedWeightKg: 0.6, volumeCbm: 0.002, unitPriceUsd: 17 }
+ value.customs.missingFacts = ['Confirmar aislamiento']
+ value.customs.disambiguation = { candidates: [], questions: [{ id: 'insulation', attribute: 'construccion', prompt: '¿La ficha confirma aislamiento por vacío?', options: [] }] }
+ const props = { prefill: { budgetUsd: 5000, sensitiveCategory: 'none' } as QuotePrefill, status: 'blocked' as const, activeStage: 0, onConfirm: confirm, onManualNcm: vi.fn(), onEditProduct: vi.fn(), onReviewProduct: vi.fn(), capacity: { mode: 'budget' as const, budgetUsd: 5000, min: 1, max: 1 } }
+ await act(async () => root.render(<CalculationPipeline {...props} analysis={value} />))
+ expect(container.querySelector('.case-question')).toBeNull()
+ expect(container.textContent).toContain('¿La ficha confirma aislamiento por vacío?')
+ await act(async () => [...container.querySelectorAll('button')].find(b => b.textContent === 'Enviar dato preciso')!.click())
+ const submitted = confirm.mock.calls[0][0]
+ expect(submitted.functionText).toBe('Transportar bebidas')
+ expect(submitted.material).toBe('Acero inoxidable')
+ expect(submitted.unitWeightKg).toBe(0.6)
+ expect(submitted.description).toContain('Recipiente aislado por vacío para bebidas.')
+ await act(async () => root.render(<CalculationPipeline {...props} analysis={{ ...value, product: { ...value.product, packedWeightKg: 0 } }} />))
+ await act(async () => [...container.querySelectorAll('button')].find(b => b.textContent === 'Enviar dato preciso')!.click())
+ expect(confirm.mock.calls[1][0].unitWeightKg).toBe(0.6)
+ expect(confirm.mock.calls[1][0].description.match(/Recipiente aislado por vacío para bebidas/g)).toHaveLength(1)
+ await act(async () => root.render(<CalculationPipeline {...props} analysis={{ ...value, product: { ...value.product, packedWeightKg: 0 }, classificationRefinement: { allowed: true, attempt: 2, maxAttempts: 99 } }} />))
+ await act(async () => [...container.querySelectorAll('button')].find(b => b.textContent === 'Enviar dato preciso')!.click())
+ expect(confirm).toHaveBeenCalledTimes(2)
+ expect(container.textContent).toContain('No hay una clasificación validada')
 })

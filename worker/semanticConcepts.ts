@@ -93,28 +93,27 @@ const POLAR_CONCEPTS: PolarConcept[] = [
       /\bnon[-\s]?insulat/,
       /\bnot\s+insulated/,
       /\bno\s+(thermal\s+)?insulat/,
-      /\bno\s+(vacuum|vacio)/,
+      /\b(no|sin)\s+(vacuum|vacio)/,
+      /\bnot\s+vacuum/,
+      /\bno\s+(tiene|posee|usa|cuenta\s+con)\s+(aislamiento\s+)?((al|por)\s+)?vacio/,
+      /\bno\s+(esta|es)\s+aislad[oa]\s+(al|por)\s+vacio/,
+      /\b(does\s+not|doesn't|without)\s+(have\s+)?vacuum/,
+
+      /\bvacuum[^.,;]{0,12}\b(none|no)\b/,
       /\bsin\s+aislamiento/,
       /\baislamiento[^.,;]{0,12}\b(no|ninguno|none|nula?)\b/,
       /\bno\s+isotermic/,
     ],
     positive: [
       /\bvacuum[-\s]?insulat/,
-      /\bdouble[-\s]?wall/,
-      /\bdoble\s+pared/,
-      /\bthermal\s+insulat/,
-      /\bisotermic/,
       /\baislad[oa]\s+(al|por)\s+vacio/,
+      /\baislamiento\s+(al|por)\s+vacio/,
       /\bvacuum\s+flask/,
-      /\bthermos\b/,
-      /\btermo\b/,
-      /\bmantiene\s+(la\s+)?temperatura/,
-      /\bkeeps?\s+(hot|cold|drinks|beverages|temperature)/,
     ],
     positiveTerms: ['termo', 'isotermico', 'aislado por vacio', 'recipiente isotermico', 'aislado'],
     exclusionTerms: ['isotermic', 'aislad', 'vacio', 'termo'],
     construction: 'vacuum_insulated',
-    positiveReason: 'Evidencia de aislamiento térmico / doble pared al vacío.',
+    positiveReason: 'Evidencia explícita de construcción aislada por vacío.',
     negativeReason: 'Evidencia explícita de que NO es isotérmico / sin aislamiento al vacío: se penalizan las partidas de termos y recipientes isotérmicos.',
   },
   {
@@ -203,7 +202,7 @@ const PLAIN_CONCEPTS: PlainConcept[] = [
   // Function / identity families (Spanish tariff vocabulary aligned with official labels)
   {
     key: 'beverage_container',
-    match: [/\bbottle\b/, /\bbotella\b/, /\bflask\b/, /\btumbler\b/, /\bmug\b/, /\bcup\b/, /\bvaso\b/, /\btaza\b/, /\bdrink(ing|ware)?\b/, /\bbeber\b/, /\bbebidas?\b/, /\bwater\s+bottle\b/, /\bstraw\b/, /\bsorbete\b/, /\bcantimplora\b/, /\b\d+\s?(oz|ml|l|litros?|liter)\b/],
+    match: [/\btermos?\b/, /\bthermos\b/, /\b(tomar|ceb(ar|a))\s+mate\b/, /\b(conservar|mantener)\s+(el\s+)?agua\s+(caliente|fria)\b/, /\bbottle\b/, /\bbotella\b/, /\bflask\b/, /\btumbler\b/, /\bmug\b/, /\bcup\b/, /\bvaso\b/, /\btaza\b/, /\bdrink(ing|ware)?\b/, /\bbeber\b/, /\bbebidas?\b/, /\bwater\s+bottle\b/, /\bcantimplora\b/],
     positiveTerms: ['recipiente', 'botella', 'para bebidas', 'articulos de uso domestico'],
     functionText: 'recipiente para bebidas',
     householdUse: true,
@@ -327,6 +326,23 @@ export function deriveSemanticConcepts(facts: NcmProductFactsLike): SemanticConc
     if (typeof concept.householdUse === 'boolean' && householdUse === null) householdUse = concept.householdUse
   }
 
+  // Commercial thermal claims identify the family, not the legally decisive vacuum construction.
+  if (/\b(termos?|thermos|isotermic[oa]s?|doble\s+pared|double[-\s]?wall|thermal\s+insulation)\b/.test(text)) {
+    concepts.push('thermal_container')
+    positiveTerms.add('termo')
+    positiveTerms.add('recipiente isotermico')
+  }
+  const productName = normalize(facts.name)
+  if (/\b(lingotes?|laminados?|chapas?|laminas?|bobinas?|barras?|planchas?|ingots?|sheets?|coils?)\b/.test(productName) && /\b(acero|steel|metal|aluminio|aluminum|aluminium)\b/.test(productName)) concepts.push('raw_material')
+  // Parts must not inherit the classification of the complete article they mention.
+  const identity = normalize([facts.name, facts.functionText].filter(Boolean).join(' · '))
+  const deniesPart = /\bno\s+(es|son)\s+((un|una)\s+)?(repuesto|parte|pieza)\b|\bnot\s+(a\s+)?(replacement|spare)\b/.test(identity)
+  const namesPart = /\b(partes?|piezas?|componentes?|parts?)\s+(de|para|for|of)\b|\b(flasks?|thermos)\s+parts\b/.test(productName)
+    || /\b(repuestos?|recambios?|replacement|spare|ampollas?|liners?)\b|\b(tapas?|tapones?|lids?|caps?)\s+(para|de|for)\s+((un|una|a|an|the)\s+)?(vacuum\s+)?(termos?|thermos|flasks?|botellas?)/.test(identity)
+  if (namesPart && !deniesPart) {
+    concepts.push('article_part')
+  }
+
   const material = conceptMaterial ?? (facts.material ? facts.material.trim() : null)
 
   return {
@@ -426,14 +442,14 @@ export function deriveDisambiguationQuestions(concepts: SemanticConcepts): Disam
   const has = (key: string) => concepts.concepts.includes(key)
   const questions: DisambiguationQuestion[] = []
 
-  if (has('beverage_container') && !has('vacuum_insulated') && !has('!vacuum_insulated')) {
+  if (has('beverage_container') && !has('article_part') && !has('raw_material') && !has('electric') && !has('vacuum_insulated') && !has('!vacuum_insulated')) {
     questions.push({
       id: 'insulation',
       attribute: 'construccion',
-      prompt: '¿El recipiente tiene aislamiento térmico (doble pared / al vacío, tipo termo)?',
+      prompt: '¿La ficha del producto confirma aislamiento por vacío?',
       options: [
-        { label: 'Sí, es térmico / doble pared', value: 'si', note: 'El recipiente tiene aislamiento térmico de doble pared al vacío (termo isotérmico).' },
-        { label: 'No, es común sin aislamiento', value: 'no', note: 'El recipiente es común, de una sola pared, sin aislamiento térmico.' },
+        { label: 'Sí, confirma aislamiento por vacío', value: 'si', note: 'Recipiente aislado por vacío para bebidas.' },
+        { label: 'No, no tiene aislamiento por vacío', value: 'no', note: 'Recipiente sin aislamiento por vacío.' },
         { label: 'No sé', value: 'no-se' },
       ],
     })
@@ -469,9 +485,9 @@ export function deriveClarifications(concepts: SemanticConcepts): Clarification[
   // Insulation decides between the isothermal-container family and ordinary drinkware — but
   // only ask when the evidence neither asserts nor denies it. If it is already asserted or
   // explicitly denied, the classifier does not need to ask.
-  if (has('beverage_container') && !has('vacuum_insulated') && !has('!vacuum_insulated')) {
+  if (has('beverage_container') && !has('article_part') && !has('raw_material') && !has('electric') && !has('vacuum_insulated') && !has('!vacuum_insulated')) {
     clarifications.push({
-      question: '¿El recipiente tiene aislamiento térmico / doble pared al vacío (termo isotérmico) o es una botella común sin aislamiento?',
+      question: '¿La ficha del producto confirma aislamiento por vacío?',
       fact: 'construction',
     })
   }

@@ -8,7 +8,9 @@ import { initialSupplierQuote } from '../lib/supplierQuote'
 import { buildPurchasePlan, type PurchaseCapacity } from '../lib/purchasePlan'
 import { saveCompletedAnalysis } from '../lib/analysisHistory'
 import { ApiAuthError, setSessionState } from '../lib/authSession'
+import { usd } from '../lib/format'
 import { writeCaseConversation } from '../lib/caseConversation'
+vi.mock('../lib/format', async importOriginal => { const actual = await importOriginal<typeof import('../lib/format')>(); return { ...actual, usd: vi.fn(actual.usd) } })
 vi.mock('../lib/analysisHistory',()=>({saveCompletedAnalysis:vi.fn()}))
 const analysis=createManualProductAnalysis('manual://test')
 analysis.product.name='Luz RGB'; analysis.product.supplierQuote=initialSupplierQuote(10,true)
@@ -41,4 +43,18 @@ it('resumes the same pending save after a login reload without changing its snap
  setSessionState('ready');await render()
  expect(vi.mocked(saveCompletedAnalysis).mock.calls[1]).toEqual(first)
  expect(container.textContent).toContain('Presupuesto guardado')
+})
+
+it('does not render the immutable dashboard again for saving and saved feedback', async () => {
+ let resolve!: (value: any) => void
+ vi.mocked(saveCompletedAnalysis).mockImplementation(() => new Promise(r => { resolve = r }))
+ await render()
+ const formattingCalls = vi.mocked(usd).mock.calls.length
+ expect(formattingCalls).toBeGreaterThan(0)
+ await act(async () => save().click())
+ expect(container.textContent).toContain('Guardando…')
+ expect(vi.mocked(usd).mock.calls.length).toBe(formattingCalls)
+ await act(async () => resolve({ id: 'saved-case' }))
+ expect(container.textContent).toContain('Presupuesto guardado')
+ expect(vi.mocked(usd).mock.calls.length).toBe(formattingCalls)
 })

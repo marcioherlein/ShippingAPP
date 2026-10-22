@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react'
+import React, { lazy, useEffect, useState } from 'react'
+import LoadingBoundary from '../components/LoadingBoundary'
 import { UserButton, useAuth } from '@clerk/react'
-import LoginDialog from './LoginDialog'
+const LoginDialog = lazy(() => import('./LoginDialog'))
 import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
 import { saveCompletedAnalysis } from '../lib/analysisHistory'
-import AnalysisHistory from '../components/AnalysisHistory'
-import Watchlist from '../components/Watchlist'
+const AnalysisHistory = lazy(() => import('../components/AnalysisHistory'))
+const Watchlist = lazy(() => import('../components/Watchlist'))
 import UsageBadge from '../components/UsageBadge'
-import EmailPreferences from '../components/EmailPreferences'
+const EmailPreferences = lazy(() => import('../components/EmailPreferences'))
 import './auth.css'
 import { AccountControlsContext } from './AccountControls'
 import { authenticationError, getSessionState, setSessionState, subscribeSession } from '../lib/authSession'
@@ -16,6 +17,7 @@ type HistorySaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function ClerkShell({ children }: { children: React.ReactNode }) {
   const { getToken, isLoaded, isSignedIn } = useAuth()
+  const [accountOpen, setAccountOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
   const [accountSync, setAccountSync] = useState<AccountSyncState>('idle')
   const [historySave, setHistorySave] = useState<HistorySaveState>('idle')
@@ -117,19 +119,19 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
         <button type="button" className="auth-primary" onClick={() => setLoginOpen(true)}>Crear cuenta</button>
       </> : <>
         {accountSync === 'error' && <button type="button" className="auth-secondary" onClick={() => setSyncAttempt(attempt => attempt + 1)}>Reintentar conectar cuenta</button>}
-        <details className="app-account-menu">
+        <details className="app-account-menu" onToggle={event => setAccountOpen(event.currentTarget.open)}>
           <summary>Mi cuenta</summary>
           <div className="app-account-panel">
         <span className="auth-saved-label" data-account-sync={accountSync} data-history-save={historySave}>{accountLabel}</span>
         {accountSync === 'ready' && <UsageBadge />}
-        {accountSync === 'ready' && <EmailPreferences />}
-        {accountSync === 'ready' && <Watchlist />}
-        {accountSync === 'ready' && <AnalysisHistory />}
+        {accountSync === 'ready' && accountOpen && <LoadingBoundary label="Cargando panel…"><EmailPreferences /></LoadingBoundary>}
+        {accountSync === 'ready' && accountOpen && <LoadingBoundary label="Cargando panel…"><Watchlist /></LoadingBoundary>}
+        {accountSync === 'ready' && accountOpen && <LoadingBoundary label="Cargando panel…"><AnalysisHistory /></LoadingBoundary>}
         <UserButton />
           </div>
         </details>
       </>}
     </div>
 
-  return <AccountControlsContext value={controls}>{children}{loginOpen && <LoginDialog loaded={!!isLoaded} onClose={() => setLoginOpen(false)} />}</AccountControlsContext>
+  return <AccountControlsContext value={controls}>{children}{loginOpen && <LoadingBoundary label="Cargando acceso…"><LoginDialog loaded={!!isLoaded} onClose={() => setLoginOpen(false)} /></LoadingBoundary>}</AccountControlsContext>
 }

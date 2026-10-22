@@ -2,19 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { deriveClarifications, deriveNormalizedCategory, deriveSemanticConcepts } from './semanticConcepts'
 
 describe('semantic concept derivation', () => {
-  it('derives vacuum-insulated beverage concepts from English commercial facts', () => {
+  it('identifies thermal drinkware without inventing vacuum from commercial insulation claims', () => {
     const c = deriveSemanticConcepts({
       name: '45oz 1350ml Large Capacity Stainless Steel',
       material: 'Stainless Steel',
       description: 'thermal insulation performance: Thermal Insulation, direct drinking, travel',
     })
-    expect(c.concepts).toContain('vacuum_insulated')
+    expect(c.concepts).not.toContain('vacuum_insulated')
+    expect(c.concepts).toContain('thermal_container')
     expect(c.concepts).toContain('beverage_container')
     expect(c.material).toBe('acero inoxidable')
-    expect(c.construction).toBe('vacuum_insulated')
-    expect(c.positiveTerms.join(' ')).toMatch(/isotermico|termo/)
-    // Positively insulated → must NOT exclude the isothermal family.
-    expect(c.exclusionTerms.join(' ')).not.toMatch(/isotermic/)
+    expect(c.construction).toBeNull()
+    expect(deriveClarifications(c)[0].question).toContain('vacío')
+    expect(c.exclusionTerms).toEqual([])
   })
 
   it('derives the SAME insulation concept from Spanish facts (language invariance)', () => {

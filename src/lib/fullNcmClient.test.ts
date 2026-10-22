@@ -193,3 +193,21 @@ describe('full SIM vs seed SIM reconciliation', () => {
     expect(merged.simOpeningCandidate).toBeNull()
   })
 })
+
+
+it('does not let a confident seed bypass an explicit full-catalog construction question', () => {
+  const local = customsProfileFor('Padel racket', 'China', 'Carbon Fiber Padel Racket')
+  expect(local.ncmCandidate).toBeTruthy()
+  const pending = full({
+    status: 'missing', code: null, label: null, confidence: 'missing',
+    disambiguation: { candidates: [], questions: [{ id: 'insulation', attribute: 'construccion', prompt: '¿La ficha confirma aislamiento por vacío?', options: [{ label: 'Sí', value: 'si', note: 'Aislado por vacío' }] }] },
+  })
+  const result = mergeFullCustomsProfile(local, pending)
+  expect(result.ncmCandidate).toBeNull()
+  expect(result.dutyRatePct).toBeNull()
+  expect(result.tariff).toBeNull()
+  expect(result.simOpeningCandidate).toBeNull()
+  expect(result.provisional).toBe(false)
+  expect(result.classificationConfidence).toBe('missing')
+  expect(result.disambiguation?.questions[0].id).toBe('insulation')
+})

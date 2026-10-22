@@ -12,6 +12,7 @@ let root: Root
 let container: HTMLDivElement
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+  HTMLElement.prototype.scrollIntoView = vi.fn()
   sessionStorage.clear()
   setSessionState('unmanaged')
   container = document.createElement('div')

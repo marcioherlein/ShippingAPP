@@ -128,12 +128,30 @@ export class WatchlistRepository {
     return row
   }
 
-  listActiveForUser(userId: string) {
+  listActiveForUser(userId: string, limit?: number) {
+    if (limit != null && (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)) throw new Error('Invalid watchlist limit')
     return all<WatchlistItemRow>(this.db,
       `SELECT * FROM watchlist_items
        WHERE user_id = ? AND active = 1
-       ORDER BY updated_at DESC, id DESC`,
-      [required('userId', userId, MAX.id)],
+       ORDER BY updated_at DESC, id DESC${limit == null ? '' : ' LIMIT ?'}`,
+      [required('userId', userId, MAX.id), ...(limit == null ? [] : [limit])],
+    )
+  }
+
+  /** One indexed, owner-scoped read for the two snapshots shown on every card. */
+  listLatestSnapshotsForUser(userId: string, itemIds?: string[]) {
+    if (itemIds && !itemIds.length) return Promise.resolve([] as WatchlistSnapshotRow[])
+    if (itemIds && itemIds.length > 100) throw new Error('Invalid snapshot batch size')
+    return all<WatchlistSnapshotRow>(this.db,
+      `SELECT ws.* FROM watchlist_items wi
+       JOIN watchlist_snapshots ws ON ws.id IN (
+         SELECT recent.id FROM watchlist_snapshots recent
+         WHERE recent.watchlist_item_id = wi.id
+         ORDER BY recent.observed_at DESC, recent.id DESC LIMIT 2
+       )
+       WHERE wi.user_id = ? AND wi.active = 1${itemIds ? ` AND wi.id IN (${itemIds.map(() => '?').join(',')})` : ''}
+       ORDER BY ws.watchlist_item_id, ws.observed_at DESC, ws.id DESC`,
+      [required('userId', userId, MAX.id), ...(itemIds?.map(id => required('itemId', id, MAX.id)) ?? [])],
     )
   }
 

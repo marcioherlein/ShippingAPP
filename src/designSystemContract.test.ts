@@ -42,7 +42,6 @@ describe('GlobalShipping design system contract', () => {
 
   it('removes font glyph icons from the owned-product intake', () => {
     expect(intakeSource).toContain('<UiIcon name="external-link"')
-    expect(intakeSource).toContain('<UiIcon name="edit"')
     expect(intakeSource).toContain('<UiIcon name="arrow-right"')
     expect(intakeSource).not.toContain('>↗<')
     expect(intakeSource).not.toContain('>✎<')

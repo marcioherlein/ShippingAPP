@@ -1,3 +1,4 @@
+import AccountControls from '../auth/AccountControls'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { ingestAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
@@ -256,18 +257,25 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     return () => { unsubscribe(); window.removeEventListener('shippingapp:auth-resolved', onAuthResolved) }
   }, [loading])
 
+  useEffect(() => {
+    if (!loading && discovery?.results.length) {
+      let active = true; queueMicrotask(() => active && document.querySelector<HTMLElement>('.discovery-actions button')?.focus())
+      return () => { active = false }
+    }
+  }, [discovery, loading])
+
+  useEffect(() => { if (error) queueMicrotask(() => { const alert = document.querySelector<HTMLElement>('.analyzer-error'); alert?.focus({ preventScroll: true }); alert?.scrollIntoView({ block: 'center', behavior: 'instant' }) }) }, [error])
+
   const modeClass = mode === 'discovery' ? ' discovery-search-mode' : ' search-first-mode'
 
-  return <section className={`url-analyzer${modeClass}`}>
+  return <section className={`url-analyzer${modeClass}${discovery?.results.length ? ' has-results' : ''}`}>
     <div className="analyzer-copy">
       <span className="eyebrow">Búsqueda real en Alibaba</span>
       <h2>Buscá un producto o pegá un link.</h2>
-      <p>La app muestra sólo publicaciones reales. Si un dato no está disponible, no lo rellena con “pendiente”: te lo pide después únicamente si es necesario para calcular.</p>
+      <p>Describí qué querés traer o pegá una publicación de Alibaba. Elegís un producto real y después confirmás su oferta y embalaje.</p>
     </div>
 
-    {messages.length === 0 && <div className="analyst-suggestions intake-suggestions">
-      {starters.map((item) => <button key={item} type="button" onClick={() => void submitValue(item)}>{item}</button>)}
-    </div>}
+
 
     {messages.length > 0 && <div className="intake-thread" aria-live="polite">
       {messages.slice(-6).map((message, index) => <div key={`${index}-${message.content}`} className={`intake-message ${message.role}`}>
@@ -282,6 +290,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       <div className="url-input-wrap">
         <input
           type="text"
+          autoFocus={!messages.length && !discovery}
           value={draft}
           onChange={(event) => setDraft(event.target.value.slice(0, 1800))}
           placeholder="Ej: raqueta de tenis profesional hasta USD 30, MOQ menor a 100"
@@ -291,11 +300,15 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         <button type="submit" disabled={loading || !draft.trim()}>{loading ? (phase === 'extract' ? 'Leyendo…' : 'Buscando…') : 'Buscar'}</button>
       </div>
       <small>También podés pegar directamente una URL de producto de Alibaba.</small>
-      {error && <div className="analyzer-error manual-fallback-error" role="alert">
-        <span>{error}</span>
+      {error && <div className="analyzer-error manual-fallback-error" role="alert" tabIndex={-1}>
+        <span>{error}</span>{pendingAuth.current && <AccountControls />}
         {failedSourceUrl && onManualFallback && <button type="button" onClick={() => enterManual(failedSourceUrl)}>Cargar este producto manualmente</button>}
       </div>}
     </form>
+
+    {messages.length === 0 && <details className="search-examples"><summary>Ver ejemplos de búsqueda</summary><div className="analyst-suggestions intake-suggestions">
+      {starters.map((item) => <button key={item} type="button" onClick={() => void submitValue(item)}>{item}</button>)}
+    </div></details>}
 
     {lastSearch && (loading || error || (discovery && (discovery.results.length === 0 || discovery.status !== 'live'))) && <div className="search-recovery">
       <p>Podés continuar sin esperar la búsqueda automática.</p>
@@ -322,7 +335,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
               <span>ALIBABA · PUBLICACIÓN REAL</span>
               {item.opportunityScore ? <small>{item.opportunityScore}/100</small> : null}
             </div>
-            {item.imageUrl && <img className="discovery-thumb" src={item.imageUrl} alt="" loading="lazy" />}
+            {item.imageUrl && <img className="discovery-thumb" src={item.imageUrl} alt="" width={240} height={180} loading="lazy" decoding="async" referrerPolicy="no-referrer" />}
             <h3>{item.title}</h3>
             <div className="opportunity-facts">
               {price && <span><b>{price}</b><small>{item.priceDisplay || 'precio proveedor'}</small></span>}

@@ -8,6 +8,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.goto('/')
       // CI runs without a Clerk key. Include the real signed-out control
       // classes so cascade conflicts and mobile account overflow are covered.
+      await expect(page.locator('.app-header-account')).toBeVisible()
       await page.evaluate(() => {
         document.querySelector('.app-header-account')!.innerHTML = '<div class="auth-account-control"><button type="button" class="auth-secondary">Ingresar</button><button type="button" class="auth-primary">Crear cuenta</button></div>'
       })

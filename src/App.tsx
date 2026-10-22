@@ -1,20 +1,26 @@
-import PurchaseQuoteResult, { type PurchaseQuoteSnapshot } from './components/PurchaseQuoteResult'
+import { type PurchaseQuoteSnapshot } from './components/PurchaseQuoteResult'
+const LoadedPurchaseQuoteResult = lazy(() => import('./components/PurchaseQuoteResult'))
+const PurchaseQuoteResult = (props: ComponentProps<typeof LoadedPurchaseQuoteResult>) => <LoadingBoundary><LoadedPurchaseQuoteResult {...props} /></LoadingBoundary>
 import { buildPurchasePlan, type PurchaseCapacity } from './lib/purchasePlan'
 import { readCaseConversation, writeCaseConversation } from './lib/caseConversation'
 import { readProductDraft, writeProductDraft, clearProductDraft } from './lib/productDraft'
 import { savePendingConfirm, loadPendingConfirm, clearPendingConfirm } from './lib/sessionDraft'
 import { ApiAuthError, getSessionState, subscribeSession } from './lib/authSession'
 import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from './lib/pendingOperation'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import LoadingBoundary from './components/LoadingBoundary'
+import React, { lazy, type ComponentProps, useEffect, useMemo, useRef, useState } from 'react'
 import { supplierQuotePrice } from './lib/supplierQuote'
 import { startImportAnalysis } from './lib/productAnalysis'
-import UrlAnalyzer from './components/UrlAnalyzer'
-import OwnedProductIntake from './components/OwnedProductIntake'
-import CalculationPipeline, { type CalculationPipelineStatus, type CalculationPipelineSummary } from './components/CalculationPipeline'
-import ImportQuoteFlow, { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
+const LoadedUrlAnalyzer = lazy(() => import('./components/UrlAnalyzer'))
+const UrlAnalyzer = (props: ComponentProps<typeof LoadedUrlAnalyzer>) => <LoadingBoundary><LoadedUrlAnalyzer {...props} /></LoadingBoundary>
+const LoadedOwnedProductIntake = lazy(() => import('./components/OwnedProductIntake'))
+const OwnedProductIntake = (props: ComponentProps<typeof LoadedOwnedProductIntake>) => <LoadingBoundary><LoadedOwnedProductIntake {...props} /></LoadingBoundary>
+import { type CalculationPipelineStatus, type CalculationPipelineSummary } from './components/CalculationPipeline'
+const LoadedCalculationPipeline = lazy(() => import('./components/CalculationPipeline'))
+const CalculationPipeline = (props: ComponentProps<typeof LoadedCalculationPipeline>) => <LoadingBoundary><LoadedCalculationPipeline {...props} /></LoadingBoundary>
+import { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
 import Landing from './components/Landing'
 import AppHeader from './components/AppHeader'
-import DsSelect from './components/DsSelect'
 import UiIcon from './components/UiIcon'
 import type { QuotePrefill } from './lib/hotProducts'
 import { enrichProductAnalysisV2, ingestAlibabaUrlV2, hasConfirmedClassification, effectiveDutyRatePct, effectiveTariffProfile, type ProductAnalysisV2 } from './lib/productAnalysisV2'
@@ -322,11 +328,11 @@ export default function App() {
     sensitiveCategory: sensitiveCategory || 'unknown',
   }), [budgetMode, budgetUsd, unitsMin, unitsMax, purpose, entityType, signature, sensitiveCategory])
 
-  const capacity: PurchaseCapacity = { mode: budgetMode || 'unknown', budgetUsd: budgetMode === 'budget' ? budgetUsd : 0, min: unitsMin, max: unitsMax }
-  const resultPlan = analysis && analysisPrefill && hasConfirmedClassification(analysis.customs) && analysis.product.supplierQuote ? buildPurchasePlan({
+  const capacity = useMemo<PurchaseCapacity>(() => ({ mode: budgetMode || 'unknown', budgetUsd: budgetMode === 'budget' ? budgetUsd : 0, min: unitsMin, max: unitsMax }), [budgetMode, budgetUsd, unitsMin, unitsMax])
+  const resultPlan = useMemo(() => frozenQuote?.purchasePlan ?? (effectiveCalculationStatus === 'ready' && analysis && analysisPrefill && hasConfirmedClassification(analysis.customs) && analysis.product.supplierQuote ? buildPurchasePlan({
     costs: { originCountry: analysisPrefill.originCountry, unitWeightKg: analysisPrefill.unitWeightKg, unitVolumeCbm: analysisPrefill.unitVolumeCbm, dutyRatePct: analysis.customs.dutyRatePct!, statisticsRatePct: analysisPrefill.statisticsRatePct ?? undefined, vatRatePct: analysisPrefill.vatRatePct ?? undefined, vatAdditionalRatePct: analysisPrefill.vatAdditionalRatePct ?? undefined, gainsRatePct: analysisPrefill.gainsRatePct ?? undefined, iibbRatePct: analysisPrefill.iibbRatePct ?? undefined, purpose: purpose || 'unknown', entityType: entityType || 'unknown', hasImporterSignature: signature === 'yes' ? true : signature === 'no' ? false : null, sensitiveCategory: sensitiveCategory || 'unknown', capitalGoodEligible: analysis.customs.capitalGoodEligible || false, capitalGoodUse: false },
     quote: analysis.product.supplierQuote, moq: analysis.product.moq || 0, capacity, quantity: capacity.mode === 'units' && approvedQuantity !== analysis.product.purchaseQuantity && ((analysis.product.purchaseQuantity || 0) < capacity.min || (analysis.product.purchaseQuantity || 0) > capacity.max) ? undefined : analysis.product.purchaseQuantity, quantityApproved: approvedQuantity === analysis.product.purchaseQuantity,
-  }) : null
+  }) : null), [frozenQuote, effectiveCalculationStatus, analysis, analysisPrefill, purpose, entityType, signature, sensitiveCategory, capacity, approvedQuantity])
 
   useEffect(() => {
     const open = (event: Event) => {
@@ -790,7 +796,7 @@ export default function App() {
       </div>
 
       <aside className="journey-case-summary">
-        <div className="journey-summary-sticky">
+        <div className="journey-summary-sticky"><ol className="quote-stage-list" aria-label="Etapas de la cotización"><li aria-current={step === 1 ? 'step' : undefined}>1. Tu operación</li><li aria-current={step === 2 ? 'step' : undefined}>2. Tu compra</li><li aria-current={step === 3 ? 'step' : undefined}>3. Producto y oferta</li><li>4. Tu resultado</li></ol>
           <span className="eyebrow">Resumen de la operación</span>
           <h2>{analysisPrefill?.productName || (intent === 'have_product' ? 'Tu producto' : 'Nueva importación')}</h2>
           {(() => {

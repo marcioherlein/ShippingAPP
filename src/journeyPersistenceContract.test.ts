@@ -44,7 +44,7 @@ describe('journey persistence contract', () => {
 
   it('installs persistence only after the React application render call', () => {
     expect(main).toContain("import { installJourneyPersistence } from './lib/journeyPersistence'")
-    const renderIndex = main.lastIndexOf('reactRoot.render(')
+    const renderIndex = main.indexOf('reactRoot.render(\n  <React.StrictMode>')
     const persistenceIndex = main.indexOf('installJourneyPersistence()')
     expect(renderIndex).toBeGreaterThan(-1)
     expect(persistenceIndex).toBeGreaterThan(renderIndex)

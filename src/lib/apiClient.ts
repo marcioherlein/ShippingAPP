@@ -1,6 +1,8 @@
 import { authenticationError, getSessionState, setSessionState, waitForVerifiedSession } from './authSession'
 export type ApiTokenProvider = (fresh?: boolean) => Promise<string | null>
 
+const pendingReads = new Map<string, Promise<Response>>()
+let sessionGeneration = 0
 let tokenProvider: ApiTokenProvider | null = null
 
 const IDEMPOTENT_METERED_POSTS = new Set([
@@ -14,6 +16,8 @@ const IDEMPOTENT_METERED_POSTS = new Set([
 ])
 
 export function setApiTokenProvider(provider: ApiTokenProvider | null) {
+  sessionGeneration += 1
+  pendingReads.clear()
   tokenProvider = provider
 }
 
@@ -97,7 +101,7 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
   await attachToken()
   // Clone Request inputs before their body is consumed by the first fetch.
   const replay = input instanceof Request ? input.clone() : input
-  let response = await fetch(input, { ...init, headers })
+  let response = await fetch(input, { ...init, ...(shouldAttach ? { cache: 'no-store' as const } : {}), headers })
   let code = ''
   const responseCode = async () => {
     try { return String((await response.clone().json()).code || '') } catch { return '' }
@@ -107,7 +111,7 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
     if (provider && code !== 'auth_origin_rejected') {
       await attachToken(true)
       if (init?.signal?.aborted) throw init.signal.reason
-      response = await fetch(replay, { ...init, headers })
+      response = await fetch(replay, { ...init, ...(shouldAttach ? { cache: 'no-store' as const } : {}), headers })
       code = await responseCode()
     }
   }
@@ -128,7 +132,7 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 /** Bounds both session lookup and provider requests; abort releases the connection. */
-export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
+async function boundedApiFetch(input: RequestInfo | URL, init?: RequestInit) {
   const controller = new AbortController()
   const abort = () => controller.abort(init?.signal?.reason)
   init?.signal?.addEventListener('abort', abort, { once: true })
@@ -159,4 +163,21 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
     if (rejectOnAbort) controller.signal.removeEventListener('abort', rejectOnAbort)
     init?.signal?.removeEventListener('abort', abort)
   }
+}
+
+/** Coalesce concurrent reads only. Never cache private results, writes, or caller-owned aborts. */
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = inputUrl(input)
+  const eligible = typeof input === 'string' && isProtectedSameOriginApi(input) && requestMethod(input,init) === 'GET' && !init?.signal && !init?.headers && Object.keys(init ?? {}).every(key => key === 'method') &&
+    ['/api/usage','/api/history','/api/watchlist','/api/email-preferences'].includes(url?.pathname || '')
+  if (!eligible) return boundedApiFetch(input,init)
+  const key = `${sessionGeneration}:${url!.href}`
+  let pending = pendingReads.get(key)
+  if (!pending) {
+    pending = boundedApiFetch(input,init)
+    pendingReads.set(key,pending)
+    const remove = () => { if (pendingReads.get(key) === pending) pendingReads.delete(key) }
+    void pending.then(remove,remove)
+  }
+  return (await pending).clone()
 }

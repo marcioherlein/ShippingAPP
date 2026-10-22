@@ -211,6 +211,10 @@ function allowedChapterPrefixes(facts: NcmProductFacts): string[] | null {
   const compatible = compatibleNcmChapters(facts)
   if (compatible) return compatible
   const concepts = deriveSemanticConcepts(facts).concepts
+  if (concepts.includes('beverage_container') && !concepts.includes('raw_material') && !concepts.includes('electric') && !concepts.includes('active_refrigeration')) {
+    // Finished drinkware and its identifiable parts cannot become raw steel, solely on material overlap.
+    return ['39', '44', '45', '48', '63', '69', '70', '73', '76', '83', '96']
+  }
   if (concepts.includes('cooking_appliance') && concepts.includes('solid_fuel')) return ['73']
   return null
 }
@@ -377,6 +381,10 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, co
   const insulatedBeverage = concepts.concepts.includes('beverage_container')
     && concepts.concepts.includes('vacuum_insulated')
     && !concepts.concepts.includes('!vacuum_insulated')
+    && !concepts.concepts.includes('article_part')
+    && !concepts.concepts.includes('raw_material')
+    && !concepts.concepts.includes('electric')
+    && !concepts.concepts.includes('active_refrigeration')
   if (insulatedBeverage) {
     const official = findOfficial(index, '9617.00.10')
     if (official) {
@@ -412,7 +420,6 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, co
     { code: '9506.40.00', terms: ['tenis de mesa', 'ping pong'], rationale: 'Producto identificado como artículo para tenis de mesa.' },
     { code: '9506.91.00', terms: ['mancuerna', 'gimnasio', 'fitness'], rationale: 'Producto identificado como artículo/equipo para ejercicio físico.' },
     { code: '4202.92.00', terms: ['mochila', 'backpack'], rationale: 'Producto identificado como mochila/bolso con superficie textil o plástica.' },
-    { code: '9617.00.10', terms: ['botella', 'termica'], rationale: 'Producto identificado como botella/termo isotérmico.' },
     { code: '8518.30.00', terms: ['auricular', 'headphones', 'earbuds'], rationale: 'Producto identificado como auriculares.' },
     { code: '8518.21.00', terms: ['parlante', 'speaker'], rationale: 'Producto identificado como altavoz/parlante portátil.' },
     { code: '8471.60.52', terms: ['teclado'], rationale: 'Producto identificado como teclado, unidad de entrada para máquina automática de procesamiento de datos.' },
@@ -470,10 +477,19 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
   const exclusionNorms = [...new Set(exclusionTerms.map(normalizeText).filter((term) => term.length >= 3))]
 
   const chapterPrefixes = allowedChapterPrefixes(facts)
+  const identityConcepts = deriveSemanticConcepts(facts).concepts
+  const beveragePart = identityConcepts.includes('beverage_container') && identityConcepts.includes('article_part')
   const scored: NcmRetrievalCandidate[] = []
   for (const record of prepareIndex(index)) {
     const { code, label, normalizedLabel, labelTokens } = record
     if (chapterPrefixes && !chapterPrefixes.some((prefix) => code.startsWith(prefix))) continue
+    if (beveragePart && code === '9617.00.10') continue
+    if (identityConcepts.includes('beverage_container') && !identityConcepts.includes('raw_material') && !beveragePart && !identityConcepts.includes('electric') && !identityConcepts.includes('active_refrigeration')) {
+      // Match the finished article's headings, not every raw material/fastener in its chapter.
+      if (!['9617', '3923', '3924', '7010', '7013', '7323', '7615', '6911', '6912', '4419', '4823'].some(prefix => code.startsWith(prefix))) continue
+      if (code === '9617.00.20') continue
+    }
+    if (code === '9617.00.10' && (identityConcepts.includes('!vacuum_insulated') || identityConcepts.includes('electric') || identityConcepts.includes('active_refrigeration'))) continue
     const matchedTerms: string[] = []
     let score = 0
 
@@ -519,9 +535,18 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
   return scored.sort((a, b) => b.score - a.score || a.code.localeCompare(b.code)).slice(0, Math.max(1, Math.min(50, limit)))
 }
 
+// Bound each inference so an unavailable model cannot leave the quote waiting indefinitely.
+function withAiDeadline<T>(request: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('NCM inference deadline exceeded')), 8_000)
+  })
+  return Promise.race([request, deadline]).finally(() => clearTimeout(timer))
+}
+
 async function expandSearchTerms(ai: AI, facts: NcmProductFacts): Promise<AiExpansion> {
   try {
-    const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
+    const result: any = await withAiDeadline(ai.run('@cf/zai-org/glm-4.7-flash', {
       messages: [
         { role: 'system', content: 'You prepare search vocabulary for Argentina customs nomenclature retrieval. Return JSON only: {"searchTerms":[...],"negativeTerms":[...],"missingFacts":[...]}. searchTerms must be Spanish customs/product nouns or short phrases describing what the product IS, its principal function, material/composition and important technical nature. negativeTerms must be Spanish customs concepts that the product explicitly is NOT (e.g. "isotérmico", "eléctrico", "refrigeración", "correctora") ONLY when the evidence explicitly denies them; never guess. Include useful synonyms/translations. NEVER output HS, NCM, tariff or numeric classification codes. Do not guess missing technical facts.' },
         { role: 'user', content: JSON.stringify(facts) },
@@ -529,7 +554,7 @@ async function expandSearchTerms(ai: AI, facts: NcmProductFacts): Promise<AiExpa
       response_format: { type: 'json_object' },
       temperature: 0,
       max_completion_tokens: 380,
-    })
+    }))
     const content = result?.response ?? result?.choices?.[0]?.message?.content
     const parsed = typeof content === 'string' ? JSON.parse(content) : content
     return {
@@ -562,7 +587,7 @@ export function sanitizeAiRanking(output: unknown, shortlist: NcmRetrievalCandid
 
 async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRetrievalCandidate[]): Promise<AiRanking> {
   try {
-    const result: any = await ai.run('@cf/zai-org/glm-4.7-flash', {
+    const result: any = await withAiDeadline(ai.run('@cf/zai-org/glm-4.7-flash', {
       messages: [
         { role: 'system', content: 'You rerank ONLY the supplied Argentina NCM candidates. Return JSON only: {"ranking":[{"code":"EXACT_ALLOWED_CODE","reason":"short reason"}],"confidence":"high|medium|low","missingFacts":[...]}. Never create a code. If product facts are insufficient, still rank only allowed codes but use low confidence and explain missing facts. Classification depends on objective product characteristics/function, never origin country, price or intended profit.' },
         { role: 'user', content: JSON.stringify({ product: facts, allowedCandidates: shortlist.map(({ code, label }) => ({ code, label })) }) },
@@ -570,7 +595,7 @@ async function rerankShortlist(ai: AI, facts: NcmProductFacts, shortlist: NcmRet
       response_format: { type: 'json_object' },
       temperature: 0,
       max_completion_tokens: 550,
-    })
+    }))
     const content = result?.response ?? result?.choices?.[0]?.message?.content
     return sanitizeAiRanking(content, shortlist)
   } catch {
@@ -626,6 +651,17 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   // ("¿tiene aislamiento al vacío?") instead of a generic "¿qué es?".
   const clarifications = deriveClarifications(concepts).map((c) => c.question)
 
+  const questions = deriveDisambiguationQuestions(concepts)
+  if (questions.length && concepts.concepts.includes('beverage_container')) {
+    return {
+      status: 'missing', code: null, label: null, confidence: 'missing', alternatives: [], tariff: null,
+      missingFacts: clarifications, rationale: ['Falta confirmar una característica que determina la familia arancelaria. No se presume aislamiento por marca, material o doble pared.'],
+      searchTerms: concepts.positiveTerms, sourceDate: index.meta.sourceDate, source: index.meta.source,
+      catalogRecordCount: index.meta.recordCount, retrievalMode: 'missing',
+      disambiguation: { candidates: [], questions },
+      diagnostics: buildDiagnostics(concepts, concepts.positiveTerms, concepts.exclusionTerms, [], 'Requisito de construcción pendiente.', questions[0].prompt),
+    }
+  }
   const deterministic = deterministicKnownNcm(index, facts, concepts)
   if (deterministic) {
     return {
@@ -669,7 +705,8 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   const reason = ranked.ranking.find((item) => item.code === top.code)?.reason
   const combinedMissingFacts = [...new Set([...expansion.missingFacts, ...(ranked.missingFacts || [])])].slice(0, 8)
   const unresolvedFunction = !facts.functionText?.trim() && combinedMissingFacts.some(fact => /funcion|uso principal|principal function|main use/.test(normalizeText(fact)))
-  const confidence = unresolvedFunction ? 'low' : ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
+  const incompatibleThermo = top.code === '9617.00.10' && (!concepts.concepts.includes('vacuum_insulated') || concepts.concepts.includes('!vacuum_insulated') || concepts.concepts.includes('article_part') || concepts.concepts.includes('electric'))
+  const confidence = unresolvedFunction || incompatibleThermo ? 'low' : ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
 
   if (confidence === 'low') {
     const confidenceReason = top.code !== shortlist[0].code

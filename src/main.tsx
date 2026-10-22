@@ -1,9 +1,6 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import { ClerkProvider } from '@clerk/react'
-import { esES } from '@clerk/localizations/es-ES'
-import App from './App'
-import ClerkShell from './auth/ClerkShell'
+import App from './AppEntry'
 import { setSessionState } from './lib/authSession'
 import { readPublicAuthKey } from './lib/publicAuthConfig'
 import { installJourneySemantics } from './lib/journeySemantics'
@@ -36,13 +33,10 @@ installJourneySemantics()
 
 const reactRoot = createRoot(root)
 reactRoot.render(<p role="status">Cargando aplicación…</p>)
-void readPublicAuthKey(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY).then(clerkPublishableKey => {
+void readPublicAuthKey(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY).then(async clerkPublishableKey => {
 if (clerkPublishableKey) setSessionState('loading')
-const application = clerkPublishableKey
-  ? <ClerkProvider publishableKey={clerkPublishableKey} localization={esES}>
-      <ClerkShell><App /></ClerkShell>
-    </ClerkProvider>
-  : <App />
+const AuthenticatedApp = clerkPublishableKey ? (await import('./auth/AuthenticatedApp')).default : null
+const application = AuthenticatedApp && clerkPublishableKey ? <AuthenticatedApp publishableKey={clerkPublishableKey}><App /></AuthenticatedApp> : <App />
 
 reactRoot.render(
   <React.StrictMode>
@@ -51,6 +45,6 @@ reactRoot.render(
 )
 
 installJourneyPersistence()
-})
+}).catch(() => reactRoot.render(<section role="alert"><p>No pudimos iniciar el acceso a la aplicación.</p><button type="button" onClick={() => window.location.reload()}>Reintentar cargar</button></section>))
 
 import "./styles/workspace.css"

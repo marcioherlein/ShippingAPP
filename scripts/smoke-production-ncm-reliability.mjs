@@ -21,12 +21,13 @@ export async function verifyNcmReliability(baseUrl, fetcher = fetch) {
   for (const facts of [
     { ...product, description: 'No tiene aislamiento al vacío.' },
     { name: 'Ampolla de vidrio de repuesto para termo', description: 'Aislado por vacío' },
+    { name: 'Partes de termo', description: 'Aislado por vacío' },
     { name: 'Termo eléctrico', functionText: 'Calienta agua con electricidad', description: 'Aislado por vacío' },
   ]) {
     const result = await classify(facts)
     if (result.code === '9617.00.10') throw new Error(`Incompatible complete-flask classification: ${facts.name}`)
   }
-  return { status: 'passed', cases: 5, catalogRecordCount: confirmed.catalogRecordCount, confirmedCode: confirmed.code }
+  return { status: 'passed', cases: 6, catalogRecordCount: confirmed.catalogRecordCount, confirmedCode: confirmed.code }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

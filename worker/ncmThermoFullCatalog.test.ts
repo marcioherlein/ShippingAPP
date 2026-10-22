@@ -55,6 +55,12 @@ describe('reported thermo failure against the complete official catalog', () => 
     { name: 'Botella común', material: 'Plástico', description: 'Sin aislamiento térmico' },
     { name: 'Termo eléctrico', functionText: 'Calentar agua con electricidad', description: 'Aislado por vacío' },
     { name: 'Ampolla de vidrio de repuesto para termo', description: 'Aislado por vacío' },
+    { name: 'Partes de termo', description: 'Aislado por vacío' },
+    { name: 'Tapas para termos', description: 'Aislado por vacío' },
+    { name: 'Lids for vacuum flasks', description: 'Vacuum insulated' },
+    { name: 'Piezas para termos', description: 'Aislado por vacío' },
+    { name: 'Repuestos para termos', description: 'Aislado por vacío' },
+    { name: 'Vacuum flask parts', description: 'Vacuum insulated' },
     { name: 'Tapa para termo Stanley', material: 'Plástico', description: 'Repuesto para recipiente aislado por vacío' },
   ])('never promotes an incompatible complete vacuum flask: $name', async facts => {
     let call = 0
@@ -91,5 +97,12 @@ it('bounds an indefinitely stalled model and returns an unpriced result', async 
     expect(result.tariff).toBeNull()
   } finally {
     vi.useRealTimers()
+  }
+})
+
+it('does not mistake explicit complete articles or a travel slogan for replacement parts', async () => {
+  for (const name of ['Termo completo, no es un repuesto', 'Termo para llevar a todas partes']) {
+    const result = await classifyFullNcm(index, unavailable, { ...ordinary, name, description: 'Aislado por vacío para bebidas' })
+    expect(result.code).toBe('9617.00.10')
   }
 })

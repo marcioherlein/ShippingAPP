@@ -336,7 +336,10 @@ export function deriveSemanticConcepts(facts: NcmProductFactsLike): SemanticConc
   if (/\b(lingotes?|laminados?|chapas?|laminas?|bobinas?|barras?|planchas?|ingots?|sheets?|coils?)\b/.test(productName) && /\b(acero|steel|metal|aluminio|aluminum|aluminium)\b/.test(productName)) concepts.push('raw_material')
   // Parts must not inherit the classification of the complete article they mention.
   const identity = normalize([facts.name, facts.functionText].filter(Boolean).join(' · '))
-  if (/\b(repuesto|replacement|spare|ampolla|liner)\b|\b(tapa|tapon|lid|cap)\s+(para|de|for)\s+(un\s+)?(termo|thermos|flask|botella)/.test(identity)) {
+  const deniesPart = /\bno\s+(es|son)\s+((un|una)\s+)?(repuesto|parte|pieza)\b|\bnot\s+(a\s+)?(replacement|spare)\b/.test(identity)
+  const namesPart = /\b(partes?|piezas?|componentes?|parts?)\s+(de|para|for|of)\b|\b(flasks?|thermos)\s+parts\b/.test(productName)
+    || /\b(repuestos?|recambios?|replacement|spare|ampollas?|liners?)\b|\b(tapas?|tapones?|lids?|caps?)\s+(para|de|for)\s+((un|una|a|an|the)\s+)?(vacuum\s+)?(termos?|thermos|flasks?|botellas?)/.test(identity)
+  if (namesPart && !deniesPart) {
     concepts.push('article_part')
   }
 

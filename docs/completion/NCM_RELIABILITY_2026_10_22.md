@@ -15,10 +15,10 @@ El caso «termo Stanley, acero inoxidable, para mantener el agua caliente y toma
 
 ## Evidencia y gates
 
-- Vitest completo: 187 archivos y 1.106 pruebas aprobadas.
+- Vitest completo: 187 archivos y 1.113 pruebas aprobadas.
 - Regresión con las 10.504 posiciones del asset productivo, competidores reales de acero/partes/maquinaria, idiomas y contraejemplos, IA caída/adversarial/colgada.
 - Endpoint `/api/ncm-classify` real con asset oficial: pregunta → confirmación → candidato y tarifa; ausencia de SIM no inventa sufijo.
-- Gate de producción nuevo: cinco casos contra el backend desplegado (pendiente, confirmado, sin vacío, repuesto, eléctrico). Usa el mecanismo de autenticación de servicio existente y debe aprobar antes de declarar verificado el despliegue.
+- Gate de producción nuevo: seis casos contra el backend desplegado (pendiente, confirmado, sin vacío, ampolla de repuesto, partes genéricas, eléctrico). Usa el mecanismo de autenticación de servicio existente y debe aprobar antes de declarar verificado el despliegue.
 - Chromium: ocho recorridos nuevos aprobados (descripción manual sí/no, búsqueda y link, a 390×844 y 1440×1000). Clasificador real y catálogo completo dentro del handler de prueba; búsqueda, proveedor y reserva usan fixtures. Dos solicitudes NCM, sin tercer bucle. Auditor independiente revisó 24 capturas y dos retomas del estado terminal.
 - Gate de release: suite completa de 96 pruebas WebKit/Chromium, build TypeScript/Vite, presupuestos de bundle, schema y assets. El resultado del head final y del despliegue se registra en CI/PR.
 

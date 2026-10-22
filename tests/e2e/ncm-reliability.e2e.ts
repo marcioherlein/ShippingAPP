@@ -50,6 +50,8 @@ async function completeQuote(page: Page) {
  throw new Error('Too many quote steps')
 }
 for (const width of [390, 1440]) for (const mode of ['manual', 'search', 'link']) for (const decision of (mode === 'manual' ? ['yes', 'no'] : ['yes'])) test(`real full catalog ${mode} ${decision} ${width}: precise question to confirmed quote`, async ({ page }, info) => {
+ // Includes the complete form, real catalog and three screenshots on retina WebKit.
+ test.setTimeout(60_000)
  await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 })
  const fixture = createManualProductAnalysis(source, name)
  Object.assign(fixture.product, { material: 'Acero inoxidable', functionText: 'Para mantener el agua caliente y tomar mate', originCountry: 'China', unitPriceUsd: 17, moq: 1, packedWeightKg: 0.6, volumeCbm: 0.002, supplierQuote: initialSupplierQuote(17, true) })

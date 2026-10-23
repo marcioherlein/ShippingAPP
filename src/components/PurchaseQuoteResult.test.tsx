@@ -25,7 +25,7 @@ function save(){return [...container.querySelectorAll('button')].find(b=>b.textC
 it('shows the decision metrics first and retains the transcript in collapsed history',async()=>{
  await render();expect(container.querySelectorAll('.simple-quote-card')).toHaveLength(2)
  expect(container.querySelector('details')?.open).toBe(false)
- expect(container.querySelector('.workspace-result-overview')?.textContent).toContain('Inversión total estimada');expect(container.querySelector('.case-conversation')!.closest('details')?.open).toBe(false)
+ expect(container.querySelector('.workspace-result-overview')?.textContent).toContain('Inversión total estimada');expect(container.querySelector('.workspace-result-overview')?.textContent).toContain('Costo puesto por unidad');expect(container.textContent).not.toContain('versión guardada del cálculo');expect(container.querySelector('.case-conversation')!.closest('details')?.open).toBe(false)
  expect(container.textContent).toContain('Para iluminar fotos.')
 })
 it('reports saved only after server confirmation and retains chat and scenarios in the payload',async()=>{

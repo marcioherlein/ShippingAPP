@@ -49,6 +49,7 @@ for (const [width,entry] of [[390,'link'],[1440,'link'],[390,'search']] as const
   const result=page.getByRole('region',{name:'Tu presupuesto de importación'})
   await expect(result).toBeVisible()
   await expect(result.locator('.workspace-result-overview')).toContainText('Inversión total estimada')
+  await expect(result.locator('.workspace-result-overview')).toContainText('Costo puesto por unidad')
   await expect(result.locator('details.workspace-audit')).not.toHaveAttribute('open','')
   await page.getByRole('button',{name:'Guardar presupuesto',exact:true}).click()
   await expect(page.getByRole('button',{name:'Presupuesto guardado',exact:true})).toBeVisible()
@@ -58,6 +59,19 @@ for (const [width,entry] of [[390,'link'],[1440,'link'],[390,'search']] as const
   const violations=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations.filter(v=>v.impact==='serious'||v.impact==='critical')
   expect(violations).toEqual([])
   await page.screenshot({path:testInfo.outputPath(`workspace-${width}.png`),fullPage:true})
+  // Navigation must stay useful after the confirmation screen is unmounted.
+  const nav = page.getByRole('navigation', { name: 'Navegación principal' })
+  await nav.getByRole('link', { name: 'Resultado', exact: true }).click()
+  await expect(page.locator('#calculator')).toBeInViewport()
+  await page.getByRole('button', { name: 'Editar objetivo o perfil', exact: true }).click()
+  await expect(page.getByRole('radio', { name: 'Reventa', exact: true })).toBeVisible()
+  await expect(nav.getByRole('link', { name: 'Resultado', exact: true })).toHaveCount(0)
+  await nav.getByRole('button', { name: 'Revisar producto', exact: true }).click()
+  await expect(page.locator('#case-confirmation')).toBeVisible()
+  await expect(page.locator('#case-confirmation')).toBeFocused()
+  await expect(page.getByRole('radio', { name: 'Reventa', exact: true })).toBeHidden()
+  await expect(page.locator('#case-confirmation')).toContainText('Raqueta de tenis de aluminio')
+
 })
 
 test('manual product sheet preserves fields on reload and creates a review without a chat',async({page})=>{

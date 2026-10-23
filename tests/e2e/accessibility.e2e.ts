@@ -129,12 +129,13 @@ test('mobile journey prioritizes current work and keeps compact controls touch-f
   await expect(page.locator('.journey-question-card.active')).toBeVisible()
 
   const chipBox = await page.getByRole('radio', { name: 'Reventa', exact: true }).boundingBox()
-  expect(chipBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+  // WebKit may report a 44px box as 43.999969px after transforms.
+  expect(Math.round((chipBox?.height ?? 0) * 100) / 100).toBeGreaterThanOrEqual(44)
   // "Nuevo caso" is hidden at ≤480px (auth panel covers it at narrow widths)
   const newCaseLocator = page.getByRole('button', { name: 'Nuevo caso', exact: true })
   if (await newCaseLocator.count() > 0) {
     const newCaseBox = await newCaseLocator.boundingBox()
-    expect(newCaseBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    expect(Math.round((newCaseBox?.height ?? 0) * 100) / 100).toBeGreaterThanOrEqual(44)
   }
 
   await expectNoSeriousAxeViolations(page)

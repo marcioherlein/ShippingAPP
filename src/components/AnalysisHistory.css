@@ -261,3 +261,13 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Account controls remain comfortable to operate on touch screens. */
+.analysis-history-trigger,
+.analysis-history-panel button,
+.analysis-history-source { min-height: 44px; }
+.analysis-history-head > button { width: 44px; height: 44px; flex-shrink: 0; }
+.analysis-history-actions { flex-wrap: wrap; }
+.analysis-history-error button { display: block; margin: 8px auto 0; border: 1px solid currentColor; border-radius: 10px; background: transparent; color: inherit; padding: 8px 14px; font: inherit; cursor: pointer; }
+.analysis-history-source { display: inline-flex; align-items: center; }
+.analysis-history-panel { overscroll-behavior: contain; }

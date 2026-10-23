@@ -5,7 +5,7 @@ import {beforeEach,afterEach,it,expect,vi} from 'vitest'
 import GuidedCaseReview from './GuidedCaseReview'
 import {createManualProductAnalysis,productConfirmationFromAnalysis} from '../lib/productConfirmation'
 import {initialSupplierQuote} from '../lib/supplierQuote'
-import {readCaseConversation} from '../lib/caseConversation'
+import {readCaseConversation,recordCaseAnswer} from '../lib/caseConversation'
 const analysis=createManualProductAnalysis('manual://guided')
 analysis.product={...analysis.product,name:'Luz RGB',originCountry:'China',unitPriceUsd:10,packedWeightKg:0.2,volumeCbm:0.001,moq:1,functionText:null}
 let root:Root,container:HTMLDivElement
@@ -49,4 +49,18 @@ it('does not read stored conversation again while typing a pack count',async()=>
  const field=container.querySelector<HTMLInputElement>('.case-question input')!
  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(field,'5');field.dispatchEvent(new Event('input',{bubbles:true}))})
  expect(field.value).toBe('5');expect(reads).not.toHaveBeenCalled();reads.mockRestore()
+})
+
+it('explains invalid numbers and rejects an upper price tier below its minimum',async()=>{
+ await act(async()=>root.render(<Harness pack/>));
+ const change=async(value:string)=>{const input=container.querySelector<HTMLInputElement>('.case-question input')!;await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}))})}
+ await change('-1');expect(container.querySelector('[aria-invalid="true"]')).not.toBeNull();expect(container.textContent).toContain('número entero mayor a cero')
+ await change('5');await click('Continuar');await change('100');await click('Continuar');await change('50');expect(container.textContent).toContain('igual o mayor a 100');expect([...container.querySelectorAll('button')].find(b=>b.textContent==='Continuar')?.disabled).toBe(true)
+})
+it('restores an already confirmed upper tier from the previous longer prompt',async()=>{
+ recordCaseAnswer(analysis.sourceUrl,'¿Desde cuántas unidades es válido ese precio?','1')
+ recordCaseAnswer(analysis.sourceUrl,'¿Hasta cuántas unidades vale ese precio? Dejá vacío sólo si confirmaste que no tiene límite.','Confirmo que no tiene límite')
+ const draft={...productConfirmationFromAnalysis(analysis),functionText:'Iluminar fotografías'}
+ await act(async()=>root.render(<GuidedCaseReview analysis={analysis} draft={draft} quote={initialSupplierQuote(10,true)} capacity={{mode:'unknown',budgetUsd:0,min:1,max:1}} classified={false} askedForMore={false} clarificationTarget="functionText" exhausted={false} status="confirm" authRequired={false} onDraft={vi.fn()} onQuote={vi.fn()} onConfirm={confirm} onManual={vi.fn()}/>))
+ expect(container.querySelector('.case-question')).toBeNull();expect(container.textContent).toContain('Revisá y confirmá')
 })

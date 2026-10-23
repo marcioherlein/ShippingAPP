@@ -7,17 +7,21 @@ export default function ProductWorkspaceForm({ onSubmit }: { onSubmit: (data: Ma
   const [draft, setDraft] = useState<Draft>(() => readProductDraft<Draft>('workspace-product') || { name: '', use: '', material: '' })
   const [page,setPage] = useState(() => Math.min(2, Math.max(0, readProductDraft<number>('workspace-product-page') || 0)))
   useEffect(() => { writeProductDraft('workspace-product', draft); writeProductDraft('workspace-product-page',page) }, [draft,page])
+  const invalid = page === 0 ? !!draft.name && draft.name.trim().length < 3 : page === 1 ? !!draft.use && draft.use.trim().length < 2 : false
+  useEffect(() => { const field = document.querySelector<HTMLElement>('.workspace-product-form'); field?.querySelector<HTMLElement>('input,textarea')?.focus({ preventScroll: true }); field?.scrollIntoView?.({ block: 'center', behavior: 'instant' }) }, [page])
   return <form className="workspace-product-form" onSubmit={event => {
     event.preventDefault()
+    if (page === 0 && draft.name.trim().length < 3 || page === 1 && draft.use.trim().length < 2) return
     if (page < 2) { setPage(page + 1); return }
     if (draft.name.trim().length < 3 || draft.use.trim().length < 2) return
     onSubmit({ name: draft.name.trim(), use: draft.use.trim(), material: draft.material.trim(), unitPriceUsd: 0, originCountry: '', packedWeightKg: 0, moq: 0, volumeCbm: null, sensitiveCategory: 'unknown' })
   }}>
-    <div className="workspace-section-heading"><span className="eyebrow">Ficha de producto</span><h3>{['¿Cómo se llama tu producto?','¿Para qué se utiliza?','¿De qué está hecho?'][page]}</h3></div>
-    {page === 0 && <label><span>Nombre y modelo del producto</span><input autoFocus required minLength={3} maxLength={300} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="Ej. Lámpara LED de escritorio, modelo X1" /></label>}
-    {page === 1 && <label><span>Función o uso principal</span><textarea autoFocus required minLength={2} maxLength={2000} value={draft.use} onChange={e => setDraft({ ...draft, use: e.target.value })} placeholder="Qué hace, cómo funciona y para qué se utiliza" /></label>}
+    <div className="workspace-section-heading"><span className="eyebrow">Ficha de producto · Paso {page + 1} de 3</span><h3>{['¿Cómo se llama tu producto?','¿Para qué se utiliza?','¿De qué está hecho?'][page]}</h3></div>
+    {page === 0 && <label><span>Nombre y modelo del producto</span><input autoFocus required aria-invalid={invalid || undefined} aria-describedby="workspace-product-help workspace-product-error" minLength={3} maxLength={300} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="Ej. Lámpara LED de escritorio, modelo X1" /></label>}
+    {page === 1 && <label><span>Función o uso principal</span><textarea autoFocus required aria-invalid={invalid || undefined} aria-describedby="workspace-product-help workspace-product-error" minLength={2} maxLength={2000} value={draft.use} onChange={e => setDraft({ ...draft, use: e.target.value })} placeholder="Qué hace, cómo funciona y para qué se utiliza" /></label>}
     {page === 2 && <label><span>Material y características <small>Opcional</small></span><input autoFocus maxLength={1000} value={draft.material} onChange={e => setDraft({ ...draft, material: e.target.value })} placeholder="Ej. Aluminio, alimentación USB, 10 W" /></label>}
-    <p className="workspace-help">{page === 0 ? 'Incluí el modelo si lo conocés. Después completaremos la oferta y el embalaje.' : page === 1 ? 'Describí qué hace; este dato ayuda a identificar la posición aduanera.' : 'Opcional: material principal y características técnicas conocidas.'}</p>
+    <p id="workspace-product-help" className="workspace-help">{page === 0 ? 'Incluí el modelo si lo conocés. Después completaremos la oferta y el embalaje.' : page === 1 ? 'Describí qué hace; este dato ayuda a identificar la posición aduanera.' : 'Opcional: material principal y características técnicas conocidas.'}</p>
+    <p id="workspace-product-error" className="workspace-field-error" role={invalid ? "alert" : undefined}>{invalid ? page === 0 ? "Ingresá un nombre de al menos tres caracteres." : "Describí el uso con al menos dos caracteres." : ""}</p>
     {page > 0 && <button type="button" className="pipeline-secondary" onClick={()=>setPage(page-1)}>Atrás</button>}
     <button type="submit" className="journey-primary-action" disabled={page === 0 ? draft.name.trim().length < 3 : draft.use.trim().length < 2}>{page < 2 ? 'Continuar' : 'Crear ficha de importación'}</button>
   </form>

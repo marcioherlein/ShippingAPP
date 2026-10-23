@@ -18,10 +18,12 @@ function resume() {
 
 export default function AppEntry() {
   const [entered, setEntered] = useState(resume)
+  const [focusOnEntry, setFocusOnEntry] = useState(false)
   if (!entered) return <Landing onStart={() => {
     try { localStorage.setItem('shippingapp:entered', '1') } catch {}
+    setFocusOnEntry(true)
     setEntered(true)
     window.scrollTo({ top: 0, behavior: 'auto' })
   }} />
-  return <LoadingBoundary label="Cargando cotizador…"><QuoteApp /></LoadingBoundary>
+  return <LoadingBoundary label="Cargando cotizador…"><QuoteApp focusOnEntry={focusOnEntry} /></LoadingBoundary>
 }

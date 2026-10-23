@@ -21,8 +21,9 @@ export const PurchaseQuoteSummary = React.memo(function PurchaseQuoteSummary({ s
   return <>
 
     <section className="simple-quote" aria-label="Tu presupuesto de importación">
-      <span className="eyebrow">Panel de decisión · Importación a Argentina</span><h2>{analysis.product.name}</h2><p>Cotización del {new Date(snapshot.quotedAt).toLocaleString('es-AR')}. Las tarifas corresponden a esta versión guardada del cálculo.</p>
-      {plan.selected && <div className="workspace-result-overview" aria-label="Resumen de la compra"><div><span>Inversión total estimada · USD</span><strong>{usd(plan.selected.cost.totalCostUsd)}</strong></div><div><span>Cantidad elegida</span><strong>{plan.selected.quantity} u.</strong></div><div><span>Modalidad comparada</span><strong>{modes[plan.selected.mode]}</strong></div></div>}
+      <span className="eyebrow">Panel de decisión · Importación a Argentina</span><h2>{analysis.product.name}</h2>
+      {plan.selected && <div className="workspace-result-overview" aria-label="Resumen de la compra"><div><span>Inversión total estimada · USD</span><strong>{usd(plan.selected.cost.totalCostUsd)}</strong></div><div><span>Costo puesto por unidad · USD</span><strong>{usd(plan.selected.cost.unitCostUsd)}</strong></div><div><span>Cantidad elegida</span><strong>{plan.selected.quantity} u.</strong></div><div><span>Modalidad comparada</span><strong>{modes[plan.selected.mode]}</strong></div></div>}
+      <p>Cálculo del {new Date(snapshot.quotedAt).toLocaleString('es-AR')}. Fuentes y tarifas corresponden a esta versión del cálculo.</p>
       <p className="workspace-result-note">Estimación para decidir, sujeta a validación comercial y aduanera. Revisá los pendientes antes de comprar.</p>
       {plan.note && <p>{plan.note}</p>}{plan.error && <p role="alert">{plan.error}</p>}
       <details className="quote-scenarios"><summary>Comparar una unidad con esta compra</summary><div className="simple-quote-grid">

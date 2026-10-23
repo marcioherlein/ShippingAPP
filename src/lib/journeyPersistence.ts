@@ -21,7 +21,7 @@ type InitialSource = 'url' | 'storage'
 const intentByCopy: Array<[string, PersistedJourneyState['intent']]> = [
   ['Ya tengo un producto', 'have_product'],
   ['Quiero buscarlo', 'search_product'],
-  ['Quiero descubrir', 'discover'],
+  ['Quiero explorar', 'discover'],
 ]
 
 const purposeByCopy: Record<string, PersistedJourneyState['purpose']> = {
@@ -130,10 +130,12 @@ function completedCardValues(number: '01' | '02') {
 }
 
 function captureIntent() {
+  const intent = document.querySelector<HTMLElement>('.journey-bubble.user[data-entry-intent]')?.dataset.entryIntent
+  if (intent === 'have_product' || intent === 'search_product' || intent === 'discover') return intent
   const copy = textOf(document.querySelector('.journey-bubble.user b'))
   if (copy.includes('Ya tengo el producto')) return 'have_product' as const
   if (copy.includes('Quiero buscar un producto')) return 'search_product' as const
-  if (copy.includes('Quiero explorar oportunidades')) return 'discover' as const
+  if (copy.includes('Quiero explorar')) return 'discover' as const
   return null
 }
 
@@ -298,7 +300,7 @@ async function chooseIntent(intent: PersistedJourneyState['intent']) {
     await waitFor(() => buttonContaining('Ya tengo un producto'))
   }
   const copy = intentByCopy.find(([, value]) => value === intent)?.[0]
-  if (copy) (await waitFor(() => buttonContaining(copy))).click()
+  if (copy) (await waitFor(() => document.querySelector<HTMLButtonElement>(`button[data-entry-intent="${intent}"]`) || buttonContaining(copy))).click()
 }
 
 function radioFor(groupLabel: string, copy: string | undefined) {
@@ -411,6 +413,7 @@ export function installJourneyPersistence() {
   let scheduled = false
   let lastNavigationKey: string | null = null
   let restoreChain: Promise<void> = Promise.resolve()
+  let lastJourneyUrl = new URL(window.location.href).searchParams.get(URL_KEY)
 
   const syncState = () => {
     if (restoring) return
@@ -429,6 +432,7 @@ export function installJourneyPersistence() {
       : key !== lastNavigationKey ? 'push' : 'replace'
 
     writeState(state, mode)
+    lastJourneyUrl = new URL(window.location.href).searchParams.get(URL_KEY)
     lastNavigationKey = key
   }
 
@@ -447,6 +451,7 @@ export function installJourneyPersistence() {
     if (!restoring && new URL(window.location.href).searchParams.has(URL_KEY)) {
       window.history.pushState({ shippingAppJourney: true }, '', urlForState(null))
     }
+    lastJourneyUrl = new URL(window.location.href).searchParams.get(URL_KEY)
   }
 
   const onClick = (event: MouseEvent) => {
@@ -476,6 +481,7 @@ export function installJourneyPersistence() {
     window.dispatchEvent(new Event('shippingapp:journey-restored'))
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     if (source === 'storage') writeState(state, 'replace')
+    lastJourneyUrl = new URL(window.location.href).searchParams.get(URL_KEY)
     lastNavigationKey = navigationKey(state)
   }
 
@@ -499,8 +505,12 @@ export function installJourneyPersistence() {
   }
 
   const onPopState = () => {
-    const state = decodeState(new URL(window.location.href).searchParams.get(URL_KEY))
-    void restore(state)
+    const encoded = new URL(window.location.href).searchParams.get(URL_KEY)
+    // Native section links also emit popstate. They must not replay a completed
+    // journey or race a user's new-case confirmation.
+    if (encoded === lastJourneyUrl) return
+    lastJourneyUrl = encoded
+    void restore(decodeState(encoded))
   }
 
   // scheduleSync debounces by 30ms, so a reload/navigation that happens within

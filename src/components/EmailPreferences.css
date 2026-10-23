@@ -6,3 +6,14 @@
 .email-pref-timezone{align-items:flex-start;flex-direction:column}.email-pref-timezone>div{display:flex;width:100%;gap:8px}.email-pref-timezone input{flex:1;min-width:0;border:1px solid #d0d5dd;border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.82);font:inherit}.email-pref-timezone button,.email-pref-error button{border:1px solid #d0d5dd;border-radius:12px;background:#fff;padding:9px 11px;font-weight:600;cursor:pointer}
 .email-pref-transactional{margin-top:8px;padding:14px 15px;border-radius:16px;background:rgba(17,24,39,.05)}.email-pref-transactional strong{font-size:13px}.email-pref-transactional p{margin:5px 0 0;color:#667085;font-size:12px;line-height:1.45}.email-pref-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:18px}.email-pref-actions span{font-size:12px;color:#667085}.email-pref-save{border:0;border-radius:999px;background:#101828;color:#fff;padding:11px 16px;font-weight:700;cursor:pointer}.email-pref-save:disabled{opacity:.55;cursor:wait}.email-pref-muted{color:#667085}.email-pref-error,.email-pref-inline-error{color:#b42318;font-size:13px}.email-pref-error{padding:14px;border-radius:14px;background:#fef3f2}.email-pref-error p{margin-top:0}
 @media(max-width:640px){.email-pref-backdrop{padding:0;align-items:flex-end}.email-pref-panel{width:100%;max-height:88vh;margin:0;border-radius:28px 28px 0 0;padding:20px}.email-pref-timezone>div{flex-direction:column}}
+
+/* Native dialog supplies top-layer modality, keyboard containment and Escape. */
+dialog.email-pref-backdrop{width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;color:inherit;box-sizing:border-box}
+dialog.email-pref-backdrop::backdrop{background:transparent}
+.email-pref-fields{min-width:0;margin:0;padding:0;border:0}
+.email-pref-panel{max-height:calc(100dvh - 106px);overscroll-behavior:contain}
+.email-pref-close{width:44px;height:44px;flex-shrink:0}
+.email-pref-panel button,.email-pref-timezone input{min-height:44px}
+.email-pref-row{min-height:44px;cursor:pointer}
+.email-pref-fields:disabled .email-pref-row{cursor:wait}
+@media(max-width:640px){.email-pref-panel{max-height:88dvh}}

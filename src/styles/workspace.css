@@ -203,3 +203,13 @@
 
 .quote-processing{display:flex;align-items:center;gap:12px;min-height:80px}.quote-processing-indicator{width:22px;height:22px;flex:none;border:3px solid #d9e2e9;border-top-color:#10283c;border-radius:50%;animation:quote-processing-spin 1s linear infinite}@keyframes quote-processing-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.quote-processing-indicator{animation:none}}
 @media(max-width:650px){.workspace-app:has(.quote-result-actions) .journey-hero{margin:8px auto;padding-top:8px}.workspace-app:has(.quote-result-actions) .journey-task-title{font-size:24px}.workspace-app .quote-result-actions{gap:8px}.workspace-app .quote-result-actions>button{flex:1 1 auto;padding:10px;font-size:14px;min-height:44px}.workspace-app .quote-result-actions>button:first-child{flex-basis:58%}}
+
+.workspace-app .workspace-result-overview { grid-template-columns: repeat(4,minmax(0,1fr)); }
+@media(max-width:760px) {
+  .workspace-app .workspace-result-overview { grid-template-columns: repeat(2,minmax(0,1fr)); gap:16px 12px; }
+  .workspace-app .workspace-result-overview strong { font-size:clamp(19px,5vw,26px); }
+}
+@media(max-width:650px) {
+  .workspace-app .quote-result-actions { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); }
+  .workspace-app .quote-result-actions > p { grid-column:1 / -1; }
+}

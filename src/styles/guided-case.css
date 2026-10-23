@@ -20,3 +20,5 @@
 .guided-case :focus-visible,.simple-quote :focus-visible { outline:2px solid var(--ds-brand); outline-offset:3px; }
 
 .journey-workspace[hidden] { display:none !important; }
+
+.workspace-field-error{color:#a52a21;font-size:14px;line-height:1.5;margin:8px 0}.workspace-field-error:empty{display:none}[aria-invalid=true]{border-color:#a52a21!important}@media(prefers-color-scheme:dark){.workspace-field-error{color:#ffb4a8}}

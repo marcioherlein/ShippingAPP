@@ -222,3 +222,26 @@ for (const budgetMode of ['units', 'unknown']) for (const width of [320, 390]) {
     expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:search'))).toBeNull()
   }
 })
+
+ test('legacy explore survives reload and new case clears the previous capacity', async ({ page }) => {
+  // Explore is a hidden legacy entry, but existing links still need recovery.
+  const saved = { v: 1, intent: 'discover', purpose: 'resale', entityType: 'company', signature: 'yes', budgetMode: 'units', unitsMin: 125, unitsMax: 375, step: 3 }
+  await page.goto('/?journey=' + encodeURIComponent(Buffer.from(JSON.stringify(saved)).toString('base64url')))
+  await expect(page.getByRole('textbox', { name: 'Buscar productos en Alibaba' })).toBeVisible()
+  await expect.poll(() => persistedStep(page)).toBe(3)
+  await page.reload()
+  await expect(page.getByRole('textbox', { name: 'Buscar productos en Alibaba' })).toBeVisible()
+  await expect(page.locator('.journey-bubble.user')).toContainText('Quiero explorar productos.')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('shippingapp:journey:v1') || '{}').intent)).toBe('discover')
+  // Same-document navigation must not start a hidden replay of this old case.
+  await page.getByRole('link', { name: 'Cotizador', exact: true }).click()
+  await page.getByRole('button', { name: 'Nuevo caso', exact: true }).click()
+  await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
+  await expect.poll(() => new URL(page.url()).searchParams.has('journey')).toBe(false)
+  await completeOperation(page)
+  await expect(page.getByRole('radio', { name: /Tengo rango de unidades/ })).toHaveAttribute('aria-checked', 'false')
+  await page.getByRole('radio', { name: /Tengo rango de unidades/ }).click()
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await expect(page.getByLabel('Mínimo de unidades')).toHaveValue('50')
+  await expect(page.getByLabel('Máximo de unidades')).toHaveValue('200')
+ })

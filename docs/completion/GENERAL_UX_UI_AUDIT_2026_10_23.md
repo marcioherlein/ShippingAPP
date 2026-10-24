@@ -44,7 +44,9 @@ Auditoría de código, navegación, accesibilidad y revisión visual independien
 8. **P2 — Pregunta/CTA recortados en móvil:** se revela la tarjeta actual y se reducen textos duplicados, conservando una pregunta a la vez.
 9. **P2 — Resumen financiero relegado:** el costo por unidad no estaba en las métricas iniciales y las acciones ocupaban demasiada altura móvil. Se reorganizó el resumen y las acciones sin cambiar cálculos.
 10. **P2 — Información ambigua:** se eliminó la afirmación de versión guardada antes de guardar; un perfil desconocido no se presenta como Persona.
-11. **P1 pendiente editorial — Legales inexistentes:** páginas de estado reales evitan el fallback engañoso. Sólo el operador puede aportar el contenido aprobado para cerrar este punto.
+11. **P1 — Contraste en la oferta avanzada:** las etiquetas heredaban un color claro pensado para otro fondo. Se usa el token semántico de texto secundario y se extienden los recorridos de navegador para auditar esta pantalla, incluidos tramos adicionales y temas claro/oscuro, con axe. La regresión reprodujo contraste 1,03:1 antes del cambio.
+12. **P2 — Acción de perfil fuera de pantalla a 320 px:** al cambiar la pregunta se revela la tarjeta activa, respetando restauración y movimiento reducido; la regresión confirma la acción siguiente completamente visible después de las tres respuestas No sé.
+13. **P1 pendiente editorial — Legales inexistentes:** páginas de estado reales evitan el fallback engañoso. Sólo el operador puede aportar el contenido aprobado para cerrar este punto.
 
 ## Evidencia y límites
 

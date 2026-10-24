@@ -49,7 +49,7 @@
 .pipeline-confirm-field > span {
   font-size: 0.78rem;
   font-weight: 700;
-  color: var(--muted, rgba(255, 255, 255, 0.68));
+  color: var(--ds-text-secondary);
   letter-spacing: 0.02em;
 }
 

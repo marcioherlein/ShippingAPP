@@ -304,6 +304,13 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
 
   const operationAnswered = purpose !== null && entityType !== null && signature !== null
   const profileStep = profilePage
+  useEffect(() => {
+    if (!intent || restoringRef.current) return
+    const frame = requestAnimationFrame(() => {
+      scrollIntoViewIfNeeded(document.querySelector('.journey-question-card.active'))
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [intent, step, profilePage, budgetPage])
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
   const budgetAnswered = budgetMode !== null && budgetError === null
 

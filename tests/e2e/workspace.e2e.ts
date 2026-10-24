@@ -71,6 +71,22 @@ for (const [width,entry] of [[390,'link'],[1440,'link'],[390,'search']] as const
   await expect(page.locator('#case-confirmation')).toBeFocused()
   await expect(page.getByRole('radio', { name: 'Reventa', exact: true })).toBeHidden()
   await expect(page.locator('#case-confirmation')).toContainText('Raqueta de tenis de aluminio')
+  // Advanced editing is a distinct surface: audit labels and additional tiers,
+  // including both color schemes rather than only the guided happy path.
+  await page.getByText('Opciones de clasificación y oferta', { exact: true }).click()
+  await page.getByRole('button', { name: 'Editar tramos de precio', exact: true }).click()
+  const supplier = page.getByRole('region', { name: 'Confirmación del precio del proveedor' })
+  await expect(supplier).toBeVisible()
+  await supplier.getByRole('button', { name: 'Agregar otro tramo de precio confirmado' }).click()
+  await expect(supplier.getByRole('group', { name: /Tramo adicional 1/ })).toBeVisible()
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme })
+    // Theme transitions must settle before measuring foreground/background contrast.
+    await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().endTime !== Infinity).map(animation => animation.finished.catch(() => undefined))))
+    const advancedViolations = (await new AxeBuilder({ page }).include('.supplier-review').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations.filter(v => v.impact === 'serious' || v.impact === 'critical')
+    expect(advancedViolations, `Advanced supplier form in ${colorScheme}`).toEqual([])
+    await supplier.screenshot({ path: testInfo.outputPath(`advanced-offer-${width}-${colorScheme}.png`) })
+  }
 
 })
 

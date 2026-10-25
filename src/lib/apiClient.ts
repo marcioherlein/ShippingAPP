@@ -147,6 +147,11 @@ async function boundedApiFetch(input: RequestInfo | URL, init?: RequestInit) {
         if (controller.signal.aborted) rejectOnAbort()
       }),
       apiFetchInternal(input, { ...init, signal: controller.signal }).then(async response => {
+        // These statuses forbid a body, even when a fetch/transport wrapper
+        // exposes an empty stream. ArrayBuffer(0) is still an illegal body here.
+        if (response.status === 204 || response.status === 205 || response.status === 304) {
+          return new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers })
+        }
         if (!response.body) return response
         const body = await response.arrayBuffer()
         return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers })

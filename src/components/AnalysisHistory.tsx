@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useId, useState } from 'react'
 import { deleteAnalysisHistoryItem, getAnalysisHistoryItem, listAnalysisHistory, type AnalysisHistoryItem, type AnalysisHistorySummary } from '../lib/analysisHistory'
 import { addAnalysisToWatchlist } from '../lib/watchlist'
 import './AnalysisHistory.css'
+import { useAccountPanel } from '../hooks/useAccountPanel'
 
 function money(value: number | null | undefined) {
   return value == null ? '—' : `US$ ${Math.round(value).toLocaleString('es-AR')}`
@@ -15,9 +16,11 @@ function dateLabel(value: string) {
 
 export default function AnalysisHistory() {
   const [open, setOpen] = useState(false)
+  const panelId = useId()
   const [items, setItems] = useState<AnalysisHistorySummary[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [detail, setDetail] = useState<AnalysisHistoryItem | null>(null)
+  const { panelRef, triggerRef, focusAfterRemoval } = useAccountPanel(open, () => setOpen(false), detail?.id)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [openingId, setOpeningId] = useState<string | null>(null)
@@ -83,10 +86,12 @@ export default function AnalysisHistory() {
 
   const remove = async (id: string) => {
     if (!window.confirm('¿Eliminar este análisis de tu historial?')) return
+    const previousFocus = document.activeElement
     setDeletingId(id)
     setError('')
     try {
       await deleteAnalysisHistoryItem(id)
+      focusAfterRemoval(previousFocus)
       setItems((current) => current.filter((item) => item.id !== id))
       if (detail?.id === id) setDetail(null)
     } catch (cause) {
@@ -101,20 +106,20 @@ export default function AnalysisHistory() {
   const detailPipeline = detailResult?.pipelineSummary ?? null
 
   return <div className="analysis-history-control">
-    <button type="button" className="analysis-history-trigger" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+    <button type="button" ref={triggerRef} className="analysis-history-trigger" aria-haspopup="dialog" aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
       <span aria-hidden="true">◷</span> Historial
     </button>
 
-    {open && <div className="analysis-history-panel" role="dialog" aria-label="Historial de análisis">
+    {open && <div ref={panelRef} id={panelId} className="analysis-history-panel" role="dialog" aria-label="Historial de análisis">
       <div className="analysis-history-head">
         <div><b>{detail ? 'Análisis guardado' : 'Tu historial'}</b><small>{detail ? dateLabel(detail.createdAt) : 'Sólo vos podés ver estos análisis.'}</small></div>
         <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar historial">×</button>
       </div>
 
-      {error && <div className="analysis-history-error">{error}</div>}
+      {error && <div className="analysis-history-error" role="alert">{error}{!detail && <button type="button" onClick={() => { void load(); panelRef.current?.querySelector<HTMLButtonElement>('button')?.focus() }} disabled={loading}>Reintentar</button>}</div>}
 
       {detail ? <div className="analysis-history-detail">
-        <button type="button" className="analysis-history-back" onClick={() => setDetail(null)}>← Volver al historial</button>
+        <button type="button" className="analysis-history-back" data-account-panel-start onClick={() => setDetail(null)}>← Volver al historial</button>
         {detailResult?.version === 1 && detailResult?.purchasePlan && <button type="button" onClick={() => { window.dispatchEvent(new CustomEvent('shippingapp:open-quote', { detail: { input: detail.input, result: detail.result } })); setOpen(false) }}>Abrir presupuesto con su conversación</button>}
         <h3>{detailAnalysis?.product?.name || 'Análisis guardado'}</h3>
         <div className="analysis-history-metrics">
@@ -152,7 +157,7 @@ export default function AnalysisHistory() {
           </article>)}
         </div>
 
-        {loading && <div className="analysis-history-loading">Cargando historial…</div>}
+        {loading && <div className="analysis-history-loading" role="status">Cargando historial…</div>}
         {!loading && cursor && <button type="button" className="analysis-history-more" onClick={() => void load(cursor, true)}>Cargar más</button>}
       </>}
     </div>}

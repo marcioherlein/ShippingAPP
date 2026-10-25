@@ -316,7 +316,7 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
 
 
   if (capacity && status !== 'ready') return <GuidedCaseReview
-    profileContext={`${costProfile?.purpose === 'resale' ? 'Para revender' : costProfile?.purpose === 'own_use' ? 'Uso personal' : 'Uso por confirmar'} · ${costProfile?.entityType === 'company' ? 'Empresa' : 'Persona'} · ${costProfile?.hasImporterSignature === true ? 'Con firma de importador' : costProfile?.hasImporterSignature === false ? 'Sin firma de importador' : 'Firma por confirmar'}`}
+    profileContext={`${costProfile?.purpose === 'resale' ? 'Para revender' : costProfile?.purpose === 'own_use' ? 'Uso personal' : 'Uso por confirmar'} · ${costProfile?.entityType === 'company' ? 'Empresa' : costProfile?.entityType === 'individual' ? 'Persona' : 'Importador por confirmar'} · ${costProfile?.hasImporterSignature === true ? 'Con firma de importador' : costProfile?.hasImporterSignature === false ? 'Sin firma de importador' : 'Firma por confirmar'}`}
     analysis={analysis} draft={draft} quote={supplierQuote} capacity={capacity}
     classified={classificationResolved && !identityEdited} askedForMore={classifierAskedForMore}
     clarificationTarget={clarificationTarget} exhausted={refinementExhausted}

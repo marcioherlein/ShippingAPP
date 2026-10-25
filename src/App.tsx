@@ -26,6 +26,7 @@ import type { QuotePrefill } from './lib/hotProducts'
 import { enrichProductAnalysisV2, ingestAlibabaUrlV2, hasConfirmedClassification, effectiveDutyRatePct, effectiveTariffProfile, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
 import { getJourneyBudgetError } from './lib/journeyValidation'
+import { recoverSavedCategory } from './lib/calculationRecovery'
 import { scrollIntoViewIfNeeded, scrollWindowToTop } from './lib/motionPreference'
 import { translateProductLabel } from './lib/productTranslation'
 import {
@@ -189,8 +190,22 @@ type PipelineDraft = {
   calculationInputKey: string
 }
 
-export default function App() {
+export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }) {
   const resetDialog = useRef<HTMLDialogElement>(null)
+  const [productNavigation, setProductNavigation] = useState(0)
+  useEffect(() => {
+    if (focusOnEntry) document.querySelector<HTMLElement>('.journey-task-title')?.focus({ preventScroll: true })
+  }, [focusOnEntry])
+  useEffect(() => {
+    if (!productNavigation) return
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById('case-confirmation')
+      target?.setAttribute('tabindex', '-1')
+      target?.focus({ preventScroll: true })
+      scrollIntoViewIfNeeded(target)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [productNavigation])
   const [intent, setIntent] = useState<EntryIntent>(null)
   const [step, setStep] = useState(0)
   const [profilePage, setProfilePage] = useState(1)
@@ -232,7 +247,9 @@ export default function App() {
         // Bring back a finished quote when the saved inputs still match what the
         // replayed answers produced; otherwise fall back to the review step.
         const pipe = readProductDraft<PipelineDraft>('pipeline')
-        if (hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && pipe.calculationInputKey === currentCalculationInputKeyRef.current) {
+        const restoredCategory = pipe?.status === 'ready' ? recoverSavedCategory(pipe.calculationInputKey, currentCalculationInputKeyRef.current) : undefined
+        if (hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && restoredCategory !== undefined) {
+          setSensitiveCategory(restoredCategory)
           setApprovedQuantity(pipe.approvedQuantity ?? null)
           setPipelineSummary(pipe.pipelineSummary)
           setPipelineStage(pipe.pipelineStage ?? 3)
@@ -290,6 +307,13 @@ export default function App() {
 
   const operationAnswered = purpose !== null && entityType !== null && signature !== null
   const profileStep = profilePage
+  useEffect(() => {
+    if (!intent || restoringRef.current) return
+    const frame = requestAnimationFrame(() => {
+      scrollIntoViewIfNeeded(document.querySelector('.journey-question-card.active'))
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [intent, step, profilePage, budgetPage])
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
   const budgetAnswered = budgetMode !== null && budgetError === null
 
@@ -509,6 +533,7 @@ export default function App() {
       }
 
       await nextPaint()
+      if (!operationIsCurrent('confirmation', operation.id)) return
       setPipelineStage(1)
 
       if (duty === null) {
@@ -530,6 +555,7 @@ export default function App() {
 
       const prefill = makeAnalysisPrefill(refreshed, budgetMode, budgetUsd, sensitiveCategory)
       await nextPaint()
+      if (!operationIsCurrent('confirmation', operation.id)) return
       setPipelineStage(2)
 
       const priceEvidence = refreshed.product.supplierQuote
@@ -575,6 +601,7 @@ export default function App() {
       }
 
       await nextPaint()
+      if (!operationIsCurrent('confirmation', operation.id)) return
       setPipelineStage(3)
       const winner = comparison.modes[comparison.bestMode]
       const completedSummary: CalculationPipelineSummary = {
@@ -596,6 +623,7 @@ export default function App() {
       setPipelineSummary(completedSummary)
 
       await nextPaint(120)
+      if (!operationIsCurrent('confirmation', operation.id)) return
       clearPendingConfirm()
       pendingResultReveal.current = true
       setCalculationStatus('ready')
@@ -640,13 +668,16 @@ export default function App() {
     setSignature(null)
     setSensitiveCategory(null)
     setBudgetMode(null)
+    setBudgetUsd(10000)
+    setUnitsMin(50)
+    setUnitsMax(200)
     setAnalysis(null)
     resetPipeline()
     scrollWindowToTop()
   }
 
   const requestReset = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (intent && event.isTrusted) resetDialog.current?.showModal()
+    if ((intent || analysis) && event.isTrusted) resetDialog.current?.showModal()
     else resetJourney()
   }
 
@@ -666,10 +697,10 @@ export default function App() {
         <button type="button" className="journey-destructive-action" onClick={resetJourney}>Empezar de nuevo</button>
       </div>
     </dialog>
-    <AppHeader onNewCase={requestReset} hasProduct={!!analysis} />
+    <AppHeader onNewCase={requestReset} hasProduct={!!analysis} processing={effectiveCalculationStatus === 'processing'} hasResult={effectiveCalculationStatus === 'ready' && !showSetup} onReviewProduct={() => { setShowSetup(false); reviewProductData(); setProductNavigation(value => value + 1) }} />
 
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
-      <h1 className="journey-task-title">{progressStep === 4 ? 'Tu panel de resultados' : 'Planificá tu importación'}</h1>
+      <h1 className="journey-task-title" tabIndex={-1}>{progressStep === 4 ? 'Tu panel de resultados' : 'Planificá tu importación'}</h1>
       <p className="workspace-intro">Evaluá cuánto invertir, cuánto cuesta cada unidad y qué falta validar antes de comprar.</p>
       <div className="journey-progress-bar" role="progressbar" aria-valuenow={progressStep} aria-valuemin={0} aria-valuemax={4} aria-label={progressStep === 4 ? 'Cotización lista' : progressStep === 0 ? 'Elegí tu punto de partida' : `Paso ${progressStep} de 4: ${stepLabels[progressStep]}`}>
         <div className="journey-progress-track">
@@ -695,10 +726,10 @@ export default function App() {
         </div>
 
         {intent === null ? <div className="journey-choice-grid three">
-          <button type="button" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Tengo una publicación, proveedor o sé qué quiero traer.</small></button>
-          <button type="button" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y GlobalShipping busca opciones reales en Alibaba.</small></button>
-          <button type="button" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Buscá ideas de producto usando la misma búsqueda real, sin catálogo cacheado.</small></button>
-        </div> : <div className="journey-bubble user"><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
+          <button type="button" data-entry-intent="have_product" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Tengo una publicación, proveedor o sé qué quiero traer.</small></button>
+          <button type="button" data-entry-intent="search_product" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y GlobalShipping busca opciones reales en Alibaba.</small></button>
+          <button type="button" data-entry-intent="discover" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Buscá ideas de producto usando la misma búsqueda real, sin catálogo cacheado.</small></button>
+        </div> : <div className="journey-bubble user" data-entry-intent={intent}><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
 
         {intent && <>
           <div className="journey-bubble assistant">

@@ -49,6 +49,7 @@ for (const [width,entry] of [[390,'link'],[1440,'link'],[390,'search']] as const
   const result=page.getByRole('region',{name:'Tu presupuesto de importación'})
   await expect(result).toBeVisible()
   await expect(result.locator('.workspace-result-overview')).toContainText('Inversión total estimada')
+  await expect(result.locator('.workspace-result-overview')).toContainText('Costo puesto por unidad')
   await expect(result.locator('details.workspace-audit')).not.toHaveAttribute('open','')
   await page.getByRole('button',{name:'Guardar presupuesto',exact:true}).click()
   await expect(page.getByRole('button',{name:'Presupuesto guardado',exact:true})).toBeVisible()
@@ -58,6 +59,35 @@ for (const [width,entry] of [[390,'link'],[1440,'link'],[390,'search']] as const
   const violations=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations.filter(v=>v.impact==='serious'||v.impact==='critical')
   expect(violations).toEqual([])
   await page.screenshot({path:testInfo.outputPath(`workspace-${width}.png`),fullPage:true})
+  // Navigation must stay useful after the confirmation screen is unmounted.
+  const nav = page.getByRole('navigation', { name: 'Navegación principal' })
+  await nav.getByRole('link', { name: 'Resultado', exact: true }).click()
+  await expect(page.locator('#calculator')).toBeInViewport()
+  await page.getByRole('button', { name: 'Editar objetivo o perfil', exact: true }).click()
+  await expect(page.getByRole('radio', { name: 'Reventa', exact: true })).toBeVisible()
+  await expect(nav.getByRole('link', { name: 'Resultado', exact: true })).toHaveCount(0)
+  await nav.getByRole('button', { name: 'Revisar producto', exact: true }).click()
+  await expect(page.locator('#case-confirmation')).toBeVisible()
+  await expect(page.locator('#case-confirmation')).toBeFocused()
+  await expect(page.getByRole('radio', { name: 'Reventa', exact: true })).toBeHidden()
+  await expect(page.locator('#case-confirmation')).toContainText('Raqueta de tenis de aluminio')
+  // Advanced editing is a distinct surface: audit labels and additional tiers,
+  // including both color schemes rather than only the guided happy path.
+  await page.getByText('Opciones de clasificación y oferta', { exact: true }).click()
+  await page.getByRole('button', { name: 'Editar tramos de precio', exact: true }).click()
+  const supplier = page.getByRole('region', { name: 'Confirmación del precio del proveedor' })
+  await expect(supplier).toBeVisible()
+  await supplier.getByRole('button', { name: 'Agregar otro tramo de precio confirmado' }).click()
+  await expect(supplier.getByRole('group', { name: /Tramo adicional 1/ })).toBeVisible()
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme })
+    // Theme transitions must settle before measuring foreground/background contrast.
+    await page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().endTime !== Infinity).map(animation => animation.finished.catch(() => undefined))))
+    const advancedViolations = (await new AxeBuilder({ page }).include('.supplier-review').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations.filter(v => v.impact === 'serious' || v.impact === 'critical')
+    expect(advancedViolations, `Advanced supplier form in ${colorScheme}`).toEqual([])
+    await supplier.screenshot({ path: testInfo.outputPath(`advanced-offer-${width}-${colorScheme}.png`) })
+  }
+
 })
 
 test('manual product sheet preserves fields on reload and creates a review without a chat',async({page})=>{
@@ -136,5 +166,8 @@ test('manual product reaches the dashboard using carton dimensions, one field at
  await expect(page.getByRole('region',{name:'Tu presupuesto de importación'})).toBeVisible()
  await expect(page.getByRole('region',{name:'Precio y costo por unidad'})).toBeVisible()
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+ await page.reload()
+ await expect(page.getByRole('region',{name:'Tu presupuesto de importación'})).toBeVisible()
+ await expect(page.getByRole('region',{name:'Precio y costo por unidad'})).toBeVisible()
  await page.screenshot({path:testInfo.outputPath('manual-dimensions-dashboard.png'),fullPage:true})
 })

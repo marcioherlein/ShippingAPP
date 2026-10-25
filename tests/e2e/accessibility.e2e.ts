@@ -120,7 +120,7 @@ test('reduced motion preference suppresses transitions and JS smooth scrolling',
   expect(behavior).toBe('auto')
 })
 
-test('mobile journey prioritizes current work and keeps compact controls touch-friendly', async ({ page }) => {
+test('mobile journey prioritizes current work and keeps compact controls touch-friendly', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
   await page.getByRole('button', { name: /Ya tengo un producto/i }).click()
@@ -129,13 +129,22 @@ test('mobile journey prioritizes current work and keeps compact controls touch-f
   await expect(page.locator('.journey-question-card.active')).toBeVisible()
 
   const chipBox = await page.getByRole('radio', { name: 'Reventa', exact: true }).boundingBox()
-  expect(chipBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+  // WebKit may report a 44px box as 43.999969px after transforms.
+  expect(Math.round((chipBox?.height ?? 0) * 100) / 100).toBeGreaterThanOrEqual(44)
   // "Nuevo caso" is hidden at ≤480px (auth panel covers it at narrow widths)
   const newCaseLocator = page.getByRole('button', { name: 'Nuevo caso', exact: true })
   if (await newCaseLocator.count() > 0) {
     const newCaseBox = await newCaseLocator.boundingBox()
-    expect(newCaseBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    expect(Math.round((newCaseBox?.height ?? 0) * 100) / 100).toBeGreaterThanOrEqual(44)
   }
 
   await expectNoSeriousAxeViolations(page)
+  // On a 320px phone, long profile guidance must not hide the next action.
+  await page.setViewportSize({ width: 320, height: 844 })
+  for (let profileStep = 1; profileStep <= 3; profileStep += 1) {
+    await page.getByRole('radio', { name: 'No sé', exact: true }).click()
+    if (profileStep < 3) await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+  }
+  await expect(page.getByRole('button', { name: /Seguir con presupuesto/ })).toBeInViewport({ ratio: 1 })
+  await page.screenshot({ path: testInfo.outputPath('profile-unknown-320.png') })
 })

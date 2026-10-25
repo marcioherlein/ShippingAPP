@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useId, useState } from 'react'
 import {
   getWatchlistItem,
   listWatchlist,
@@ -8,6 +8,7 @@ import {
   type WatchlistSnapshot,
 } from '../lib/watchlist'
 import './Watchlist.css'
+import { useAccountPanel } from '../hooks/useAccountPanel'
 
 function ars(value: number | null | undefined) {
   return value == null ? '—' : `$ ${Math.round(value).toLocaleString('es-AR')}`
@@ -36,8 +37,10 @@ function statusLabel(snapshot: WatchlistSnapshot | null) {
 
 export default function Watchlist() {
   const [open, setOpen] = useState(false)
+  const panelId = useId()
   const [items, setItems] = useState<WatchlistItem[]>([])
   const [detail, setDetail] = useState<WatchlistItem | null>(null)
+  const { panelRef, triggerRef, focusAfterRemoval } = useAccountPanel(open, () => setOpen(false), detail?.id)
   const [loading, setLoading] = useState(false)
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
@@ -98,11 +101,13 @@ export default function Watchlist() {
   }
 
   const remove = async (id: string) => {
-    if (!window.confirm('¿Dejar de seguir este producto? El historial de snapshots queda preservado si después lo volvés a seguir.')) return
+    if (!window.confirm('¿Dejar de seguir este producto? Las observaciones anteriores se conservan si después lo volvés a seguir.')) return
+    const previousFocus = document.activeElement
     setRemovingId(id)
     setError('')
     try {
       await removeWatchlistItem(id)
+      focusAfterRemoval(previousFocus)
       setItems((current) => current.filter((item) => item.id !== id))
       if (detail?.id === id) setDetail(null)
       window.dispatchEvent(new CustomEvent('shippingapp:watchlist-updated'))
@@ -114,29 +119,29 @@ export default function Watchlist() {
   }
 
   return <div className="watchlist-control">
-    <button type="button" className="watchlist-trigger" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+    <button type="button" ref={triggerRef} className="watchlist-trigger" aria-haspopup="dialog" aria-controls={open ? panelId : undefined} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
       <span aria-hidden="true">☆</span> Seguimiento
     </button>
 
-    {open && <div className="watchlist-panel" role="dialog" aria-label="Productos seguidos">
+    {open && <div ref={panelRef} id={panelId} className="watchlist-panel" role="dialog" aria-label="Productos seguidos">
       <div className="watchlist-head">
         <div>
           <b>{detail ? detail.title : 'Productos seguidos'}</b>
-          <small>{detail ? 'Snapshots generados por GlobalShipping.' : 'Separado del historial automático.'}</small>
+          <small>{detail ? 'Observaciones de precio, costo y margen.' : 'Productos que elegiste seguir desde un presupuesto guardado.'}</small>
         </div>
         <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar seguimiento">×</button>
       </div>
 
-      {error && <div className="watchlist-error">{error}</div>}
+      {error && <div className="watchlist-error" role="alert">{error}{!detail && <button type="button" onClick={() => { void load(); panelRef.current?.querySelector<HTMLButtonElement>('button')?.focus() }} disabled={loading}>Reintentar</button>}</div>}
 
       {detail ? <div className="watchlist-detail">
-        <button type="button" className="watchlist-back" onClick={() => setDetail(null)}>← Volver al seguimiento</button>
+        <button type="button" className="watchlist-back" data-account-panel-start onClick={() => setDetail(null)}>← Volver al seguimiento</button>
         <div className="watchlist-detail-actions">
           <button type="button" onClick={() => void refreshItem(detail.id)} disabled={refreshingId === detail.id}>{refreshingId === detail.id ? 'Actualizando…' : 'Actualizar ahora'}</button>
           <button type="button" className="danger" onClick={() => void remove(detail.id)} disabled={removingId === detail.id}>{removingId === detail.id ? 'Quitando…' : 'Dejar de seguir'}</button>
         </div>
         <div className="watchlist-timeline">
-          {detail.snapshots.length === 0 ? <div className="watchlist-empty"><b>Sin snapshots todavía.</b></div> : detail.snapshots.map((snapshot) => <article key={snapshot.id} className="watchlist-snapshot">
+          {detail.snapshots.length === 0 ? <div className="watchlist-empty"><b>Todavía no hay observaciones.</b></div> : detail.snapshots.map((snapshot) => <article key={snapshot.id} className="watchlist-snapshot">
             <div className="watchlist-snapshot-head"><b>{dateLabel(snapshot.observedAt)}</b><span data-status={snapshot.marketStatus}>{statusLabel(snapshot)}</span></div>
             <div className="watchlist-metrics">
               <span><small>Precio mercado</small><b>{ars(snapshot.marketPriceArs)}</b></span>
@@ -161,7 +166,7 @@ export default function Watchlist() {
               <span><small>Costo puesto/u.</small><b>{ars(item.latestSnapshot?.landedCostArs)}</b><em>{pct(item.changes.landedCostPct)}</em></span>
               <span><small>Margen</small><b>{pct(item.latestSnapshot?.grossMarginPct)}</b><em>{pct(item.changes.grossMarginPoints, ' pp')}</em></span>
             </div>
-            {item.latestSnapshot?.marketStatus === 'unavailable' && <p className="watchlist-warning">El último refresh no tuvo evidencia de mercado suficiente. No se reutilizó el precio anterior como si fuera actual.</p>}
+            {item.latestSnapshot?.marketStatus === 'unavailable' && <p className="watchlist-warning">La última actualización no tuvo evidencia de mercado suficiente. No se reutilizó el precio anterior como si fuera actual.</p>}
             <div className="watchlist-actions">
               <button type="button" onClick={() => void openItem(item.id)} disabled={openingId === item.id}>{openingId === item.id ? 'Abriendo…' : 'Ver historial'}</button>
               <button type="button" onClick={() => void refreshItem(item.id)} disabled={refreshingId === item.id}>{refreshingId === item.id ? 'Actualizando…' : 'Actualizar'}</button>
@@ -169,7 +174,7 @@ export default function Watchlist() {
             </div>
           </article>)}
         </div>
-        {loading && <div className="watchlist-loading">Cargando seguimiento…</div>}
+        {loading && <div className="watchlist-loading" role="status">Cargando seguimiento…</div>}
       </>}
     </div>}
   </div>

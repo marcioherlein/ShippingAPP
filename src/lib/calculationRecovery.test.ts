@@ -10,7 +10,7 @@ it('keeps old null categories and explicit categories without changing their mea
   expect(recoverSavedCategory(key({3:'food'}), key())).toBe('food')
 })
 it('does not reuse a quote after any visible operation or capacity input changes', () => {
-  for (const [index, value] of [[0,'own_use'],[1,'individual'],[2,'no'],[4,'budget'],[5,20000],[6,100],[7,500]] as const) {
+  for (const [index, value] of [[0,'own_use'],[1,'individual'],[2,'no'],[3,'food'],[4,'budget'],[5,20000],[6,100],[7,500]] as const) {
     expect(recoverSavedCategory(key({3:'unknown'}), key({[index]:value}))).toBeUndefined()
   }
 })

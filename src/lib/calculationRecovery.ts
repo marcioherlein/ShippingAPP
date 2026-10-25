@@ -10,6 +10,8 @@ export function recoverSavedCategory(savedKey: string, currentKey: string): Sens
     if (!Array.isArray(saved) || !Array.isArray(current) || saved.length !== 8 || current.length !== 8) return undefined
     const category: unknown = saved[3]
     if (category !== null && (typeof category !== 'string' || !categories.includes(category))) return undefined
+    // Only fill a missing category; never overwrite an explicit current choice.
+    if (current[3] !== null && current[3] !== category) return undefined
     current[3] = category
     return JSON.stringify(saved) === JSON.stringify(current) ? category as SensitiveProductCategory | null : undefined
   } catch {

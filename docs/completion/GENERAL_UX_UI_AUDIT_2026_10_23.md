@@ -52,6 +52,11 @@ Auditoría de código, navegación, accesibilidad y revisión visual independien
 
 Artefactos de la tarea: `/workspace/shipping-review/general-ux-ui-2026-10-23/`. El agente visual conserva baseline, retomas y reporte con capturas y mediciones. El número de capturas no equivale a revisión individual de cada imagen; su reporte distingue inspección visual de verificaciones DOM.
 
-Las APIs de búsqueda, proveedor, guardado y cuenta usan fixtures en navegador. Las pruebas verifican componentes y flujos reales, pero no acreditan login real, pagos, entrega de emails ni disponibilidad futura de proveedores. Los escenarios NCM mantienen el clasificador real con catálogo completo en su batería específica. No se afirma precisión arancelaria general ni revisión independiente por especialista.
+La batería automatizada de navegador utiliza fixtures para búsqueda, proveedor, guardado y cuenta. Las pruebas verifican componentes y flujos reales, pero no acreditan login real, pagos, entrega de emails ni disponibilidad futura de proveedores. Los escenarios NCM mantienen el clasificador real con catálogo completo en su batería específica. No se afirma precisión arancelaria general ni revisión independiente por especialista.
 
 Validación final y revisión exacta se registran en CI y en la PR: suite completa de Vitest, TypeScript/Vite y presupuestos de bundle, 109 casos de navegador Chromium/WebKit, migraciones/schema, assets NCM/SIM y runtime. No existe script de lint en el repositorio; se ejecutan type checking y `git diff --check`. El resultado final de estos controles debe aprobar antes de fusionar.
+
+
+## Ampliación de aceptación real
+
+El 25 de octubre se completaron ingreso, consulta de historial, preferencias sin cambios y guardado/reapertura de un presupuesto con la cuenta indicada por el usuario y APIs reales. El registro de prueba fue eliminado y la sesión se cerró. La aceptación descubrió y corrigió recuperación de categoría no visible al recargar, respuestas de eliminación sin cuerpo y foco después de eliminar. Evidencia, alcance y límites: [Aceptación real](REAL_ACCOUNT_ACCEPTANCE_2026_10_25.md). No se desplegó la PR por esta prueba.

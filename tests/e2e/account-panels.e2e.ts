@@ -17,20 +17,37 @@ for (const width of [320, 1440]) {
     const tracked = { id: 'tracked-1', analysisId: history.id, title: 'Termo seguido', sourceUrl: '', createdAt: history.createdAt, updatedAt: history.createdAt, ncmCode: history.ncmCode, latestSnapshot: null, previousSnapshot: null, changes: { marketPricePct: null, landedCostPct: null, grossMarginPoints: null }, snapshots: [] }
     let historyLoads = 0
     let watchlistLoads = 0
+    let historyRemoved = false
+    let watchlistRemoved = false
+    const deletions = { history: 0, watchlist: 0 }
     await page.route('**/api/history?*', route => {
       historyLoads += 1
-      return route.fulfill({ status: historyLoads === 1 ? 503 : 200, json: historyLoads === 1 ? { error: 'No pudimos cargar tu historial.' } : { items: historyLoads === 2 ? [] : [history], nextCursor: null } })
+      return route.fulfill({ status: historyLoads === 1 ? 503 : 200, json: historyLoads === 1 ? { error: 'No pudimos cargar tu historial.' } : { items: historyLoads === 2 || historyRemoved ? [] : [history], nextCursor: null } })
     })
-    await page.route('**/api/history-item?*', route => route.fulfill({ json: { item: { id: history.id, createdAt: history.createdAt, updatedAt: history.createdAt, input: {}, result: { analysis: { product: { name: history.productName } } } } } }))
+    await page.route('**/api/history-item?*', route => {
+      if (route.request().method() === 'DELETE') {
+        historyRemoved = true
+        deletions.history += 1
+        return route.fulfill({ status: 204, body: '' })
+      }
+      return route.fulfill({ json: { item: { id: history.id, createdAt: history.createdAt, updatedAt: history.createdAt, input: {}, result: { analysis: { product: { name: history.productName } } } } } })
+    })
     await page.route('**/api/watchlist', route => {
       watchlistLoads += 1
-      return route.fulfill({ status: watchlistLoads === 1 ? 503 : 200, json: watchlistLoads === 1 ? { error: 'No pudimos cargar tus productos seguidos.' } : { items: watchlistLoads === 2 ? [] : [tracked] } })
+      return route.fulfill({ status: watchlistLoads === 1 ? 503 : 200, json: watchlistLoads === 1 ? { error: 'No pudimos cargar tus productos seguidos.' } : { items: watchlistLoads === 2 || watchlistRemoved ? [] : [tracked] } })
     })
-    await page.route('**/api/watchlist-item?*', route => route.fulfill({ json: { item: tracked } }))
+    await page.route('**/api/watchlist-item?*', route => {
+      if (route.request().method() === 'DELETE') {
+        watchlistRemoved = true
+        deletions.watchlist += 1
+        return route.fulfill({ status: 204, body: '' })
+      }
+      return route.fulfill({ json: { item: tracked } })
+    })
     await openPanels(page)
     for (const panel of [
-      { trigger: 'Historial', name: 'Historial de análisis', close: 'Cerrar historial', empty: 'Todavía no hay análisis guardados.', open: 'Abrir análisis', back: '← Volver al historial' },
-      { trigger: 'Seguimiento', name: 'Productos seguidos', close: 'Cerrar seguimiento', empty: 'Todavía no seguís ningún producto.', open: 'Ver historial', back: '← Volver al seguimiento' },
+      { trigger: 'Historial', name: 'Historial de análisis', close: 'Cerrar historial', empty: 'Todavía no hay análisis guardados.', open: 'Abrir análisis', back: '← Volver al historial', remove: 'Eliminar', title: history.productName },
+      { trigger: 'Seguimiento', name: 'Productos seguidos', close: 'Cerrar seguimiento', empty: 'Todavía no seguís ningún producto.', open: 'Ver historial', back: '← Volver al seguimiento', remove: 'Quitar', title: tracked.title },
     ]) {
       const trigger = page.getByRole('button', { name: panel.trigger, exact: true })
       await trigger.click()
@@ -60,7 +77,25 @@ for (const width of [320, 1440]) {
       await outside.click()
       await expect(dialog).not.toBeVisible()
       await expect(outside).toBeFocused()
+      await trigger.click()
+      const row = dialog.getByRole('article').filter({ hasText: panel.title })
+      await expect(row).toBeVisible()
+      const confirmation = page.waitForEvent('dialog').then(async prompt => {
+        expect(prompt.type()).toBe('confirm')
+        expect(prompt.message()).toMatch(/Eliminar|Dejar de seguir/)
+        await prompt.accept()
+      })
+      await row.getByRole('button', { name: panel.remove, exact: true }).click()
+      await confirmation
+      await expect(row).toHaveCount(0)
+      await expect(dialog.getByRole('alert')).toHaveCount(0)
+      await expect(dialog.getByText(panel.empty, { exact: true })).toBeVisible()
+      await expect(dialog.getByRole('button', { name: panel.close })).toBeFocused()
+      await page.keyboard.press('Escape')
+      await expect(dialog).not.toBeVisible()
+      await expect(trigger).toBeFocused()
     }
+    expect(deletions).toEqual({ history: 1, watchlist: 1 })
   })
 
   test(`email modal contains keyboard focus and saves valid changes at ${width}`, async ({ page }, testInfo) => {

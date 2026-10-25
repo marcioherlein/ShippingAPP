@@ -216,3 +216,38 @@ describe('request deadline', () => {
   })
 
 })
+
+describe('bodyless HTTP responses', () => {
+  afterEach(() => {
+    setApiTokenProvider(null)
+    setSessionState('unmanaged')
+    vi.unstubAllGlobals()
+  })
+
+  it.each([204, 205, 304])('preserves status %s without buffering an empty transport stream', async status => {
+    setApiTokenProvider(null)
+    setSessionState('unmanaged')
+    // A valid bodyless response can arrive through a transport wrapper whose
+    // body getter exposes an empty stream. Do not construct an illegal HTTP
+    // response with a payload just to reproduce that wrapper behavior.
+    const original = new Response(null, { status, statusText: 'Bodyless response', headers: { 'x-operation-result': 'accepted' } })
+    const readBody = vi.spyOn(original, 'arrayBuffer')
+    const emptyTransportStream = new ReadableStream<Uint8Array>({ start(controller) { controller.close() } })
+    const wrapped = new Proxy(original, {
+      get(target, key) {
+        if (key === 'body') return emptyTransportStream
+        const value = Reflect.get(target, key, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => wrapped))
+
+    const response = await apiFetch('/api/history-item?id=audit-record', { method: 'DELETE' })
+    expect(response.status).toBe(status)
+    expect(response.statusText).toBe('Bodyless response')
+    expect(response.headers.get('x-operation-result')).toBe('accepted')
+    expect(response.body).toBeNull()
+    expect(await response.text()).toBe('')
+    expect(readBody).not.toHaveBeenCalled()
+  })
+})

@@ -26,6 +26,7 @@ import type { QuotePrefill } from './lib/hotProducts'
 import { enrichProductAnalysisV2, ingestAlibabaUrlV2, hasConfirmedClassification, effectiveDutyRatePct, effectiveTariffProfile, type ProductAnalysisV2 } from './lib/productAnalysisV2'
 import { compareLandedCost, type ImportEntityType, type ImportPurpose, type SensitiveProductCategory } from './lib/landedCostEngine'
 import { getJourneyBudgetError } from './lib/journeyValidation'
+import { recoverSavedCategory } from './lib/calculationRecovery'
 import { scrollIntoViewIfNeeded, scrollWindowToTop } from './lib/motionPreference'
 import { translateProductLabel } from './lib/productTranslation'
 import {
@@ -246,7 +247,9 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
         // Bring back a finished quote when the saved inputs still match what the
         // replayed answers produced; otherwise fall back to the review step.
         const pipe = readProductDraft<PipelineDraft>('pipeline')
-        if (hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && pipe.calculationInputKey === currentCalculationInputKeyRef.current) {
+        const restoredCategory = pipe?.status === 'ready' ? recoverSavedCategory(pipe.calculationInputKey, currentCalculationInputKeyRef.current) : undefined
+        if (hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && restoredCategory !== undefined) {
+          setSensitiveCategory(restoredCategory)
           setApprovedQuantity(pipe.approvedQuantity ?? null)
           setPipelineSummary(pipe.pipelineSummary)
           setPipelineStage(pipe.pipelineStage ?? 3)

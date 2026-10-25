@@ -166,5 +166,8 @@ test('manual product reaches the dashboard using carton dimensions, one field at
  await expect(page.getByRole('region',{name:'Tu presupuesto de importación'})).toBeVisible()
  await expect(page.getByRole('region',{name:'Precio y costo por unidad'})).toBeVisible()
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+ await page.reload()
+ await expect(page.getByRole('region',{name:'Tu presupuesto de importación'})).toBeVisible()
+ await expect(page.getByRole('region',{name:'Precio y costo por unidad'})).toBeVisible()
  await page.screenshot({path:testInfo.outputPath('manual-dimensions-dashboard.png'),fullPage:true})
 })

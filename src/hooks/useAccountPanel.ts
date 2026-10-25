@@ -31,5 +31,14 @@ export function useAccountPanel(open: boolean, onClose: () => void, viewKey?: st
     }
   }, [open, viewKey])
 
-  return { panelRef, triggerRef }
+  const focusAfterRemoval = (previousFocus: Element | null) => {
+    const panel = panelRef.current
+    const active = document.activeElement
+    if (!panel || (active !== document.body && (active !== previousFocus || !panel.contains(active)))) return
+    // Focus the surviving close control before React removes the active row.
+    // A user who moved to another control while waiting keeps that focus.
+    panel.querySelector<HTMLButtonElement>('button')?.focus()
+  }
+
+  return { panelRef, triggerRef, focusAfterRemoval }
 }

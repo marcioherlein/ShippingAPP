@@ -20,7 +20,7 @@ export default function AnalysisHistory() {
   const [items, setItems] = useState<AnalysisHistorySummary[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [detail, setDetail] = useState<AnalysisHistoryItem | null>(null)
-  const { panelRef, triggerRef } = useAccountPanel(open, () => setOpen(false), detail?.id)
+  const { panelRef, triggerRef, focusAfterRemoval } = useAccountPanel(open, () => setOpen(false), detail?.id)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [openingId, setOpeningId] = useState<string | null>(null)
@@ -86,10 +86,12 @@ export default function AnalysisHistory() {
 
   const remove = async (id: string) => {
     if (!window.confirm('¿Eliminar este análisis de tu historial?')) return
+    const previousFocus = document.activeElement
     setDeletingId(id)
     setError('')
     try {
       await deleteAnalysisHistoryItem(id)
+      focusAfterRemoval(previousFocus)
       setItems((current) => current.filter((item) => item.id !== id))
       if (detail?.id === id) setDetail(null)
     } catch (cause) {

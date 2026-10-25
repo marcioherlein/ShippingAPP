@@ -40,7 +40,7 @@ export default function Watchlist() {
   const panelId = useId()
   const [items, setItems] = useState<WatchlistItem[]>([])
   const [detail, setDetail] = useState<WatchlistItem | null>(null)
-  const { panelRef, triggerRef } = useAccountPanel(open, () => setOpen(false), detail?.id)
+  const { panelRef, triggerRef, focusAfterRemoval } = useAccountPanel(open, () => setOpen(false), detail?.id)
   const [loading, setLoading] = useState(false)
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
@@ -102,10 +102,12 @@ export default function Watchlist() {
 
   const remove = async (id: string) => {
     if (!window.confirm('¿Dejar de seguir este producto? Las observaciones anteriores se conservan si después lo volvés a seguir.')) return
+    const previousFocus = document.activeElement
     setRemovingId(id)
     setError('')
     try {
       await removeWatchlistItem(id)
+      focusAfterRemoval(previousFocus)
       setItems((current) => current.filter((item) => item.id !== id))
       if (detail?.id === id) setDetail(null)
       window.dispatchEvent(new CustomEvent('shippingapp:watchlist-updated'))

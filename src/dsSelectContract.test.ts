@@ -40,7 +40,7 @@ describe('post-login continues where the user left off', () => {
     expect(app).toContain("status: 'ready'")
     // Restore only rehydrates when the saved inputs still match.
     expect(app).toContain("readProductDraft<PipelineDraft>('pipeline')")
-    expect(app).toContain('pipe.calculationInputKey === currentCalculationInputKeyRef.current')
+    expect(app).toContain('recoverSavedCategory(pipe.calculationInputKey, currentCalculationInputKeyRef.current)')
     expect(app).toContain("setCalculationStatus('ready')")
   })
 })

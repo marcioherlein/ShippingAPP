@@ -5,8 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import AnalysisHistory from './AnalysisHistory'
 import Watchlist from './Watchlist'
 import EmailPreferences from './EmailPreferences'
-import { getAnalysisHistoryItem, listAnalysisHistory } from '../lib/analysisHistory'
-import { listWatchlist } from '../lib/watchlist'
+import { deleteAnalysisHistoryItem, getAnalysisHistoryItem, listAnalysisHistory } from '../lib/analysisHistory'
+import { listWatchlist, removeWatchlistItem } from '../lib/watchlist'
 import { loadEmailPreferences, saveEmailPreferences } from '../lib/emailPreferences'
 
 vi.mock('../lib/analysisHistory', () => ({ listAnalysisHistory: vi.fn(), getAnalysisHistoryItem: vi.fn(), deleteAnalysisHistoryItem: vi.fn() }))
@@ -121,3 +121,36 @@ it('history keeps keyboard focus in context when opening and leaving an analysis
   await click(back)
   expect(document.activeElement).toBe(container.querySelector('.analysis-history-head button'))
 })
+
+for (const [name, Component, deletion] of [['history', AnalysisHistory, deleteAnalysisHistoryItem], ['watchlist', Watchlist, removeWatchlistItem]] as const) {
+  for (const movesOutside of [false, true]) {
+    it(`${name} deletion preserves ${movesOutside ? 'focus moved to another control' : 'keyboard context and Escape after removing the active row'}`, async () => {
+      const summary = { id: 'saved', createdAt: '2026-10-25', productName: 'Audit product', sourceUrl: null, ncmCode: null, selectedMode: null, unitCostUsd: 2, totalCostUsd: 200 }
+      const tracked = { id: 'tracked', analysisId: summary.id, title: summary.productName, sourceUrl: '', createdAt: summary.createdAt, updatedAt: summary.createdAt, ncmCode: null, latestSnapshot: null, previousSnapshot: null, changes: { marketPricePct: null, landedCostPct: null, grossMarginPoints: null }, snapshots: [] }
+      vi.mocked(listAnalysisHistory).mockResolvedValueOnce({ items: [summary], nextCursor: null }).mockResolvedValue({ items: [], nextCursor: null })
+      vi.mocked(listWatchlist).mockResolvedValueOnce([tracked]).mockResolvedValue([])
+      let complete!: () => void
+      vi.mocked(deletion).mockImplementation(() => new Promise<void>(resolve => { complete = resolve }))
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      try {
+        await act(async () => root.render(<><Component /><button>Outside action</button></>))
+        const trigger = container.querySelector('button')!
+        await click(trigger)
+        const remove = [...container.querySelectorAll('button')].find(button => button.textContent === (name === 'history' ? 'Eliminar' : 'Quitar'))!
+        await click(remove)
+        const outside = [...container.querySelectorAll('button')].find(button => button.textContent === 'Outside action')!
+        if (movesOutside) outside.focus()
+        await act(async () => complete())
+        expect(container.querySelector('article')).toBeNull()
+        expect(container.querySelector('[role="alert"]')).toBeNull()
+        if (movesOutside) expect(document.activeElement).toBe(outside)
+        else {
+          expect(document.activeElement).toBe(container.querySelector('[role="dialog"] button'))
+          await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+          expect(container.querySelector('[role="dialog"]')).toBeNull()
+          expect(document.activeElement).toBe(trigger)
+        }
+      } finally { confirm.mockRestore() }
+    })
+  }
+}

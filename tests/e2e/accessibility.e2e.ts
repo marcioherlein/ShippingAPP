@@ -142,7 +142,9 @@ test('mobile journey prioritizes current work and keeps compact controls touch-f
   // On a 320px phone, long profile guidance must not hide the next action.
   await page.setViewportSize({ width: 320, height: 844 })
   for (let profileStep = 1; profileStep <= 3; profileStep += 1) {
-    await page.getByRole('radio', { name: 'No sé', exact: true }).click()
+    const unknown = page.getByRole('radio', { name: 'No sé', exact: true })
+    await unknown.click()
+    await expect(unknown).toBeChecked()
     if (profileStep < 3) await page.getByRole('button', { name: 'Continuar', exact: true }).click()
   }
   await expect(page.getByRole('button', { name: /Seguir con presupuesto/ })).toBeInViewport({ ratio: 1 })

@@ -8,7 +8,7 @@ import { savePendingConfirm, loadPendingConfirm, clearPendingConfirm } from './l
 import { ApiAuthError, getSessionState, subscribeSession } from './lib/authSession'
 import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from './lib/pendingOperation'
 import LoadingBoundary from './components/LoadingBoundary'
-import React, { lazy, type ComponentProps, useEffect, useMemo, useRef, useState } from 'react'
+import React, { lazy, type ComponentProps, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { supplierQuotePrice } from './lib/supplierQuote'
 import { startImportAnalysis } from './lib/productAnalysis'
 const LoadedUrlAnalyzer = lazy(() => import('./components/UrlAnalyzer'))
@@ -307,12 +307,11 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
 
   const operationAnswered = purpose !== null && entityType !== null && signature !== null
   const profileStep = profilePage
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!intent || restoringRef.current) return
-    const frame = requestAnimationFrame(() => {
-      scrollIntoViewIfNeeded(document.querySelector('.journey-question-card.active'))
-    })
-    return () => cancelAnimationFrame(frame)
+    // Moving a question while WebKit dispatches a tap can suppress its click.
+    // Reveal it before paint, with no pending animation during the next tap.
+    return scrollIntoViewIfNeeded(document.querySelector('.journey-question-card.active'), window, 'instant')
   }, [intent, step, profilePage, budgetPage])
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
   const budgetAnswered = budgetMode !== null && budgetError === null

@@ -24,18 +24,26 @@ export function scrollWindowToTop(target: MotionWindow = window) {
  * Reveal a freshly shown card without yanking the page. Runs one rAF so the
  * element is laid out first, and skips scrolling entirely when the element is
  * already comfortably inside the viewport (accounting for the sticky top bar) —
- * so advancing a step that's already visible produces no "salto".
+ * so advancing a step that's already visible produces no "salto". Instant
+ * reveals run synchronously for layout effects, before the next interaction.
  */
 export function scrollIntoViewIfNeeded(
   element: Element | null | undefined,
   target: Pick<Window, 'matchMedia'> & { innerHeight: number } = window,
+  behavior: ScrollBehavior = preferredScrollBehavior(target),
 ) {
   if (!element) return
-  window.requestAnimationFrame(() => {
+  const reveal = () => {
     const rect = element.getBoundingClientRect()
     const stickyOffset = 92
     const fullyVisible = rect.top >= stickyOffset && rect.bottom <= target.innerHeight
     if (fullyVisible) return
-    element.scrollIntoView({ block: 'start', behavior: preferredScrollBehavior(target) })
-  })
+    element.scrollIntoView({ block: 'start', behavior })
+  }
+  if (behavior === 'instant') {
+    reveal()
+    return
+  }
+  const frame = window.requestAnimationFrame(reveal)
+  return () => window.cancelAnimationFrame(frame)
 }

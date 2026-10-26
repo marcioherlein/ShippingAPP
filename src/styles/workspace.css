@@ -229,7 +229,7 @@
 .workspace-app[data-entry="true"] .journey-choice-grid > .journey-entry-primary { border-color:var(--ds-brand-strong); }
 .workspace-app[data-entry="true"] .journey-choice-grid > button > span { width:40px; height:40px; margin-bottom:16px; }
 .workspace-app[data-entry="true"] .journey-choice-grid > button b { font-size:19px; color:var(--ds-text-strong); line-height:1.35; }
-.workspace-app[data-entry="true"] .journey-choice-grid > button small { font-size:15px; color:var(--ds-text-secondary); line-height:1.6; margin:10px 0 22px; }
+.workspace-app[data-entry="true"] .journey-choice-grid > button small { font-size:16px; color:var(--ds-text-secondary); line-height:1.6; margin:10px 0 22px; }
 .journey-entry-action { display:flex; align-items:center; gap:8px; margin-top:auto; color:var(--ds-brand-strong); font-style:normal; font-size:15px; font-weight:650; }
 @media(max-width:900px) {
  .workspace-app[data-intro="true"] .journey-workspace:not([hidden]) { width:calc(100% - 24px); margin:16px auto 28px; }
@@ -238,7 +238,7 @@
 }
 @media(max-width:540px) {
  .workspace-app[data-entry="true"] .journey-choice-grid { grid-template-columns:minmax(0,1fr); gap:12px; margin-top:20px; }
- .workspace-app[data-entry="true"] .journey-choice-grid > button { padding:18px; }
+ .workspace-app[data-entry="true"] .journey-choice-grid > button { padding:16px; }
  .workspace-app[data-entry="true"] .journey-choice-grid > button > span { width:32px; height:32px; margin-bottom:10px; }
  .workspace-app[data-entry="true"] .journey-choice-grid > button small { margin:8px 0 14px; }
  .journey-entry-heading h2 { font-size:22px; }

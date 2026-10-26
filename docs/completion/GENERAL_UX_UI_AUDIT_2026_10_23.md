@@ -68,3 +68,9 @@ Tras la instrucción explícita de desplegar, la PR #213 se fusionó y el despli
 La captura enviada por el usuario también mostró una jerarquía inicial deficiente: un resumen sin datos ocupaba una columna completa y prolongaba la página. La corrección posterior centra el inicio y las preguntas de perfil en una columna, muestra el resumen desde la etapa de compra y elimina la barra al 0 % y el encabezado de borrador sólo en la decisión inicial. Las dos opciones tienen acciones explícitas. Se conserva la navegación y el progreso del formulario.
 
 La revisión focal compara inicio y primera pregunta a 320, 390 y 1440 px. Las regresiones de navegador comprueban ambas opciones completas dentro de 844 px de alto, ausencia del resumen vacío, progreso visible al elegir y recuperación del resumen al completar el perfil. Capturas y mediciones: `/workspace/shipping-review/entry-focus-2026-10-25/`.
+
+## Fiabilidad del clic al cambiar de pregunta
+
+La CI de la PR #214 aprobó los 109 casos de navegador, uno tras reintento. Se investigó ese reintento: en WebKit la página se desplazó 24 px durante un clic de respuesta y la selección no se aplicó. El recorrido también falló una de cinco repeticiones locales. El agente de formularios confirmó el desplazamiento entre los snapshots de entrada y salida del clic.
+
+El revelado de preguntas ahora se ejecuta en un efecto de layout, de forma inmediata y sin frames de animación pendientes. La navegación voluntaria conserva su comportamiento de movimiento. Los revelados diferidos permiten cancelar su frame. La regresión comprueba que cada respuesta quede seleccionada antes de continuar; no se añaden re-clicks ni esperas artificiales para ocultar el fallo. La validación de esta corrección incluye repeticiones en WebKit, cancelación y posicionamiento sin animación, además de CI completa.

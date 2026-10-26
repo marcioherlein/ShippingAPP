@@ -19,6 +19,7 @@ async function completeOperation(page: Page) {
   await page.getByRole('button', { name: /Seguir con presupuesto/i }).click()
   await expect(page.locator('.journey-question-card.active .journey-question-head > span')).toHaveText('02')
   await expect.poll(() => persistedStep(page)).toBe(2)
+  await expect(page.locator('.journey-case-summary')).toHaveCount(1)
 }
 
 async function completeBudget(page: Page) {

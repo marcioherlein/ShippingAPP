@@ -60,3 +60,11 @@ Validación final y revisión exacta se registran en CI y en la PR: suite comple
 ## Ampliación de aceptación real
 
 El 25 de octubre se completaron ingreso, consulta de historial, preferencias sin cambios y guardado/reapertura de un presupuesto con la cuenta indicada por el usuario y APIs reales. El registro de prueba fue eliminado y la sesión se cerró. La aceptación descubrió y corrigió recuperación de categoría no visible al recargar, respuestas de eliminación sin cuerpo y foco después de eliminar. Evidencia, alcance y límites: [Aceptación real](REAL_ACCOUNT_ACCEPTANCE_2026_10_25.md). No se desplegó la PR por esta prueba.
+
+## Corrección de la entrada y despliegue solicitado
+
+Tras la instrucción explícita de desplegar, la PR #213 se fusionó y el despliegue de producción 40217266820 finalizó correctamente. Los pendientes editoriales y de configuración de Clerk indicados arriba siguen abiertos.
+
+La captura enviada por el usuario también mostró una jerarquía inicial deficiente: un resumen sin datos ocupaba una columna completa y prolongaba la página. La corrección posterior centra el inicio y las preguntas de perfil en una columna, muestra el resumen desde la etapa de compra y elimina la barra al 0 % y el encabezado de borrador sólo en la decisión inicial. Las dos opciones tienen acciones explícitas. Se conserva la navegación y el progreso del formulario.
+
+La revisión focal compara inicio y primera pregunta a 320, 390 y 1440 px. Las regresiones de navegador comprueban ambas opciones completas dentro de 844 px de alto, ausencia del resumen vacío, progreso visible al elegir y recuperación del resumen al completar el perfil. Capturas y mediciones: `/workspace/shipping-review/entry-focus-2026-10-25/`.

@@ -687,7 +687,7 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
 
   if (!entered) return <Landing onStart={enterApp} />
 
-  return <main className="journey-app workspace-app" id="home">
+  return <main className="journey-app workspace-app" id="home" data-intro={!analysis && step <= 1 || undefined} data-entry={!intent && !analysis || undefined}>
     <a className="skip-to-quote" href="#cotizador">Ir al cotizador</a>
     <dialog ref={resetDialog} className="journey-reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
       <h2 id="reset-title">¿Empezar un caso nuevo?</h2>
@@ -725,11 +725,11 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
           <div><b>1. Elegí tu punto de partida</b><p>Definí tu producto y tu operación. Revisá la clasificación, compará costos estimados y elegí un plan de compra con sus fuentes y datos pendientes.</p></div>
         </div>
 
-        {intent === null ? <div className="journey-choice-grid three">
-          <button type="button" data-entry-intent="have_product" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Tengo una publicación, proveedor o sé qué quiero traer.</small></button>
-          <button type="button" data-entry-intent="search_product" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Describilo en lenguaje natural y GlobalShipping busca opciones reales en Alibaba.</small></button>
+        {intent === null ? <div className="journey-entry-panel"><div className="journey-entry-heading"><h2>Elegí cómo empezar</h2><p>Con un producto definido o buscando opciones. Te guiamos paso a paso hasta tu presupuesto.</p></div><div className="journey-choice-grid three">
+          <button type="button" className="journey-entry-primary" data-entry-intent="have_product" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Tengo una publicación, proveedor o sé qué quiero traer.</small><em className="journey-entry-action">Cargar mi producto <UiIcon name="arrow-right" size={18} /></em></button>
+          <button type="button" data-entry-intent="search_product" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Encontrá opciones reales en Alibaba a partir de lo que necesitás.</small><em className="journey-entry-action">Buscar un producto <UiIcon name="arrow-right" size={18} /></em></button>
           <button type="button" data-entry-intent="discover" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Buscá ideas de producto usando la misma búsqueda real, sin catálogo cacheado.</small></button>
-        </div> : <div className="journey-bubble user" data-entry-intent={intent}><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
+        </div></div> : <div className="journey-bubble user" data-entry-intent={intent}><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
 
         {intent && <>
           <div className="journey-bubble assistant">
@@ -826,7 +826,7 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
         </div>{/* gs-chat-body */}
       </div>
 
-      <aside className="journey-case-summary">
+      {(analysis || step >= 2) && <aside className="journey-case-summary">
         <div className="journey-summary-sticky"><ol className="quote-stage-list" aria-label="Etapas de la cotización"><li aria-current={step === 1 ? 'step' : undefined}>1. Tu operación</li><li aria-current={step === 2 ? 'step' : undefined}>2. Tu compra</li><li aria-current={step === 3 ? 'step' : undefined}>3. Producto y oferta</li><li>4. Tu resultado</li></ol>
           <span className="eyebrow">Resumen de la operación</span>
           <h2>{analysisPrefill?.productName || (intent === 'have_product' ? 'Tu producto' : 'Nueva importación')}</h2>
@@ -846,7 +846,7 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
           </div>
           <div className="journey-summary-note"><span>Qué vas a obtener</span><p>Costo puesto por unidad, inversión total y alternativas de compra. Las fuentes, estimaciones y datos pendientes quedan identificados.</p></div>
         </div>
-      </aside>
+      </aside>}
     </section>
 
     {analysis && <div className="focus-setup-action"><button type="button" className="pipeline-secondary" onClick={() => { const opening = !showSetup; setShowSetup(opening); reviewProductData(); if (opening) { setStep(1); setProfilePage(1); setBudgetPage(false) } }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}

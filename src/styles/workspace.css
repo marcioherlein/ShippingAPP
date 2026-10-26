@@ -213,3 +213,35 @@
   .workspace-app .quote-result-actions { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); }
   .workspace-app .quote-result-actions > p { grid-column:1 / -1; }
 }
+
+/* The empty case starts with a decision, before an operation summary exists. */
+.workspace-app[data-intro="true"] .journey-hero { max-width:860px; margin:32px auto 20px; padding:0 24px; }
+.workspace-app[data-intro="true"] .journey-task-title { font-size:clamp(28px,3vw,36px); margin:0 0 12px; }
+.workspace-app[data-intro="true"] .journey-workspace:not([hidden]) { display:grid; grid-template-columns:minmax(0,1fr); max-width:860px; margin:20px auto 36px; background:var(--ds-surface); }
+.workspace-app[data-intro="true"] .journey-conversation { grid-column:1; grid-row:1; }
+.workspace-app[data-intro="true"] .journey-workspace .gs-chat-body { min-height:0; padding:28px; }
+.workspace-app[data-entry="true"] .gs-chat-panel-header,
+.workspace-app[data-entry="true"] .journey-progress-bar { display:none; }
+.journey-entry-heading h2 { margin:0 0 10px; font-size:24px; letter-spacing:-.025em; line-height:1.25; }
+.journey-entry-heading p { margin:0; max-width:620px; color:var(--ds-text-secondary); line-height:1.6; }
+.workspace-app[data-entry="true"] .journey-choice-grid { margin:24px 0 0; gap:16px; }
+.workspace-app[data-entry="true"] .journey-choice-grid > button { display:flex; flex-direction:column; align-items:flex-start; padding:24px; border:1px solid var(--ds-border); background:var(--ds-surface); border-radius:14px; }
+.workspace-app[data-entry="true"] .journey-choice-grid > .journey-entry-primary { border-color:var(--ds-brand-strong); }
+.workspace-app[data-entry="true"] .journey-choice-grid > button > span { width:40px; height:40px; margin-bottom:16px; }
+.workspace-app[data-entry="true"] .journey-choice-grid > button b { font-size:19px; color:var(--ds-text-strong); line-height:1.35; }
+.workspace-app[data-entry="true"] .journey-choice-grid > button small { font-size:15px; color:var(--ds-text-secondary); line-height:1.6; margin:10px 0 22px; }
+.journey-entry-action { display:flex; align-items:center; gap:8px; margin-top:auto; color:var(--ds-brand-strong); font-style:normal; font-size:15px; font-weight:650; }
+@media(max-width:900px) {
+ .workspace-app[data-intro="true"] .journey-workspace:not([hidden]) { width:calc(100% - 24px); margin:16px auto 28px; }
+ .workspace-app[data-intro="true"] .journey-hero { margin:24px auto 16px; padding:0 16px; }
+ .workspace-app[data-intro="true"] .journey-workspace .gs-chat-body { padding:20px; }
+}
+@media(max-width:540px) {
+ .workspace-app[data-entry="true"] .journey-choice-grid { grid-template-columns:minmax(0,1fr); gap:12px; margin-top:20px; }
+ .workspace-app[data-entry="true"] .journey-choice-grid > button { padding:18px; }
+ .workspace-app[data-entry="true"] .journey-choice-grid > button > span { width:32px; height:32px; margin-bottom:10px; }
+ .workspace-app[data-entry="true"] .journey-choice-grid > button small { margin:8px 0 14px; }
+ .journey-entry-heading h2 { font-size:22px; }
+}
+
+.workspace-app[data-entry="true"] .journey-choice-grid > button[data-entry-intent="discover"] { display:none; }

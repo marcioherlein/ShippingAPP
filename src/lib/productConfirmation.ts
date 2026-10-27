@@ -2,6 +2,7 @@ import type { SupplierQuote } from './supplierQuote'
 import { customsProfileFor } from './customsClassification'
 import type { ProductAnalysisV2 } from './productAnalysisV2'
 import type { SensitiveProductCategory } from './landedCostEngine'
+import { componentIdentity } from './productIdentity'
 
 const PRODUCT_FUNCTION_MAP: Array<[RegExp, string]> = [
   [/reloj|watch|clock/i, 'Mide y muestra la hora'],
@@ -27,7 +28,7 @@ const PRODUCT_FUNCTION_MAP: Array<[RegExp, string]> = [
   [/collar|necklace/i, 'Adorno para el cuello'],
   [/pulsera|bracelet/i, 'Adorno para la muñeca'],
   [/juguete|\btoy\b/i, 'Entretenimiento y juego'],
-  [/monopat[ií]n|patinete|scooter eléctrico|scooter electrico/i, 'Vehículo de movilidad personal eléctrico de dos ruedas'],
+  [/monopat[ií]n|patinete|scooter eléctrico|scooter electrico|electric scooter|kick scooter/i, 'Vehículo de movilidad personal'],
   [/bicicleta el[eé]ctrica|e-bike|ebike/i, 'Bicicleta con asistencia eléctrica al pedaleo'],
   [/\bbicicleta\b|\bbicycle\b|\bbike\b/i, 'Vehículo de dos ruedas de propulsión humana'],
   [/moto el[eé]ctrica|motocicleta el[eé]ctrica/i, 'Motocicleta eléctrica de dos ruedas'],
@@ -70,6 +71,9 @@ const PRODUCT_FUNCTION_MAP: Array<[RegExp, string]> = [
 ]
 
 export function inferFunctionFromProductName(name: string): string | null {
+  const component = componentIdentity({ name })
+  if (component === 'battery') return 'Almacena energía eléctrica'
+  if (component === 'power_adapter') return 'Suministra energía para cargar dispositivos'
   const n = (name || '').toLocaleLowerCase('es')
   for (const [pattern, label] of PRODUCT_FUNCTION_MAP) {
     if (pattern.test(n)) return label

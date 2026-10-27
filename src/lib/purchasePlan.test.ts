@@ -42,3 +42,48 @@ describe('purchase policy uses confirmed bands and the full landed-cost engine',
     expect(plan.selected).toBeNull(); expect(plan.error).toContain('no alcanza')
   })
 })
+
+it('compares the supplier minimum rather than a fictitious one-unit purchase at MOQ 2', () => {
+  const value=input();value.moq=2
+  const plan=buildPurchasePlan(value)
+  expect(plan.minimum?.quantity).toBe(2)
+  expect(plan.minimum?.cost.totalCostUsd).toBeGreaterThan(0)
+  expect(plan.selected?.quantity).toBe(2)
+  expect(plan.note).toContain('2 unidades')
+  expect(plan.transportOptions?.map(option=>option.mode)).toEqual(['courier','air','lcl'])
+  for(const option of plan.transportOptions!) expect(option.cost.totalWeightKg).toBe(2*value.costs.unitWeightKg)
+})
+
+it('rounds the minimum to complete packs and skips gaps in confirmed price bands', () => {
+  const value=input();value.moq=2;value.quote={...value.quote,basis:'pack',unitsPerPack:5,minQuantity:1,maxQuantity:3,additionalTiers:[{amount:40,minQuantity:10,maxQuantity:20}]}
+  const plan=buildPurchasePlan(value)
+  expect(plan.minimum?.quantity).toBe(10)
+  expect(plan.selected?.quantity).toBe(10)
+  expect(plan.alternatives?.every(s=>s.quantity%5===0&&s.quantity>=10)).toBe(true)
+})
+
+it('keeps alternative quantities in budget and uses each confirmed price band', () => {
+  const value=input();value.moq=2;value.capacity={mode:'budget',budgetUsd:2000,min:1,max:1}
+  value.quote={...value.quote,minQuantity:2,maxQuantity:19,additionalTiers:[{amount:8,minQuantity:20,maxQuantity:100}]}
+  const plan=buildPurchasePlan(value)
+  expect(plan.alternatives!.length).toBeGreaterThan(1)
+  for(const scenario of plan.alternatives!) {
+    expect(scenario.cost.totalCostUsd).toBeLessThanOrEqual(2000)
+    expect(scenario.priceUsd).toBe(scenario.quantity>=20?8:10)
+  }
+})
+
+it('retains unavailable courier and conditional battery transport without a fake zero quote', () => {
+  const value=input();value.capacity={mode:'units',budgetUsd:0,min:100,max:100};value.costs.unitWeightKg=1
+  value.cargoText='Batería de litio integrada'
+  const plan=buildPurchasePlan(value)
+  const courier=plan.transportOptions!.find(s=>s.mode==='courier')!
+  expect(courier.eligibility).toBe('unavailable')
+  expect(courier.cost.available).toBe(false)
+  expect(courier.transit).toBeNull()
+  for(const option of plan.transportOptions!.filter(s=>s.mode!=='courier')) {
+    expect(option.eligibility).toBe('requires_quote')
+    expect(option.limitations.join(' ')).toContain('UN 38.3')
+    expect(option.transit?.source).toContain('Supuesto orientativo')
+  }
+})

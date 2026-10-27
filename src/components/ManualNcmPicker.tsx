@@ -10,7 +10,7 @@ export default function ManualNcmPicker({ customs, recoveryKey = customs.descrip
   const [saved] = useState(() => readProductDraft<{ query: string; chapter: string; selected: string; confirmed: boolean }>(storageKey))
   const [index, setIndex] = useState<ManualNcmIndex | null>(null)
   const [error, setError] = useState('')
-  const [query, setQuery] = useState(saved?.query || '')
+  const [query, setQuery] = useState(saved?.query || saved?.selected || '')
   const [chapter, setChapter] = useState(saved?.chapter || '')
   const [selected, setSelected] = useState(saved?.selected || '')
   const [confirmed, setConfirmed] = useState(saved?.confirmed || false)
@@ -25,7 +25,9 @@ export default function ManualNcmPicker({ customs, recoveryKey = customs.descrip
   }, [retry])
   useEffect(() => { writeProductDraft(storageKey, { query, chapter, selected, confirmed }) }, [storageKey, query, chapter, selected, confirmed])
   const chapters = useMemo(() => index ? [...new Set(index.records.map(row => row[0].slice(0, 2)))].sort() : [], [index])
-  const results = useMemo(() => index ? searchManualNcm(index, query, chapter) : [], [index, query, chapter])
+  const searchReady = query.trim().length >= 2 || !!chapter
+  const results = useMemo(() => index && searchReady ? searchManualNcm(index, query, chapter) : [], [index, query, chapter, searchReady])
+  const selectedVisible = results.some(([code]) => code === selected)
   return <section className="manual-ncm-picker">
     <h3>Buscar en el nomenclador</h3>
     <p>Buscá por producto o código y filtrá por capítulo. Validamos que la posición exista y tenga aranceles; revisá que la descripción corresponda a tu producto.</p>
@@ -39,13 +41,13 @@ export default function ManualNcmPicker({ customs, recoveryKey = customs.descrip
       <p className="ncm-catalog-source">Fuente: {index.meta.source} · Actualización: {index.meta.sourceDate}</p>
       <label>Producto o código NCM<input autoFocus value={query} onChange={event => { setQuery(event.target.value); setSelected(''); setConfirmed(false) }} type="search" autoComplete="off" placeholder="Ej. crema, raquetas, 3304" /></label>
       <label>Capítulo<DsSelect ariaLabel="Capítulo del nomenclador" value={chapter} onChange={value => { setChapter(value); setSelected(''); setConfirmed(false) }} options={[{ value: '', label: 'Todos los capítulos' }, ...chapters.map(value => ({ value, label: `Capítulo ${value}` }))]} /></label>
-      <p role="status">{results.length === 60 ? 'Primeras 60 posiciones. Agregá palabras para acotar.' : `${results.length} posiciones encontradas.`}</p>
+      <p role="status">{!searchReady ? 'Escribí al menos dos caracteres del producto o código, o elegí un capítulo para buscar.' : results.length === 60 ? 'Hay 60 o más coincidencias. Agregá palabras para acotar.' : `${results.length} posiciones encontradas.`}</p>
       <div className="manual-ncm-results" role="group" aria-label="Posiciones del nomenclador">{results.map(([code, label]) => <label key={code}><input type="radio" name={selectionName} checked={selected === code} onChange={() => { setSelected(code); setConfirmed(false) }} /><span><b>{code}</b> {label}</span></label>)}</div>
-      {results.length === 0 && <p className="manual-ncm-empty">No encontramos coincidencias. Probá con el nombre general del producto o elegí otro capítulo.</p>}
-      {selected && <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />Revisé la descripción y corresponde a mi producto.</label>}
-      <p id={`${selectionName}-help`} className="manual-ncm-selection-help">{!selected ? 'Elegí una posición para continuar.' : !confirmed ? 'Confirmá que la descripción corresponde a tu producto.' : 'Posición elegida. Podés continuar.'}</p>
+      {searchReady && results.length === 0 && <p className="manual-ncm-empty">No encontramos coincidencias. Probá con el nombre general del producto o elegí otro capítulo.</p>}
+      {selectedVisible && <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />Revisé la descripción y corresponde a mi producto.</label>}
+      <p id={`${selectionName}-help`} className="manual-ncm-selection-help">{!searchReady ? 'Empezá por buscar tu producto o una posición conocida.' : !selectedVisible ? 'Elegí una posición para continuar.' : !confirmed ? 'Confirmá que la descripción corresponde a tu producto.' : 'Posición elegida. Podés continuar.'}</p>
       {error && <p className="manual-ncm-selection-error" role="alert">{error}</p>}
-      <button type="button" aria-describedby={`${selectionName}-help`} className="journey-primary-action" disabled={!selected || !confirmed} onClick={() => { try { onSelect(manualNcmProfile(customs, index, selected)) } catch (error) { setError((error as Error).message) } }}>Usar esta posición</button>
+      <button type="button" aria-describedby={`${selectionName}-help`} className="journey-primary-action" disabled={!selectedVisible || !confirmed} onClick={() => { try { onSelect(manualNcmProfile(customs, index, selected)) } catch (error) { setError((error as Error).message) } }}>Usar esta posición</button>
     </>}
   </section>
 }

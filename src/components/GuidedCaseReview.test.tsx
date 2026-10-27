@@ -64,3 +64,24 @@ it('restores an already confirmed upper tier from the previous longer prompt',as
  await act(async()=>root.render(<GuidedCaseReview analysis={analysis} draft={draft} quote={initialSupplierQuote(10,true)} capacity={{mode:'unknown',budgetUsd:0,min:1,max:1}} classified={false} askedForMore={false} clarificationTarget="functionText" exhausted={false} status="confirm" authRequired={false} onDraft={vi.fn()} onQuote={vi.fn()} onConfirm={confirm} onManual={vi.fn()}/>))
  expect(container.querySelector('.case-question')).toBeNull();expect(container.textContent).toContain('Revisá y confirmá')
 })
+
+it('requests a new distinguishing detail and preserves facts already supplied after a generic failure',async()=>{
+ const known={...analysis,classificationRefinement:{allowed:true,attempt:1,maxAttempts:2},product:{...analysis.product,functionText:'Transporte urbano personal',material:'Aluminio'}}
+ const draft={...productConfirmationFromAnalysis(known),description:'Vehículo de dos ruedas'}
+ const change=vi.fn()
+ await act(async()=>root.render(<GuidedCaseReview analysis={known} draft={draft} quote={initialSupplierQuote(10,true)} capacity={{mode:'unknown',budgetUsd:0,min:1,max:1}} classified={false} askedForMore={true} classificationAttempted={true} clarificationTarget="description" exhausted={false} status="blocked" authRequired={false} onDraft={change} onQuote={vi.fn()} onConfirm={confirm} onManual={vi.fn()}/>))
+ expect(container.querySelector('.case-question h2')?.textContent).toBe('¿Qué detalle técnico nuevo podemos sumar?')
+ const input=container.querySelector<HTMLInputElement>('.case-question input')!
+ expect(input.value).toBe('')
+ expect([...container.querySelectorAll('button')].find(b=>b.textContent==='Continuar')?.disabled).toBe(true)
+ await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'Motor eléctrico de 350 W sin pedales');input.dispatchEvent(new Event('input',{bubbles:true}))})
+ await click('Continuar')
+ expect(change).toHaveBeenCalledWith(expect.objectContaining({functionText:'Transporte urbano personal',material:'Aluminio',description:'Vehículo de dos ruedas · Motor eléctrico de 350 W sin pedales'}))
+ expect(confirm).not.toHaveBeenCalled()
+})
+
+it('does not announce a classification failure before the first classifier request',async()=>{
+ await act(async()=>root.render(<Harness/>))
+ expect(container.querySelector('.workspace-classification-status b')?.textContent).toBe('Completá tu ficha de producto')
+ expect(container.querySelector('.workspace-classification-status')?.textContent).not.toContain('Clasificación pendiente')
+})

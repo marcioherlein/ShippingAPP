@@ -14,8 +14,8 @@ import PackagingWizard from './PackagingWizard'
 import { usd } from '../lib/format'
 
 type Question = { id: string; prompt: string; value: string; type?: 'number' | 'text'; options?: Array<[string,string]>; valid: (value: string) => boolean; apply: (value: string) => void }
-type Props = { profileContext?: string; analysis: ProductAnalysisV2; draft: ProductConfirmationData; quote: SupplierQuote; capacity: PurchaseCapacity; classified: boolean; askedForMore: boolean; clarificationTarget: ClassificationClarificationTarget; exhausted: boolean; status: string; blocker?: string | null; authRequired: boolean; candidates?: React.ReactNode; hasPreciseClarification?: boolean; onDraft: (draft: ProductConfirmationData) => void; onQuote: (quote: SupplierQuote) => void; onConfirm: () => void; onManual: (customs: ProductAnalysisV2['customs']) => void }
-export default function GuidedCaseReview({ profileContext, analysis, draft, quote, capacity, classified, askedForMore, clarificationTarget, exhausted, status, blocker, authRequired, candidates, hasPreciseClarification = false, onDraft, onQuote, onConfirm, onManual }: Props) {
+type Props = { profileContext?: string; analysis: ProductAnalysisV2; draft: ProductConfirmationData; quote: SupplierQuote; capacity: PurchaseCapacity; classified: boolean; askedForMore: boolean; classificationAttempted?: boolean; clarificationTarget: ClassificationClarificationTarget; exhausted: boolean; status: string; blocker?: string | null; authRequired: boolean; candidates?: React.ReactNode; hasPreciseClarification?: boolean; onDraft: (draft: ProductConfirmationData) => void; onQuote: (quote: SupplierQuote) => void; onConfirm: () => void; onManual: (customs: ProductAnalysisV2['customs']) => void }
+export default function GuidedCaseReview({ profileContext, analysis, draft, quote, capacity, classified, askedForMore, classificationAttempted = askedForMore, clarificationTarget, exhausted, status, blocker, authRequired, candidates, hasPreciseClarification = false, onDraft, onQuote, onConfirm, onManual }: Props) {
   const source = analysis.sourceUrl
   const [skipped, setSkipped] = useState<string[]>(() => readProductDraft<string[]>(`guide-skipped:${source}`) || [])
   const [packaging, setPackaging] = useState(false)
@@ -85,7 +85,12 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
     return !question.valid(question.value)
   }
   const preciseClarification = askedForMore && hasPreciseClarification
-  const forced = askedForMore && !preciseClarification && !exhausted && answeredAttempt !== attempt ? all.find(q => q.id === clarificationTarget) ?? productQuestion('description', '¿Qué detalle técnico falta para identificarlo?') : null
+  const requestedQuestion = all.find(q => q.id === clarificationTarget)
+  const needsNewDetail = clarificationTarget === 'description'
+  const clarificationQuestion = needsNewDetail || !requestedQuestion
+    ? { ...productQuestion('description', '¿Qué detalle técnico nuevo podemos sumar?'), value: '', apply: (detail: string) => onDraft({ ...draft, description: [draft.description?.trim(), detail.trim()].filter(Boolean).join(' · ') }) }
+    : requestedQuestion
+  const forced = askedForMore && !preciseClarification && !exhausted && answeredAttempt !== attempt ? clarificationQuestion : null
   const pending = all.find(q => needs(q) && (classified || !skipped.includes(q.id)) && q.id !== 'moq') ?? (all.find(q => q.id === 'moq' && needs(q)) || null)
   const question = edit ? all.find(q => q.id === edit) || null : forced || pending
   useEffect(() => { setValue(question?.value || ''); setPackaging(question?.id === 'unitVolumeCbm'); let active = true; queueMicrotask(() => { if (!active) return; const card = document.querySelector<HTMLElement>('#case-confirmation .case-question'); card?.querySelector<HTMLElement>('input,select,button')?.focus({ preventScroll: true }); card?.scrollIntoView?.({ block: 'center', behavior: 'instant' }) }); return () => { active = false } }, [question?.id, edit, attempt])
@@ -110,6 +115,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const help: Record<string,string> = {
     productName: 'Usá el nombre comercial y, si existe, el modelo. Evitá describirlo sólo como accesorio o repuesto.',
     functionText: 'Contá qué hace y para qué se usa. Esta información ayuda a identificar la posición aduanera correcta.',
+    description: 'No repitas los datos que ya completaste. Sumá una característica verificable de la ficha, como el mecanismo, la potencia, la construcción o el uso específico. Si no la conocés, podés revisar una posición con ayuda de tu despachante.',
     material: 'Indicá el material principal o la composición. Si combina materiales, contanos cuáles.',
     'quote.amount': 'Ingresá el importe que figura en la oferta. Después confirmamos moneda y presentación.',
     'quote.currency': 'Seleccioná la moneda indicada por el proveedor. El símbolo $ por sí solo no alcanza.',
@@ -133,7 +139,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
     <aside className="quote-progress-rail"><div className="workspace-section-heading"><span className="eyebrow">Tu ficha de importación</span><h2>Un dato a la vez. Tu resultado al final.</h2><p>Completá la pregunta resaltada y tocá Continuar. Guardamos tus respuestas; podés volver para corregirlas.</p></div>
     <p className="workspace-capacity">Tu compra: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : 'explorar desde una unidad'}.</p>
     <ol aria-label="Etapas de la cotización"><li>✓ Tu operación</li><li>✓ Tu compra</li><li aria-current="step">3. Producto y oferta</li><li>4. Tu resultado</li></ol></aside><div className="quote-focus-content">
-    <div className={`workspace-classification-status ${classified ? 'is-confirmed' : ''}`}><b>{classified ? `NCM validada: ${analysis.customs.ncmCandidate}` : 'Clasificación pendiente de validar'}</b><span>{classified ? analysis.customs.source : 'Revisá la identidad del producto o seleccioná una posición del nomenclador. Sin una clasificación válida no mostramos un costo de importación.'}</span></div>
+    <div className={`workspace-classification-status ${classified ? 'is-confirmed' : ''}`}><b>{classified ? `NCM validada: ${analysis.customs.ncmCandidate}` : classificationAttempted ? 'Clasificación pendiente de validar' : 'Completá tu ficha de producto'}</b><span>{classified ? analysis.customs.source : classificationAttempted ? 'Conservamos lo que ya completaste. Necesitamos confirmar un detalle antes de calcular los costos.' : 'Completá la oferta y el embalaje. Después validamos la posición aduanera y calculamos tus opciones.'}</span></div>
     {blocker && (!(preciseClarification || exhausted) || authRequired || !blocker.startsWith('No pude cerrar una NCM')) && <p role="alert" className="case-alert">{blocker}</p>}
     {authRequired && <AccountControls />}
     {processing ? <p role="status" className="quote-processing"><span className="quote-processing-indicator" aria-hidden="true" />{classified ? 'Calculando tus opciones de compra…' : 'Validando la clasificación del producto…'}</p> : <>

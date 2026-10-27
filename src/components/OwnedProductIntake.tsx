@@ -329,7 +329,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       <p>Cargar, leer y completar el producto no consume un análisis. El crédito se usa recién cuando pedís clasificar la NCM y calcular la importación.</p>
     </div>
 
-    {mode === 'form' && <><ProductWorkspaceForm onSubmit={onStructuredData} /><button type="button" className="pipeline-secondary" onClick={() => setMode(null)}>Cambiar forma de carga</button></>}
+    {mode === 'form' && <div className="owned-product-form"><ProductWorkspaceForm onSubmit={onStructuredData} /><button type="button" className="pipeline-secondary" onClick={() => setMode(null)}>Cambiar forma de carga</button></div>}
     {mode === null && <div className="owned-product-options">
       <button type="button" onClick={() => setMode('form')}><span className="owned-product-option-icon"><UiIcon name="product" size={19} /></span><b>Completar ficha</b><small>Una pregunta por pantalla. Empezá por el nombre del producto.</small><em>Recomendado</em></button>
       <button type="button" onClick={() => setMode('link')}>

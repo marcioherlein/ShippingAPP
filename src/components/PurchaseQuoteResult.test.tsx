@@ -58,3 +58,76 @@ it('does not render the immutable dashboard again for saving and saved feedback'
  expect(container.textContent).toContain('Presupuesto guardado')
  expect(vi.mocked(usd).mock.calls.length).toBe(formattingCalls)
 })
+
+it('shows the calculable MOQ minimum and a visible optimization table instead of an unavailable one-unit purchase', async () => {
+ const { PurchaseQuoteSummary } = await import('./PurchaseQuoteResult')
+ const product = createManualProductAnalysis('manual://moq-two')
+ product.product.name = 'Botellas'; product.product.moq = 2; product.product.supplierQuote = initialSupplierQuote(10, true)
+ const moqPlan = buildPurchasePlan({ costs: { originCountry: 'China', unitWeightKg: 0.1, unitVolumeCbm: 0.001, dutyRatePct: 16, purpose: 'resale', entityType: 'company', hasImporterSignature: true, sensitiveCategory: 'none' }, quote: product.product.supplierQuote, moq: 2, capacity })
+ const choose = vi.fn()
+ await act(async () => root.render(<PurchaseQuoteSummary snapshot={{ version: 1, quotedAt: '2026-10-27T12:00:00Z', analysis: product, pipelineSummary: summary, purchasePlan: moqPlan, conversation: [] }} onChoose={choose} />))
+ const comparison = container.querySelector('[aria-label="Compra mínima y cantidad elegida"]')!
+ expect(comparison.textContent).toContain('Si traés lo mínimo: 2 unidades')
+ expect(comparison.textContent).toContain(usd(moqPlan.minimum!.cost.totalCostUsd))
+ expect(comparison.textContent).not.toContain('Si traés una unidad')
+ const table = container.querySelector('.purchase-options-table')!
+ expect(table.closest('details')).toBeNull()
+ expect(table.textContent).toContain('Flete incluido · USD')
+ expect(table.textContent).toContain('Costo puesto · USD/u.')
+ expect(table.textContent).toContain('Cantidad elegida')
+ const button = [...table.querySelectorAll('button')].find(button => button.textContent === 'Elegir 2 unidades')!
+ await act(async () => button.click())
+ expect(choose).toHaveBeenCalledWith(2)
+ expect(container.querySelectorAll('.purchase-transport-card')).toHaveLength(3)
+ expect(container.textContent).toContain('Tiempo de transporte orientativo')
+ expect(container.textContent).toContain('no fechas de entrega')
+})
+
+it('does not display an unavailable courier merchandise subtotal as a landed price', async () => {
+ const { PurchaseQuoteSummary } = await import('./PurchaseQuoteResult')
+ const quote = initialSupplierQuote(10, true)
+ const heavyPlan = buildPurchasePlan({ costs: { originCountry: 'China', unitWeightKg: 1, unitVolumeCbm: 0.001, dutyRatePct: 16, purpose: 'resale', entityType: 'company', hasImporterSignature: true, sensitiveCategory: 'none' }, quote, moq: 2, capacity: { mode: 'units', min: 100, max: 100, budgetUsd: 0 } })
+ await act(async () => root.render(<PurchaseQuoteSummary snapshot={{ version: 1, quotedAt: '2026-10-27T12:00:00Z', analysis, pipelineSummary: summary, purchasePlan: heavyPlan, conversation: [] }} />))
+ const courier = container.querySelector('article[aria-label="Courier comercial"]')!
+ expect(courier.textContent).toContain('Sin tarifa calculable')
+ expect(courier.querySelector('.purchase-transport-price')).toBeNull()
+ expect(courier.textContent).toContain('50 kg')
+ expect(container.querySelector('article[aria-label="Aéreo"] .purchase-transport-price')).not.toBeNull()
+})
+
+it('keeps a missing MOQ explicit and never invents transport comparisons for an older saved plan', async () => {
+ const { PurchaseQuoteSummary } = await import('./PurchaseQuoteResult')
+ const legacyPlan = { single: plan.single, singleReason: plan.singleReason, selected: plan.selected, improvement: plan.improvement, note: plan.note, error: plan.error }
+ const product = createManualProductAnalysis('manual://legacy-missing-moq'); product.product.moq = 0
+ await act(async () => root.render(<PurchaseQuoteSummary snapshot={{ version: 1, quotedAt: '2026-10-27T12:00:00Z', analysis: product, pipelineSummary: summary, purchasePlan: legacyPlan, conversation: [] }} />))
+ expect(container.textContent).toContain('MOQ pendiente de confirmar')
+ expect(container.textContent).toContain('Compra mínima modelada')
+ expect(container.textContent).toContain('Este presupuesto guardado no incluye el detalle por modalidad')
+ expect(container.querySelectorAll('.purchase-transport-card')).toHaveLength(0)
+})
+
+it('labels an over-budget minimum without offering to select it', async () => {
+ const { PurchaseQuoteSummary } = await import('./PurchaseQuoteResult')
+ const compared = { ...plan, minimum: { ...plan.minimum!, withinBudget: false }, selected: plan.selected }
+ const choose = vi.fn()
+ await act(async () => root.render(<PurchaseQuoteSummary snapshot={{ version: 1, quotedAt: '2026-10-27T12:00:00Z', analysis, pipelineSummary: summary, purchasePlan: compared, conversation: [] }} onChoose={choose} />))
+ const row = [...container.querySelectorAll('.purchase-options-table tbody tr')].find(row => row.querySelector('th')?.textContent?.startsWith(`${compared.minimum.quantity} u.`))!
+ expect(row.textContent).toContain('Supera tu presupuesto')
+ expect(row.querySelector('button')).toBeNull()
+})
+
+it('marks a battery shipment total as conditional before the transport details', async () => {
+ const { PurchaseQuoteSummary } = await import('./PurchaseQuoteResult')
+ const conditional = buildPurchasePlan({ costs: { originCountry: 'China', unitWeightKg: 0.1, unitVolumeCbm: 0.001, dutyRatePct: 16, purpose: 'resale', entityType: 'company', hasImporterSignature: true, sensitiveCategory: 'none' }, quote: initialSupplierQuote(10, true), moq: 2, capacity, cargoText: 'Batería de litio integrada' })
+ await act(async () => root.render(<PurchaseQuoteSummary snapshot={{ version: 1, quotedAt: '2026-10-27T12:00:00Z', analysis, pipelineSummary: summary, purchasePlan: conditional, conversation: [] }} />))
+ const upfront = container.querySelector('.purchase-dashboard-summary > .purchase-conditional-price')!
+ expect(upfront.textContent).toContain('no incluyen recargos especiales pendientes')
+ expect(upfront.closest('details')).toBeNull()
+ expect(container.querySelectorAll('.purchase-transport-card .purchase-conditional-price')).toHaveLength(3)
+ expect(container.querySelectorAll('.purchase-transport-card .purchase-cargo-warning')).toHaveLength(3)
+ for (const warning of container.querySelectorAll('.purchase-cargo-warning')) {
+  expect(warning.textContent).toContain('baterías')
+  expect(warning.closest('details')).toBeNull()
+ }
+ expect(container.querySelectorAll('.purchase-transport-details')).toHaveLength(3)
+})

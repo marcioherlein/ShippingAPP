@@ -1,4 +1,5 @@
 import { compatibleNcmChapters } from '../src/lib/ncmFamilyGuard'
+import { isMobilityPartIdentity, principalProductText } from '../src/lib/productIdentity'
 import { ncmAppTariffOverride } from './ncmTariffOverrides'
 import {
   deriveClarifications,
@@ -208,9 +209,16 @@ function automaticMechanicalCommonMetalWristwatch(facts: NcmProductFacts) {
 // be added here only with regression coverage.
 function allowedChapterPrefixes(facts: NcmProductFacts): string[] | null {
   if (conventionalWristwatchText(facts)) return ['91']
+  const concepts = deriveSemanticConcepts(facts).concepts
+  if (concepts.includes('kick_scooter')) {
+    if (concepts.includes('electric') && !concepts.includes('toy_mobility')) return ['8711.60']
+    return ['87', '95']
+  }
+  if (concepts.includes('battery_lithium') && !/\b(?:residuos?|desechos?|scrap|waste)\b/.test(normalizeText(facts.name))) return ['8507']
+  if (concepts.includes('battery_article')) return ['8506', '8507']
+  if (concepts.includes('power_adapter')) return ['8504']
   const compatible = compatibleNcmChapters(facts)
   if (compatible) return compatible
-  const concepts = deriveSemanticConcepts(facts).concepts
   if (concepts.includes('beverage_container') && !concepts.includes('raw_material') && !concepts.includes('electric') && !concepts.includes('active_refrigeration')) {
     // Finished drinkware and its identifiable parts cannot become raw steel, solely on material overlap.
     return ['39', '44', '45', '48', '63', '69', '70', '73', '76', '83', '96']
@@ -336,7 +344,16 @@ function shortcutClassification(
 }
 
 function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, concepts: SemanticConcepts): FullNcmClassification | null {
-  const text = normalizeText(factsText(facts))
+  const text = principalProductText(facts)
+
+  if (concepts.concepts.includes('kick_scooter') && concepts.concepts.includes('electric')
+    && concepts.concepts.includes('personal_transport') && !concepts.concepts.includes('toy_mobility')
+    && !concepts.concepts.includes('!electric') && !concepts.concepts.includes('article_part')) {
+    const official = findOfficialByLabel(index, '8711.60.', ['motor electrico'])
+    if (official) return shortcutClassification(index, official,
+      ['velocipedo', 'propulsadas con motor electrico', 'transporte personal'],
+      'Monopatín completo con propulsión eléctrica y uso de transporte personal confirmado; no se clasifica su batería integrada por separado.')
+  }
 
   const faceCream = /\b(?:crema(?:s)? facial(?:es)?|face cream|facial cream|crema hidratante|crema nutritiva)\b/.test(text)
   const medicinal = /\b(?:medicament|medicinal|terapeutic|corticoid|antibiotic|tretinoin|hydrocortisone)/.test(text)
@@ -434,6 +451,7 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, co
 
   for (const check of checks) {
     if (!check.terms.every((term) => text.includes(normalizeText(term)))) continue
+    if (check.code === '8507.60.00' && !concepts.concepts.includes('battery_lithium')) continue
     const official = findOfficial(index, check.code)
     if (official) return shortcutClassification(index, official, check.terms, check.rationale)
   }
@@ -478,10 +496,12 @@ export function retrieveNcmCandidates(index: NcmSearchIndex, searchTerms: string
 
   const chapterPrefixes = allowedChapterPrefixes(facts)
   const identityConcepts = deriveSemanticConcepts(facts).concepts
+  const mobilityPart = isMobilityPartIdentity(facts)
   const beveragePart = identityConcepts.includes('beverage_container') && identityConcepts.includes('article_part')
   const scored: NcmRetrievalCandidate[] = []
   for (const record of prepareIndex(index)) {
     const { code, label, normalizedLabel, labelTokens } = record
+    if (mobilityPart && /^87(?:0[1-9]|1[0-3])/.test(code)) continue
     if (chapterPrefixes && !chapterPrefixes.some((prefix) => code.startsWith(prefix))) continue
     if (beveragePart && code === '9617.00.10') continue
     if (identityConcepts.includes('beverage_container') && !identityConcepts.includes('raw_material') && !beveragePart && !identityConcepts.includes('electric') && !identityConcepts.includes('active_refrigeration')) {
@@ -652,14 +672,30 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   const clarifications = deriveClarifications(concepts).map((c) => c.question)
 
   const questions = deriveDisambiguationQuestions(concepts)
-  if (questions.length && concepts.concepts.includes('beverage_container')) {
+  if (questions.length && (concepts.concepts.includes('beverage_container') || concepts.concepts.includes('kick_scooter') || concepts.concepts.includes('battery_article'))) {
     return {
       status: 'missing', code: null, label: null, confidence: 'missing', alternatives: [], tariff: null,
-      missingFacts: clarifications, rationale: ['Falta confirmar una característica que determina la familia arancelaria. No se presume aislamiento por marca, material o doble pared.'],
+      missingFacts: questions.map(question => question.prompt), rationale: ['Falta confirmar una característica que determina la familia arancelaria. No se presumen propiedades por marca ni por componentes incluidos.'],
       searchTerms: concepts.positiveTerms, sourceDate: index.meta.sourceDate, source: index.meta.source,
       catalogRecordCount: index.meta.recordCount, retrievalMode: 'missing',
       disambiguation: { candidates: [], questions },
       diagnostics: buildDiagnostics(concepts, concepts.positiveTerms, concepts.exclusionTerms, [], 'Requisito de construcción pendiente.', questions[0].prompt),
+    }
+  }
+  const supportedElectricScooter = concepts.concepts.includes('electric')
+    && !concepts.concepts.includes('!electric') && concepts.concepts.includes('personal_transport')
+    && !concepts.concepts.includes('toy_mobility') && !concepts.concepts.includes('article_part')
+  if (concepts.concepts.includes('kick_scooter') && !supportedElectricScooter) {
+    // Recognizing a broad family does not validate every configuration in it.
+    // Do not let generic lexical overlap + model confidence promote a truck,
+    // toy or another unvalidated vehicle position for this unsupported branch.
+    const review = 'Este tipo o configuración de monopatín requiere revisión de clasificación; no se le aplican los aranceles del vehículo eléctrico para transporte personal.'
+    return {
+      status: 'missing', code: null, label: null, confidence: 'missing', alternatives: [], tariff: null,
+      missingFacts: [review], rationale: [review, 'No se utiliza una expansión o ranking del modelo para elegir una posición de una configuración todavía no validada.'],
+      searchTerms: concepts.positiveTerms, sourceDate: index.meta.sourceDate, source: index.meta.source,
+      catalogRecordCount: index.meta.recordCount, retrievalMode: 'missing', disambiguation: null,
+      diagnostics: buildDiagnostics(concepts, concepts.positiveTerms, concepts.exclusionTerms, [], 'Configuración de movilidad fuera de la rama validada.', review),
     }
   }
   const deterministic = deterministicKnownNcm(index, facts, concepts)
@@ -706,7 +742,10 @@ export async function classifyFullNcm(index: NcmSearchIndex, ai: AI, facts: NcmP
   const combinedMissingFacts = [...new Set([...expansion.missingFacts, ...(ranked.missingFacts || [])])].slice(0, 8)
   const unresolvedFunction = !facts.functionText?.trim() && combinedMissingFacts.some(fact => /funcion|uso principal|principal function|main use/.test(normalizeText(fact)))
   const incompatibleThermo = top.code === '9617.00.10' && (!concepts.concepts.includes('vacuum_insulated') || concepts.concepts.includes('!vacuum_insulated') || concepts.concepts.includes('article_part') || concepts.concepts.includes('electric'))
-  const confidence = unresolvedFunction || incompatibleThermo ? 'low' : ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
+  const incompatibleMobility = concepts.concepts.includes('kick_scooter') && top.code.startsWith('8711')
+    && (!concepts.concepts.includes('electric') || !concepts.concepts.includes('personal_transport') || concepts.concepts.includes('toy_mobility'))
+  const incompatibleLithium = top.code === '8507.60.00' && !concepts.concepts.includes('battery_lithium')
+  const confidence = unresolvedFunction || incompatibleThermo || incompatibleMobility || incompatibleLithium ? 'low' : ranked.ranking.length ? deriveConfidence(shortlist, ranked) : 'low'
 
   if (confidence === 'low') {
     const confidenceReason = top.code !== shortlist[0].code

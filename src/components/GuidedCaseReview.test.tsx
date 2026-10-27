@@ -85,3 +85,24 @@ it('does not announce a classification failure before the first classifier reque
  expect(container.querySelector('.workspace-classification-status b')?.textContent).toBe('Completá tu ficha de producto')
  expect(container.querySelector('.workspace-classification-status')?.textContent).not.toContain('Clasificación pendiente')
 })
+
+it('describes exploration as the minimum valid purchase without mistaking supplier MOQ for a pack size',async()=>{
+ recordCaseAnswer(analysis.sourceUrl,'¿Cuántas unidades incluye ese lote?','5')
+ recordCaseAnswer(analysis.sourceUrl,'¿Desde cuántas unidades es válido ese precio?','5')
+ recordCaseAnswer(analysis.sourceUrl,'¿Hasta cuántas unidades vale ese precio?','Confirmo que no tiene límite')
+ const draft={...productConfirmationFromAnalysis(analysis),functionText:'Iluminar fotografías',moq:2}
+ const quote={...initialSupplierQuote(10,true),basis:'pack' as const,unitsPerPack:5,minQuantity:5}
+ await act(async()=>root.render(<GuidedCaseReview analysis={analysis} draft={draft} quote={quote} capacity={{mode:'unknown',budgetUsd:0,min:1,max:1}} classified={false} askedForMore={false} clarificationTarget="functionText" exhausted={false} status="confirm" authRequired={false} onDraft={vi.fn()} onQuote={vi.fn()} onConfirm={confirm} onManual={vi.fn()}/>))
+ expect(container.querySelector('.workspace-capacity')?.textContent).toContain('explorar desde la compra mínima disponible')
+ expect(container.querySelector('.case-review')?.textContent).toContain('explorar desde la compra mínima disponible')
+ expect(container.textContent).not.toContain('explorar desde una unidad')
+ expect(container.textContent).not.toContain('explorar desde 2')
+})
+
+it('keeps an unknown supplier minimum explicit in the sidebar and conversation',async()=>{
+ const draft={...productConfirmationFromAnalysis(analysis),moq:0}
+ await act(async()=>root.render(<GuidedCaseReview analysis={analysis} draft={draft} quote={initialSupplierQuote(10,true)} capacity={{mode:'unknown',budgetUsd:0,min:1,max:1}} classified={false} askedForMore={false} clarificationTarget="functionText" exhausted={false} status="confirm" authRequired={false} onDraft={vi.fn()} onQuote={vi.fn()} onConfirm={confirm} onManual={vi.fn()}/>))
+ expect(container.querySelector('.workspace-capacity')?.textContent).toContain('mínimo del proveedor, por confirmar')
+ expect(readCaseConversation(analysis.sourceUrl).some(message=>message.text==='Quiero conocer la compra mínima y comparar alternativas.')).toBe(true)
+ expect(readCaseConversation(analysis.sourceUrl).some(message=>message.text.includes('costo de una unidad'))).toBe(false)
+})

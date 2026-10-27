@@ -4,11 +4,13 @@ import { test, expect } from './fixtures'
 import { classifyFullNcm, type NcmSearchIndex } from '../../worker/ncmRetrieval'
 import { createManualProductAnalysis } from '../../src/lib/productConfirmation'
 import { initialSupplierQuote } from '../../src/lib/supplierQuote'
-const index = JSON.parse(readFileSync('public/data/ncm-index.json', 'utf8')) as NcmSearchIndex
+import { loadCanonicalSimParentLabels, reconcileNcmIndexLabels } from '../../scripts/ncm-label-reconciliation.mjs'
+const canonical = loadCanonicalSimParentLabels('public/data/sim')
+const index = reconcileNcmIndexLabels(JSON.parse(readFileSync('public/data/ncm-index.json', 'utf8')), canonical.labelsByCode, canonical.sourceDate) as NcmSearchIndex
 const ai = { run: async () => { throw new Error('AI unavailable: deterministic real classifier path') } }
 const source = 'https://www.alibaba.com/product-detail/Thermo_1600000001234.html'
 const name = 'Termo Stanley'
-async function enter(page: Page, mode: string) {
+async function enter(page: Page, mode: string, productName = name, use = 'Para mantener el agua caliente y tomar mate', material = 'Acero inoxidable') {
  await page.goto('/')
  await page.getByRole('button', { name: mode === 'search' ? /Quiero buscarlo/ : /Ya tengo un producto/ }).click()
  for (const option of ['Reventa', 'Empresa']) { await page.getByRole('radio', { name: option, exact: true }).click(); await page.getByRole('button', { name: 'Continuar', exact: true }).click() }
@@ -16,9 +18,9 @@ async function enter(page: Page, mode: string) {
  await page.getByRole('radio', { name: /Todavía no sé/ }).click(); await page.getByRole('button', { name: /Seguir con el producto/ }).click()
  if (mode === 'manual') {
   await page.getByRole('button', { name: /Completar ficha/ }).click()
-  await page.getByLabel('Nombre y modelo del producto').fill(name); await page.getByRole('button', { name: 'Continuar', exact: true }).click()
-  await page.getByLabel('Función o uso principal').fill('Para mantener el agua caliente y tomar mate'); await page.getByRole('button', { name: 'Continuar', exact: true }).click()
-  await page.getByLabel('Material y características').fill('Acero inoxidable'); await page.getByRole('button', { name: 'Crear ficha de importación', exact: true }).click()
+  await page.getByLabel('Nombre y modelo del producto').fill(productName); await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await page.getByLabel('Función o uso principal').fill(use); await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await page.getByLabel('Material y características').fill(material); await page.getByRole('button', { name: 'Crear ficha de importación', exact: true }).click()
  } else if (mode === 'link') {
   await page.getByRole('button', { name: /Pegar link de Alibaba/ }).click(); await page.getByLabel('Enlace de Alibaba').fill(source); await page.getByRole('button', { name: /Leer producto/ }).click()
  } else {
@@ -26,7 +28,7 @@ async function enter(page: Page, mode: string) {
  }
  await page.locator('.guided-case').waitFor()
 }
-async function completeQuote(page: Page) {
+async function completeQuote(page: Page, values: { price: string; moq: string; variant?: string; weight?: string; volume?: string } = { price: '17', moq: '1' }) {
  for (let step = 0; step < 25; step++) {
   if (await page.getByRole('button', { name: 'Confirmar y clasificar', exact: true }).isVisible()) return
   const q = page.locator('.case-question'); await q.waitFor()
@@ -37,12 +39,12 @@ async function completeQuote(page: Page) {
   else {
    const input = q.locator('input').first()
    if (/Hasta cuántas/.test(prompt)) await input.fill('')
-   else if (/precio del proveedor/.test(prompt)) await input.fill('17')
-   else if (/variante/.test(prompt)) await input.fill('Acero inoxidable 1 litro')
+   else if (/precio del proveedor/.test(prompt)) await input.fill(values.price)
+   else if (/variante/.test(prompt)) await input.fill(values.variant || 'Acero inoxidable 1 litro')
    else if (/país de origen/.test(prompt)) await input.fill('China')
-   else if (/pesa/.test(prompt)) await input.fill('0.6')
-   else if (/volumen ocupa/.test(prompt)) await input.fill('0.002')
-   else if (/Desde cuántas|mínimo del proveedor/.test(prompt)) await input.fill('1')
+   else if (/pesa/.test(prompt)) await input.fill(values.weight || '0.6')
+   else if (/volumen ocupa/.test(prompt)) await input.fill(values.volume || '0.002')
+   else if (/Desde cuántas|mínimo del proveedor/.test(prompt)) await input.fill(values.moq)
    else throw new Error(`Unexpected question: ${prompt}`)
   }
   await page.getByRole('button', { name: 'Continuar', exact: true }).click()
@@ -97,4 +99,41 @@ for (const width of [390, 1440]) for (const mode of ['manual', 'search', 'link']
  await expect(page.getByRole('region', { name: 'Tu presupuesto de importación' })).toContainText('9617.00.10')
  expect(requests).toHaveLength(2)
  await page.screenshot({ path: info.outputPath(`ncm-dashboard-${mode}-${width}.png`), fullPage: true })
+})
+
+for (const width of [320, 390, 1440]) test(`electric scooter uses canonical classification and MOQ 2 dashboard at ${width}px`, async ({ page }, info) => {
+ test.setTimeout(60_000)
+ await page.setViewportSize({ width, height: width > 400 ? 1000 : 844 })
+ const fixture = createManualProductAnalysis('manual://scooter', 'Monopatín eléctrico')
+ const requests: Array<Record<string, unknown>> = []
+ const codes: Array<string | null> = []
+ await page.route('**/api/analyze', route => route.fulfill({ headers: { 'x-shippingapp-usage-reservation': 'scooter-case' }, json: { ...fixture, sourceUrl: route.request().postDataJSON().sourceUrl, product: route.request().postDataJSON().product } }))
+ await page.route('**/api/ncm-classify', async route => {
+  const facts = route.request().postDataJSON(); requests.push(facts)
+  const result = await classifyFullNcm(index, ai, facts); codes.push(result.code)
+  await route.fulfill({ json: { ...result, refinement: { allowed: requests.length < 2, attempt: requests.length, maxAttempts: 2 } } })
+ })
+ await enter(page, 'manual', 'Monopatín eléctrico', 'Movilidad personal', 'Aluminio, batería de litio integrada')
+ await completeQuote(page, { price: '150', moq: '2', variant: 'Monopatín adulto con batería', weight: '12', volume: '0.06' })
+ await page.getByRole('button', { name: 'Confirmar y clasificar', exact: true }).click()
+ const question = page.getByRole('group', { name: '¿Es para transporte personal o es un juguete infantil?' })
+ await expect(question).toBeVisible()
+ await expect(page.locator('.ncm-disambiguation-candidate')).toHaveCount(0)
+ await expect(page.locator('.case-question')).toHaveCount(0)
+ await question.getByRole('button', { name: 'Para transporte personal de adultos', exact: true }).click()
+ await question.getByRole('button', { name: 'Continuar', exact: true }).click()
+ await page.getByRole('button', { name: /Volver a clasificar con mis respuestas/ }).click()
+ await expect(page.locator('.guided-case')).toContainText('NCM validada: 8711.60.00')
+ const result = page.getByRole('region', { name: 'Tu presupuesto de importación' })
+ const calculate = page.getByRole('button', { name: 'Confirmar y calcular mis opciones', exact: true })
+ await expect.poll(async () => await result.isVisible() || await calculate.isVisible()).toBe(true)
+ if (await calculate.isVisible()) await calculate.click()
+ await expect(result).toContainText('Si traés lo mínimo: 2 unidades')
+ await expect(result.getByRole('table', { name: 'Tabla de optimización de tu compra' })).toBeVisible()
+ await expect(result.locator('.purchase-transport-card')).toHaveCount(3)
+ await expect(result).toContainText('Tiempo de transporte orientativo')
+ await expect(result.locator('.purchase-transport-status').filter({ hasText: 'Requiere cotización y aceptación' })).toHaveCount(3)
+ expect(requests).toHaveLength(2)
+ expect(codes).toEqual([null, '8711.60.00'])
+ await page.screenshot({ path: info.outputPath(`scooter-moq2-dashboard-${width}.png`), fullPage: true })
 })

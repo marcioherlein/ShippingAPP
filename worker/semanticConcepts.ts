@@ -14,6 +14,8 @@
 //   - The concept lexicon is concept-based and compact, not a per-product dictionary. Adding
 //     a product family here is adding a concept, not hardcoding a URL or a code.
 
+import { componentIdentity, isKickScooterIdentity, normalizeProductIdentity, principalProductText } from '../src/lib/productIdentity'
+
 export type NcmProductFactsLike = {
   name?: string | null
   category?: string | null
@@ -147,13 +149,18 @@ const POLAR_CONCEPTS: PolarConcept[] = [
       /\bno\s+electric/,
       /\bno\s+es\s+electric/,
       /\bsin\s+electricidad/,
+      /\bsin\s+motor\b/,
+      /\b(?:no|not|non)\s+motorized\b/,
+      /\bwithout\s+(?:a\s+)?motor\b/,
+      /\ba\s+patada\b/,
+      /\bfoot\s+propelled\b/,
       /\bno\s+electric[oa]/,
     ],
     positive: [
       /\belectric(al|o|a)?\b/,
       /\brechargeable\b/,
       /\brecargable\b/,
-      /\bmotor\b/,
+      /\bmotor\s+electric[oa]\b/,
       /\bplug\b/,
       /\benchufe\b/,
       /\bvoltaj/,
@@ -235,7 +242,7 @@ const PLAIN_CONCEPTS: PlainConcept[] = [
   },
   {
     key: 'battery_lithium',
-    match: [/\blithium\b/, /\bli-?ion\b/, /\bbattery\b/, /\bbateria\b/, /\bacumulador\b/, /\b18650\b/],
+    match: [/\bli[-\s]?ion\b/, /\blithium[-\s]?ion\b/, /\bion(?:es)?\s+(?:de\s+)?litio\b/],
     positiveTerms: ['acumulador de litio', 'bateria de litio'],
     functionText: 'acumular energía eléctrica',
     activeMechanism: 'electric',
@@ -280,6 +287,14 @@ function matchAny(patterns: RegExp[], text: string) {
  */
 export function deriveSemanticConcepts(facts: NcmProductFactsLike): SemanticConcepts {
   const text = factsText(facts)
+  const standaloneBattery = componentIdentity(facts) === 'battery'
+  const chemistryText = text.replace(/\b(?:sin|libre de|no (?:es de|contiene|tiene)|without)\s+(?:plomo|lead|niquel|nickel|zinc|sodio|sodium)\b|\blead[-\s]?free\b/g, '')
+  const otherBatteryChemistry = /\b(?:plomo|lead[-\s]?acid|niquel|nickel|ni[-\s]?(?:cd|mh)|alcalin[oa]s?|alkaline|zinc|sodio|sodium|litio metal|lithium metal)\b/.test(chemistryText)
+  const deniesLithium = /\b(?:sin|libre de|no(?:\s+(?:es|contiene|tiene))?|not|non|without|does not contain)\s+(?:(?:de|a|una)\s+)?(?:ion(?:es)?\s+(?:de\s+)?)?(?:litio|lithium|li[-\s]?ion)\b/.test(text)
+  const primaryBattery = /\b(?:primari[oa]|primary|no recargable|non[-\s]?rechargeable|not rechargeable)\b/.test(text)
+  const lithiumIonEvidence = !deniesLithium && !otherBatteryChemistry && !primaryBattery
+    && (/\b(?:li[-\s]?ion|lithium[-\s]?ion|ion(?:es)?\s+(?:de\s+)?litio)\b/.test(text)
+      || (/\b(?:lithium|litio)\b/.test(text) && /\b(?:recargable|rechargeable)\b/.test(text)))
 
   const positiveTerms = new Set<string>()
   const exclusionTerms = new Set<string>()
@@ -315,6 +330,10 @@ export function deriveSemanticConcepts(facts: NcmProductFactsLike): SemanticConc
 
   // Plain concepts: material / function / identity vocabulary.
   for (const concept of PLAIN_CONCEPTS) {
+    // An integrated battery/charger is an attribute of the main article.
+    // Only an explicitly named standalone component contributes its identity.
+    if (concept.key === 'battery_lithium' && (!standaloneBattery || !lithiumIonEvidence)) continue
+    if (concept.key === 'power_adapter' && componentIdentity(facts) !== 'power_adapter') continue
     if (!matchAny(concept.match, text)) continue
     for (const term of concept.positiveTerms) positiveTerms.add(term)
     concepts.push(concept.key)
@@ -324,6 +343,37 @@ export function deriveSemanticConcepts(facts: NcmProductFactsLike): SemanticConc
     if (concept.activeMechanism === 'electric' && activeMechanism !== 'passive') activeMechanism = 'electric'
     else if (concept.activeMechanism && !activeMechanism) activeMechanism = concept.activeMechanism
     if (typeof concept.householdUse === 'boolean' && householdUse === null) householdUse = concept.householdUse
+  }
+
+  if (standaloneBattery) {
+    concepts.push('battery_article')
+    if (lithiumIonEvidence && !concepts.includes('battery_lithium')) {
+      concepts.push('battery_lithium')
+      positiveTerms.add('acumulador de litio')
+      positiveTerms.add('bateria de litio')
+    }
+    if (!lithiumIonEvidence && !otherBatteryChemistry && !primaryBattery) concepts.push('battery_chemistry_unknown')
+    if (deniesLithium) concepts.push('!battery_lithium')
+  }
+
+  if (isKickScooterIdentity(facts)) {
+    concepts.push('kick_scooter')
+    // Electricity in an included charger is not evidence of vehicle propulsion.
+    const electricPropulsion = /\b(?:electric[oa]?|e scooter)\b/.test(principalProductText(facts))
+      || /\b(?:motor electrico|electric motor|electric propulsion)\b/.test(text)
+    if (!electricPropulsion && concepts.includes('electric')) {
+      concepts.splice(concepts.indexOf('electric'), 1)
+      positiveTerms.delete('electrico')
+      activeMechanism = null
+    }
+    positiveTerms.add('velocipedo')
+    functionText = facts.functionText?.trim() || 'movilidad personal'
+    if (concepts.includes('electric')) positiveTerms.add('propulsadas con motor electrico')
+    const use = normalizeProductIdentity([facts.category, facts.functionText, facts.description, facts.name].filter(Boolean).join(' '))
+    const positiveUse = use.replace(/\b(?:no es (?:un )?juguete(?: infantil| para ninos)?|not (?:a |an? )?(?:children s |kids? )?toy|no infantil|no (?:es )?(?:apto |disenado )?para ninos|not for (?:kids|children))\b/g, '')
+    const toy = /\b(?:juguete|toy|infantil|ninos?|kids?|children)\b/.test(positiveUse)
+    if (toy) concepts.push('toy_mobility')
+    else if (/\b(?:transporte (?:personal|urbano)|movilidad urbana|urban (?:transport|commut)|commuting|adultos?|adults?)\b/.test(use)) concepts.push('personal_transport')
   }
 
   // Commercial thermal claims identify the family, not the legally decisive vacuum construction.
@@ -402,7 +452,9 @@ export function deriveNormalizedCategory(
   if (has('footwear')) return 'Calzado'
   if (has('backpack')) return 'Mochila / bolso'
   if (has('headphones')) return 'Auriculares'
+  if (has('kick_scooter')) return has('electric') ? 'Monopatín eléctrico' : 'Monopatín / patinete'
   if (has('battery_lithium')) return 'Acumulador de litio'
+  if (has('battery_article')) return has('battery_chemistry_unknown') ? 'Batería / pila (tecnología por confirmar)' : 'Batería / pila'
   if (has('power_adapter')) return 'Fuente de alimentación / cargador'
   if (has('cooking_appliance') && has('solid_fuel')) {
     return `Parrilla / aparato de cocción a combustible sólido ${materialWord}`.replace(/\s+/g, ' ').trim()
@@ -441,6 +493,37 @@ export type DisambiguationQuestion = {
 export function deriveDisambiguationQuestions(concepts: SemanticConcepts): DisambiguationQuestion[] {
   const has = (key: string) => concepts.concepts.includes(key)
   const questions: DisambiguationQuestion[] = []
+
+  if (has('battery_chemistry_unknown')) questions.push({
+    id: 'battery-chemistry', attribute: 'construccion',
+    prompt: '¿Qué tecnología de batería indica la ficha técnica?',
+    options: [
+      { label: 'Recargable de ion de litio (Li-ion)', value: 'lithium-ion', note: 'La batería es un acumulador recargable de ion de litio (Li-ion).' },
+      { label: 'Recargable de plomo', value: 'lead', note: 'La batería es un acumulador recargable de plomo.' },
+      { label: 'Recargable de níquel', value: 'nickel', note: 'La batería es un acumulador recargable de níquel.' },
+      { label: 'Pila no recargable', value: 'primary', note: 'El producto es una pila primaria no recargable.' },
+      { label: 'No sé', value: 'no-se' },
+    ],
+  })
+
+  if (has('kick_scooter')) {
+    if (!has('electric') && !has('!electric')) questions.push({
+      id: 'mobility-propulsion', attribute: 'motor', prompt: '¿Cómo se impulsa el monopatín?',
+      options: [
+        { label: 'Con motor eléctrico', value: 'electric', note: 'El monopatín se propulsa con motor eléctrico.' },
+        { label: 'A patada, sin motor', value: 'manual', note: 'El monopatín se impulsa a patada, sin motor.' },
+        { label: 'No sé', value: 'no-se' },
+      ],
+    })
+    if (!has('personal_transport') && !has('toy_mobility')) questions.push({
+      id: 'mobility-use', attribute: 'uso', prompt: '¿Es para transporte personal o es un juguete infantil?',
+      options: [
+        { label: 'Para transporte personal de adultos', value: 'transport', note: 'Monopatín completo para transporte personal urbano de adultos; no es un juguete.' },
+        { label: 'Es un juguete infantil', value: 'toy', note: 'Monopatín destinado a ser un juguete infantil.' },
+        { label: 'No sé', value: 'no-se' },
+      ],
+    })
+  }
 
   if (has('beverage_container') && !has('article_part') && !has('raw_material') && !has('electric') && !has('vacuum_insulated') && !has('!vacuum_insulated')) {
     questions.push({

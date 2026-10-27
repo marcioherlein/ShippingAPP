@@ -208,7 +208,6 @@ function NomencladorGuidance({ onManualSearch }: { onManualSearch?: () => void }
 export default function CalculationPipeline({ capacity, analysis, prefill, status, activeStage, purchaseRange, costProfile, summary, blocker, authRequired = false, onConfirm, onEditProduct, onReviewProduct, onManualNcm }: Props) {
   const progress = status === 'confirm' ? 0 : status === 'ready' ? 100 : Math.min(100, Math.max(8, ((activeStage + (status === 'processing' ? 0.35 : 0)) / pipelineSteps.length) * 100))
   const interventionFee = hasInterventionFee(prefill)
-  const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, blocker, summary)
   const [draft, setDraft] = useState<ProductConfirmationData>(() => {
     const saved = readProductDraft<{sourceUrl: string; productName: string; draft: ProductConfirmationData}>('confirmation')
     return saved?.sourceUrl === analysis.sourceUrl && saved.productName === analysis.product.name ? saved.draft : productConfirmationFromAnalysis(analysis)
@@ -258,7 +257,21 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
   // questions already answered in the chat before the first NCM request.
   const classifierAttempted = !!analysis.usageReservationId || !!refinement
   const classifierAskedForMore = classifierAttempted && !classificationReady && (analysis.customs.missingFacts.length > 0 || !!disambiguation?.questions.length)
-  const clarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
+  const requestedClarificationTarget = classificationClarificationTarget(analysis.customs.missingFacts)
+  // A generic fallback must not ask users to repeat a fact already supplied.
+  const requestedFact = draft[requestedClarificationTarget]
+  const suppliedFact = requestedClarificationTarget !== 'functionText' || !!analysis.product.functionText?.trim() || draft.functionText !== sourceDraft.functionText
+  const clarificationTarget = suppliedFact && requestedClarificationTarget !== 'description' && typeof requestedFact === 'string' && requestedFact.trim().length >= 3
+    ? 'description' : requestedClarificationTarget
+  const recoveryAction = disambiguation?.questions.length
+    ? 'Respondé la pregunta técnica para distinguir la posición correcta.'
+    : disambiguation?.candidates.length
+      ? 'Revisá las opciones compatibles o sumá un detalle técnico nuevo.'
+      : 'Sumá un detalle técnico nuevo o buscá una posición conocida en el nomenclador.'
+  const visibleBlocker = blocker?.startsWith('No pude cerrar una NCM')
+    ? `No pude cerrar una NCM confiable. Conservamos los datos que completaste. ${recoveryAction}`
+    : blocker
+  const statusAnnouncement = pipelineStatusAnnouncement(status, activeStage, visibleBlocker, summary)
   const clarificationUi = clarificationCopy(analysis, clarificationTarget)
   const clarificationSatisfied = !classifierAskedForMore || identityEdited || clarification.trim().length >= 3
   const priceReady = supplierQuote.amount <= 0 || supplierQuotePrice(supplierQuote, draft.quantity) !== null
@@ -293,7 +306,9 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
     if (refinementExhausted) return
     const note = clarification.replace(/\s+/g, ' ').trim()
     const next = note
-      ? applyClassificationClarification(draft, note, analysis.customs.missingFacts)
+      ? clarificationTarget !== requestedClarificationTarget
+        ? { ...draft, description: [draft.description?.trim(), note].filter(Boolean).join(' · ') }
+        : applyClassificationClarification(draft, note, analysis.customs.missingFacts)
       : draft
     const snapshot = { ...next, supplierQuote, unitPriceUsd: supplierQuotePrice(supplierQuote, next.quantity) || 0 }
     setDraft(snapshot)
@@ -318,9 +333,9 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
   if (capacity && status !== 'ready') return <GuidedCaseReview
     profileContext={`${costProfile?.purpose === 'resale' ? 'Para revender' : costProfile?.purpose === 'own_use' ? 'Uso personal' : 'Uso por confirmar'} · ${costProfile?.entityType === 'company' ? 'Empresa' : costProfile?.entityType === 'individual' ? 'Persona' : 'Importador por confirmar'} · ${costProfile?.hasImporterSignature === true ? 'Con firma de importador' : costProfile?.hasImporterSignature === false ? 'Sin firma de importador' : 'Firma por confirmar'}`}
     analysis={analysis} draft={draft} quote={supplierQuote} capacity={capacity}
-    classified={classificationResolved && !identityEdited} askedForMore={classifierAskedForMore}
+    classified={classificationResolved && !identityEdited} askedForMore={classifierAskedForMore} classificationAttempted={classifierAttempted}
     clarificationTarget={clarificationTarget} exhausted={refinementExhausted}
-    status={status} blocker={blocker} authRequired={authRequired}
+    status={status} blocker={visibleBlocker} authRequired={authRequired}
     onDraft={setDraft} onQuote={setSupplierQuote} onConfirm={submitConfirmation}
     onManual={pickDisambiguationCandidate}
     hasPreciseClarification={!!disambiguation?.questions.length}
@@ -331,7 +346,7 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
   return <section className="calculation-pipeline" id="case-confirmation" aria-busy={status === 'processing'}>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>
     {(status === 'confirm' || status === 'blocked') ? <>
-      {status === 'blocked' && blocker && <div className="pipeline-blocker" role="alert" aria-atomic="true"><p>{blocker}</p>{authRequired ? <AccountControls /> : analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.map(fact => <li key={fact}>{fact}</li>)}</ul>}</div>}
+      {status === 'blocked' && visibleBlocker && <div className="pipeline-blocker" role="alert" aria-atomic="true"><p>{visibleBlocker}</p>{authRequired ? <AccountControls /> : analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.map(fact => <li key={fact}>{fact}</li>)}</ul>}</div>}
       <div className="pipeline-confirm-head progressive-confirm-head">
         <span className="eyebrow">{classificationResolved ? 'Últimos datos para cotizar' : 'Revisá y confirmá tu producto'}</span>
         <h2>{classificationResolved ? 'La NCM está validada. Completá los datos para cotizar.' : 'Revisá la identidad, la oferta y el embalaje.'}</h2>

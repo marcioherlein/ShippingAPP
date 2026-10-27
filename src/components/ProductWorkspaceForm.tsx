@@ -22,7 +22,9 @@ export default function ProductWorkspaceForm({ onSubmit }: { onSubmit: (data: Ma
     {page === 2 && <label><span>Material y características <small>Opcional</small></span><input autoFocus maxLength={1000} value={draft.material} onChange={e => setDraft({ ...draft, material: e.target.value })} placeholder="Ej. Aluminio, alimentación USB, 10 W" /></label>}
     <p id="workspace-product-help" className="workspace-help">{page === 0 ? 'Incluí el modelo si lo conocés. Después completaremos la oferta y el embalaje.' : page === 1 ? 'Describí qué hace; este dato ayuda a identificar la posición aduanera.' : 'Opcional: material principal y características técnicas conocidas.'}</p>
     <p id="workspace-product-error" className="workspace-field-error" role={invalid ? "alert" : undefined}>{invalid ? page === 0 ? "Ingresá un nombre de al menos tres caracteres." : "Describí el uso con al menos dos caracteres." : ""}</p>
-    {page > 0 && <button type="button" className="pipeline-secondary" onClick={()=>setPage(page-1)}>Atrás</button>}
-    <button type="submit" className="journey-primary-action" disabled={page === 0 ? draft.name.trim().length < 3 : draft.use.trim().length < 2}>{page < 2 ? 'Continuar' : 'Crear ficha de importación'}</button>
+    <div className="workspace-product-actions">
+      <button type="submit" className="journey-primary-action" disabled={page === 0 ? draft.name.trim().length < 3 : draft.use.trim().length < 2}>{page < 2 ? 'Continuar' : 'Crear ficha de importación'}</button>
+      {page > 0 && <button type="button" className="pipeline-secondary" onClick={()=>setPage(page-1)}>Atrás</button>}
+    </div>
   </form>
 }

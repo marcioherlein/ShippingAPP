@@ -245,3 +245,9 @@
 }
 
 .workspace-app[data-entry="true"] .journey-choice-grid > button[data-entry-intent="discover"] { display:none; }
+
+/* Keep the next action in the same place throughout manual product entry. */
+.workspace-app .owned-product-form,
+.workspace-app .workspace-product-actions { display:grid; gap:12px; }
+.workspace-app .workspace-product-actions > button,
+.workspace-app .owned-product-form > .pipeline-secondary { width:100%; min-height:44px; margin:0; }

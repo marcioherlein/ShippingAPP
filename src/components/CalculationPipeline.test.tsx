@@ -79,3 +79,20 @@ it('prioritizes the precise backend question and preserves user facts through re
  expect(confirm).toHaveBeenCalledTimes(2)
  expect(container.textContent).toContain('No hay una clasificación validada')
 })
+
+it('keeps known usage intact and does not promise candidate options after a generic classifier failure',async()=>{
+ const value=analysis()
+ value.product={...value.product,name:'Monopatin electrico',category:'Monopatin electrico',functionText:'Transporte urbano personal',material:'Aluminio'}
+ value.customs.missingFacts=['Validar clasificación antes de usar aranceles o economics']
+ value.customs.disambiguation={candidates:[],questions:[]}
+ await act(async()=>root.render(<CalculationPipeline analysis={value} prefill={{budgetUsd:0,sensitiveCategory:'none'} as QuotePrefill} status="blocked" activeStage={0} blocker="No pude cerrar una NCM. Elegí la descripción que más se parezca a tu producto." onConfirm={confirm} onManualNcm={vi.fn()} onEditProduct={vi.fn()} onReviewProduct={vi.fn()}/>))
+ expect(container.textContent).not.toContain('Elegí la descripción')
+ expect(container.textContent).not.toContain('¿Para qué se usa este producto?')
+ expect(container.textContent).toContain('¿Qué detalle técnico distingue a este producto?')
+ expect(container.textContent).toContain('Sumá un detalle técnico nuevo o buscá una posición conocida')
+ const detail=container.querySelector<HTMLTextAreaElement>('#classification-clarification')!
+ await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(detail,'Dos ruedas, sin pedales, motor eléctrico de 350 W');detail.dispatchEvent(new Event('input',{bubbles:true}))})
+ const send=[...container.querySelectorAll('button')].find(b=>b.textContent?.includes('Responder y continuar'))!
+ await act(async()=>send.click())
+ expect(confirm).toHaveBeenCalledWith(expect.objectContaining({functionText:'Transporte urbano personal',material:'Aluminio',description:expect.stringContaining('Dos ruedas, sin pedales, motor eléctrico de 350 W')}))
+})

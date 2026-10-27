@@ -14,8 +14,8 @@ import PackagingWizard from './PackagingWizard'
 import { usd } from '../lib/format'
 
 type Question = { id: string; prompt: string; value: string; type?: 'number' | 'text'; options?: Array<[string,string]>; valid: (value: string) => boolean; apply: (value: string) => void }
-type Props = { profileContext?: string; analysis: ProductAnalysisV2; draft: ProductConfirmationData; quote: SupplierQuote; capacity: PurchaseCapacity; classified: boolean; askedForMore: boolean; clarificationTarget: ClassificationClarificationTarget; exhausted: boolean; status: string; blocker?: string | null; authRequired: boolean; candidates?: React.ReactNode; hasPreciseClarification?: boolean; onDraft: (draft: ProductConfirmationData) => void; onQuote: (quote: SupplierQuote) => void; onConfirm: () => void; onManual: (customs: ProductAnalysisV2['customs']) => void }
-export default function GuidedCaseReview({ profileContext, analysis, draft, quote, capacity, classified, askedForMore, clarificationTarget, exhausted, status, blocker, authRequired, candidates, hasPreciseClarification = false, onDraft, onQuote, onConfirm, onManual }: Props) {
+type Props = { profileContext?: string; analysis: ProductAnalysisV2; draft: ProductConfirmationData; quote: SupplierQuote; capacity: PurchaseCapacity; classified: boolean; askedForMore: boolean; classificationAttempted?: boolean; clarificationTarget: ClassificationClarificationTarget; exhausted: boolean; status: string; blocker?: string | null; authRequired: boolean; candidates?: React.ReactNode; hasPreciseClarification?: boolean; onDraft: (draft: ProductConfirmationData) => void; onQuote: (quote: SupplierQuote) => void; onConfirm: () => void; onManual: (customs: ProductAnalysisV2['customs']) => void }
+export default function GuidedCaseReview({ profileContext, analysis, draft, quote, capacity, classified, askedForMore, classificationAttempted = askedForMore, clarificationTarget, exhausted, status, blocker, authRequired, candidates, hasPreciseClarification = false, onDraft, onQuote, onConfirm, onManual }: Props) {
   const source = analysis.sourceUrl
   const [skipped, setSkipped] = useState<string[]>(() => readProductDraft<string[]>(`guide-skipped:${source}`) || [])
   const [packaging, setPackaging] = useState(false)
@@ -26,13 +26,14 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const [value, setValue] = useState('')
   const [answeredAttempt, setAnsweredAttempt] = useState(-1)
   const attempt = analysis.classificationRefinement?.attempt ?? 0
+  const explorationSummary = draft.moq > 0 ? 'explorar desde la compra mínima disponible' : 'explorar desde el mínimo del proveedor, por confirmar'
   useEffect(() => { writeProductDraft(`guide-skipped:${source}`, skipped) }, [source, skipped])
   useEffect(() => {
     if (readCaseConversation(source).length) return
     const entry = readProductDraft<{ chatAnswers?: Record<string,string> }>('entry')
     const messages = [
       { role: 'assistant' as const, text: '¿Querés calcular con presupuesto, unidades o explorar?' },
-      { role: 'user' as const, text: capacity.mode === 'budget' ? `Mi presupuesto total es ${usd(capacity.budgetUsd)}.` : capacity.mode === 'units' ? `Quiero ${capacity.min === capacity.max ? capacity.min : `${capacity.min}–${capacity.max}`} unidades.` : 'Quiero ver el costo de una unidad y algunas alternativas.' },
+      { role: 'user' as const, text: capacity.mode === 'budget' ? `Mi presupuesto total es ${usd(capacity.budgetUsd)}.` : capacity.mode === 'units' ? `Quiero ${capacity.min === capacity.max ? capacity.min : `${capacity.min}–${capacity.max}`} unidades.` : 'Quiero conocer la compra mínima y comparar alternativas.' },
       { role: 'assistant' as const, text: '¿Qué producto querés importar?' },
       { role: 'user' as const, text: `${draft.productName || 'Producto por completar'}${source.startsWith('https://') ? ` · ${source}` : ''}` },
     ]
@@ -85,7 +86,12 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
     return !question.valid(question.value)
   }
   const preciseClarification = askedForMore && hasPreciseClarification
-  const forced = askedForMore && !preciseClarification && !exhausted && answeredAttempt !== attempt ? all.find(q => q.id === clarificationTarget) ?? productQuestion('description', '¿Qué detalle técnico falta para identificarlo?') : null
+  const requestedQuestion = all.find(q => q.id === clarificationTarget)
+  const needsNewDetail = clarificationTarget === 'description'
+  const clarificationQuestion = needsNewDetail || !requestedQuestion
+    ? { ...productQuestion('description', '¿Qué detalle técnico nuevo podemos sumar?'), value: '', apply: (detail: string) => onDraft({ ...draft, description: [draft.description?.trim(), detail.trim()].filter(Boolean).join(' · ') }) }
+    : requestedQuestion
+  const forced = askedForMore && !preciseClarification && !exhausted && answeredAttempt !== attempt ? clarificationQuestion : null
   const pending = all.find(q => needs(q) && (classified || !skipped.includes(q.id)) && q.id !== 'moq') ?? (all.find(q => q.id === 'moq' && needs(q)) || null)
   const question = edit ? all.find(q => q.id === edit) || null : forced || pending
   useEffect(() => { setValue(question?.value || ''); setPackaging(question?.id === 'unitVolumeCbm'); let active = true; queueMicrotask(() => { if (!active) return; const card = document.querySelector<HTMLElement>('#case-confirmation .case-question'); card?.querySelector<HTMLElement>('input,select,button')?.focus({ preventScroll: true }); card?.scrollIntoView?.({ block: 'center', behavior: 'instant' }) }); return () => { active = false } }, [question?.id, edit, attempt])
@@ -110,6 +116,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const help: Record<string,string> = {
     productName: 'Usá el nombre comercial y, si existe, el modelo. Evitá describirlo sólo como accesorio o repuesto.',
     functionText: 'Contá qué hace y para qué se usa. Esta información ayuda a identificar la posición aduanera correcta.',
+    description: 'No repitas los datos que ya completaste. Sumá una característica verificable de la ficha, como el mecanismo, la potencia, la construcción o el uso específico. Si no la conocés, podés revisar una posición con ayuda de tu despachante.',
     material: 'Indicá el material principal o la composición. Si combina materiales, contanos cuáles.',
     'quote.amount': 'Ingresá el importe que figura en la oferta. Después confirmamos moneda y presentación.',
     'quote.currency': 'Seleccioná la moneda indicada por el proveedor. El símbolo $ por sí solo no alcanza.',
@@ -131,9 +138,9 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const processing = status === 'processing'
   return <section className="guided-case" id="case-confirmation" aria-busy={processing}>
     <aside className="quote-progress-rail"><div className="workspace-section-heading"><span className="eyebrow">Tu ficha de importación</span><h2>Un dato a la vez. Tu resultado al final.</h2><p>Completá la pregunta resaltada y tocá Continuar. Guardamos tus respuestas; podés volver para corregirlas.</p></div>
-    <p className="workspace-capacity">Tu compra: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : 'explorar desde una unidad'}.</p>
+    <p className="workspace-capacity">Tu compra: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : explorationSummary}.</p>
     <ol aria-label="Etapas de la cotización"><li>✓ Tu operación</li><li>✓ Tu compra</li><li aria-current="step">3. Producto y oferta</li><li>4. Tu resultado</li></ol></aside><div className="quote-focus-content">
-    <div className={`workspace-classification-status ${classified ? 'is-confirmed' : ''}`}><b>{classified ? `NCM validada: ${analysis.customs.ncmCandidate}` : 'Clasificación pendiente de validar'}</b><span>{classified ? analysis.customs.source : 'Revisá la identidad del producto o seleccioná una posición del nomenclador. Sin una clasificación válida no mostramos un costo de importación.'}</span></div>
+    <div className={`workspace-classification-status ${classified ? 'is-confirmed' : ''}`}><b>{classified ? `NCM validada: ${analysis.customs.ncmCandidate}` : classificationAttempted ? 'Clasificación pendiente de validar' : 'Completá tu ficha de producto'}</b><span>{classified ? analysis.customs.source : classificationAttempted ? 'Conservamos lo que ya completaste. Necesitamos confirmar un detalle antes de calcular los costos.' : 'Completá la oferta y el embalaje. Después validamos la posición aduanera y calculamos tus opciones.'}</span></div>
     {blocker && (!(preciseClarification || exhausted) || authRequired || !blocker.startsWith('No pude cerrar una NCM')) && <p role="alert" className="case-alert">{blocker}</p>}
     {authRequired && <AccountControls />}
     {processing ? <p role="status" className="quote-processing"><span className="quote-processing-indicator" aria-hidden="true" />{classified ? 'Calculando tus opciones de compra…' : 'Validando la clasificación del producto…'}</p> : <>
@@ -146,7 +153,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
         {!packaging && !!backStack.length && <button type="button" className="pipeline-secondary" onClick={() => { setEdit(backStack[backStack.length - 1]); setBackStack(current => current.slice(0,-1)); setPackaging(false) }}>Atrás</button>}
         {!packaging && (question.id === 'moq' || (!classified && !forced && !['productName','functionText'].includes(question.id))) ? <button type="button" className="pipeline-secondary" onClick={() => { recordCaseAnswer(source,question.prompt,'No lo sé todavía'); setSkipped(current => [...current,question.id]); setEdit(null) }}>No sé todavía</button> : null}
         {question.id === 'unitVolumeCbm' && !packaging && <button type="button" className="pipeline-secondary" onClick={() => setPackaging(true)}>Tengo medidas en lugar de volumen</button>}
-      </div> : <div className="case-review"><h2>Revisá y confirmá</h2><p>Tu elección: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : 'explorar desde una unidad'}. No volvemos a preguntarte la cantidad.</p>
+      </div> : <div className="case-review"><h2>Revisá y confirmá</h2><p>Tu elección: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : explorationSummary}. No volvemos a preguntarte la cantidad.</p>
         <dl className="confirmation-facts"><div><dt>Producto</dt><dd>{draft.productName}</dd></div><div><dt>Oferta</dt><dd>{quote.currency || 'Moneda pendiente'} {quote.amount || 'Precio pendiente'} / {quote.basis === 'pack' ? `lote de ${quote.unitsPerPack}` : 'unidad'} · {quote.variant || 'Variante pendiente'}</dd></div><div><dt>Origen</dt><dd>{draft.originCountry || 'Pendiente'}</dd></div><div><dt>Embalaje por unidad</dt><dd>{draft.unitWeightKg || 'Peso pendiente'} kg · {resolvedProductVolumeCbm(draft) || 'Volumen pendiente'} m³</dd></div></dl><details><summary>Revisar respuestas y corregir un dato</summary><dl>{all.filter(q => q.id === 'quote.unitsPerPack' ? quote.basis === 'pack' : ['quote.usdPerCurrency','quote.fxSource','quote.fxDate'].includes(q.id) ? !!quote.currency && quote.currency !== 'USD' : true).map(q => <div key={q.id}><dt>{q.prompt}</dt><dd>{q.options?.find(([key]) => key === q.value)?.[1] || q.value || (q.id === 'quote.maxQuantity' && hasConfirmedAnswer(q) ? 'Sin límite confirmado' : 'Sin dato')} <button type="button" onClick={() => setEdit(q.id)}>Editar</button></dd></div>)}</dl></details>
         {!classified && <p>Los datos comerciales que todavía no conocés quedan pendientes; no inventamos el costo.</p>}
         <button type="button" className="journey-primary-action" disabled={exhausted && !classified} onClick={() => { recordCaseAnswer(source,'¿Confirmás estos datos?\n' + all.filter(q => q.value).map(q => `${q.prompt} ${q.value}`).join('\n'),classified ? 'Confirmo y calculo mi compra.' : 'Confirmo y clasifico el producto.'); onConfirm() }}>{classified ? 'Confirmar y calcular mis opciones' : 'Confirmar y clasificar'}</button>

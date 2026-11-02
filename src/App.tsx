@@ -309,9 +309,18 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
   const profileStep = profilePage
   useLayoutEffect(() => {
     if (!intent || restoringRef.current) return
+    const question = document.querySelector<HTMLElement>('.journey-question-card.active')
+    // Continue is reused and can become disabled on the next page. Move focus
+    // out of it before native keyboard navigation gets stranded (WebKit).
+    const questionLabel = question?.querySelector<HTMLElement>('.journey-question-fields > div:not([hidden]) > label, .journey-question-fields > label')
+      || question?.querySelector<HTMLElement>('.journey-question-head b')
+    if (questionLabel) {
+      questionLabel.tabIndex = -1
+      questionLabel.focus({ preventScroll: true })
+    }
     // Moving a question while WebKit dispatches a tap can suppress its click.
     // Reveal it before paint, with no pending animation during the next tap.
-    return scrollIntoViewIfNeeded(document.querySelector('.journey-question-card.active'), window, 'instant')
+    return scrollIntoViewIfNeeded(question, window, 'instant')
   }, [intent, step, profilePage, budgetPage])
   const budgetError = getJourneyBudgetError({ mode: budgetMode, budgetUsd, unitsMin, unitsMax })
   const budgetAnswered = budgetMode !== null && budgetError === null

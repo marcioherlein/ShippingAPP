@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { canonicalToken, classifyFullNcm, retrieveNcmCandidates, sanitizeAiRanking, type NcmSearchIndex } from './ncmRetrieval'
 
 const index: NcmSearchIndex = {
@@ -119,11 +119,12 @@ describe('full NCM AI-constrained classification', () => {
   })
 
   it('fails closed when an AI-invented winner leaves no trusted rerank', async () => {
-    const ai = fakeAi([
+    const ai = { run: vi.fn(fakeAi([
       { searchTerms: ['raqueta deportiva', 'bádminton similar'], missingFacts: [] },
       { ranking: [{ code: '1234.56.78', reason: 'hallucinated' }], confidence: 'high' },
-    ])
-    const result = await classifyFullNcm(index, ai, { name: 'Carbon padel racket', category: 'Padel racket' })
+    ]).run) }
+    const result = await classifyFullNcm(index, ai, { name: 'Ambiguous sports racket', category: 'Racket sport' })
+    expect(ai.run).toHaveBeenCalledTimes(2)
     expect(result.status).toBe('missing')
     expect(result.code).toBeNull()
     expect(result.retrievalMode).toBe('missing')

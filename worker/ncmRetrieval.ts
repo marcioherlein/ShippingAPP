@@ -1,5 +1,5 @@
 import { compatibleNcmChapters } from '../src/lib/ncmFamilyGuard'
-import { isMobilityPartIdentity, principalProductText } from '../src/lib/productIdentity'
+import { componentIdentity, isMobilityPartIdentity, normalizeProductIdentity, principalProductText } from '../src/lib/productIdentity'
 import { ncmAppTariffOverride } from './ncmTariffOverrides'
 import {
   deriveClarifications,
@@ -429,21 +429,48 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, co
     if (official) return shortcutClassification(index, official, ['gafas de sol', 'sunglasses'], 'Producto identificado como gafas/anteojos de sol.')
   }
 
+  // Alias groups describe one article, rather than requiring Spanish AND English
+  // simultaneously. Inspect only its principal identity: an included grip is not
+  // the article, while "padel racket replacement grip" is still an accessory.
+  const accessoryIdentity = /\b(?:fundas?|cases?|covers?|grips?|overgrips?|cuerdas?|strings?|pelotas?|balls?|repuestos?|recambios?|replacement|spares?|parts?|partes?|piezas?|almohadillas?|earpads?|correas?|straps?|filtros?|filters?|resistencias?|resistors?|bags?|bolsas?|protectores?|protectors?|soportes?|stands?|holders?|organizadores?|aro|munequeras?)\b/.test(text)
+  const declaredMaterial = normalizeProductIdentity(facts.material)
+  const construction = normalizeProductIdentity([facts.name, facts.material, facts.functionText, facts.description].filter(Boolean).join(' '))
+  const description = normalizeProductIdentity(facts.description)
+  const textileOrPlasticExterior = /\b(?:poliester|polyester|nylon|textil|textile|plastico|plastic)\b/.test(`${text} ${declaredMaterial}`)
+    && !/\b(?:cuero|leather|forro|lining|relleno|filling)\b/.test(construction)
+  const singleEnclosedSpeaker = /\b(?:un (?:solo )?altavoz|one speaker|single (?:loudspeaker|speaker|driver))\b/.test(description)
+    && /\b(?:montado en (?:su |una )?caja|mounted in (?:an? |its )?(?:enclosure|cabinet))\b/.test(description)
+    && !/\b(?:dos|two|multiple|multiples|varios|varias|stereo|estereo|dual|sin caja|without (?:an? )?(?:enclosure|cabinet))\b/.test(construction)
+  const domesticElectricCoffeeMaker = /\b(?:electric[oa]s?|electric)\b/.test(text)
+    && /\b(?:domestic[oa]|household|domestic|hogar)\b/.test(construction)
+    && !/\b(?:sin electricidad|no electric[oa]?|non electric|manual|estufa|stovetop|industrial|comercial|commercial|gas)\b/.test(construction)
+  const electricWaterHeater = /\b(?:electric[oa]s?|electric)\b/.test(text)
+    && !/\b(?:gas|solar|sin electricidad|no electric[oa]?|non electric)\b/.test(construction)
+  const guardedChecks = [
+    { code: '9506.59.00', matches: /\bpadel\b/.test(text) && /^(?:(?:carbon|fiber|fibra|de|carbono|padel)\s+)*(?:paletas?|raquetas?|rackets?|racquets?|paddles?)\b/.test(text) && !/\b(?:tenis|tennis|ping pong)\b/.test(text), terms: ['padel', 'raqueta'], rationale: 'Artículo principal identificado como paleta/raqueta de pádel; se excluyen accesorios vendidos por separado.' },
+    { code: '8507.60.00', matches: componentIdentity(facts) === 'battery' && concepts.concepts.includes('battery_lithium'), terms: ['acumulador', 'iones de litio'], rationale: 'Acumulador independiente con química de ion de litio explícita y compatible.' },
+    { code: '9506.91.00', matches: /^(?:(?:adjustable|ajustables?)\s+)*(?:mancuernas?|dumbbells?)\b/.test(text), terms: ['mancuernas', 'ejercicio fisico'], rationale: 'Artículo principal identificado como mancuernas para ejercicio físico.' },
+    { code: '4202.92.00', matches: /^(?:(?:school|escolar|polyester|nylon)\s+)*(?:mochilas?|backpacks?|rucksacks?)\b/.test(text) && textileOrPlasticExterior, terms: ['mochila', 'superficie textil o plastica'], rationale: 'Mochila con superficie textil o plástica declarada; no se presume ese material por el uso.' },
+    { code: '8518.30.00', matches: /^(?:(?:wireless|bluetooth|inalambric[oa]s?)\s+)*(?:auriculares?|headphones?|earbuds?|earphones?)\b/.test(text), terms: ['auriculares'], rationale: 'Artículo principal identificado como auriculares.' },
+    { code: '8518.21.00', matches: /\b(?:parlantes?|altavoces?|speakers?)\b/.test(text) && singleEnclosedSpeaker, terms: ['un solo altavoz', 'montado en caja'], rationale: 'Altavoz único montado en su caja, construcción explícitamente declarada.' },
+    { code: '8516.71.00', matches: /\b(?:cafeteras?|coffee makers?|espresso machines?)\b/.test(text) && domesticElectricCoffeeMaker, terms: ['cafetera', 'electrica'], rationale: 'Artículo principal identificado como cafetera eléctrica.' },
+    { code: '8516.10.00', matches: /\b(?:termotanques?|water heaters?)\b/.test(text) && electricWaterHeater, terms: ['calentador de agua', 'electrico'], rationale: 'Artículo principal identificado como calentador eléctrico de agua.' },
+  ]
+  if (!accessoryIdentity) {
+    for (const check of guardedChecks) {
+      if (!check.matches) continue
+      const official = findOfficial(index, check.code)
+      if (official) return shortcutClassification(index, official, check.terms, check.rationale)
+    }
+  }
+
   const checks: Array<{ code: string; terms: string[]; rationale: string }> = [
-    { code: '9506.59.00', terms: ['padel', 'paleta', 'racket'], rationale: 'Producto identificado como paleta/raqueta de pádel.' },
     { code: '8504.40.90', terms: ['cargador'], rationale: 'Producto identificado como adaptador/cargador eléctrico.' },
-    { code: '8507.60.00', terms: ['litio', 'lithium', 'bateria', 'battery'], rationale: 'Producto identificado como acumulador de ion litio.' },
     { code: '9506.51.00', terms: ['tenis', 'raqueta'], rationale: 'Producto identificado como raqueta de tenis.' },
     { code: '9506.40.00', terms: ['tenis de mesa', 'ping pong'], rationale: 'Producto identificado como artículo para tenis de mesa.' },
-    { code: '9506.91.00', terms: ['mancuerna', 'gimnasio', 'fitness'], rationale: 'Producto identificado como artículo/equipo para ejercicio físico.' },
-    { code: '4202.92.00', terms: ['mochila', 'backpack'], rationale: 'Producto identificado como mochila/bolso con superficie textil o plástica.' },
-    { code: '8518.30.00', terms: ['auricular', 'headphones', 'earbuds'], rationale: 'Producto identificado como auriculares.' },
-    { code: '8518.21.00', terms: ['parlante', 'speaker'], rationale: 'Producto identificado como altavoz/parlante portátil.' },
     { code: '8471.60.52', terms: ['teclado'], rationale: 'Producto identificado como teclado, unidad de entrada para máquina automática de procesamiento de datos.' },
     { code: '8471.60.53', terms: ['mouse'], rationale: 'Producto identificado como mouse, unidad de entrada para máquina automática de procesamiento de datos.' },
     { code: '9405.42.00', terms: ['lampara', 'led'], rationale: 'Producto identificado como aparato eléctrico de alumbrado LED.' },
-    { code: '8516.71.00', terms: ['cafetera', 'coffee maker', 'espresso'], rationale: 'Producto identificado como aparato eléctrico para preparar café.' },
-    { code: '8516.10.00', terms: ['termotanque', 'water heater'], rationale: 'Producto identificado como calentador eléctrico de agua.' },
     { code: '8471.30.19', terms: ['notebook'], rationale: 'Producto identificado como computadora portátil/notebook.' },
     { code: '8541.43.00', terms: ['panel', 'solar'], rationale: 'Producto identificado como panel solar fotovoltaico.' },
     { code: '6404.11.00', terms: ['zapatillas'], rationale: 'Producto identificado como calzado deportivo con suela de caucho/plástico y capellada textil.' },
@@ -451,7 +478,7 @@ function deterministicKnownNcm(index: NcmSearchIndex, facts: NcmProductFacts, co
 
   for (const check of checks) {
     if (!check.terms.every((term) => text.includes(normalizeText(term)))) continue
-    if (check.code === '8507.60.00' && !concepts.concepts.includes('battery_lithium')) continue
+    if (check.code === '9506.51.00' && /\b(?:mesa|table|ping pong|padel)\b/.test(text)) continue
     const official = findOfficial(index, check.code)
     if (official) return shortcutClassification(index, official, check.terms, check.rationale)
   }

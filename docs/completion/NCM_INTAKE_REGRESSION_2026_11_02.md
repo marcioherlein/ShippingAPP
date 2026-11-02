@@ -20,7 +20,7 @@ El timeout de producción sigue siendo 15 segundos y todos los gates siguen acti
 
 ## Planes anteriores y límites que siguen aplicando
 
-- La PR #216 ya implementó MOQ/lotes/tramos, mínimo viable, optimización visible y comparación courier/aéreo/LCL; esta corrección no vuelve a implementarlos ni modifica la UI.
+- La PR #216 ya implementó MOQ/lotes/tramos, mínimo viable, optimización visible y comparación courier/aéreo/LCL; esta corrección no vuelve a implementarlos ni rediseña la UI.
 - Los antiguos lotes de UX con chat obligatorio o referencia obligatoria de una unidad fueron superados por el cotizador de una pregunta y el mínimo viable. No corresponde reabrirlos como requisitos actuales.
 - Rendimiento ya dispone de chunks diferidos, presupuesto de bundle, fuentes locales, coalescing de GET y consultas de watchlist/digest sin N+1. Las pruebas de índices y conteo de consultas no acreditan latencia p95 productiva ni ausencia universal de N+1.
 - [Arquitectura NCM](../plans/NCM_CLASSIFICATION_ARCHITECTURE.md) continúa vigente: corpus independiente por familias, notas normativas, métricas de abstención/falsos positivos y revisión aduanera experta. Pasar estas fixtures no demuestra precisión universal.
@@ -66,3 +66,11 @@ Mediciones locales del clasificador aislado: no incluyen red, auth ni Durable Ob
 - Assets NCM/SIM y bundle Worker dry run: aprobados.
 - Revisión visual independiente de cinco capturas Chromium: dashboard de termo 390 px, dashboard desde enlace 1440 px, monopatín MOQ 2 a 320 px y pasos de pregunta/respuesta. Sin defectos críticos observados; son fixtures locales, no login real ni tarifas cotizadas. La longitud del dashboard móvil y el copy anterior «1 unidades» quedan como observaciones menores fuera de esta corrección de clasificación.
 - La matriz completa de navegador y el deploy autenticado deben verificarse en los workflows del head exacto antes de declarar el cierre productivo. La evidencia final se registra en la PR y el informe de release de la tarea.
+
+### Corrección de foco encontrada durante la batería WebKit
+
+La ejecución local WebKit con servidor estable pasó 58/59; el caso de teclado fallaba al llegar a Empresa o Sí. Se reprodujo 3/5 veces. Una espera de frames en el helper no lo resolvió y se descartó: se conserva su navegación original por Tab sin pausas artificiales. Una sonda registró el foco en BODY después de que el mismo botón Continuar se deshabilitara al cambiar la pregunta; los siguientes Tabs no alcanzaban el radio visible con tabindex 0.
+
+El efecto de navegación ahora enfoca la etiqueta de la pregunta visible, fuera del botón que acaba de deshabilitarse, antes del scroll instantáneo existente. No modifica respuestas ni requiere clic adicional. El test de teclado exige además foco en las preguntas Empresa y Firma. La nueva revisión debe validarse completa en CI; no se reutiliza el resultado del head anterior para fusionar.
+
+La corrección pasó 10/10 repeticiones WebKit del test original. Con las nuevas aserciones explícitas pasó 6/6 repeticiones (tres WebKit y tres Chromium). Suite completa posterior: 193 archivos y 1.244 pruebas aprobadas; build/TypeScript y diff check aprobados. Revisión independiente del efecto: sin hallazgos críticos de accesibilidad/restauración. El efecto depende de navegación, no de las respuestas, por lo que no roba foco al seleccionar opciones.

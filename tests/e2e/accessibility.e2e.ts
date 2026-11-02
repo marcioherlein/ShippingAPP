@@ -67,8 +67,10 @@ test('primary journey is operable keyboard-only and keeps visible focus', async 
   // Only the first (or selected) radio in each group has tabIndex=0 and is Tab-reachable.
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Reventa', exact: true }))
   await chooseByKeyboard(page, page.getByRole('button',{name:'Continuar',exact:true}))
+  await expect(page.locator('[data-profile-page="2"] > div:not([hidden]) > label')).toBeFocused()
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Empresa', exact: true }))
   await chooseByKeyboard(page, page.getByRole('button',{name:'Continuar',exact:true}))
+  await expect(page.locator('[data-profile-page="3"] > div:not([hidden]) > label')).toBeFocused()
   // Firma group index-0 is "Sí" (tabIndex=0); choose it to keep Tab navigation simple
   await chooseByKeyboard(page, page.getByRole('radio', { name: 'Sí', exact: true }))
 

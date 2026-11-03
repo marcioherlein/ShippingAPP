@@ -33,3 +33,7 @@ Los harnesses de cuenta usan componentes de producción y el motor de costos rea
 ## Límites pendientes
 
 La configuración productiva de Clerk y los textos legales aprobados siguen requiriendo datos del operador ya documentados. No se cambió de instancia ni se inventaron credenciales. El plan NCM continúa requiriendo corpus independiente y revisión aduanera experta; este rediseño no amplía las garantías de clasificación ni de costos.
+
+### Ajustes confirmados por la matriz completa
+
+La primera ejecución completa detectó cuatro fallos de presentación: dos variantes WebKit de ajuste vertical inicial, un contraste heredado blanco en el nuevo resumen claro y el tamaño del texto explicativo de entrada. Se conserva el mínimo de 16 px, se compacta la navegación móvil sin reducir targets táctiles y se aplican colores de texto explícitos al resumen. Las 16 pruebas focales de encabezado, accesibilidad y semántica pasan después de estas correcciones; la matriz completa se vuelve a exigir sobre el commit final, sin omitir ni relajar sus criterios.

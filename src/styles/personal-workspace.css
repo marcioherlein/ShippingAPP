@@ -406,3 +406,18 @@ body { background: var(--workspace-paper); }
 }
 
 .workspace-app .workspace-price-explainer { margin: 20px 0; color: var(--ds-text-secondary); }
+/* Preserve readable body copy and prevent inherited dark-rail text colors. */
+.workspace-app[data-entry="true"] .journey-choice-grid > button small { font-size: 16px; }
+.workspace-app .journey-case-summary :is(h2,b) { color: var(--ds-text-strong); }
+.workspace-app .journey-case-summary .eyebrow { color: var(--ds-brand-strong); }
+@media (max-width:650px) {
+  .workspace-app[data-entry="true"] .journey-hero { margin-top: 20px; margin-bottom: 16px; }
+  .workspace-app[data-entry="true"] .journey-workspace .gs-chat-body { padding: 16px; }
+  .workspace-app .journey-entry-heading h2 { font-size: 22px; }
+  .workspace-app[data-entry="true"] .journey-choice-grid > button { padding: 16px; }
+  .workspace-app[data-entry="true"] .journey-choice-grid > button small { font-size: 16px; line-height: 1.5; margin: 8px 0 12px; }
+}
+@media (max-width:420px) {
+  :is(.personal-workspace,.workspace-app) .app-header-nav { gap: 4px; padding-top: 6px; }
+  :is(.personal-workspace,.workspace-app) .app-header-nav :is(a,button) { font-size: 12px; padding-inline: 8px; }
+}

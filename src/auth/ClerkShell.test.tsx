@@ -6,9 +6,11 @@ import { getSessionState, setSessionState } from '../lib/authSession'
 import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
 import AccountControls from './AccountControls'
 import Landing from '../components/Landing'
+import AppHeader from '../components/AppHeader'
 const auth = vi.hoisted(() => ({ isLoaded: true, isSignedIn: true, getToken: vi.fn(async () => 'signed-token'), openSignIn: vi.fn() }))
 vi.mock('@clerk/react', () => ({
   useAuth: () => auth, useClerk: () => ({ openSignIn: auth.openSignIn }),
+  useUser: () => ({ user: null }),
   SignIn: () => <form aria-label="Clerk access"><input aria-label="Email" /></form>, UserButton: () => null,
 }))
 import ClerkShell from './ClerkShell'
@@ -17,7 +19,7 @@ let container: HTMLDivElement
 const dialogMethods = ['showModal', 'close'] as const
 const originalDialogMethods = dialogMethods.map(name => Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name))
 beforeEach(() => {
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+  Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true })
   auth.isLoaded = true; auth.isSignedIn = true; auth.openSignIn.mockClear()
   setSessionState('loading')
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)
@@ -92,6 +94,41 @@ it('offers account access at a protected-step message, not only in the top bar',
   await act(async () => root.render(<ClerkShell><section aria-label="blocked step"><AccountControls /></section></ClerkShell>))
   await act(async () => container.querySelector('button')!.click())
   await act(async () => { await vi.dynamicImportSettled() }); expect(container.querySelector('dialog[open]')).not.toBeNull()
+})
+it('opens the personal workspace for login from both shared header and landing', async () => {
+  auth.isSignedIn = false
+  const openWorkspace = vi.fn()
+  window.addEventListener('shippingapp:open-workspace', openWorkspace)
+  try {
+    for (const screen of [<AppHeader />, <Landing onStart={vi.fn()} />]) {
+      openWorkspace.mockClear()
+      await act(async () => root.render(<ClerkShell>{screen}</ClerkShell>))
+      const login = [...container.querySelectorAll('button')].find(button => button.textContent === 'Ingresar')!
+      await act(async () => login.click())
+      await act(async () => { await vi.dynamicImportSettled() })
+      expect(openWorkspace).toHaveBeenCalledTimes(1)
+      expect(container.querySelector('dialog[open]')).not.toBeNull()
+      await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Cerrar ingreso"]')!.click())
+      expect(container.querySelector('dialog')).toBeNull()
+    }
+  } finally { window.removeEventListener('shippingapp:open-workspace', openWorkspace) }
+})
+it('keeps the current calculation visible when login starts from protected-step account controls', async () => {
+  auth.isSignedIn = false
+  const openWorkspace = vi.fn()
+  window.addEventListener('shippingapp:open-workspace', openWorkspace)
+  try {
+    await act(async () => root.render(<ClerkShell><section aria-label="Producto pendiente"><input aria-label="Producto" defaultValue="Monopatín eléctrico" /><AccountControls /></section></ClerkShell>))
+    const product = container.querySelector('input')!
+    const login = [...container.querySelectorAll('button')].find(button => button.textContent === 'Ingresar')!
+    await act(async () => login.click())
+    await act(async () => { await vi.dynamicImportSettled() })
+    expect(openWorkspace).not.toHaveBeenCalled()
+    expect(container.querySelector('[aria-label="Producto pendiente"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="Producto"]')).toBe(product)
+    expect(product.value).toBe('Monopatín eléctrico')
+    expect(container.querySelector('dialog[open]')).not.toBeNull()
+  } finally { window.removeEventListener('shippingapp:open-workspace', openWorkspace) }
 })
 it('offers visible reconnection outside the closed account menu and resumes once identity verifies', async () => {
   const fetcher = vi.fn(async () => new Response('{}'))

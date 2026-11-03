@@ -48,3 +48,4 @@ installJourneyPersistence()
 }).catch(() => reactRoot.render(<section role="alert"><p>No pudimos iniciar el acceso a la aplicación.</p><button type="button" onClick={() => window.location.reload()}>Reintentar cargar</button></section>))
 
 import "./styles/workspace.css"
+import "./styles/personal-workspace.css"

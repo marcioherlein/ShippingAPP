@@ -1,0 +1,99 @@
+import AxeBuilder from '@axe-core/playwright'
+import { expect, test } from './fixtures'
+import type { Page } from '@playwright/test'
+import { workspaceItem, workspaceSummary, secondSummary } from './support/personal-workspace-data'
+
+async function openWorkspace(page: Page, suffix = '#mi-panel') {
+  await page.route('**/__personal-workspace*', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mi panel · GlobalShipping</title></head><body><div id="root"></div><script type="module" src="/tests/e2e/support/personal-workspace.fixture.tsx"></script></body></html>' }))
+  await page.goto(`/__personal-workspace${suffix}`)
+}
+
+for (const width of [320, 390, 1440]) {
+  test(`personal workspace opens saved calculation and preserves a new draft at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 960 })
+    await page.emulateMedia({ colorScheme: width === 390 ? 'dark' : 'light', reducedMotion: 'reduce' })
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.route('**/api/history?*', route => route.fulfill({ json: { items: [workspaceSummary, secondSummary], nextCursor: null } }))
+    await page.route('**/api/history-item?*', route => route.fulfill({ json: { item: workspaceItem } }))
+    await openWorkspace(page)
+    await expect(page.getByRole('heading', { name: 'Hola, Alex.' })).toBeVisible()
+    await expect(page.getByRole('table')).toContainText(workspaceSummary.productName)
+    await expect(page.getByRole('table')).toContainText(secondSummary.productName)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    const brand = await page.locator('.personal-workspace .app-wordmark').boundingBox()
+    const account = await page.locator('.personal-workspace .app-header-account').boundingBox()
+    expect(brand!.x + brand!.width + 4).toBeLessThanOrEqual(account!.x)
+    const violations = (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations.filter(item => ['serious', 'critical'].includes(item.impact || ''))
+    expect(violations).toEqual([])
+    await page.screenshot({ path: testInfo.outputPath(`personal-workspace-${width}.png`), fullPage: true })
+    await page.getByRole('button', { name: `Abrir cálculo: ${workspaceSummary.productName}` }).click()
+    const result = page.getByRole('region', { name: 'Tu presupuesto de importación' })
+    await expect(result).toBeVisible()
+    await expect(result.getByRole('heading', { name: workspaceSummary.productName, exact: true })).toBeVisible()
+    await expect(page.locator('.purchase-transport-card')).toHaveCount(3)
+    await expect(result).toContainText('100 u.')
+    await result.getByRole('heading', { name: '¿Cómo podés traer tu compra?' }).scrollIntoViewIfNeeded()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: testInfo.outputPath(`saved-result-${width}.png`), fullPage: true })
+    await page.getByRole('link', { name: 'Mis cálculos', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Tus cálculos', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Calcular un nuevo producto' }).click()
+    await expect(page.getByRole('dialog', { name: '¿Empezar un caso nuevo?' })).toBeVisible()
+    await page.getByRole('button', { name: 'Seguir con este caso', exact: true }).click()
+    await expect(result).toBeVisible()
+    await page.getByRole('button', { name: 'Nuevo caso', exact: false }).click()
+    await page.getByRole('button', { name: 'Empezar de nuevo', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Elegí cómo empezar' })).toBeVisible()
+    await page.getByRole('button', { name: /Quiero buscarlo/ }).click()
+    await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
+    await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+    await expect(page.getByRole('radio', { name: 'Empresa', exact: true })).toBeVisible()
+    await page.getByRole('link', { name: 'Mis cálculos', exact: true }).click()
+    await expect(page.getByText('Tenés un cálculo en curso')).toBeVisible()
+    await page.getByRole('button', { name: 'Retomar cálculo' }).click()
+    await expect(page.getByRole('radio', { name: 'Empresa', exact: true })).toBeVisible()
+    expect(errors).toEqual([])
+  })
+}
+
+test('account verification gates history; sign in, search, retry and logout remain usable', async ({ page }) => {
+  let loads = 0
+  await page.route('**/api/history?*', route => {
+    loads += 1
+    return route.fulfill({ status: loads === 1 ? 503 : 200, json: loads === 1 ? { error: 'No pudimos cargar tus cálculos.' } : { items: [workspaceSummary, secondSummary], nextCursor: null } })
+  })
+  await page.route('**/api/history-item?*', route => route.fulfill({ json: { item: workspaceItem } }))
+  await openWorkspace(page, '?signed-out=1#mi-panel')
+  await expect(page.getByRole('heading', { name: 'Ingresá a tu espacio.' })).toBeVisible()
+  expect(loads).toBe(0)
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('workspace-test:session', { detail: { signedIn: true, userId: 'test-account-a', status: 'syncing' } })))
+  await expect(page.getByText('Estamos preparando tu espacio.')).toBeVisible()
+  expect(loads).toBe(0)
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('workspace-test:session', { detail: { status: 'ready' } })))
+  await expect(page.getByRole('alert')).toContainText('No pudimos cargar')
+  await page.getByRole('button', { name: 'Reintentar cargar cálculos' }).click()
+  await expect(page.getByRole('table')).toContainText(workspaceSummary.productName)
+  await page.getByRole('searchbox').fill('térmica')
+  await expect(page.getByRole('table')).not.toContainText(secondSummary.productName)
+  await page.getByRole('searchbox').fill('')
+  await page.getByRole('button', { name: `Abrir cálculo: ${workspaceSummary.productName}` }).click()
+  await expect(page.getByRole('region', { name: 'Tu presupuesto de importación' })).toBeVisible()
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('workspace-test:session', { detail: { signedIn: false, userId: null, status: 'idle' } })))
+  await expect(page.getByRole('heading', { name: 'Ingresá a tu espacio.' })).toBeVisible()
+  await expect(page.getByText(workspaceSummary.productName, { exact: true })).toHaveCount(0)
+  expect(await page.evaluate(() => sessionStorage.getItem('shippingapp:product-draft:analysis'))).toBeNull()
+})
+
+test('clean calculator deep link and account section anchors choose the correct page', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear())
+  await openWorkspace(page, '?signed-out=1#cotizador')
+  await expect(page.getByRole('heading', { name: 'Elegí cómo empezar' })).toBeVisible()
+  await page.getByRole('link', { name: 'Mis cálculos', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Ingresá a tu espacio.' })).toBeVisible()
+  await page.locator('.skip-to-quote:visible').focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: 'Ingresá a tu espacio.' })).toBeVisible()
+  await page.evaluate(() => { location.hash = '/sign-up'; window.dispatchEvent(new PopStateEvent('popstate')) })
+  await expect(page.getByRole('heading', { name: 'Ingresá a tu espacio.' })).toBeVisible()
+})

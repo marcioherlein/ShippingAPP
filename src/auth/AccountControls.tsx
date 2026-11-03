@@ -2,11 +2,12 @@ import React, { createContext, useContext, useState, type ReactNode } from 'reac
 
 // Account UI is supplied by ClerkShell and rendered by the shared header.
 // Public builds can use the same header without loading Clerk hooks.
-export const AccountControlsContext = createContext<ReactNode>(null)
+export type AccountDestination = 'workspace' | 'current'
+export const AccountControlsContext = createContext<ReactNode | ((destination: AccountDestination) => ReactNode)>(null)
 
-export default function AccountControls() {
+export default function AccountControls({ destination = 'current' }: { destination?: AccountDestination }) {
   const controls = useContext(AccountControlsContext)
-  return controls ?? <UnavailableAccountControls />
+  return typeof controls === 'function' ? controls(destination) : controls ?? <UnavailableAccountControls />
 }
 
 function UnavailableAccountControls() {

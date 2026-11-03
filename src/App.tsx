@@ -28,6 +28,7 @@ import { compareLandedCost, type ImportEntityType, type ImportPurpose, type Sens
 import { getJourneyBudgetError } from './lib/journeyValidation'
 import { recoverSavedCategory } from './lib/calculationRecovery'
 import { scrollIntoViewIfNeeded, scrollWindowToTop } from './lib/motionPreference'
+import type { AnalysisHistoryItem } from './lib/analysisHistory'
 import { translateProductLabel } from './lib/productTranslation'
 import {
   applyClassificationClarification,
@@ -173,6 +174,7 @@ function hasPendingRestore() {
 
 function readInitialEntered() {
   if (typeof window === 'undefined') return false
+  if (window.location.hash === '#cotizador') return true
   try {
     if (localStorage.getItem(ENTERED_KEY) === '1') return true
   } catch { /* storage may be unavailable */ }
@@ -190,12 +192,12 @@ type PipelineDraft = {
   calculationInputKey: string
 }
 
-export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }) {
+export default function App({ focusOnEntry = false, active = true, initialSavedQuote = null, newCalculationRequest = 0 }: { focusOnEntry?: boolean; active?: boolean; initialSavedQuote?: AnalysisHistoryItem | null; newCalculationRequest?: number }) {
   const resetDialog = useRef<HTMLDialogElement>(null)
   const [productNavigation, setProductNavigation] = useState(0)
   useEffect(() => {
-    if (focusOnEntry) document.querySelector<HTMLElement>('.journey-task-title')?.focus({ preventScroll: true })
-  }, [focusOnEntry])
+    if (focusOnEntry && active) document.querySelector<HTMLElement>('.journey-task-title')?.focus({ preventScroll: true })
+  }, [focusOnEntry, active])
   useEffect(() => {
     if (!productNavigation) return
     const frame = requestAnimationFrame(() => {
@@ -390,8 +392,9 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
       pendingResultReveal.current = true
     }
     window.addEventListener('shippingapp:open-quote', open)
+    if (initialSavedQuote) open(new CustomEvent('shippingapp:open-quote', { detail: initialSavedQuote }))
     return () => window.removeEventListener('shippingapp:open-quote', open)
-  }, [])
+  }, [initialSavedQuote])
 
   const progressStep = effectiveCalculationStatus === 'ready' ? 4 : step
 
@@ -404,10 +407,10 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
   // The result exists only after React commits the ready state. Querying it
   // inside confirmAndCalculate reads the previous DOM and cannot reveal it.
   useEffect(() => {
-    if (effectiveCalculationStatus !== 'ready' || restoringRef.current || !pendingResultReveal.current) return
+    if (!active || effectiveCalculationStatus !== 'ready' || restoringRef.current || !pendingResultReveal.current) return
     pendingResultReveal.current = false
     scrollIntoViewIfNeeded(document.querySelector('#calculator .result-hero'))
-  }, [effectiveCalculationStatus])
+  }, [active, effectiveCalculationStatus])
 
   const enterApp = () => {
     setEntered(true)
@@ -690,13 +693,21 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
     else resetJourney()
   }
 
+  const lastNewCalculationRequest = useRef(0)
+  useEffect(() => {
+    if (!active || !newCalculationRequest || lastNewCalculationRequest.current === newCalculationRequest) return
+    lastNewCalculationRequest.current = newCalculationRequest
+    if (intent || analysis || hasPendingRestore()) resetDialog.current?.showModal()
+    else resetJourney()
+  }, [active, newCalculationRequest])
+
   const productStatusLabel = analysis
     ? effectiveCalculationStatus === 'ready' ? 'Calculado' : effectiveCalculationStatus === 'processing' ? 'Procesando' : effectiveCalculationStatus === 'blocked' ? 'Falta una respuesta' : 'Listo para revisar'
     : step >= 3 ? 'Elegí o cargá un producto' : 'Todavía no elegido'
 
   if (!entered) return <Landing onStart={enterApp} />
 
-  return <main className="journey-app workspace-app" id="home" data-intro={!analysis && step <= 1 || undefined} data-entry={!intent && !analysis || undefined}>
+  return <main className="journey-app workspace-app" id="home" data-result={progressStep === 4 || undefined} data-intro={!analysis && step <= 1 || undefined} data-entry={!intent && !analysis || undefined}>
     <a className="skip-to-quote" href="#cotizador">Ir al cotizador</a>
     <dialog ref={resetDialog} className="journey-reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
       <h2 id="reset-title">¿Empezar un caso nuevo?</h2>
@@ -836,7 +847,7 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
       </div>
 
       {(analysis || step >= 2) && <aside className="journey-case-summary">
-        <div className="journey-summary-sticky"><ol className="quote-stage-list" aria-label="Etapas de la cotización"><li aria-current={step === 1 ? 'step' : undefined}>1. Tu operación</li><li aria-current={step === 2 ? 'step' : undefined}>2. Tu compra</li><li aria-current={step === 3 ? 'step' : undefined}>3. Producto y oferta</li><li>4. Tu resultado</li></ol>
+        <details className="journey-summary-sticky"><summary className="journey-operation-toggle"><span><UiIcon name="product" size={18} /><b>Tu operación</b><span>{purposeLabel(purpose)} · {budgetMode === 'budget' ? `USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} u.` : 'Cantidad por definir'}</span></span><span>Ver resumen <UiIcon name="chevron-down" size={16} /></span></summary><div className="journey-operation-detail">
           <span className="eyebrow">Resumen de la operación</span>
           <h2>{analysisPrefill?.productName || (intent === 'have_product' ? 'Tu producto' : 'Nueva importación')}</h2>
           {(() => {
@@ -853,8 +864,7 @@ export default function App({ focusOnEntry = false }: { focusOnEntry?: boolean }
             <div><span>Capacidad</span><b>{budgetMode === 'budget' ? `USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} u.` : budgetMode === 'unknown' ? 'Todavía no definida' : 'Sin responder'}</b></div>
             <div><span>Producto</span><b>{productStatusLabel}</b></div>
           </div>
-          <div className="journey-summary-note"><span>Qué vas a obtener</span><p>Costo puesto por unidad, inversión total y alternativas de compra. Las fuentes, estimaciones y datos pendientes quedan identificados.</p></div>
-        </div>
+        </div></details>
       </aside>}
     </section>
 

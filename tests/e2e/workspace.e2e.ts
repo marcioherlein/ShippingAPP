@@ -164,10 +164,14 @@ test('manual product reaches the dashboard using carton dimensions, one field at
  await page.getByRole('button',{name:'Usar esta posición',exact:true}).click()
  await page.getByRole('button',{name:'Confirmar y calcular mis opciones',exact:true}).click()
  await expect(page.getByRole('region',{name:'Tu presupuesto de importación'})).toBeVisible()
+ // The optional price explanation is collapsed in the redesigned result.
+ await page.getByText('Del precio del proveedor al costo puesto', { exact: true }).click()
  await expect(page.getByRole('region',{name:'Precio y costo por unidad'})).toBeVisible()
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
  await page.reload()
  await expect(page.getByRole('region',{name:'Tu presupuesto de importación'})).toBeVisible()
+ // The optional price explanation is collapsed in the redesigned result.
+ await page.getByText('Del precio del proveedor al costo puesto', { exact: true }).click()
  await expect(page.getByRole('region',{name:'Precio y costo por unidad'})).toBeVisible()
  await page.screenshot({path:testInfo.outputPath('manual-dimensions-dashboard.png'),fullPage:true})
 })

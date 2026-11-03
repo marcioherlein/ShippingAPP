@@ -1,28 +1,26 @@
 import React, { lazy, useEffect, useState } from 'react'
 import LoadingBoundary from '../components/LoadingBoundary'
-import { UserButton, useAuth } from '@clerk/react'
+import { UserButton, useAuth, useUser } from '@clerk/react'
 const LoginDialog = lazy(() => import('./LoginDialog'))
 import { apiFetch, setApiTokenProvider } from '../lib/apiClient'
 import { saveCompletedAnalysis } from '../lib/analysisHistory'
-const AnalysisHistory = lazy(() => import('../components/AnalysisHistory'))
-const Watchlist = lazy(() => import('../components/Watchlist'))
-import UsageBadge from '../components/UsageBadge'
-const EmailPreferences = lazy(() => import('../components/EmailPreferences'))
 import './auth.css'
-import { AccountControlsContext } from './AccountControls'
+import { AccountControlsContext, type AccountDestination } from './AccountControls'
+import { AccountSessionContext, openPersonalWorkspace } from './AccountSession'
 import { authenticationError, getSessionState, setSessionState, subscribeSession } from '../lib/authSession'
 
 type AccountSyncState = 'idle' | 'syncing' | 'ready' | 'error'
 type HistorySaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function ClerkShell({ children }: { children: React.ReactNode }) {
-  const { getToken, isLoaded, isSignedIn } = useAuth()
-  const [accountOpen, setAccountOpen] = useState(false)
+  const { getToken, isLoaded, isSignedIn, userId } = useAuth()
+  const { user } = useUser()
   const [loginOpen, setLoginOpen] = useState(false)
   const [accountSync, setAccountSync] = useState<AccountSyncState>('idle')
   const [historySave, setHistorySave] = useState<HistorySaveState>('idle')
   const [syncAttempt, setSyncAttempt] = useState(0)
   const [syncError, setSyncError] = useState('')
+  const [verifiedUserId, setVerifiedUserId] = useState<string | null>(null)
   useEffect(() => subscribeSession(() => {
     if (getSessionState() === 'error') setAccountSync('error')
   }), [])
@@ -32,6 +30,7 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
       setApiTokenProvider(null)
       setSessionState(isLoaded ? 'signed_out' : 'loading')
       setAccountSync('idle')
+      setVerifiedUserId(null)
       setHistorySave('idle')
       return
     }
@@ -40,6 +39,7 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
     const controller = new AbortController()
     setApiTokenProvider((fresh) => getToken({ skipCache: !!fresh }))
     setSessionState('verifying')
+    setVerifiedUserId(null)
     setAccountSync('syncing')
     setSyncError('')
 
@@ -49,6 +49,7 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
         if (!active) return
         if (!response.ok || identity.authenticated !== true || !identity.accountId) throw authenticationError('auth_identity_unavailable', true)
         setAccountSync('ready')
+        setVerifiedUserId(userId ?? null)
         setSessionState('ready')
       })
       .catch((error) => {
@@ -63,7 +64,7 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
       controller.abort()
       setApiTokenProvider(null)
     }
-  }, [getToken, isLoaded, isSignedIn, syncAttempt])
+  }, [getToken, isLoaded, isSignedIn, userId, syncAttempt])
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return
@@ -113,25 +114,22 @@ export default function ClerkShell({ children }: { children: React.ReactNode }) 
       ? syncError || 'No pudimos sincronizar la cuenta'
       : 'Conectando cuenta…'
 
-  const controls = <div className="auth-account-control" role="group" aria-label="Cuenta">
+  const openAccountLogin = (destination: AccountDestination) => { if (destination === 'workspace') openPersonalWorkspace(); setLoginOpen(true) }
+  const controls = (destination: AccountDestination) => <div className="auth-account-control" role="group" aria-label="Cuenta">
       {!isSignedIn ? <>
-        <button type="button" className="auth-secondary" onClick={() => setLoginOpen(true)}>Ingresar</button>
-        <button type="button" className="auth-primary" onClick={() => setLoginOpen(true)}>Crear cuenta</button>
+        <button type="button" className="auth-secondary" onClick={() => openAccountLogin(destination)}>Ingresar</button>
+        <button type="button" className="auth-primary" onClick={() => openAccountLogin(destination)}>Crear cuenta</button>
       </> : <>
         {accountSync === 'error' && <button type="button" className="auth-secondary" onClick={() => setSyncAttempt(attempt => attempt + 1)}>Reintentar conectar cuenta</button>}
-        <details className="app-account-menu" onToggle={event => setAccountOpen(event.currentTarget.open)}>
-          <summary>Mi cuenta</summary>
-          <div className="app-account-panel">
-        <span className="auth-saved-label" data-account-sync={accountSync} data-history-save={historySave}>{accountLabel}</span>
-        {accountSync === 'ready' && <UsageBadge />}
-        {accountSync === 'ready' && accountOpen && <LoadingBoundary label="Cargando panel…"><EmailPreferences /></LoadingBoundary>}
-        {accountSync === 'ready' && accountOpen && <LoadingBoundary label="Cargando panel…"><Watchlist /></LoadingBoundary>}
-        {accountSync === 'ready' && accountOpen && <LoadingBoundary label="Cargando panel…"><AnalysisHistory /></LoadingBoundary>}
+        <button type="button" className="auth-secondary account-home-control" onClick={openPersonalWorkspace}>Mi panel</button>
+        <span className="sr-only" data-account-sync={accountSync} data-history-save={historySave} role="status">{accountLabel}</span>
         <UserButton />
-          </div>
-        </details>
       </>}
     </div>
 
-  return <AccountControlsContext value={controls}>{children}{loginOpen && <LoadingBoundary label="Cargando acceso…"><LoginDialog loaded={!!isLoaded} onClose={() => setLoginOpen(false)} /></LoadingBoundary>}</AccountControlsContext>
+  return <AccountSessionContext value={{
+    signedIn: !!isSignedIn, loaded: !!isLoaded, status: accountSync === 'ready' && verifiedUserId !== userId ? 'syncing' : accountSync, userId: userId ?? null,
+    name: user?.firstName || user?.username || null, error: syncError,
+    signIn: () => setLoginOpen(true), retry: () => setSyncAttempt(attempt => attempt + 1),
+  }}><AccountControlsContext value={controls}>{children}{loginOpen && <LoadingBoundary label="Cargando acceso…"><LoginDialog loaded={!!isLoaded} onClose={() => setLoginOpen(false)} /></LoadingBoundary>}</AccountControlsContext></AccountSessionContext>
 }

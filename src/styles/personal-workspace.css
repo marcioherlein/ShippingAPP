@@ -385,10 +385,10 @@ body { background: var(--workspace-paper); }
 .personal-workspace h1[tabindex="-1"]:focus, .workspace-app .journey-task-title[tabindex="-1"]:focus { outline: none !important; }
 .workspace-app :is(.pipeline-secondary,.quote-result-actions > .pipeline-secondary) { background: var(--ds-surface); color: var(--ds-text-strong); border: 1px solid var(--ds-border); border-radius: 4px; box-shadow: none; }
 :is(.personal-workspace,.workspace-app,.workspace-landing) .workspace-brand-symbol { flex: none; }
-.workspace-app :is(.purchase-transport-details,.workspace-audit) > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; }
-.workspace-app :is(.purchase-transport-details,.workspace-audit) > summary::-webkit-details-marker { display: none; }
-.workspace-app :is(.purchase-transport-details,.workspace-audit) > summary::after { content: '+'; font-size: 18px; font-weight: 400; color: var(--ds-brand-strong); }
-.workspace-app :is(.purchase-transport-details,.workspace-audit)[open] > summary::after { content: '−'; }
+.workspace-app :is(.purchase-transport-details,.workspace-audit,.workspace-price-explainer) > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; }
+.workspace-app :is(.purchase-transport-details,.workspace-audit,.workspace-price-explainer) > summary::-webkit-details-marker { display: none; }
+.workspace-app :is(.purchase-transport-details,.workspace-audit,.workspace-price-explainer) > summary::after { content: '+'; font-size: 18px; font-weight: 400; color: var(--ds-brand-strong); }
+.workspace-app :is(.purchase-transport-details,.workspace-audit,.workspace-price-explainer)[open] > summary::after { content: '−'; }
 @media (max-width:650px) {
   .workspace-new-steps { display: flex; gap: 12px; padding: 16px 24px; }
   .workspace-new-steps li { display: block; flex: 1; padding: 0; }
@@ -404,3 +404,5 @@ body { background: var(--workspace-paper); }
   :is(.personal-workspace,.workspace-app,.workspace-landing) .app-header-account .auth-account-control { flex-wrap: wrap; justify-content: flex-end; }
   :is(.personal-workspace,.workspace-app,.workspace-landing) .app-header-account .auth-secondary { max-width: 90px; white-space: normal; font-size: 12px; padding-inline: 8px; }
 }
+
+.workspace-app .workspace-price-explainer { margin: 20px 0; color: var(--ds-text-secondary); }

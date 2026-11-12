@@ -6,14 +6,14 @@ Selecting a search result previously depended entirely on a second Alibaba detai
 
 - Selection preserves the actual search result. Detail reading has a 12-second deadline; a supplier failure continues into confirmation with the title, source, image, MOQ and original evidence available. Currency, offer basis, packaging and customs classification are not invented from the search card. Authentication failures retain their separate sign-in/recovery path.
 - Missing or malformed search constraints are normalized before evaluation. An absent threshold is not reported as a passed constraint.
-- Foreground search, product reading, classification and calculation display one full-screen native modal. Underlying navigation and form controls are inert for pointer and keyboard input. The screen shows actual stages, without fabricated percentages. Concurrent requests cannot release the screen prematurely. Timeout, abort, authentication errors and unmount release their respective work registrations.
+- Foreground search, product reading, catalog loading, classification, calculation and saving display one full-screen native modal. Underlying navigation and form controls are inert for pointer and keyboard input. The screen shows actual stages, without fabricated percentages. Concurrent requests cannot release the screen prematurely. Timeout, abort, authentication errors and unmount release their respective work registrations.
 - Requests retain their existing 30-second transport deadline; a stalled lazy-loaded step releases the modal after 20 seconds and offers reload recovery. Background usage/history reads do not lock the application.
 - Product, supplier and packaging forms use a shared form stylesheet, consistent fields and primary/secondary actions, wrapping labels, and a single main surface. The former product sidebar and nested question cards were removed. Original price evidence is visible when confirming a supplier amount.
 - Product/operation context can be expanded without displacing the current question. Editing the operation is placed after the main task. The redundant “Revisar producto” navigation action is omitted while already reviewing the product.
 
 ## Verification
 
-- Full local unit/integration run: 198 files, 1,282 tests passed.
+- Full local unit/integration run: 198 files, 1,283 tests passed.
 - Local search/calculation browser flows: 16 cases across Chromium and WebKit; guards assert no unhandled JavaScript or React rendering errors.
 - Header and manual intake checks: 10 cases across both engines, covering 320/390/1440 widths and light/dark headers.
 - Processing-screen browser checks: 6 cases across both engines, including full viewport coverage, real pointer/keyboard blocking, Escape, success/failure release and accessibility.

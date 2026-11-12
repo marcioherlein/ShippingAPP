@@ -7,6 +7,7 @@ import { loadManualNcmIndex } from '../lib/loadManualNcmIndex'
 import type { ManualNcmIndex } from '../lib/manualNcm'
 import { createManualProductAnalysis } from '../lib/productConfirmation'
 import { writeProductDraft } from '../lib/productDraft'
+import { getProcessingState } from '../lib/processingScreen'
 vi.mock('../lib/loadManualNcmIndex', () => ({ loadManualNcmIndex: vi.fn() }))
 const catalog: ManualNcmIndex = { meta: { source: 'Catálogo de prueba', sourceDate: '2026-08-27' }, records: [
   ['0101.21.00', 'Caballos reproductores de raza pura', 0, 0, 3, 0, 21, 20, 6, 2.5, null, false],
@@ -28,6 +29,15 @@ async function query(value: string) {
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })) })
 }
 function useButton() { return [...container.querySelectorAll('button')].find(button => button.textContent === 'Usar esta posición')! }
+it('blocks while the catalog loads and releases the screen on failure', async () => {
+  let reject!: (error: Error) => void
+  vi.mocked(loadManualNcmIndex).mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail }))
+  await render()
+  expect(getProcessingState()?.title).toBe('Cargando el nomenclador')
+  await act(async () => reject(new Error('El catálogo no respondió')))
+  expect(getProcessingState()).toBeNull()
+  expect(container.querySelector('[role=alert]')?.textContent).toContain('El catálogo no respondió')
+})
 it('shows search guidance instead of arbitrary catalog rows and still validates an explicit selection', async () => {
   await render()
   expect(container.querySelectorAll('input[type="radio"]')).toHaveLength(0)

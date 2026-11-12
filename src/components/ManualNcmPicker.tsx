@@ -4,6 +4,7 @@ import type { CustomsProfile } from '../lib/customsClassification'
 import DsSelect from './DsSelect'
 import { loadManualNcmIndex } from '../lib/loadManualNcmIndex'
 import { readProductDraft, writeProductDraft } from '../lib/productDraft'
+import { useProcessingScreen } from '../lib/useProcessingScreen'
 export default function ManualNcmPicker({ customs, recoveryKey = customs.description || '', onSelect }: { customs: CustomsProfile; recoveryKey?: string; onSelect: (value: CustomsProfile) => void }) {
   const selectionName = useId()
   const storageKey = `manual-ncm:${recoveryKey}`
@@ -15,6 +16,7 @@ export default function ManualNcmPicker({ customs, recoveryKey = customs.descrip
   const [selected, setSelected] = useState(saved?.selected || '')
   const [confirmed, setConfirmed] = useState(saved?.confirmed || false)
   const [retry, setRetry] = useState(0)
+  useProcessingScreen(!index && !error, { title: 'Cargando el nomenclador', detail: 'Estamos preparando el catálogo para que puedas revisar una posición aduanera.' })
   useEffect(() => {
     const controller = new AbortController()
     setError('')

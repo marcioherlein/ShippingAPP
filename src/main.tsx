@@ -49,3 +49,4 @@ installJourneyPersistence()
 
 import "./styles/workspace.css"
 import "./styles/personal-workspace.css"
+import './styles/quote-forms.css'

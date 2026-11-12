@@ -1,0 +1,301 @@
+/* Quote forms share one canvas and one set of controls. Keep after legacy styles. */
+.workspace-app {
+  --quote-form-width: 820px;
+  --quote-control-radius: 6px;
+  --quote-control-height: 48px;
+}
+.workspace-app :is(.quote-form-surface,.journey-question-card,.url-analyzer),
+.workspace-app :is(.quote-form-surface,.journey-question-card,.url-analyzer) * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+.workspace-app .journey-workspace:not([hidden]),
+.workspace-app[data-intro="true"] .journey-workspace:not([hidden]) {
+  max-width: var(--quote-form-width);
+  width: min(var(--quote-form-width),calc(100% - 48px));
+}
+.workspace-app .journey-conversation { overflow: visible; }
+.workspace-app .gs-chat-panel-header { display: none; }
+.workspace-app .journey-workspace .gs-chat-body,
+.workspace-app[data-intro="true"] .journey-workspace .gs-chat-body { padding: 32px; }
+.workspace-app .journey-question-card.active {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+.workspace-app .journey-question-head { padding: 0 0 20px; margin: 0; border: 0; background: transparent; }
+.workspace-app .journey-question-card.active .journey-question-head { background: transparent; }
+.workspace-app .journey-question-head > span { border-radius: 4px; flex: none; }
+.workspace-app .journey-question-card.active .journey-question-head > span { color: var(--ds-brand-strong); background: var(--ds-brand-soft); }
+.workspace-app .journey-question-head b { color: var(--ds-text-strong); }
+.workspace-app .journey-question-head small { color: var(--ds-text-secondary); }
+.workspace-app .journey-question-fields { display: grid; gap: 20px; padding: 0; }
+.workspace-app .journey-question-fields label { color: var(--ds-text-strong); }
+.workspace-app .journey-question-fields > div > label {
+  margin: 0 0 20px;
+  color: var(--ds-text-strong);
+  font-size: clamp(22px,3vw,28px);
+  font-weight: 550;
+  line-height: 1.3;
+}
+.workspace-app .journey-question-fields p { margin: 16px 0 0; font-size: 14px; line-height: 1.6; }
+.workspace-app .journey-question-fields .journey-range-fields label { margin: 0; font-size: 14px; line-height: 1.5; }
+.workspace-app .journey-chip-row { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.workspace-app .journey-chip-row button,
+.workspace-app .case-choices button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--quote-control-height);
+  height: auto;
+  padding: 12px 16px;
+  margin: 0;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--quote-control-radius);
+  background: var(--ds-surface);
+  color: var(--ds-text-strong);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+}
+.workspace-app :is(.journey-chip-row button.selected,.case-choices button[aria-pressed="true"]) {
+  border-color: var(--ds-brand-strong);
+  background: var(--ds-brand-soft);
+  color: var(--ds-text-strong);
+  box-shadow: inset 0 0 0 1px var(--ds-brand-strong);
+  outline: 0;
+}
+.workspace-app .journey-choice-grid.budget { gap: 12px; margin: 0; }
+.workspace-app .journey-choice-grid.budget > button {
+  padding: 20px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--quote-control-radius);
+  background: var(--ds-surface);
+  box-shadow: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.workspace-app .journey-choice-grid.budget > button.selected { border-color: var(--ds-brand-strong); background: var(--ds-brand-soft); box-shadow: inset 0 0 0 1px var(--ds-brand-strong); }
+.workspace-app .journey-choice-grid.budget b { font-size: 16px; line-height: 1.4; }
+.workspace-app .journey-choice-grid.budget small { font-size: 14px; line-height: 1.6; margin: 8px 0 0; }
+
+/* All action labels can wrap. A primary action is always followed by secondary actions. */
+.workspace-app :is(.quote-form-surface,.journey-question-fields,.url-analyzer) :is(button,a) { max-width: 100%; }
+.workspace-app :is(.quote-form-surface,.journey-question-fields,.url-analyzer) button {
+  font-family: inherit;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.5;
+  height: auto;
+}
+.workspace-app :is(.quote-form-surface,.journey-question-fields) :is(.journey-primary-action,.pipeline-secondary),
+.workspace-app .url-analyzer :is(.url-input-wrap > button,.discovery-actions button,.discovery-actions a,.search-recovery button,.search-recovery a) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: var(--quote-control-height);
+  padding: 12px 18px;
+  margin: 0;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--quote-control-radius);
+  background: var(--ds-surface);
+  color: var(--ds-text-strong);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.5;
+  text-decoration: none;
+  box-shadow: none;
+  position: static;
+  transform: none;
+}
+.workspace-app :is(.quote-form-surface,.journey-question-fields) .journey-primary-action,
+.workspace-app .url-analyzer :is(.url-input-wrap > button,.discovery-actions button) {
+  color: #fff;
+  background: var(--workspace-accent);
+  border-color: var(--workspace-accent);
+}
+.workspace-app :is(.quote-form-surface,.journey-question-fields) .journey-primary-action:not(:disabled):hover,
+.workspace-app .url-analyzer :is(.url-input-wrap > button,.discovery-actions button):not(:disabled):hover { filter: brightness(.92); background: var(--workspace-accent); transform: none; }
+.workspace-app :is(.quote-form-surface,.journey-question-fields) .pipeline-secondary:hover { background: var(--ds-surface-subtle); }
+.workspace-app :is(.quote-form-surface,.journey-question-fields,.url-analyzer) button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.workspace-app :is(.quote-form-surface,.journey-question-fields,.url-analyzer) :is(button,input,select,textarea,a,summary):focus-visible {
+  outline: 2px solid var(--ds-brand);
+  outline-offset: 3px;
+}
+.workspace-app .journey-question-fields > .journey-primary-action { width: 100%; order: 1; }
+.workspace-app .journey-question-fields > .pipeline-secondary { width: 100%; order: 2; }
+.workspace-app .quote-form-actions { display: grid; gap: 12px; margin-top: 24px; }
+.workspace-app .quote-form-actions > button { width: 100%; }
+.workspace-app .quote-form-secondary-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.workspace-app .quote-form-secondary-actions > button { flex: 1 1 180px; }
+.workspace-app .quote-form-secondary-actions:empty { display: none; }
+.workspace-app .quote-form-surface svg { flex: none; }
+
+/* One field language for the initial product, supplier review and packaging. */
+.workspace-app .quote-form-surface :is(input:not([type="radio"]):not([type="checkbox"]),textarea,select),
+.workspace-app .journey-question-fields input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--quote-control-height);
+  padding: 12px 14px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--quote-control-radius);
+  background: var(--ds-surface);
+  color: var(--ds-text-strong);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  box-shadow: none;
+}
+.workspace-app .quote-form-surface textarea { min-height: 120px; resize: vertical; }
+.workspace-app .journey-number-field input { padding-left: 60px; }
+.workspace-app .quote-form-surface :is(input[type="radio"],input[type="checkbox"]) { width: 18px; height: 18px; min-height: 18px; flex: none; padding: 0; margin: 0; accent-color: var(--ds-brand-strong); }
+.workspace-app .quote-form-surface :is(h2,h3) { color: var(--ds-text-strong); font-size: clamp(22px,3vw,28px); font-weight: 550; line-height: 1.3; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.workspace-app .quote-form-surface p { font-size: 14px; line-height: 1.65; color: var(--ds-text-secondary); overflow-wrap: anywhere; }
+.workspace-app .quote-form-surface .workspace-field-error { color: var(--ds-danger); }
+.workspace-app .quote-form-surface label { display: flex; flex-direction: column; gap: 8px; margin: 0; font-size: 14px; line-height: 1.5; }
+.workspace-app .quote-form-surface label > span { overflow-wrap: anywhere; }
+.workspace-app .workspace-product-form { display: grid; gap: 16px; padding: 0; margin: 0; border: 0; background: transparent; }
+.workspace-app .workspace-product-form .workspace-section-heading h3 { margin: 10px 0 0; }
+.workspace-app .workspace-product-form .workspace-help { margin: 0; }
+.workspace-app .workspace-product-form .workspace-product-actions { margin-top: 8px; }
+.workspace-app .owned-product-intake.quote-form-surface { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+.workspace-app .owned-product-form { gap: 12px; }
+.workspace-app .owned-product-form > .quote-form-switch { width: 100%; margin: 0; }
+.workspace-app .owned-product-intro h2 { font-size: clamp(22px,3vw,28px) !important; margin: 10px 0 12px; }
+.workspace-app .owned-product-intro p { margin: 8px 0; }
+.workspace-app .owned-product-intro .quote-form-credit-note { font-size: 12px; }
+.workspace-app .owned-product-options { margin-top: 24px; gap: 16px; }
+.workspace-app .owned-product-options > button { display: flex; align-items: flex-start; flex-direction: column; padding: 20px; border: 1px solid var(--ds-border); border-radius: var(--quote-control-radius); background: var(--ds-surface); color: var(--ds-text-strong); text-align: left; transform: none; box-shadow: none; }
+.workspace-app .owned-product-option-icon { width: 36px; height: 36px; border-radius: 4px; background: var(--ds-brand-soft); color: var(--ds-brand-strong); }
+.workspace-app .owned-product-options b { color: var(--ds-text-strong); font-size: 17px; line-height: 1.4; margin: 16px 0 8px; }
+.workspace-app .owned-product-options small { color: var(--ds-text-secondary); font-size: 14px; line-height: 1.6; }
+.workspace-app .owned-product-options em { position: static; display: inline-block; margin-top: 16px; padding: 0; background: transparent; color: var(--ds-brand-strong); font-size: 12px; line-height: 1.5; white-space: normal; }
+.workspace-app .owned-product-entry { margin: 0; padding: 0; border: 0; background: transparent; gap: 24px; }
+.workspace-app .owned-product-entry-head { display: block; }
+.workspace-app .owned-product-entry-head h2 { margin: 10px 0 12px; }
+.workspace-app .owned-product-entry-head small { font-size: 14px; line-height: 1.65; color: var(--ds-text-secondary); }
+.workspace-app .owned-product-link-row { display: grid; grid-template-columns: minmax(0,1fr); gap: 12px; }
+.workspace-app .owned-product-link-row > button { width: 100%; }
+
+/* The focused product step has no sidebar or nested question card. */
+.workspace-app .guided-case.quote-form-surface { display: block; width: min(var(--quote-form-width),calc(100% - 48px)); max-width: var(--quote-form-width); margin: 0 auto 32px; padding: 32px; border: 1px solid var(--ds-border); border-radius: var(--quote-control-radius); background: var(--ds-surface); overflow: visible; }
+.workspace-app .quote-form-header { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--ds-border); }
+.workspace-app .quote-form-steps { display: flex; flex-wrap: wrap; gap: 8px 18px; list-style: none; padding: 0; margin: 0; font-size: 12px; line-height: 1.5; color: var(--ds-text-secondary); }
+.workspace-app .quote-form-steps li[aria-current] { font-weight: 650; color: var(--ds-brand-strong); }
+.workspace-app .quote-form-header .workspace-capacity { margin: 12px 0 0; font-size: 13px; }
+.workspace-app .quote-form-context { margin-top: 8px; }
+.workspace-app .quote-form-context > summary { padding: 10px 0; min-height: 44px; color: var(--ds-brand-strong); font-size: 13px; line-height: 1.6; }
+.workspace-app .quote-form-header .quote-form-product-name { display: grid; gap: 4px; margin: 16px 0 0; }
+.workspace-app .quote-form-product-name b { color: var(--ds-text-strong); font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.workspace-app .quote-form-product-name a { width: fit-content; min-height: 44px; padding: 10px 0; color: var(--ds-brand-strong); font-size: 13px; line-height: 1.6; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.workspace-app .guided-case .quote-form-original-price { margin: 0 0 20px; color: var(--ds-text-strong); }
+.workspace-app .quote-focus-content { padding: 0; }
+.workspace-app .guided-case .workspace-classification-status { padding: 0; margin: 0 0 24px; border: 0; background: transparent; gap: 6px; }
+.workspace-app .guided-case .workspace-classification-status b { font-size: 13px; font-weight: 550; color: var(--ds-brand-strong); }
+.workspace-app .guided-case .workspace-classification-status span { display: block; font-size: 13px; }
+.workspace-app .guided-case :is(.case-question,.case-review,.case-advanced) { display: block; max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.workspace-app .guided-case .case-question > h2 { margin: 10px 0 12px; }
+.workspace-app .guided-case .case-question > .workspace-help { margin: 0 0 24px; }
+.workspace-app .guided-case .case-choices { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,180px),1fr)); gap: 12px; }
+.workspace-app .guided-case button { margin: 0; }
+.workspace-app .guided-case .case-review > .journey-primary-action { margin-top: 24px; width: 100%; position: static; box-shadow: none; }
+.workspace-app .guided-case .confirmation-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 24px; margin: 24px 0; }
+.workspace-app .guided-case .confirmation-facts > div { padding: 16px 0; background: transparent; border: 0; border-bottom: 1px solid var(--ds-border); border-radius: 0; }
+.workspace-app .guided-case .case-review dl { max-height: none; overflow: visible; }
+.workspace-app .guided-case .case-review dd { font-size: 15px; line-height: 1.6; }
+.workspace-app .guided-case .case-review details > dl > div { padding: 16px 0; }
+.workspace-app .guided-case .case-review dd button { display: block; margin-top: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--ds-border); border-radius: var(--quote-control-radius); background: transparent; color: var(--ds-brand-strong); font-size: 14px; }
+.workspace-app .quote-help-actions { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--ds-border); }
+.workspace-app .guided-case summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-size: 14px; line-height: 1.6; color: var(--ds-text-secondary); overflow-wrap: anywhere; }
+.workspace-app .quote-help-actions[open] { display: flex; flex-wrap: wrap; gap: 12px; }
+.workspace-app .quote-help-actions > summary { width: 100%; }
+.workspace-app .quote-help-actions > button { width: 100%; margin-top: 12px; }
+.workspace-app .guided-case :is(.packaging-wizard,.supplier-review,.pipeline-progressive-fields,.supplier-tier) { border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; }
+.workspace-app .guided-case .packaging-wizard > .journey-primary-action { width: 100%; margin-top: 24px; }
+.workspace-app .guided-case .packaging-wizard > .pipeline-secondary { width: 100%; margin-top: 12px; }
+.workspace-app .guided-case .supplier-review { margin-top: 24px; }
+.workspace-app .guided-case .supplier-review h3 { font-size: 20px; }
+.workspace-app .guided-case .supplier-tier { display: grid; gap: 20px; grid-column: 1/-1; padding-top: 24px; border-top: 1px solid var(--ds-border); }
+.workspace-app .guided-case .supplier-original-evidence { padding: 12px 0; border: 0; border-block: 1px solid var(--ds-border); border-radius: 0; background: transparent; font-size: 13px; overflow-wrap: anywhere; }
+.workspace-app .guided-case .supplier-original-evidence dd { margin-left: 0; }
+.workspace-app .guided-case .supplier-review .pipeline-progressive-fields { gap: 20px; }
+.workspace-app .guided-case .manual-ncm-picker { border: 0; padding: 0; background: transparent; }
+.workspace-app .guided-case .manual-ncm-picker > label { margin-top: 16px; }
+.workspace-app .guided-case .manual-ncm-results > label,
+.workspace-app .guided-case .manual-ncm-picker > label:has(input[type="checkbox"]) { display: flex; flex-direction: row; align-items: flex-start; gap: 12px; padding: 16px 0; }
+.workspace-app .guided-case .manual-ncm-results > label { border-radius: 0; background: transparent; border: 0; border-bottom: 1px solid var(--ds-border); }
+.workspace-app .quote-form-surface .ds-select-trigger { min-height: var(--quote-control-height); padding: 12px 14px; border: 1px solid var(--ds-border); border-radius: var(--quote-control-radius); background: var(--ds-surface); color: var(--ds-text-strong); font-size: 16px; text-align: left; }
+.workspace-app .quote-form-surface .ds-select-value { white-space: normal; overflow-wrap: anywhere; }
+.workspace-app .calculation-pipeline.quote-form-surface :is(.pipeline-product-card,.pipeline-progressive-fields,.pipeline-understood-card,.pipeline-clarification-card,.supplier-review,.supplier-logistics-review) { border: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.workspace-app .calculation-pipeline.quote-form-surface .pipeline-product-card { gap: 24px; }
+.workspace-app .calculation-pipeline.quote-form-surface .supplier-review { padding-block: 24px; border-block: 1px solid var(--ds-border); }
+
+/* Search results are a list of products, with the same primary action as the form. */
+.workspace-app .url-analyzer { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.workspace-app .url-analyzer .url-input-wrap { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; padding: 0; border: 0; background: transparent; }
+.workspace-app .url-analyzer .url-input-wrap input { width: 100%; min-height: var(--quote-control-height); padding: 12px 14px; border: 1px solid var(--ds-border); border-radius: var(--quote-control-radius); color: var(--ds-text-strong); background: var(--ds-surface); font-size: 16px; line-height: 1.5; }
+.workspace-app .url-analyzer .url-form > small { display: block; margin-top: 12px; color: var(--ds-text-secondary); font-size: 13px; line-height: 1.6; }
+.workspace-app .url-analyzer .discovery-card { padding: 24px 0 0; margin: 24px 0 0; border: 0; border-top: 1px solid var(--ds-border); border-radius: 0; background: transparent; }
+.workspace-app .url-analyzer .discovery-head { flex-wrap: wrap; }
+.workspace-app .url-analyzer .discovery-head :is(h2,p) { overflow-wrap: anywhere; }
+.workspace-app .url-analyzer .discovery-head h2 { font-size: 24px; font-weight: 550; line-height: 1.3; }
+.workspace-app .url-analyzer .discovery-head p { font-size: 14px; color: var(--ds-text-secondary); line-height: 1.6; }
+.workspace-app .url-analyzer .discovery-head .confidence { background: transparent; color: var(--ds-brand-strong); padding: 0; font-size: 12px; white-space: normal; }
+.workspace-app .url-analyzer .discovery-grid { gap: 16px; align-items: stretch; }
+.workspace-app .url-analyzer .discovery-grid:has(> :only-child) { grid-template-columns: minmax(0,1fr); }
+.workspace-app .url-analyzer .discovery-item { display: flex; flex-direction: column; padding: 20px; border: 1px solid var(--ds-border); border-radius: var(--quote-control-radius); background: var(--ds-surface); }
+.workspace-app .url-analyzer .discovery-item-top > span { color: var(--ds-text-secondary); font-weight: 550; line-height: 1.5; }
+.workspace-app .url-analyzer .discovery-item h3 { font-size: 17px; line-height: 1.5; font-weight: 550; overflow-wrap: anywhere; margin: 16px 0 12px; }
+.workspace-app .url-analyzer .discovery-item :is(p,small,b) { overflow-wrap: anywhere; }
+.workspace-app .url-analyzer .discovery-thumb { width: 100%; max-width: 100%; height: 160px; object-fit: contain; background: var(--ds-surface-subtle); border-radius: 4px; margin-top: 12px; }
+.workspace-app .url-analyzer .opportunity-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+.workspace-app .url-analyzer .opportunity-facts > span { padding: 0; border: 0; background: transparent; }
+.workspace-app .url-analyzer .opportunity-facts b { font-size: 14px; line-height: 1.5; }
+.workspace-app .url-analyzer .opportunity-facts small { font-size: 12px; line-height: 1.6; }
+.workspace-app .url-analyzer .discovery-actions { margin-top: auto; padding-top: 20px; display: grid; grid-template-columns: minmax(0,1fr); gap: 12px; }
+.workspace-app .url-analyzer .discovery-actions :is(a,button) { width: 100%; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+.workspace-app .url-analyzer .search-recovery { margin-top: 20px; padding: 16px 0 0; border: 0; border-top: 1px solid var(--ds-border); background: transparent; border-radius: 0; }
+.workspace-app .url-analyzer .search-examples summary { min-height: 44px; padding-block: 12px; font-size: 14px; color: var(--ds-text-secondary); cursor: pointer; }
+.workspace-app .focus-setup-action { width: min(var(--quote-form-width),calc(100% - 48px)); max-width: var(--quote-form-width); padding: 0; margin: 20px auto 32px; }
+.workspace-app .focus-setup-action > button { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: var(--quote-control-height); height: auto; padding: 12px 18px; margin: 0; border: 1px solid var(--ds-border); border-radius: var(--quote-control-radius); background: var(--ds-surface); color: var(--ds-text-strong); font: inherit; font-size: 14px; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; box-shadow: none; }
+
+@media(max-width:650px) {
+  .workspace-app .journey-workspace:not([hidden]),
+  .workspace-app[data-intro="true"] .journey-workspace:not([hidden]),
+  .workspace-app .guided-case.quote-form-surface { width: calc(100% - 24px); }
+  .workspace-app .journey-workspace .gs-chat-body,
+  .workspace-app[data-intro="true"] .journey-workspace .gs-chat-body,
+  .workspace-app .guided-case.quote-form-surface { padding: 20px 16px; }
+  .workspace-app .journey-question-fields { gap: 16px; }
+  .workspace-app .journey-chip-row { gap: 8px; }
+  .workspace-app .journey-chip-row button { padding-inline: 8px; font-size: 14px; }
+  .workspace-app .journey-choice-grid.budget { grid-template-columns: minmax(0,1fr); }
+  .workspace-app .journey-choice-grid.budget > button { padding: 16px; }
+  .workspace-app .journey-range-fields { grid-template-columns: minmax(0,1fr); }
+  .workspace-app .quote-form-steps { gap: 8px 16px; }
+  .workspace-app:has(.guided-case) .journey-hero { width: calc(100% - 24px); margin: 16px auto 12px; padding: 0; }
+  .workspace-app:has(.guided-case) .journey-task-title { font-size: 20px; line-height: 1.3; margin: 0; }
+  .workspace-app .focus-setup-action { width: calc(100% - 24px); }
+  .workspace-app .guided-case:has(.case-question) .workspace-classification-status span,
+  .workspace-app .guided-case .case-question > .eyebrow { display: none; }
+  .workspace-app .guided-case .confirmation-facts { grid-template-columns: minmax(0,1fr); }
+  .workspace-app .quote-form-secondary-actions { flex-direction: column; }
+  .workspace-app .quote-form-secondary-actions > button { flex: none; width: 100%; }
+  .workspace-app .owned-product-options { grid-template-columns: minmax(0,1fr); }
+  .workspace-app .url-analyzer .url-input-wrap { grid-template-columns: minmax(0,1fr); }
+  .workspace-app .url-analyzer .url-input-wrap > button { width: 100%; }
+  .workspace-app .url-analyzer .discovery-item { padding: 16px; }
+  .workspace-app .guided-case .supplier-review .pipeline-progressive-fields { grid-template-columns: minmax(0,1fr); }
+}

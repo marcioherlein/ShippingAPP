@@ -4,13 +4,15 @@ import { readProductDraft, writeProductDraft } from '../lib/productDraft'
 import { ingestAlibabaUrlV2, type ProductAnalysisV2 } from '../lib/productAnalysisV2'
 import { createManualProductAnalysis } from '../lib/productConfirmation'
 import { isAlibabaUrl } from '../lib/productIntake'
-import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryResponse } from '../lib/productDiscovery'
+import { discoverProducts, type DiscoveryConstraints, type ProductDiscoveryItem, type ProductDiscoveryResponse } from '../lib/productDiscovery'
 import { checkDiscoveryConstraints } from '../lib/discoveryConstraintCheck'
 import { buildDiscoveryQuery, isGenericAlibabaSearchRequest } from '../lib/searchIntent'
 import { translateProductLabel } from '../lib/productTranslation'
 import UiIcon from './UiIcon'
-import { ApiAuthError, getSessionState, subscribeSession } from '../lib/authSession'
+import { ApiAuthError, authenticationError, getSessionState, subscribeSession } from '../lib/authSession'
 import { beginOperation, canResume, operationIsCurrent, readOperation, settleOperation } from '../lib/pendingOperation'
+import { analysisFromDiscovery } from '../lib/discoverySelection'
+import { useProcessingScreen } from '../lib/useProcessingScreen'
 
 type Props = {
   onAnalysis: (analysis: ProductAnalysisV2) => void
@@ -23,7 +25,7 @@ type Props = {
 type SearchDraft = { draft?: string; lastSearch?: string; discovery?: ProductDiscoveryResponse | null; messages?: ThreadMessage[]; selectedConstraints?: DiscoveryConstraints | null; pendingAuth?: boolean; failedSourceUrl?: string | null; lastError?: string }
 
 type ThreadMessage = { role: 'user' | 'assistant'; content: string }
-type SearchOperation = { value: string; selectedUrl?: string; constraints?: DiscoveryConstraints | null }
+type SearchOperation = { value: string; selectedUrl?: string; selectedItem?: ProductDiscoveryItem; constraints?: DiscoveryConstraints | null }
 
 const starters = [
   'Paletas de pádel de carbono',
@@ -61,6 +63,12 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   const [selectedConstraints, setSelectedConstraints] = useState<DiscoveryConstraints | null>(savedSearch?.selectedConstraints || null)
   const [loading, setLoading] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'search' | 'extract'>('idle')
+  useProcessingScreen(loading, {
+    title: phase === 'extract' ? 'Preparando el producto que elegiste' : 'Buscando tu producto',
+    detail: phase === 'extract' ? 'Conservamos la publicación y revisamos sus datos. Después vas a confirmar lo que falte.' : 'Estamos consultando publicaciones reales de Alibaba. Los resultados aparecerán al terminar.',
+    steps: ['Buscar publicaciones', 'Elegir producto', 'Confirmar los datos'],
+    activeStep: phase === 'extract' ? 1 : 0,
+  })
   const pendingAuth = useRef(savedSearch?.pendingAuth || false)
   const busy = useRef(false)
   const activeRequest = useRef<AbortController | null>(null)
@@ -75,18 +83,43 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     [analysis, selectedConstraints],
   )
 
-  const analyzeRealUrl = async (url: string, fromDiscovery: boolean, constraints: DiscoveryConstraints | null, operationId: string, signal: AbortSignal) => {
+  const analyzeRealUrl = async (url: string, fromDiscovery: boolean, constraints: DiscoveryConstraints | null, operationId: string, signal: AbortSignal, selectedItem?: ProductDiscoveryItem) => {
     setPhase('extract')
-    const next = await ingestAlibabaUrlV2(url, signal)
+    let next: ProductAnalysisV2
+    if (selectedItem) {
+      // A real search result already identifies the user's choice. Detail reads
+      // may be blocked by Alibaba; never turn that into a lost product/dead end.
+      const detailController = new AbortController()
+      const abort = () => detailController.abort(signal.reason)
+      signal.addEventListener('abort', abort, { once: true })
+      if (signal.aborted) abort()
+      const deadline = window.setTimeout(() => detailController.abort(new DOMException('La publicación no respondió a tiempo', 'TimeoutError')), 12_000)
+      try {
+        next = analysisFromDiscovery(selectedItem, await ingestAlibabaUrlV2(url, detailController.signal))
+      } catch (error) {
+        if (signal.aborted || error instanceof ApiAuthError) throw error
+        const session = getSessionState()
+        if (session !== 'ready' && session !== 'unmanaged') {
+          throw authenticationError(session === 'signed_out' ? 'session_required' : session === 'error' ? 'auth_session_unavailable' : 'auth_session_pending', true)
+        }
+        next = analysisFromDiscovery(selectedItem)
+      } finally {
+        window.clearTimeout(deadline)
+        signal.removeEventListener('abort', abort)
+      }
+    } else next = await ingestAlibabaUrlV2(url, signal)
     if (signal.aborted || !operationIsCurrent('search', operationId)) return
     setSelectedConstraints(fromDiscovery ? constraints : null)
     setFailedSourceUrl(null)
+    pendingAuth.current = false
+    const operation = readOperation<SearchOperation>('search')
+    if (operation?.id === operationId) settleOperation('search', { ...operation, status: 'complete' })
     onAnalysis(next)
     setDiscovery(null)
     setMessages((current) => [...current, {
       role: 'assistant',
       content: fromDiscovery
-        ? 'Producto seleccionado. Validé la publicación real. Abajo vas a completar solamente los datos que no pude confirmar.'
+        ? 'Conservamos el producto seleccionado. Ahora revisá su identidad y confirmá los datos de la oferta y el embalaje.'
         : 'Producto leído. Abajo vas a revisar lo detectado y completar únicamente lo que falte.',
     }])
   }
@@ -165,25 +198,27 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     }
   }
 
-  const selectDiscovery = async (url: string, constraints: DiscoveryConstraints | null = discovery?.constraints ?? null) => {
+  const selectDiscovery = async (url: string, constraints: DiscoveryConstraints | null = discovery?.constraints ?? null, selectedItem = discovery?.results.find(item => item.url === url)) => {
     if (busy.current) return
     busy.current = true
     const controller = new AbortController()
     activeRequest.current = controller
-    const operation = beginOperation<SearchOperation>('search', { value: lastSearch, selectedUrl: url, constraints })
+    const operation = beginOperation<SearchOperation>('search', { value: lastSearch, selectedUrl: url, ...(selectedItem ? { selectedItem } : {}), constraints })
     setLoading(true)
     setError('')
     setFailedSourceUrl(null)
     try {
-      await analyzeRealUrl(url, true, constraints, operation.id, controller.signal)
+      await analyzeRealUrl(url, true, constraints, operation.id, controller.signal, selectedItem)
     } catch (err) {
       if (controller.signal.aborted || !operationIsCurrent('search', operation.id)) return
-      operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
+      pendingAuth.current = err instanceof ApiAuthError
+      operation.status = pendingAuth.current ? 'waiting_auth' : 'failed'
       setFailedSourceUrl(url)
       setError(err instanceof Error ? err.message : 'No pude analizar la publicación seleccionada.')
     } finally {
       if (!controller.signal.aborted) {
         if (operation.status === 'running') operation.status = 'complete'
+        if (operation.status === 'complete') pendingAuth.current = false
         settleOperation('search', operation)
       }
       if (activeRequest.current === controller) {
@@ -218,7 +253,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
   const retryLast = () => {
     const operation = readOperation<SearchOperation>('search')
-    if (operation?.payload.selectedUrl) void selectDiscovery(operation.payload.selectedUrl, operation.payload.constraints ?? null)
+    if (operation?.payload.selectedUrl) void selectDiscovery(operation.payload.selectedUrl, operation.payload.constraints ?? null, operation.payload.selectedItem)
     else if (failedSourceUrl) void submitValue(failedSourceUrl)
     else void submitValue(lastSearch)
   }
@@ -241,7 +276,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       if (busy.current) return
       const operation = readOperation<SearchOperation>('search')
       if (canResume(operation) && operation) {
-        if (operation.payload.selectedUrl) void selectDiscoveryRef.current(operation.payload.selectedUrl, operation.payload.constraints ?? null)
+        if (operation.payload.selectedUrl) void selectDiscoveryRef.current(operation.payload.selectedUrl, operation.payload.constraints ?? null, operation.payload.selectedItem)
         else void submitValueRef.current(operation.payload.value, true)
         return
       }

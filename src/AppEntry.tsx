@@ -1,5 +1,6 @@
 import { lazy, useEffect, useRef, useState } from 'react'
 import LoadingBoundary from './components/LoadingBoundary'
+import ProcessingScreen from './components/ProcessingScreen'
 import Landing from './components/Landing'
 import { useAccountSession } from './auth/AccountSession'
 import type { AnalysisHistoryItem } from './lib/analysisHistory'
@@ -128,6 +129,7 @@ export default function AppEntry() {
   const quoteVisibleToAccount = !quoteOwnerId || account.loaded && account.signedIn && account.userId === quoteOwnerId
 
   return <>
+    <ProcessingScreen />
     {view === 'landing' && <Landing onStart={enterCalculator} />}
     {view === 'workspace' && <LoadingBoundary label="Cargando tu espacio…"><PersonalWorkspace key={account.userId ?? 'visitor'} hasDraft={hasDraft} onContinue={enterCalculator} onNewCalculation={newCalculation} onOpen={item => { if (hasDraft) setQuoteToOpen(item); else openQuote(item) }} /></LoadingBoundary>}
     {quoteMounted && quoteVisibleToAccount && <div hidden={view !== 'calculator'} className="quote-view"><LoadingBoundary label="Cargando cotizador…"><QuoteApp key={quoteGeneration} active={view === 'calculator'} focusOnEntry={focusOnEntry} initialSavedQuote={savedQuote} newCalculationRequest={newCalculationRequest} /></LoadingBoundary></div>}

@@ -9,6 +9,7 @@ import { isAlibabaUrl } from '../lib/productIntake'
 import type { ManualProductChatData } from '../lib/productConfirmation'
 import { inferSensitiveCategoryFromName } from '../lib/productConfirmation'
 import type { SensitiveProductCategory } from '../lib/landedCostEngine'
+import { useProcessingScreen } from '../lib/useProcessingScreen'
 
 type Props = {
   onAlibabaLink: (url: string, signal?: AbortSignal) => Promise<void>
@@ -133,6 +134,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const [mode, setMode] = useState<Mode>(draft?.mode === 'link' ? 'link' : draft?.mode === 'describe' ? 'describe' : draft?.mode === 'form' ? 'form' : null)
   const [link, setLink] = useState(draft?.link || '')
   const [loading, setLoading] = useState(false)
+  useProcessingScreen(loading, { title: 'Leyendo tu producto', detail: 'Estamos consultando la publicación de Alibaba. Después podrás confirmar los datos y completar lo que falte.' })
   const [error, setError] = useState('')
   const [authRequired,setAuthRequired] = useState(false)
   useEffect(() => { if (error) queueMicrotask(() => { const alert = document.querySelector<HTMLElement>('.owned-product-error'); alert?.focus({ preventScroll: true }); alert?.scrollIntoView({ block: 'center', behavior: 'instant' }) }) }, [error])
@@ -322,20 +324,21 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
 
   const currentUnit = CHAT_UNITS[chatStep] ?? null
 
-  return <section className="owned-product-intake" aria-label="Cómo cargar tu producto">
+  return <section className="owned-product-intake quote-form-surface" aria-label="Cómo cargar tu producto">
     <div className="owned-product-intro" hidden={mode !== null}>
       <span className="eyebrow">Tu producto</span>
       <h2>Elegí la forma más fácil.</h2>
-      <p>Cargar, leer y completar el producto no consume un análisis. El crédito se usa recién cuando pedís clasificar la NCM y calcular la importación.</p>
+      <p>Empezá con el nombre o con una publicación de Alibaba. Después te pedimos sólo los datos que falten.</p>
+      <p className="quote-form-credit-note">La carga es gratis. Usás un análisis al confirmar la clasificación y el cálculo.</p>
     </div>
 
-    {mode === 'form' && <div className="owned-product-form"><ProductWorkspaceForm onSubmit={onStructuredData} /><button type="button" className="pipeline-secondary" onClick={() => setMode(null)}>Cambiar forma de carga</button></div>}
+    {mode === 'form' && <div className="owned-product-form"><ProductWorkspaceForm onSubmit={onStructuredData} /><button type="button" className="pipeline-secondary quote-form-switch" onClick={() => setMode(null)}>Cambiar forma de carga</button></div>}
     {mode === null && <div className="owned-product-options">
       <button type="button" onClick={() => setMode('form')}><span className="owned-product-option-icon"><UiIcon name="product" size={19} /></span><b>Completar ficha</b><small>Una pregunta por pantalla. Empezá por el nombre del producto.</small><em>Recomendado</em></button>
       <button type="button" onClick={() => setMode('link')}>
         <span className="owned-product-option-icon"><UiIcon name="external-link" size={19} /></span>
         <b>Pegar link de Alibaba</b>
-        <small>Intento traer título, tipo, specs, precio, MOQ, peso, volumen y origen. Después sólo confirmás o completás faltantes.</small>
+        <small>Leemos la publicación. Revisás lo encontrado y completás lo que falte.</small>
         <em>Lectura gratis</em>
       </button>
 
@@ -343,8 +346,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
 
     {mode === 'link' && <form className="owned-product-entry" onSubmit={(event) => void submitLink(event)}>
       <div className="owned-product-entry-head">
-        <div><b>Pegá la publicación de Alibaba</b><small>Revisaremos los datos de la publicación con vos. Esta lectura no consume un análisis.</small></div>
-        <button type="button" onClick={() => leaveLink(null)}>Cambiar</button>
+        <div><span className="eyebrow">Tu producto · Enlace</span><h2>Pegá la publicación de Alibaba</h2><small>Revisaremos los datos con vos. Esta lectura no consume un análisis.</small></div>
       </div>
       <div className="owned-product-link-row">
         <input
@@ -359,7 +361,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : 'Leer producto'} <UiIcon name="arrow-right" size={16} /></button>
       </div>
       {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
-      <button type="button" className="pipeline-secondary" onClick={() => leaveLink('form')}>Completar ficha manualmente</button>
+      <div className="quote-form-secondary-actions"><button type="button" className="pipeline-secondary" onClick={() => leaveLink(null)}>Cambiar forma de carga</button><button type="button" className="pipeline-secondary" onClick={() => leaveLink('form')}>Completar ficha manualmente</button></div>
     </form>}
 
     {mode === 'describe' && !awaitingSensitive && <div className="product-chatbot">

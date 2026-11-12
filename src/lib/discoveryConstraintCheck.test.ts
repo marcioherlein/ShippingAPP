@@ -19,6 +19,21 @@ function analysis(overrides: Partial<ProductAnalysisV2['product']> = {}): Produc
 const constraints: DiscoveryConstraints = { maxUnitPriceUsd: 30, maxMoq: 100, originCountry: 'China', excludedOriginCountries: [], lowMoqPreference: false }
 
 describe('discovery constraint checks after deep analysis', () => {
+  it('does not crash or invent thresholds when a response or saved draft has missing constraints', () => {
+    for (const partial of [undefined, null, {}, { originCountry: 'China' }]) {
+      const checks = checkDiscoveryConstraints(analysis(), partial)
+      expect(checks.map(check => check.id)).toEqual(partial?.originCountry ? ['origin'] : [])
+    }
+  })
+
+  it('ignores malformed constraints and preserves valid ones without iterating a missing array', () => {
+    expect(checkDiscoveryConstraints(analysis(), { maxMoq: 100 }).map(check => check.id)).toEqual(['moq'])
+    expect(checkDiscoveryConstraints(analysis(), { maxUnitPriceUsd: NaN, maxMoq: -1, excludedOriginCountries: null } as unknown as DiscoveryConstraints)).toEqual([])
+    const checks = checkDiscoveryConstraints(analysis(), { excludedOriginCountries: [' China ', null, 1, ''] } as unknown as DiscoveryConstraints)
+    expect(checks).toHaveLength(1)
+    expect(checks[0]).toMatchObject({ id: 'origin_excluded', status: 'fail', label: 'Origen ≠ China' })
+  })
+
   it('passes only constraints supported by deep-read product facts', () => {
     const checks = checkDiscoveryConstraints(analysis(), constraints)
     expect(checks.map((item) => [item.id, item.status])).toEqual([

@@ -106,3 +106,19 @@ it('keeps an unknown supplier minimum explicit in the sidebar and conversation',
  expect(readCaseConversation(analysis.sourceUrl).some(message=>message.text==='Quiero conocer la compra mínima y comparar alternativas.')).toBe(true)
  expect(readCaseConversation(analysis.sourceUrl).some(message=>message.text.includes('costo de una unidad'))).toBe(false)
 })
+
+it('keeps the selected listing available in collapsed context and the original price clear without assuming a currency',async()=>{
+ const selected={...analysis,sourceUrl:'https://www.alibaba.com/product-detail/Selected-bottle_1600123456789.html',fetched:false,product:{...analysis.product,name:'Botella térmica de acero inoxidable seleccionada en Alibaba',functionText:'Mantener la temperatura de las bebidas',unitPriceUsd:0,supplierEvidence:{priceText:'$ 12.50–18.00',currency:null,quantityUnit:null,variant:null}}}
+ const draft=productConfirmationFromAnalysis(selected)
+ await act(async()=>root.render(<GuidedCaseReview analysis={selected} draft={draft} quote={initialSupplierQuote(0,false)} capacity={{mode:'unknown',budgetUsd:0,min:1,max:1}} classified={false} askedForMore={false} clarificationTarget="functionText" exhausted={false} status="confirm" authRequired={false} onDraft={vi.fn()} onQuote={vi.fn()} onConfirm={confirm} onManual={vi.fn()}/>))
+ expect(container.querySelector('.quote-form-product-name b')?.textContent).toBe(selected.product.name)
+ expect(container.querySelector('.quote-form-product-name a')?.getAttribute('href')).toBe(selected.sourceUrl)
+ expect(container.querySelector('.quote-form-product-name a')?.textContent).toBe('Publicación guardada · datos por confirmar')
+ expect(container.querySelector<HTMLDetailsElement>('.quote-form-context')?.open).toBe(false)
+ expect(container.querySelector('.quote-form-context summary')?.textContent).toBe('Producto y operación')
+ expect(container.querySelector('.case-question h2')?.textContent).toContain('precio del proveedor')
+ expect(container.querySelector('.quote-form-original-price')?.textContent).toContain('$ 12.50–18.00')
+ expect(container.querySelector('.quote-form-original-price')?.textContent).not.toContain('USD')
+ expect(container.querySelector<HTMLInputElement>('.case-question input')?.value).toBe('')
+ expect(confirm).not.toHaveBeenCalled()
+})

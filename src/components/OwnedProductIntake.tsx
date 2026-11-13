@@ -132,7 +132,9 @@ type VolumeBasis = 'unit' | 'carton'
 type EntryDraft = { volumeBasis?: VolumeBasis | null; mode: Mode; link: string; chatStep?: ChatStep; chatAnswers?: Partial<Record<ChatStep, string>>; chatInput?: string; volumeMode?: 'dims' | 'cbm'; dimL?: string; dimW?: string; dimH?: string; dimUnit?: 'cm' | 'm'; awaitingSensitive?: boolean; pendingChatAnswers?: Partial<Record<ChatStep, string>> }
 
 export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, entryMode, onManualFallback }: Props) {
-  const [draft] = useState(() => readProductDraft<EntryDraft>('entry'))
+  const draftKey = entryMode ? 'inline-product' : 'entry'
+  const operationStage = entryMode ? 'entry-link' : 'owned-link'
+  const [draft] = useState(() => readProductDraft<EntryDraft>(draftKey))
   const [mode, setMode] = useState<Mode>(entryMode ?? (draft?.mode === 'link' || draft?.mode === 'describe' || draft?.mode === 'form' ? draft.mode : null))
   const [link, setLink] = useState(draft?.link || '')
   const [loading, setLoading] = useState(false)
@@ -158,7 +160,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
   const activeRequest = useRef<AbortController | null>(null)
   useEffect(() => () => activeRequest.current?.abort(), [])
 
-  useEffect(() => { writeProductDraft('entry', { mode, link, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers }) }, [mode, link, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers])
+  useEffect(() => { writeProductDraft(draftKey, { mode, link, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers }) }, [mode, link, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers, draftKey])
 
   useEffect(() => {
     if (mode === 'describe') {
@@ -182,14 +184,14 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
     busy.current = true
     const controller = new AbortController()
     activeRequest.current = controller
-    const operation = beginOperation('owned-link', value)
-    writeProductDraft('entry', { mode: 'link', link: value, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers })
+    const operation = beginOperation(operationStage, value)
+    writeProductDraft(draftKey, { mode: 'link', link: value, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers })
     setLoading(true)
     setError('')
     try {
       await onAlibabaLink(value, controller.signal)
     } catch (err) {
-      if (controller.signal.aborted || !operationIsCurrent('owned-link', operation.id)) return
+      if (controller.signal.aborted || !operationIsCurrent(operationStage, operation.id)) return
       operation.status = err instanceof ApiAuthError ? 'waiting_auth' : 'failed'
       setAuthRequired(err instanceof ApiAuthError)
       const raw = err instanceof Error ? err.message : ''
@@ -200,7 +202,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
     } finally {
       if (activeRequest.current === controller) {
         if (operation.status === 'running') operation.status = 'complete'
-        settleOperation('owned-link', operation)
+        settleOperation(operationStage, operation)
         activeRequest.current = null
         busy.current = false
         setLoading(false)
@@ -210,8 +212,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
   const leaveLink = (nextMode: Mode) => {
     activeRequest.current?.abort()
     activeRequest.current = null
-    const operation = readOperation('owned-link')
-    if (operation) settleOperation('owned-link', { ...operation, status: 'failed' })
+    const operation = readOperation(operationStage)
+    if (operation) settleOperation(operationStage, { ...operation, status: 'failed' })
     busy.current = false
     setLoading(false)
     setError('')
@@ -222,7 +224,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
   runLinkRef.current = runLink
   useEffect(() => {
     const resume = () => {
-      const operation = readOperation<string>('owned-link')
+      const operation = readOperation<string>(operationStage)
       if (mode === 'link' && operation && canResume(operation) && !busy.current) void runLinkRef.current(operation.payload)
     }
     const checkReady = () => { if (getSessionState() === 'ready') resume() }
@@ -230,7 +232,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
     window.addEventListener('shippingapp:auth-resolved', resume)
     checkReady()
     return () => { unsubscribe(); window.removeEventListener('shippingapp:auth-resolved', resume) }
-  }, [loading, mode])
+  }, [loading, mode, operationStage])
 
   const answeredSteps = ALL_STEPS.filter(
     (s) => ALL_STEPS.indexOf(s) < ALL_STEPS.indexOf(chatStep) && chatAnswers[s] !== undefined,

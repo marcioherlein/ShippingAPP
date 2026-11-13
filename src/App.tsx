@@ -269,18 +269,16 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
 
   useEffect(() => {
     const restoreProduct = () => {
-      const saved = readProductDraft<{ intent: EntryIntent; analysis: ProductAnalysisV2; setup?: boolean; sensitiveCategory?: SensitiveProductCategory | null }>('analysis')
+      const saved = readProductDraft<{ intent: EntryIntent; analysis: ProductAnalysisV2; sensitiveCategory?: SensitiveProductCategory | null }>('analysis')
       if (saved?.intent === intent && saved.analysis?.product && saved.analysis?.customs) {
         setAnalysis(saved.analysis)
-        if (saved.setup && step < 3) {
-          setShowSetup(true)
-          if (saved.sensitiveCategory !== undefined) setSensitiveCategory(saved.sensitiveCategory)
-        }
+        setShowSetup(step < 3)
+        if (saved.sensitiveCategory !== undefined) setSensitiveCategory(saved.sensitiveCategory)
         // Bring back a finished quote when the saved inputs still match what the
         // replayed answers produced; otherwise fall back to the review step.
         const pipe = readProductDraft<PipelineDraft>('pipeline')
         const restoredCategory = pipe?.status === 'ready' ? recoverSavedCategory(pipe.calculationInputKey, currentCalculationInputKeyRef.current) : undefined
-        if (!saved.setup && hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && restoredCategory !== undefined) {
+        if (step >= 3 && hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && restoredCategory !== undefined) {
           setSensitiveCategory(restoredCategory)
           setApprovedQuantity(pipe.approvedQuantity ?? null)
           setPipelineSummary(pipe.pipelineSummary)
@@ -329,9 +327,9 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
 
   useEffect(() => {
     if (!analysis || !intent) return
-    writeProductDraft('analysis', { intent, analysis, setup: showSetup && step < 3, sensitiveCategory })
+    writeProductDraft('analysis', { intent, analysis, sensitiveCategory })
     if (step >= 3 && readProductDraft('prepared-entry')) writeProductDraft('prepared-entry', null)
-  }, [analysis, intent, showSetup, step, sensitiveCategory])
+  }, [analysis, intent, step, sensitiveCategory])
 
   useEffect(() => {
     if (calculationStatus === 'ready' && pipelineSummary && calculationInputKey) {

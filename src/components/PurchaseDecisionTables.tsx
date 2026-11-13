@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import type { PurchasePlan, PurchaseScenario } from '../lib/purchasePlan'
 import { usd } from '../lib/format'
 import UiIcon, { type UiIconName } from './UiIcon'
@@ -21,15 +21,29 @@ function Cell({ label, children }: { label: string; children: React.ReactNode })
 }
 
 export function PurchaseOptimization({ plan, onChoose, minimumConfirmed = true }: { plan: PurchasePlan; onChoose?: (quantity: number) => void; minimumConfirmed?: boolean }) {
+  const [objective, setObjective] = useState<'quantity' | 'unitCost'>('quantity')
   const scenarios = comparedScenarios(plan)
   const minimum = minimumScenario(plan)
   const selected = plan.selected
-  const cheapest = scenarios.reduce<PurchaseScenario | null>((best, scenario) => scenario.withinBudget === false || best && best.cost.unitCostUsd <= scenario.cost.unitCostUsd ? best : scenario, null)
+  const feasible = scenarios.filter(scenario => scenario.withinBudget !== false)
+  const best = objective === 'quantity'
+    ? feasible.at(-1)
+    : feasible.reduce<PurchaseScenario | undefined>((lowest, scenario) => {
+        return !lowest || scenario.cost.unitCostUsd < lowest.cost.unitCostUsd ? scenario : lowest
+      }, undefined)
+  const saving = best && selected ? selected.cost.unitCostUsd - best.cost.unitCostUsd : 0
   return <section className="purchase-optimization" aria-labelledby="purchase-optimization-title">
     <div className="purchase-section-heading"><h3 id="purchase-optimization-title">Tabla de optimización de tu compra</h3><p>Todos los importes incluyen mercadería, transporte, impuestos y gastos modelados. Un costo por unidad menor puede exigir una inversión mayor.</p></div>
-    {selected && cheapest && cheapest.quantity !== selected.quantity && cheapest.cost.unitCostUsd < selected.cost.unitCostUsd - 0.005 && <p className="calculator-plan-note">
-      {cheapest.quantity.toLocaleString('es-AR')} u. a <strong>{usd(cheapest.cost.unitCostUsd)} por unidad</strong> · {usd(selected.cost.unitCostUsd - cheapest.cost.unitCostUsd)} menos por unidad frente a tu elección. Desembolso: {usd(cheapest.cost.totalCostUsd)}.
-    </p>}
+    {feasible.length > 1 && <div className="calculator-optimizer-controls">
+      <div role="group" aria-label="Objetivo de la comparación">
+        <button type="button" aria-pressed={objective === 'quantity'} onClick={() => setObjective('quantity')}>Más unidades</button>
+        <button type="button" aria-pressed={objective === 'unitCost'} onClick={() => setObjective('unitCost')}>Menor costo por unidad</button>
+      </div>
+      {best && <p aria-live="polite">
+        {objective === 'quantity' ? 'Mayor cantidad evaluada' : 'Menor costo unitario evaluado'} · <strong>{best.quantity.toLocaleString('es-AR')} u. a {usd(best.cost.unitCostUsd)} por unidad</strong>. Total {usd(best.cost.totalCostUsd)}.
+        {saving > 0.005 && ` Ahorrás ${usd(saving)} por unidad frente a tu elección.`}
+      </p>}
+    </div>}
     {scenarios.length ? <table className="purchase-options-table" role="table" aria-labelledby="purchase-optimization-title">
       <thead role="rowgroup"><tr role="row"><th scope="col">Cantidad</th><th scope="col">Modalidad</th><th scope="col">Flete incluido · USD</th><th scope="col">Inversión total · USD</th><th scope="col">Costo puesto · USD/u.</th><th scope="col">Ahorro por unidad vs. mínimo</th><th scope="col">Tu elección</th></tr></thead>
       <tbody role="rowgroup">{scenarios.map(scenario => {
@@ -79,8 +93,7 @@ export function PurchaseTransportComparison({ plan }: { plan: PurchasePlan }) {
           {option.eligibility === 'requires_quote' && <p className="purchase-conditional-price">Tarifa estándar de referencia: falta confirmar aceptación y recargos de esta carga.</p>}
         </> : <p className="purchase-unavailable-reason">{option.cost.reason || 'Pedí una cotización al operador para esta carga.'}</p>}
         <div className="purchase-transit"><span>Plazo estimado de transporte</span><strong>{option.transit ? `${option.transit.minDays}–${option.transit.maxDays} días ${option.transit.basis === 'business' ? 'hábiles' : 'corridos'}` : 'A confirmar con el operador'}</strong></div>
-        {baseLimit && <div className="purchase-transport-limits"><h5>Base y límite del cálculo</h5><p>{baseLimit}</p></div>}
-        <details className="purchase-transport-details"><summary>Ver límites y fuentes</summary>{available && <p className="purchase-transport-source">{option.mode === 'lcl' ? 'Medida facturable' : 'Peso facturable'}: {option.cost.chargeableUnits.toLocaleString('es-AR')} {option.mode === 'lcl' ? 'W/M' : 'kg'}.</p>}
+        <details className="purchase-transport-details"><summary>Ver límites y fuentes</summary>{baseLimit && <p className="purchase-transport-source">{baseLimit}</p>}{available && <p className="purchase-transport-source">{option.mode === 'lcl' ? 'Medida facturable' : 'Peso facturable'}: {option.cost.chargeableUnits.toLocaleString('es-AR')} {option.mode === 'lcl' ? 'W/M' : 'kg'}.</p>}
           {otherLimits.length > 0 && <ul>{otherLimits.map(limit => <li key={limit}>{limit}</li>)}</ul>}
           {available && <p className="purchase-transport-source">Fuente del costo: {option.cost.source}</p>}
           {option.transit && <><p className="purchase-transport-source">Plazo: {option.transit.source}.</p><p className="purchase-transport-source">Alcance: {option.transit.scope}</p></>}

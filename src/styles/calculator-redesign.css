@@ -1,5 +1,6 @@
 /* Shared surfaces for the public calculator, quote and account. */
 :is(.calculator-landing, .workspace-app, .personal-workspace) {
+  --a11y-focus: #568857;
   --calculator-width: min(1160px, calc(100% - 72px));
   --calculator-lime: #d9f3a5;
   --calculator-forest: #174535;
@@ -27,6 +28,7 @@
 }
 
 .workspace-landing.calculator-landing { width: 100%; max-width: none; margin: 0; padding: 0; }
+body:has(.calculator-landing, .workspace-app, .personal-workspace) { min-width: 0; }
 .calculator-shell { width: var(--calculator-width); margin: 0 auto; }
 .calculator-header-surface { background: var(--ds-surface); border-bottom: 1px solid var(--ds-border-soft); }
 :is(.calculator-landing, .workspace-app, .personal-workspace) .app-header {
@@ -171,13 +173,13 @@
 }
 .workspace-app .journey-hero, .workspace-app[data-intro="true"] .journey-hero { margin-block: 0 16px; }
 .workspace-app .journey-hero [role="progressbar"] { width: 100%; }
-.workspace-app .journey-task-title { font-size: clamp(1.65rem, 3.5vw, 2.45rem); letter-spacing: -.055em; }
+.workspace-app .journey-hero .journey-task-title { font-size: clamp(1.65rem, 3.5vw, 2.45rem); letter-spacing: -.055em; }
 .workspace-app .journey-workspace:not([hidden]) { display: flex; flex-direction: column; }
 .workspace-app .journey-conversation, .workspace-app .guided-case, .workspace-app .journey-question-card, .workspace-app .simple-quote { border-radius: 16px; }
-.workspace-app .journey-conversation .gs-chat-body, .workspace-app[data-intro="true"] .journey-workspace .gs-chat-body { padding: 17px; }
+.workspace-app .journey-workspace .gs-chat-body, .workspace-app[data-intro="true"] .journey-workspace .gs-chat-body { padding: 17px; }
 .workspace-app .journey-conversation .journey-bubble.user { border-radius: 8px; }
 .workspace-app .journey-workspace .journey-bubble.user[data-prepared-product="true"] { display: flex; margin: 0 0 12px; }
-.workspace-app .journey-workspace .journey-bubble.user > div { display: flex; width: 100%; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 4px 12px; background: var(--ds-surface-subtle); border: 1px solid var(--ds-border); border-radius: 8px; }
+.workspace-app .journey-workspace .journey-bubble.user > div { display: flex; width: 100%; max-width: none; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 4px 12px; background: var(--ds-surface-subtle); border: 1px solid var(--ds-border); border-radius: 8px; }
 .workspace-app .journey-workspace .journey-bubble.user b { color: var(--ds-text-strong); overflow-wrap: anywhere; }
 .workspace-app .journey-workspace .journey-bubble.user button { min-height: 44px; margin-left: auto; background: var(--ds-surface); border-color: var(--ds-border); color: var(--ds-brand-strong); }
 .calculator-profile-first { margin-top: 18px; }
@@ -189,9 +191,13 @@
 .personal-workspace :is(.workspace-button,.saved-calculations-primary) { border-radius: 8px; }
 .workspace-app .journey-summary-sticky { border-radius: 12px; }
 .workspace-app .journey-product-surface { margin-inline: 0; }
+.workspace-app .guided-case.quote-form-surface { border-radius: 16px; }
+.workspace-app .quote-form-header { padding-bottom: 9px; margin-bottom: 13px; }
+.workspace-app .quote-form-context { margin-top: 0; }
 
 @media (prefers-color-scheme: dark) {
   :is(.calculator-landing, .workspace-app, .personal-workspace) {
+    --a11y-focus: #b8e2aa;
     --workspace-paper: #161f1a;
     --workspace-ink: #edf3e9;
     --workspace-accent: #245a44;
@@ -240,7 +246,7 @@
   .calculator-tabs button svg { width: 12px; height: 12px; }
   .calculator-entry-pane :is(.url-input-wrap,.owned-product-link-row) button { padding-inline: 8px; }
   .calculator-entry-pane :is(.url-input-wrap,.owned-product-link-row) button svg { display: none; }
-  .workspace-app .journey-conversation .gs-chat-body, .workspace-app[data-intro="true"] .journey-workspace .gs-chat-body { padding: 9px; }
+  .workspace-app .journey-workspace .gs-chat-body, .workspace-app[data-intro="true"] .journey-workspace .gs-chat-body { padding: 9px; }
 }
 @media (max-width: 360px) { .calculator-destination { display: none; } }
 
@@ -286,7 +292,14 @@
 .workspace-app .purchase-section-heading h3, .workspace-app .calculator-cost-section h3 { margin: 0 0 5px; color: var(--ds-text-strong); font-size: 1.28rem; font-weight: 720; letter-spacing: -.042em; }
 .workspace-app .purchase-cargo-summary { margin-bottom: 9px; }
 .workspace-app .purchase-transport-grid { gap: 10px; align-items: start; }
-.workspace-app .purchase-transport-card { padding: 12px; border-radius: 12px; }
+.workspace-app .purchase-transport-card { display: flex; padding: 12px; border-radius: 12px; }
+.workspace-app .purchase-transport-heading { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px; }
+.workspace-app .purchase-transport-status { margin: 6px 0 7px; font-size: .73rem; }
+.workspace-app .purchase-transport-facts { margin: 6px 0 0; }
+.workspace-app .purchase-transport-facts > div { margin: 4px 0; }
+.workspace-app .purchase-transport-card .purchase-transit { margin: 4px 0; padding: 6px 0; }
+.workspace-app .purchase-transit > strong { margin-top: 2px; }
+.workspace-app .purchase-transport .purchase-section-heading { margin-bottom: 7px; }
 .workspace-app .purchase-transport-card.is-current { background: var(--ds-surface-subtle); border-color: var(--ds-brand); }
 .purchase-transport-heading h4 { display: flex; align-items: center; gap: 6px; }
 .calculator-transport-icon { width: 27px; height: 27px; display: grid; place-items: center; flex: none; border-radius: 6px; color: var(--ds-brand-strong); background: var(--ds-brand-soft); }
@@ -317,6 +330,11 @@
 .workspace-app .calculator-route-breakdown[open] > summary::after { content: '−'; }
 .workspace-app .calculator-route-breakdown .calculator-cost-table { margin-top: 7px; }
 .workspace-app .purchase-optimization { margin: 21px 0; }
+.calculator-optimizer-controls { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--ds-border-soft); border-radius: 10px; background: var(--ds-surface); }
+.calculator-optimizer-controls > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.calculator-optimizer-controls button { min-height: 44px; padding: 5px 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--ds-text-secondary); font-size: .76rem; font-weight: 640; }
+.calculator-optimizer-controls button[aria-pressed="true"] { border-color: var(--ds-border); background: var(--ds-brand-soft); color: var(--ds-brand-strong); }
+.calculator-optimizer-controls p { margin: 6px 0 2px; color: var(--ds-text); font-size: .79rem; line-height: 1.5; }
 .workspace-app .purchase-options-table { background: var(--ds-surface); border-color: var(--ds-border-soft); border-radius: 12px; }
 .workspace-app .purchase-options-table .is-current { background: var(--ds-brand-soft); }
 .workspace-app .simple-quote-card { border-radius: 12px; }

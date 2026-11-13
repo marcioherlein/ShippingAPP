@@ -33,7 +33,8 @@ export default function ProductEntry({ onProduct }: { onProduct: (product: Prepa
 
   const moveTabFocus = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const last = methods.length - 1
-    const position = { ArrowRight: (index + 1) % methods.length, ArrowLeft: (index + last) % methods.length, Home: 0, End: last }[event.key]
+    const positions: Partial<Record<string, number>> = { ArrowRight: (index + 1) % methods.length, ArrowLeft: (index + last) % methods.length, Home: 0, End: last }
+    const position = positions[event.key]
     if (position === undefined) return
     event.preventDefault()
     tabList.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[position]?.focus()

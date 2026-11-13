@@ -101,7 +101,7 @@ export default function AppEntry() {
   useEffect(() => {
     if (checkedAccount.current || !account.loaded || !account.signedIn) return
     checkedAccount.current = true
-    const productLookupPending = canResume(readOperation('owned-link')) || canResume(readOperation('search'))
+    const productLookupPending = ['entry-link', 'entry-search', 'owned-link', 'search'].some(stage => canResume(readOperation(stage)))
     if (!explicitView.current && !hasDraft && !productLookupPending) navigate('workspace')
   }, [account.loaded, account.signedIn, hasDraft])
 

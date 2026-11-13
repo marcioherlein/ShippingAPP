@@ -56,7 +56,9 @@ function units(value?: number | null) {
 }
 
 export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mode = 'intake', deferCalculation = false, compact = false }: Props) {
-  const [savedSearch] = useState(() => readProductDraft<SearchDraft>('search'))
+  const draftKey = compact ? 'inline-search' : 'search'
+  const operationStage = compact ? 'entry-search' : 'search'
+  const [savedSearch] = useState(() => readProductDraft<SearchDraft>(draftKey))
   const [draft, setDraft] = useState(() => typeof savedSearch?.draft === 'string' ? savedSearch.draft.slice(0, 1800) : '')
   const [lastSearch, setLastSearch] = useState(() => typeof savedSearch?.lastSearch === 'string' ? savedSearch.lastSearch.slice(0, 1800) : '')
   const [messages, setMessages] = useState<ThreadMessage[]>(savedSearch?.messages || [])
@@ -77,7 +79,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   const [error, setError] = useState(savedSearch?.lastError || '')
   const [failedSourceUrl, setFailedSourceUrl] = useState<string | null>(savedSearch?.failedSourceUrl || null)
 
-  useEffect(() => { writeProductDraft('search', { draft, lastSearch, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current, failedSourceUrl, lastError: error }) }, [draft, lastSearch, discovery, messages, selectedConstraints, failedSourceUrl, error])
+  useEffect(() => { writeProductDraft(draftKey, { draft, lastSearch, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current, failedSourceUrl, lastError: error }) }, [draft, lastSearch, discovery, messages, selectedConstraints, failedSourceUrl, error, draftKey])
 
   const constraintChecks = useMemo(
     () => analysis && selectedConstraints ? checkDiscoveryConstraints(analysis, selectedConstraints) : [],
@@ -109,12 +111,12 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         signal.removeEventListener('abort', abort)
       }
     } else next = await ingestAlibabaUrlV2(url, signal)
-    if (signal.aborted || !operationIsCurrent('search', operationId)) return
+    if (signal.aborted || !operationIsCurrent(operationStage, operationId)) return
     setSelectedConstraints(fromDiscovery ? constraints : null)
     setFailedSourceUrl(null)
     pendingAuth.current = false
-    const operation = readOperation<SearchOperation>('search')
-    if (operation?.id === operationId) settleOperation('search', { ...operation, status: 'complete' })
+    const operation = readOperation<SearchOperation>(operationStage)
+    if (operation?.id === operationId) settleOperation(operationStage, { ...operation, status: 'complete' })
     onAnalysis(next)
     setDiscovery(null)
     setMessages((current) => [...current, {
@@ -129,7 +131,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     setFailedSourceUrl(null)
     setPhase('search')
     const live = await discoverProducts(query, userText, operationId, signal)
-    if (signal.aborted || !operationIsCurrent('search', operationId)) return
+    if (signal.aborted || !operationIsCurrent(operationStage, operationId)) return
     setDiscovery(live)
     setMessages((current) => [...current, {
       role: 'assistant',
@@ -147,14 +149,14 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     busy.current = true
     const controller = new AbortController()
     activeRequest.current = controller
-    const operation = beginOperation<SearchOperation>('search', { value })
+    const operation = beginOperation<SearchOperation>(operationStage, { value })
 
     if (!resumed) setMessages((current) => [...current, { role: 'user', content: value }])
     setLastSearch(value)
     setDraft(value)
     // Save before the request can open sign-in or navigate away. Restoring text
     // must never automatically repeat a metered search.
-    writeProductDraft('search', { draft: value, lastSearch: value, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current })
+    writeProductDraft(draftKey, { draft: value, lastSearch: value, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current })
     setLoading(true)
     setError('')
     setFailedSourceUrl(null)
@@ -177,18 +179,18 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
 
       await runDiscoverySearch(query, value, operation.id, controller.signal)
     } catch (err) {
-      if (controller.signal.aborted || !operationIsCurrent('search', operation.id)) return
+      if (controller.signal.aborted || !operationIsCurrent(operationStage, operation.id)) return
       if (isAlibabaUrl(value)) setFailedSourceUrl(value)
       const message = err instanceof Error ? err.message : 'No pude completar la búsqueda en este momento.'
       pendingAuth.current = err instanceof ApiAuthError
       operation.status = pendingAuth.current ? 'waiting_auth' : 'failed'
-      writeProductDraft('search', { draft: value, lastSearch: value, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current })
+      writeProductDraft(draftKey, { draft: value, lastSearch: value, discovery, messages, selectedConstraints, pendingAuth: pendingAuth.current })
       setError(message)
     } finally {
       if (!controller.signal.aborted) {
         if (operation.status === 'running') operation.status = 'complete'
         if (operation.status === 'complete') pendingAuth.current = false
-        settleOperation('search', operation)
+        settleOperation(operationStage, operation)
       }
       if (activeRequest.current === controller) {
         activeRequest.current = null
@@ -204,14 +206,14 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     busy.current = true
     const controller = new AbortController()
     activeRequest.current = controller
-    const operation = beginOperation<SearchOperation>('search', { value: lastSearch, selectedUrl: url, ...(selectedItem ? { selectedItem } : {}), constraints })
+    const operation = beginOperation<SearchOperation>(operationStage, { value: lastSearch, selectedUrl: url, ...(selectedItem ? { selectedItem } : {}), constraints })
     setLoading(true)
     setError('')
     setFailedSourceUrl(null)
     try {
       await analyzeRealUrl(url, true, constraints, operation.id, controller.signal, selectedItem)
     } catch (err) {
-      if (controller.signal.aborted || !operationIsCurrent('search', operation.id)) return
+      if (controller.signal.aborted || !operationIsCurrent(operationStage, operation.id)) return
       pendingAuth.current = err instanceof ApiAuthError
       operation.status = pendingAuth.current ? 'waiting_auth' : 'failed'
       setFailedSourceUrl(url)
@@ -220,7 +222,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       if (!controller.signal.aborted) {
         if (operation.status === 'running') operation.status = 'complete'
         if (operation.status === 'complete') pendingAuth.current = false
-        settleOperation('search', operation)
+        settleOperation(operationStage, operation)
       }
       if (activeRequest.current === controller) {
         activeRequest.current = null
@@ -234,9 +236,9 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   const stopRequest = () => {
     activeRequest.current?.abort()
     activeRequest.current = null
-    const operation = readOperation<SearchOperation>('search')
+    const operation = readOperation<SearchOperation>(operationStage)
     if (operation) {
-      settleOperation('search', { ...operation, status: 'failed' })
+      settleOperation(operationStage, { ...operation, status: 'failed' })
       const url = operation.payload.selectedUrl || (isAlibabaUrl(operation.payload.value) ? operation.payload.value : null)
       if (url) setFailedSourceUrl(url)
     }
@@ -246,14 +248,14 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     setPhase('idle')
   }
 
-  const enterManual = (sourceUrl = readOperation<SearchOperation>('search')?.payload.selectedUrl || failedSourceUrl || (isAlibabaUrl(lastSearch) ? lastSearch : undefined)) => {
+  const enterManual = (sourceUrl = readOperation<SearchOperation>(operationStage)?.payload.selectedUrl || failedSourceUrl || (isAlibabaUrl(lastSearch) ? lastSearch : undefined)) => {
     stopRequest()
     if (sourceUrl && onManualFallback) onManualFallback(sourceUrl)
     else onAnalysis(createManualProductAnalysis(sourceUrl || 'manual://product', isAlibabaUrl(lastSearch) ? '' : lastSearch))
   }
 
   const retryLast = () => {
-    const operation = readOperation<SearchOperation>('search')
+    const operation = readOperation<SearchOperation>(operationStage)
     if (operation?.payload.selectedUrl) void selectDiscovery(operation.payload.selectedUrl, operation.payload.constraints ?? null, operation.payload.selectedItem)
     else if (failedSourceUrl) void submitValue(failedSourceUrl)
     else void submitValue(lastSearch)
@@ -275,13 +277,13 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   useEffect(() => {
     const onAuthResolved = () => {
       if (busy.current) return
-      const operation = readOperation<SearchOperation>('search')
+      const operation = readOperation<SearchOperation>(operationStage)
       if (canResume(operation) && operation) {
         if (operation.payload.selectedUrl) void selectDiscoveryRef.current(operation.payload.selectedUrl, operation.payload.constraints ?? null, operation.payload.selectedItem)
         else void submitValueRef.current(operation.payload.value, true)
         return
       }
-      const pending = readProductDraft<SearchDraft>('search')
+      const pending = readProductDraft<SearchDraft>(draftKey)
       const query = pending?.lastSearch?.trim()
       if (!pending?.pendingAuth || !query) return
       if (!operation) void submitValueRef.current(query, true)
@@ -291,7 +293,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
     const unsubscribe = subscribeSession(checkReady)
     checkReady()
     return () => { unsubscribe(); window.removeEventListener('shippingapp:auth-resolved', onAuthResolved) }
-  }, [loading])
+  }, [loading, draftKey, operationStage])
 
   useEffect(() => {
     if (!loading && discovery?.results.length) {
@@ -368,7 +370,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
           const missing = item.missingFacts?.filter(Boolean) ?? []
           return <article key={item.url} className="discovery-item">
             <div className="discovery-item-top">
-              <span>ALIBABA · PUBLICACIÓN REAL</span>
+              <span>Alibaba</span>
               {item.opportunityScore ? <small>{item.opportunityScore}/100</small> : null}
             </div>
             {item.imageUrl && <img className="discovery-thumb" src={item.imageUrl} alt="" width={240} height={180} loading="lazy" decoding="async" referrerPolicy="no-referrer" />}

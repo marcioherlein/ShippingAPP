@@ -44,7 +44,12 @@ for (const [width,entry] of [[390,'link'],[1440,'link'],[390,'search']] as const
   await page.getByRole('button',{name:'Continuar',exact:true}).click()
   await page.getByRole('button',{name:'Continuar',exact:true}).click()
   const calculate = page.getByRole('button',{name:'Confirmar y calcular mis opciones',exact:true})
-  await expect(calculate).toBeInViewport({ratio:1})
+  // WebKit rounds intersection areas at device-pixel boundaries. Check the
+  // actual box with subpixel tolerance rather than rejecting a 0.016px edge.
+  await expect.poll(async () => calculate.evaluate(element => {
+    const box = element.getBoundingClientRect()
+    return box.top >= -0.5 && box.left >= -0.5 && box.bottom <= innerHeight + 0.5 && box.right <= innerWidth + 0.5
+  })).toBe(true)
   await calculate.click()
   const result=page.getByRole('region',{name:'Tu presupuesto de importación'})
   await expect(result).toBeVisible()

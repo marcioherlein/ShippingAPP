@@ -19,7 +19,20 @@ function usableOrigin(value: string | undefined | null) {
   return actual
 }
 
-export function checkDiscoveryConstraints(analysis: ProductAnalysisV2, constraints: DiscoveryConstraints): ConstraintCheck[] {
+export function checkDiscoveryConstraints(analysis: ProductAnalysisV2, rawConstraints: Partial<DiscoveryConstraints> | null | undefined): ConstraintCheck[] {
+  // API responses and restored drafts can predate an optional constraint. An
+  // absent field is no constraint, never a reason to crash product selection or
+  // to claim that an undefined threshold was satisfied.
+  const positive = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+  const constraints: DiscoveryConstraints = {
+    maxUnitPriceUsd: positive(rawConstraints?.maxUnitPriceUsd),
+    maxMoq: positive(rawConstraints?.maxMoq),
+    originCountry: typeof rawConstraints?.originCountry === 'string' ? rawConstraints.originCountry.trim() || null : null,
+    excludedOriginCountries: Array.isArray(rawConstraints?.excludedOriginCountries)
+      ? rawConstraints.excludedOriginCountries.filter((value): value is string => typeof value === 'string' && !!value.trim()).map(value => value.trim())
+      : [],
+    lowMoqPreference: rawConstraints?.lowMoqPreference === true,
+  }
   const checks: ConstraintCheck[] = []
 
   if (constraints.maxUnitPriceUsd !== null) {

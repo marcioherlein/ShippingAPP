@@ -10,6 +10,7 @@ import { saveCompletedAnalysis } from '../lib/analysisHistory'
 import { ApiAuthError, setSessionState } from '../lib/authSession'
 import { usd } from '../lib/format'
 import { writeCaseConversation } from '../lib/caseConversation'
+import { getProcessingState } from '../lib/processingScreen'
 vi.mock('../lib/format', async importOriginal => { const actual = await importOriginal<typeof import('../lib/format')>(); return { ...actual, usd: vi.fn(actual.usd) } })
 vi.mock('../lib/analysisHistory',()=>({saveCompletedAnalysis:vi.fn()}))
 const analysis=createManualProductAnalysis('manual://test')
@@ -31,8 +32,10 @@ it('shows the decision metrics first and retains the transcript in collapsed his
 it('reports saved only after server confirmation and retains chat and scenarios in the payload',async()=>{
  let resolve!:(value:any)=>void;vi.mocked(saveCompletedAnalysis).mockImplementation(()=>new Promise(r=>{resolve=r}))
  await render();await act(async()=>save().click());expect(container.textContent).not.toContain('Presupuesto guardado')
+ expect(getProcessingState()?.title).toBe('Guardando tu presupuesto')
  expect(vi.mocked(saveCompletedAnalysis).mock.calls[0][1]).toMatchObject({conversation:[{role:'assistant'},{role:'user',text:'Para iluminar fotos.'}],purchasePlan:plan,pipelineSummary:summary})
  await act(async()=>resolve({id:'saved-case'}));expect(container.textContent).toContain('Presupuesto guardado')
+ expect(getProcessingState()).toBeNull()
 })
 it('resumes the same pending save after a login reload without changing its snapshot',async()=>{
  setSessionState('signed_out');vi.mocked(saveCompletedAnalysis).mockRejectedValueOnce(new ApiAuthError('session_required','Ingresá para guardar'))

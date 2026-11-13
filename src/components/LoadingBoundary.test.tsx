@@ -3,6 +3,7 @@ import React, { act, lazy } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import LoadingBoundary from './LoadingBoundary'
+import { getProcessingState } from '../lib/processingScreen'
 
 let root: Root
 let container: HTMLDivElement
@@ -17,6 +18,7 @@ afterEach(async () => {
   container.remove()
   sessionStorage.clear()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 it('announces loading and replaces it with the requested surface when its chunk resolves', async () => {
@@ -37,4 +39,15 @@ it('offers recovery after a rejected chunk and preserves the existing draft', as
   expect(container.querySelector('[role=alert]')?.textContent).toContain('Tu ficha permanece guardada')
   expect(container.querySelector('button')?.textContent).toBe('Reintentar cargar')
   expect(sessionStorage.getItem('shippingapp:product-draft:analysis')).toBe('saved-draft')
+})
+
+it('releases the blocking screen and offers recovery when a chunk never resolves', async () => {
+  vi.useFakeTimers()
+  const Surface = lazy(() => new Promise<{ default: React.ComponentType }>(() => {}))
+  await act(async () => root.render(<LoadingBoundary><Surface /></LoadingBoundary>))
+  expect(getProcessingState()).not.toBeNull()
+  await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+  expect(getProcessingState()).toBeNull()
+  expect(container.querySelector('[role=alert]')?.textContent).toContain('Tu ficha permanece guardada')
+  expect(container.querySelector('button')?.textContent).toBe('Reintentar cargar')
 })

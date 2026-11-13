@@ -343,7 +343,7 @@ export default function CalculationPipeline({ capacity, analysis, prefill, statu
   />
   if (capacity && status === 'ready') return null
 
-  return <section className="calculation-pipeline" id="case-confirmation" aria-busy={status === 'processing'}>
+  return <section className="calculation-pipeline quote-form-surface" id="case-confirmation" aria-busy={status === 'processing'}>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{statusAnnouncement}</div>
     {(status === 'confirm' || status === 'blocked') ? <>
       {status === 'blocked' && visibleBlocker && <div className="pipeline-blocker" role="alert" aria-atomic="true"><p>{visibleBlocker}</p>{authRequired ? <AccountControls /> : analysis.customs.missingFacts.length > 0 && <ul>{analysis.customs.missingFacts.map(fact => <li key={fact}>{fact}</li>)}</ul>}</div>}

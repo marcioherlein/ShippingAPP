@@ -1,4 +1,5 @@
 import { authenticationError, getSessionState, setSessionState, waitForVerifiedSession } from './authSession'
+import { startProcessing, type ProcessingDetails } from './processingScreen'
 export type ApiTokenProvider = (fresh?: boolean) => Promise<string | null>
 
 const pendingReads = new Map<string, Promise<Response>>()
@@ -14,6 +15,16 @@ const IDEMPOTENT_METERED_POSTS = new Set([
   '/api/mercadolibre/benchmark',
   '/api/watchlist-refresh',
 ])
+
+const FOREGROUND_OPERATIONS: Record<string, ProcessingDetails> = {
+  '/api/opportunity-search': { title: 'Buscando tu producto', detail: 'Estamos buscando publicaciones y proveedores para tu búsqueda.' },
+  '/api/discover': { title: 'Buscando tu producto', detail: 'Estamos consultando las opciones disponibles.' },
+  '/api/product-read': { title: 'Leyendo tu producto', detail: 'Estamos recuperando la ficha de la publicación. Después podrás confirmar sus datos.' },
+  '/api/intake': { title: 'Preparando tu producto', detail: 'Estamos organizando la información que compartiste.' },
+  '/api/analyze': { title: 'Analizando tu importación', detail: 'Estamos verificando el producto y consultando las fuentes disponibles.' },
+  '/api/ncm-classify': { title: 'Clasificando tu producto', detail: 'Estamos contrastando los datos del producto con el nomenclador.' },
+  '/api/watchlist-refresh': { title: 'Actualizando tu seguimiento', detail: 'Estamos consultando los datos actuales del producto.' },
+}
 
 export function setApiTokenProvider(provider: ApiTokenProvider | null) {
   sessionGeneration += 1
@@ -133,6 +144,8 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
 
 /** Bounds both session lookup and provider requests; abort releases the connection. */
 async function boundedApiFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const details = isProtectedSameOriginApi(input) ? FOREGROUND_OPERATIONS[inputUrl(input)?.pathname ?? ''] : undefined
+  const processing = details ? startProcessing({ ...details, priority: -10 }) : null
   const controller = new AbortController()
   const abort = () => controller.abort(init?.signal?.reason)
   init?.signal?.addEventListener('abort', abort, { once: true })
@@ -164,6 +177,7 @@ async function boundedApiFetch(input: RequestInfo | URL, init?: RequestInit) {
       }),
     ])
   } finally {
+    processing?.finish()
     clearTimeout(timer)
     if (rejectOnAbort) controller.signal.removeEventListener('abort', rejectOnAbort)
     init?.signal?.removeEventListener('abort', abort)

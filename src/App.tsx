@@ -10,6 +10,8 @@ import { beginOperation, canResume, operationIsCurrent, readOperation, settleOpe
 import LoadingBoundary from './components/LoadingBoundary'
 import React, { lazy, type ComponentProps, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { supplierQuotePrice } from './lib/supplierQuote'
+import { useProcessingScreen } from './lib/useProcessingScreen'
+import { getProcessingState, subscribeProcessing } from './lib/processingScreen'
 import { startImportAnalysis } from './lib/productAnalysis'
 const LoadedUrlAnalyzer = lazy(() => import('./components/UrlAnalyzer'))
 const UrlAnalyzer = (props: ComponentProps<typeof LoadedUrlAnalyzer>) => <LoadingBoundary><LoadedUrlAnalyzer {...props} /></LoadingBoundary>
@@ -196,7 +198,23 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
   const resetDialog = useRef<HTMLDialogElement>(null)
   const [productNavigation, setProductNavigation] = useState(0)
   useEffect(() => {
-    if (focusOnEntry && active) document.querySelector<HTMLElement>('.journey-task-title')?.focus({ preventScroll: true })
+    if (!focusOnEntry || !active) return
+    let frame = 0
+    let focused = false
+    const focusWhenReady = () => {
+      if (focused || getProcessingState()) return
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        // Lazy loading keeps the new page inert until the progress dialog's
+        // cleanup. Move keyboard context only after that cleanup has finished.
+        if (getProcessingState()) return
+        document.querySelector<HTMLElement>('.journey-task-title')?.focus({ preventScroll: true })
+        focused = true
+      })
+    }
+    const unsubscribe = subscribeProcessing(focusWhenReady)
+    focusWhenReady()
+    return () => { unsubscribe(); cancelAnimationFrame(frame) }
   }, [focusOnEntry, active])
   useEffect(() => {
     if (!productNavigation) return
@@ -230,6 +248,13 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
   const [pipelineBlocker, setPipelineBlocker] = useState<string | null>(null)
   const [pipelineAuthRequired, setPipelineAuthRequired] = useState(false)
   const [calculationInputKey, setCalculationInputKey] = useState<string | null>(null)
+  useProcessingScreen(active && calculationStatus === 'processing', {
+    title: ['Analizando tu producto', 'Verificando los impuestos', 'Comparando formas de envío', 'Preparando tu dashboard'][Math.min(pipelineStage, 3)],
+    detail: 'Estamos verificando la clasificación y calculando tu importación con los datos que confirmaste.',
+    steps: ['Producto y clasificación', 'Impuestos', 'Costos y transporte', 'Tu resultado'],
+    activeStep: pipelineStage,
+    priority: 10,
+  })
   const [entered, setEntered] = useState<boolean>(readInitialEntered)
 
   // True while the persistence layer replays a saved journey, so the reveal
@@ -717,7 +742,7 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
         <button type="button" className="journey-destructive-action" onClick={resetJourney}>Empezar de nuevo</button>
       </div>
     </dialog>
-    <AppHeader onNewCase={requestReset} hasProduct={!!analysis} processing={effectiveCalculationStatus === 'processing'} hasResult={effectiveCalculationStatus === 'ready' && !showSetup} onReviewProduct={() => { setShowSetup(false); reviewProductData(); setProductNavigation(value => value + 1) }} />
+    <AppHeader onNewCase={requestReset} hasProduct={!!analysis} processing={effectiveCalculationStatus === 'processing'} hasResult={effectiveCalculationStatus === 'ready' && !showSetup} onReviewProduct={effectiveCalculationStatus === 'ready' || showSetup ? () => { setShowSetup(false); reviewProductData(); setProductNavigation(value => value + 1) } : undefined} />
 
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
       <h1 className="journey-task-title" tabIndex={-1}>{progressStep === 4 ? 'Tu panel de resultados' : 'Planificá tu importación'}</h1>
@@ -868,7 +893,6 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
       </aside>}
     </section>
 
-    {analysis && <div className="focus-setup-action"><button type="button" className="pipeline-secondary" onClick={() => { const opening = !showSetup; setShowSetup(opening); reviewProductData(); if (opening) { setStep(1); setProfilePage(1); setBudgetPage(false) } }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
     {analysis && analysisPrefill && <section className="journey-pipeline-section" hidden={showSetup}>
       <CalculationPipeline
         analysis={analysis}
@@ -896,6 +920,8 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
         setApprovedQuantity(quantity); reviewProductData(); void confirmAndCalculate({ ...productConfirmationFromAnalysis(analysis), quantity }, true)
       }} />
     </section>}
+
+    {analysis && <div className="focus-setup-action"><button type="button" className="pipeline-secondary" onClick={() => { const opening = !showSetup; setShowSetup(opening); reviewProductData(); if (opening) { setStep(1); setProfilePage(1); setBudgetPage(false) } }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
 
     {!intent && <footer className="journey-footer">
       <div className="journey-footer-left">

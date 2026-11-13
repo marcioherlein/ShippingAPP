@@ -38,6 +38,7 @@ vi.mock('./App', async () => {
 
 let root: Root, container: HTMLDivElement
 const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal')
+const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close')
 const delayedOpenTest = 'delivers a saved snapshot when the calculator has not loaded yet'
 beforeEach(({ task }) => {
   // Keep individually filtered tests independent of the import-delay test.
@@ -47,12 +48,15 @@ beforeEach(({ task }) => {
   history.replaceState(null, '', '/')
   harness.account = { signedIn: false, loaded: true, status: 'idle', userId: null, name: null, error: '', signIn: vi.fn(), retry: vi.fn() }
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute('open', '') } })
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute('open') } })
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)
 })
 afterEach(async () => {
   await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks()
   if (originalShowModal) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', originalShowModal)
   else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
+  if (originalClose) Object.defineProperty(HTMLDialogElement.prototype, 'close', originalClose)
+  else Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
 })
 
 async function render() { await act(async () => root.render(<AppEntry />)) }

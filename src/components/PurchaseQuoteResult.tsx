@@ -8,6 +8,7 @@ import { readCaseConversation, type CaseMessage } from '../lib/caseConversation'
 import CaseConversation from './CaseConversation'
 import { usd } from '../lib/format'
 import { minimumScenario, PurchaseOptimization, PurchaseTransportComparison } from './PurchaseDecisionTables'
+import { useProcessingScreen } from '../lib/useProcessingScreen'
 export type PurchaseQuoteSnapshot = { version: 1; quotedAt: string; analysis: ProductAnalysisV2; pipelineSummary: { baseQuantity: number; selectedMode: string; totalCostUsd: number; unitCostUsd: number; freightCostUsd: number }; purchasePlan: PurchasePlan; conversation: CaseMessage[] }
 const modes = { lcl: 'Marítimo LCL', air: 'Aéreo', courier: 'Courier comercial' }
 export const PurchaseQuoteSummary = React.memo(function PurchaseQuoteSummary({ snapshot, onChoose }: { snapshot: PurchaseQuoteSnapshot; onChoose?: (quantity: number) => void }) {
@@ -68,6 +69,7 @@ export default function PurchaseQuoteResult({ analysis, plan, capacity, input, s
   const [cached] = useState(() => readProductDraft<{ fingerprint: string; snapshot: PurchaseQuoteSnapshot; persisted?: boolean }>('quote-result'))
   const [snapshot] = useState<PurchaseQuoteSnapshot>(() => saved ?? (pendingMatches ? pending!.snapshot : null) ?? (cached?.fingerprint === fingerprint ? cached.snapshot : null) ?? ({ version: 1, quotedAt: new Date().toISOString(), analysis, pipelineSummary: summary, purchasePlan: plan, conversation: readCaseConversation(analysis.sourceUrl) }))
   const [state, setState] = useState<'idle'|'saving'|'saved'|'error'>(saved || (cached?.fingerprint === fingerprint && cached.persisted) ? 'saved' : 'idle')
+  useProcessingScreen(state === 'saving', { title: 'Guardando tu presupuesto', detail: 'Estamos guardando el resultado completo en tu cuenta. Esperamos la confirmación del servidor.' })
   useEffect(() => { writeProductDraft('quote-result', { fingerprint, snapshot, persisted: state === 'saved' }) }, [fingerprint, snapshot, state])
   const [error, setError] = useState('')
   const busy = useRef(false)

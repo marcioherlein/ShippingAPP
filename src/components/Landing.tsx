@@ -30,7 +30,12 @@ export default function Landing({ onStart, onProduct }: Props) {
           <h1>Calculá cuánto te<br className="calculator-hero-break" /> cuesta <em>importar.</em></h1>
           <p>Compará courier, aéreo y marítimo LCL. Estimá el costo por unidad y decidí cuántas traer.</p>
           {onProduct
-            ? <a className="calculator-hero-cta" href="#elegir-producto" onClick={() => document.querySelector<HTMLElement>('#elegir-producto h2')?.focus({ preventScroll: true })}>Empezar cálculo <UiIcon name="arrow-right" size={17} /></a>
+            ? <a className="calculator-hero-cta" href="#elegir-producto" onClick={event => {
+                const heading = document.querySelector<HTMLElement>('#elegir-producto h2')
+                if (!heading) return
+                event.preventDefault()
+                heading.focus()
+              }}>Empezar cálculo <UiIcon name="arrow-right" size={17} /></a>
             : <button className="calculator-hero-cta" type="button" onClick={onStart}>Retomar mi cálculo <UiIcon name="arrow-right" size={17} /></button>}
         </div>
       </section>

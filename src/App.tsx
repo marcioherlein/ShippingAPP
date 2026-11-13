@@ -22,6 +22,8 @@ const LoadedCalculationPipeline = lazy(() => import('./components/CalculationPip
 const CalculationPipeline = (props: ComponentProps<typeof LoadedCalculationPipeline>) => <LoadingBoundary><LoadedCalculationPipeline {...props} /></LoadingBoundary>
 import { type JourneyQuoteSetup } from './components/ImportQuoteFlow'
 import Landing from './components/Landing'
+import CalculatorSteps from './components/CalculatorSteps'
+import ProductEntry, { type PreparedProduct } from './components/ProductEntry'
 import AppHeader from './components/AppHeader'
 import UiIcon from './components/UiIcon'
 import type { QuotePrefill } from './lib/hotProducts'
@@ -48,8 +50,6 @@ import {
 type EntryIntent = 'have_product' | 'search_product' | 'discover' | null
 type BudgetMode = 'budget' | 'units' | 'unknown' | null
 type SignatureAnswer = 'yes' | 'no' | 'unknown'
-
-const stepLabels = ['Objetivo', 'Tu operación', 'Presupuesto', 'Producto', 'Resultado']
 
 function purposeLabel(value: ImportPurpose | null) {
   if (value === 'resale') return 'Reventa'
@@ -183,7 +183,7 @@ function readInitialEntered() {
   try {
     if (sessionStorage.getItem(ANALYSIS_DRAFT_KEY)) return true
   } catch { /* storage may be unavailable */ }
-  return hasPendingRestore()
+  return !!readProductDraft<PreparedProduct>('prepared-entry') || hasPendingRestore()
 }
 
 type PipelineDraft = {
@@ -194,7 +194,7 @@ type PipelineDraft = {
   calculationInputKey: string
 }
 
-export default function App({ focusOnEntry = false, active = true, initialSavedQuote = null, newCalculationRequest = 0 }: { focusOnEntry?: boolean; active?: boolean; initialSavedQuote?: AnalysisHistoryItem | null; newCalculationRequest?: number }) {
+export default function App({ focusOnEntry = false, active = true, initialSavedQuote = null, initialPreparedProduct = null, newCalculationRequest = 0 }: { focusOnEntry?: boolean; active?: boolean; initialSavedQuote?: AnalysisHistoryItem | null; initialPreparedProduct?: PreparedProduct | null; newCalculationRequest?: number }) {
   const resetDialog = useRef<HTMLDialogElement>(null)
   const [productNavigation, setProductNavigation] = useState(0)
   useEffect(() => {
@@ -226,22 +226,23 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
     })
     return () => cancelAnimationFrame(frame)
   }, [productNavigation])
-  const [intent, setIntent] = useState<EntryIntent>(null)
-  const [step, setStep] = useState(0)
+  const preparedProduct = initialPreparedProduct
+  const [intent, setIntent] = useState<EntryIntent>(preparedProduct?.intent ?? null)
+  const [step, setStep] = useState(preparedProduct ? 1 : 0)
   const [profilePage, setProfilePage] = useState(1)
   const [budgetPage, setBudgetPage] = useState(false)
   const [purpose, setPurpose] = useState<ImportPurpose | null>(null)
   const [entityType, setEntityType] = useState<ImportEntityType | null>(null)
   const [signature, setSignature] = useState<SignatureAnswer | null>(null)
-  const [sensitiveCategory, setSensitiveCategory] = useState<SensitiveProductCategory | null>(null)
+  const [sensitiveCategory, setSensitiveCategory] = useState<SensitiveProductCategory | null>(preparedProduct?.sensitiveCategory ?? null)
   const [budgetMode, setBudgetMode] = useState<BudgetMode>(null)
   const [budgetUsd, setBudgetUsd] = useState(10000)
   const [unitsMin, setUnitsMin] = useState(50)
   const [unitsMax, setUnitsMax] = useState(200)
   const [approvedQuantity, setApprovedQuantity] = useState<number | null>(null)
-  const [showSetup, setShowSetup] = useState(false)
+  const [showSetup, setShowSetup] = useState(!!preparedProduct)
   const [frozenQuote, setFrozenQuote] = useState<PurchaseQuoteSnapshot | null>(null)
-  const [analysis, setAnalysis] = useState<ProductAnalysisV2 | null>(null)
+  const [analysis, setAnalysis] = useState<ProductAnalysisV2 | null>(preparedProduct?.analysis ?? null)
   const [calculationStatus, setCalculationStatus] = useState<CalculationPipelineStatus>('confirm')
   const [pipelineStage, setPipelineStage] = useState(0)
   const [pipelineSummary, setPipelineSummary] = useState<CalculationPipelineSummary | null>(null)
@@ -255,7 +256,7 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
     activeStep: pipelineStage,
     priority: 10,
   })
-  const [entered, setEntered] = useState<boolean>(readInitialEntered)
+  const [entered, setEntered] = useState(() => Boolean(preparedProduct) || readInitialEntered())
 
   // True while the persistence layer replays a saved journey, so the reveal
   // scrolls below don't yank the page during restore/popstate.
@@ -268,14 +269,18 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
 
   useEffect(() => {
     const restoreProduct = () => {
-      const saved = readProductDraft<{ intent: EntryIntent; analysis: ProductAnalysisV2 }>('analysis')
+      const saved = readProductDraft<{ intent: EntryIntent; analysis: ProductAnalysisV2; setup?: boolean; sensitiveCategory?: SensitiveProductCategory | null }>('analysis')
       if (saved?.intent === intent && saved.analysis?.product && saved.analysis?.customs) {
         setAnalysis(saved.analysis)
+        if (saved.setup && step < 3) {
+          setShowSetup(true)
+          if (saved.sensitiveCategory !== undefined) setSensitiveCategory(saved.sensitiveCategory)
+        }
         // Bring back a finished quote when the saved inputs still match what the
         // replayed answers produced; otherwise fall back to the review step.
         const pipe = readProductDraft<PipelineDraft>('pipeline')
         const restoredCategory = pipe?.status === 'ready' ? recoverSavedCategory(pipe.calculationInputKey, currentCalculationInputKeyRef.current) : undefined
-        if (hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && restoredCategory !== undefined) {
+        if (!saved.setup && hasConfirmedClassification(saved.analysis.customs) && pipe?.status === 'ready' && restoredCategory !== undefined) {
           setSensitiveCategory(restoredCategory)
           setApprovedQuantity(pipe.approvedQuantity ?? null)
           setPipelineSummary(pipe.pipelineSummary)
@@ -292,7 +297,7 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
     }
     window.addEventListener('shippingapp:journey-restored', restoreProduct)
     return () => window.removeEventListener('shippingapp:journey-restored', restoreProduct)
-  }, [intent])
+  }, [intent, step])
 
   // When auth resolves (modal sign-in completes), auto-retry any pending confirmation that was
   // interrupted by the auth gate — saves the user from clicking "Confirmar" a second time.
@@ -323,8 +328,10 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
   }, [])
 
   useEffect(() => {
-    if (analysis && intent) writeProductDraft('analysis', { intent, analysis })
-  }, [analysis, intent])
+    if (!analysis || !intent) return
+    writeProductDraft('analysis', { intent, analysis, setup: showSetup && step < 3, sensitiveCategory })
+    if (step >= 3 && readProductDraft('prepared-entry')) writeProductDraft('prepared-entry', null)
+  }, [analysis, intent, showSetup, step, sensitiveCategory])
 
   useEffect(() => {
     if (calculationStatus === 'ready' && pipelineSummary && calculationInputKey) {
@@ -422,6 +429,9 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
   }, [initialSavedQuote])
 
   const progressStep = effectiveCalculationStatus === 'ready' ? 4 : step
+  const visualStep = progressStep === 4 ? 4
+    : analysis && !showSetup && (effectiveCalculationStatus === 'processing' || effectiveCalculationStatus === 'blocked' || hasUsableClassification(analysis)) ? 3
+    : intent && (analysis || step < 3) ? 2 : 1
 
   // Reveal a freshly shown card, but never during a persistence replay.
   const revealSection = (target: Element | null | undefined) => {
@@ -434,7 +444,7 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
   useEffect(() => {
     if (!active || effectiveCalculationStatus !== 'ready' || restoringRef.current || !pendingResultReveal.current) return
     pendingResultReveal.current = false
-    scrollIntoViewIfNeeded(document.querySelector('#calculator .result-hero'))
+    scrollIntoViewIfNeeded(document.getElementById('calculator'))
   }, [active, effectiveCalculationStatus])
 
   const enterApp = () => {
@@ -459,6 +469,16 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
     setIntent(next)
     setAnalysis(null)
     resetPipeline()
+    setStep(1)
+  }
+
+  const startWithProduct = (product: PreparedProduct) => {
+    resetPipeline()
+    setIntent(product.intent)
+    setAnalysis(product.analysis)
+    setSensitiveCategory(product.sensitiveCategory ?? null)
+    writeProductDraft('prepared-entry', product)
+    setShowSetup(true)
     setStep(1)
   }
 
@@ -688,7 +708,10 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
   const continueBudget = () => {
     if (!budgetAnswered) return
     setStep(3)
-    if (analysis) setShowSetup(false)
+    if (analysis) {
+      if (quoteSetup.quantity && readProductDraft('prepared-entry')) setAnalysis({ ...analysis, product: { ...analysis.product, purchaseQuantity: quoteSetup.quantity }, suggestedQuantities: [quoteSetup.quantity] })
+      setShowSetup(false)
+    }
   }
 
   const resetJourney = () => {
@@ -742,46 +765,30 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
         <button type="button" className="journey-destructive-action" onClick={resetJourney}>Empezar de nuevo</button>
       </div>
     </dialog>
-    <AppHeader onNewCase={requestReset} hasProduct={!!analysis} processing={effectiveCalculationStatus === 'processing'} hasResult={effectiveCalculationStatus === 'ready' && !showSetup} onReviewProduct={effectiveCalculationStatus === 'ready' || showSetup ? () => { setShowSetup(false); reviewProductData(); setProductNavigation(value => value + 1) } : undefined} />
+    <AppHeader onNewCase={requestReset} hasProduct={!!analysis} processing={effectiveCalculationStatus === 'processing'} hasResult={effectiveCalculationStatus === 'ready' && !showSetup} onReviewProduct={effectiveCalculationStatus === 'ready' || showSetup && operationAnswered && budgetAnswered ? () => { setShowSetup(false); reviewProductData(); setProductNavigation(value => value + 1) } : undefined} />
 
     <section className="journey-hero" id="cotizador" tabIndex={-1}>
+      <CalculatorSteps current={visualStep} progress />
       <h1 className="journey-task-title" tabIndex={-1}>{progressStep === 4 ? 'Tu panel de resultados' : 'Planificá tu importación'}</h1>
-      <p className="workspace-intro">Evaluá cuánto invertir, cuánto cuesta cada unidad y qué falta validar antes de comprar.</p>
-      <div className="journey-progress-bar" role="progressbar" aria-valuenow={progressStep} aria-valuemin={0} aria-valuemax={4} aria-label={progressStep === 4 ? 'Cotización lista' : progressStep === 0 ? 'Elegí tu punto de partida' : `Paso ${progressStep} de 4: ${stepLabels[progressStep]}`}>
-        <div className="journey-progress-track">
-          <div className="journey-progress-fill" style={{ width: `${(progressStep / 4) * 100}%` }} />
-        </div>
-        <span className="journey-progress-label">{progressStep === 4 ? <><UiIcon name="check" size={14} />{' '}¡Listo!</> : progressStep === 0 ? 'Para empezar · Elegí tu punto de partida' : `Paso ${progressStep} de 4 · ${stepLabels[progressStep]}`}</span>
-      </div>
+      {progressStep === 4 && <p className="workspace-intro">Compará cuánto te cuesta recibir tu pedido en Argentina.</p>}
     </section>
 
     <section className={`journey-workspace focus-stage-${step}`} hidden={!!analysis && !showSetup}>
       <div className="journey-conversation">
-        <div className="gs-chat-panel-header">
-          <span className="gs-chat-panel-title">NUEVA IMPORTACIÓN</span>
-          <span className="gs-chat-panel-status">
-            <span className="gs-chat-panel-dot" aria-hidden="true" />
-            {effectiveCalculationStatus === 'processing' ? 'CALCULANDO' : effectiveCalculationStatus === 'ready' ? 'LISTO' : 'BORRADOR'}
-          </span>
-        </div>
         <div className="gs-chat-body">
-        <div className="journey-bubble assistant">
-          <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
-          <div><b>1. Elegí tu punto de partida</b><p>Definí tu producto y tu operación. Revisá la clasificación, compará costos estimados y elegí un plan de compra con sus fuentes y datos pendientes.</p></div>
-        </div>
-
-        {intent === null ? <div className="journey-entry-panel"><div className="journey-entry-heading"><h2>Elegí cómo empezar</h2><p>Te guiamos paso a paso hasta tu presupuesto.</p></div><div className="journey-choice-grid three">
+        {intent === null ? <>
+          <ProductEntry onProduct={startWithProduct} />
+          <div className="journey-entry-panel calculator-profile-first">
+            <div className="journey-entry-heading"><h3>Empezar por el perfil de importación</h3></div>
+            <div className="journey-choice-grid three">
           <button type="button" className="journey-entry-primary" data-entry-intent="have_product" onClick={() => chooseIntent('have_product')}><span><UiIcon name="product" size={20} /></span><b>Ya tengo un producto</b><small>Cargá un enlace o describí qué querés traer.</small><em className="journey-entry-action">Cargar mi producto <UiIcon name="arrow-right" size={18} /></em></button>
           <button type="button" data-entry-intent="search_product" onClick={() => chooseIntent('search_product')}><span><UiIcon name="search" size={20} /></span><b>Quiero buscarlo</b><small>Encontrá proveedores y opciones en Alibaba.</small><em className="journey-entry-action">Buscar un producto <UiIcon name="arrow-right" size={18} /></em></button>
-          <button type="button" data-entry-intent="discover" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Buscá ideas de producto usando la misma búsqueda real, sin catálogo cacheado.</small></button>
-        </div></div> : <div className="journey-bubble user" data-entry-intent={intent}><div><b>{intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
+          <button type="button" data-entry-intent="discover" onClick={() => chooseIntent('discover')}><span><UiIcon name="sparkles" size={20} /></span><b>Quiero explorar</b><small>Explorá publicaciones de Alibaba y elegí un producto.</small></button>
+            </div>
+          </div>
+        </> : <div className="journey-bubble user" data-entry-intent={intent} data-prepared-product={!!analysis && showSetup || undefined}><div><b>{analysis && showSetup ? analysis.product.name : intent === 'have_product' ? 'Ya tengo el producto.' : intent === 'search_product' ? 'Quiero buscar un producto.' : 'Quiero explorar productos.'}</b><button type="button" onClick={requestReset}>Cambiar</button></div></div>}
 
         {intent && <>
-          <div className="journey-bubble assistant">
-            <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
-            <div><b>2. Definí tu operación</b><p>Estas respuestas afectan impuestos, gastos y trámites. Si no sabés algo, podés marcar “No sé”.</p></div>
-          </div>
-
           <section className={`journey-question-card${step === 1 ? ' active' : ''}`}>
             <div className="journey-question-head"><span>01</span><div><b>Tu operación</b><small>Afecta impuestos y trámites.</small></div>{step > 1 && <button type="button" onClick={() => setStep(1)}>Editar</button>}</div>
             {step === 1 ? <div className="journey-question-fields" data-profile-page={profileStep}>
@@ -794,10 +801,6 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
           </section>
 
           {step >= 2 && <>
-            <div className="journey-bubble assistant">
-              <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
-              <div><b>3. Definí tu capacidad de compra</b><p>Presupuesto total, rango de unidades, o dejalo en abierto por ahora.</p></div>
-            </div>
             <section className={`journey-question-card${step === 2 ? ' active' : ''}`}>
               <div className="journey-question-head"><span>02</span><div><b>Presupuesto o rango</b><small>Esto limita las cantidades que vale la pena simular.</small></div>{step > 2 && <button type="button" onClick={() => setStep(2)}>Editar</button>}</div>
               {step === 2 ? <div className="journey-question-fields">
@@ -810,12 +813,12 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
                 {budgetPage && budgetMode === 'units' && <div className="journey-range-fields"><label><span>Mínimo de unidades</span><input type="number" step="1" value={unitsMin || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setUnitsMin(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label><label><span>Máximo de unidades</span><input type="number" step="1" value={unitsMax || ''} aria-invalid={!!budgetError} aria-describedby={budgetError ? 'journey-budget-error' : undefined} onFocus={(e) => e.target.select()} onChange={(event) => { setApprovedQuantity(null); const v = event.target.valueAsNumber; setUnitsMax(Number.isFinite(v) && v >= 0 ? v : 0) }} /></label></div>}
                 {budgetPage && <button type="button" className="pipeline-secondary" onClick={() => setBudgetPage(false)}>Cambiar presupuesto o cantidad</button>}
                 {budgetError && <div className="pipeline-warning" id="journey-budget-error" role="alert"><b>Revisá presupuesto o rango.</b><span>{budgetError}</span></div>}
-                <button className="journey-primary-action" type="button" disabled={budgetPage ? !budgetAnswered : !budgetMode} onClick={() => !budgetPage && budgetMode !== 'unknown' ? setBudgetPage(true) : continueBudget()}>{budgetPage || budgetMode === 'unknown' ? 'Seguir con el producto' : 'Continuar'} <span><UiIcon name="arrow-right" size={18} /></span></button>
+                <button className="journey-primary-action" type="button" disabled={budgetPage ? !budgetAnswered : !budgetMode} onClick={() => !budgetPage && budgetMode !== 'unknown' ? setBudgetPage(true) : continueBudget()}>{budgetPage || budgetMode === 'unknown' ? (analysis ? 'Seguir con el producto elegido' : 'Seguir con el producto') : 'Continuar'} <span><UiIcon name="arrow-right" size={18} /></span></button>
               </div> : <div className="journey-complete-row"><span>{budgetMode === 'budget' ? `Hasta USD ${budgetUsd.toLocaleString('es-AR')}` : budgetMode === 'units' ? `${unitsMin}–${unitsMax} unidades` : 'Todavía sin cantidad definida'}</span>{analysis?.product.purchaseQuantity && budgetMode !== 'unknown' ? <span>{analysis.product.purchaseQuantity} unidades seleccionadas</span> : null}</div>}
             </section>
           </>}
 
-          {step >= 3 && <>
+          {step >= 3 && (!analysis || !showSetup) && <>
             {!(intent === 'have_product' && analysis) && <div className="journey-bubble assistant">
               <span className="journey-avatar" aria-hidden="true"><UiIcon name="sparkles" size={18} /></span>
               <div>
@@ -921,7 +924,7 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
       }} />
     </section>}
 
-    {analysis && <div className="focus-setup-action"><button type="button" className="pipeline-secondary" onClick={() => { const opening = !showSetup; setShowSetup(opening); reviewProductData(); if (opening) { setStep(1); setProfilePage(1); setBudgetPage(false) } }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
+    {analysis && (!showSetup || operationAnswered && budgetAnswered) && <div className="focus-setup-action"><button type="button" className="pipeline-secondary" onClick={() => { const opening = !showSetup; setShowSetup(opening); reviewProductData(); if (opening) { setStep(1); setProfilePage(1); setBudgetPage(false) } }}>{showSetup ? 'Volver a la ficha' : 'Editar objetivo o perfil'}</button></div>}
 
     {!intent && <footer className="journey-footer">
       <div className="journey-footer-left">

@@ -2,11 +2,13 @@ import { lazy, useEffect, useRef, useState } from 'react'
 import LoadingBoundary from './components/LoadingBoundary'
 import ProcessingScreen from './components/ProcessingScreen'
 import Landing from './components/Landing'
+import type { PreparedProduct } from './components/ProductEntry'
 import { useAccountSession } from './auth/AccountSession'
 import type { AnalysisHistoryItem } from './lib/analysisHistory'
 import { scrollWindowToTop } from './lib/motionPreference'
-import { clearProductDraft } from './lib/productDraft'
+import { clearProductDraft, readProductDraft, writeProductDraft } from './lib/productDraft'
 import { clearPendingConfirm } from './lib/sessionDraft'
+import { canResume, readOperation } from './lib/pendingOperation'
 
 const QuoteApp = lazy(() => import('./App'))
 const PersonalWorkspace = lazy(() => import('./components/PersonalWorkspace'))
@@ -19,6 +21,7 @@ function resume() {
     return localStorage.getItem('shippingapp:entered') === '1'
       || !!localStorage.getItem('shippingapp:journey:v1')
       || !!sessionStorage.getItem('shippingapp:product-draft:analysis')
+      || !!readProductDraft<PreparedProduct>('prepared-entry')
       || deepLink
   } catch {
     return deepLink
@@ -31,6 +34,7 @@ export default function AppEntry() {
   // One quote tree stays mounted when visiting the panel, preserving unsaved work.
   const [quoteMounted, setQuoteMounted] = useState(() => resume() || location.hash === '#cotizador')
   const [focusOnEntry, setFocusOnEntry] = useState(false)
+  const [preparedProduct, setPreparedProduct] = useState<PreparedProduct | null>(() => readProductDraft<PreparedProduct>('prepared-entry'))
   const [newCalculationRequest, setNewCalculationRequest] = useState(0)
   const [savedQuote, setSavedQuote] = useState<AnalysisHistoryItem | null>(null)
   const [quoteToOpen, setQuoteToOpen] = useState<AnalysisHistoryItem | null>(null)
@@ -40,6 +44,7 @@ export default function AppEntry() {
   })
   const [quoteGeneration, setQuoteGeneration] = useState(0)
   const [hasDraft, setHasDraft] = useState(() => {
+    if (preparedProduct) return true
     try { return !!localStorage.getItem('shippingapp:journey:v1') || !!sessionStorage.getItem('shippingapp:product-draft:analysis') } catch { return false }
   })
   const explicitView = useRef(location.hash === '#cotizador' || location.hash === '#mi-panel')
@@ -79,6 +84,7 @@ export default function AppEntry() {
       clearPendingConfirm()
       try { sessionStorage.removeItem('shippingapp:quote-owner') } catch {}
       setSavedQuote(null)
+      setPreparedProduct(null)
       setQuoteToOpen(null)
       setQuoteMounted(false)
       setQuoteGeneration(value => value + 1)
@@ -95,7 +101,8 @@ export default function AppEntry() {
   useEffect(() => {
     if (checkedAccount.current || !account.loaded || !account.signedIn) return
     checkedAccount.current = true
-    if (!explicitView.current && !hasDraft) navigate('workspace')
+    const productLookupPending = canResume(readOperation('owned-link')) || canResume(readOperation('search'))
+    if (!explicitView.current && !hasDraft && !productLookupPending) navigate('workspace')
   }, [account.loaded, account.signedIn, hasDraft])
 
   useEffect(() => {
@@ -116,6 +123,11 @@ export default function AppEntry() {
     setFocusOnEntry(true)
     navigate('calculator')
   }
+  const startWithProduct = (product: PreparedProduct) => {
+    writeProductDraft('prepared-entry', product)
+    setPreparedProduct(product)
+    enterCalculator()
+  }
   const newCalculation = () => {
     setSavedQuote(null)
     setNewCalculationRequest(value => value + 1)
@@ -130,9 +142,9 @@ export default function AppEntry() {
 
   return <>
     <ProcessingScreen />
-    {view === 'landing' && <Landing onStart={enterCalculator} />}
+    {view === 'landing' && <Landing onStart={enterCalculator} onProduct={quoteMounted ? undefined : startWithProduct} />}
     {view === 'workspace' && <LoadingBoundary label="Cargando tu espacio…"><PersonalWorkspace key={account.userId ?? 'visitor'} hasDraft={hasDraft} onContinue={enterCalculator} onNewCalculation={newCalculation} onOpen={item => { if (hasDraft) setQuoteToOpen(item); else openQuote(item) }} /></LoadingBoundary>}
-    {quoteMounted && quoteVisibleToAccount && <div hidden={view !== 'calculator'} className="quote-view"><LoadingBoundary label="Cargando cotizador…"><QuoteApp key={quoteGeneration} active={view === 'calculator'} focusOnEntry={focusOnEntry} initialSavedQuote={savedQuote} newCalculationRequest={newCalculationRequest} /></LoadingBoundary></div>}
+    {quoteMounted && quoteVisibleToAccount && <div hidden={view !== 'calculator'} className="quote-view"><LoadingBoundary label="Cargando cotizador…"><QuoteApp key={quoteGeneration} active={view === 'calculator'} focusOnEntry={focusOnEntry} initialSavedQuote={savedQuote} initialPreparedProduct={preparedProduct} newCalculationRequest={newCalculationRequest} /></LoadingBoundary></div>}
     {view === 'calculator' && quoteMounted && !quoteVisibleToAccount && <p className="workspace-account-state" role="status">Verificando la cuenta para recuperar tu cálculo…</p>}
     {quoteToOpen && quoteVisibleToAccount && account.signedIn && <dialog ref={replaceDialog} className="workspace-replace-dialog" aria-labelledby="replace-quote-title" onCancel={() => setQuoteToOpen(null)}><span className="eyebrow">CAMBIAR DE CÁLCULO</span><h2 id="replace-quote-title">¿Abrir el presupuesto guardado?</h2><p>Reemplazará el cálculo en curso. Los presupuestos que ya guardaste seguirán en tu cuenta.</p><div><button className="workspace-text-button" onClick={() => setQuoteToOpen(null)}>Conservar mi cálculo actual</button><button className="workspace-button" onClick={() => openQuote(quoteToOpen)}>Abrir presupuesto guardado</button></div></dialog>}
   </>

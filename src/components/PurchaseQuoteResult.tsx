@@ -7,16 +7,21 @@ import { ApiAuthError, getSessionState, subscribeSession } from '../lib/authSess
 import { readCaseConversation, type CaseMessage } from '../lib/caseConversation'
 import CaseConversation from './CaseConversation'
 import { usd } from '../lib/format'
-import { minimumScenario, PurchaseOptimization, PurchaseTransportComparison } from './PurchaseDecisionTables'
+import { minimumScenario, PurchaseOptimization, PurchaseTransportComparison, transportLabels } from './PurchaseDecisionTables'
+import QuoteCostBreakdown from './QuoteCostBreakdown'
+import UiIcon from './UiIcon'
 import { useProcessingScreen } from '../lib/useProcessingScreen'
 export type PurchaseQuoteSnapshot = { version: 1; quotedAt: string; analysis: ProductAnalysisV2; pipelineSummary: { baseQuantity: number; selectedMode: string; totalCostUsd: number; unitCostUsd: number; freightCostUsd: number }; purchasePlan: PurchasePlan; conversation: CaseMessage[] }
-const modes = { lcl: 'Marítimo LCL', air: 'Aéreo', courier: 'Courier comercial' }
 export const PurchaseQuoteSummary = React.memo(function PurchaseQuoteSummary({ snapshot, onChoose }: { snapshot: PurchaseQuoteSnapshot; onChoose?: (quantity: number) => void }) {
   const { purchasePlan: plan, analysis } = snapshot
   const minimum = minimumScenario(plan)
   const minimumReason = 'minimumReason' in plan ? plan.minimumReason : plan.singleReason
   const selectedTransport = plan.transportOptions?.find(option => option.mode === plan.selected?.mode)
-  const cost = plan.selected?.cost
+  const selected = plan.selected
+  const cost = selected?.cost
+  const transit = selectedTransport?.transit
+  const origin = analysis.product.originCountry
+  const ncm = analysis.customs.ncmCandidate
   const composition: Array<[string, number]> = cost ? [
     ['Mercadería', cost.fobUsd],
     ['Flete y destino', cost.freightCostUsd + cost.fixedDestinationUsd],
@@ -26,19 +31,42 @@ export const PurchaseQuoteSummary = React.memo(function PurchaseQuoteSummary({ s
   return <>
 
     <section className="simple-quote purchase-dashboard-summary" aria-label="Tu presupuesto de importación">
-      <span className="eyebrow">Panel de decisión · Importación a Argentina</span><h2>{analysis.product.name}</h2>
-      {plan.selected && <div className="workspace-result-overview" aria-label="Resumen de la compra"><div><span>Inversión total estimada · USD</span><strong>{usd(plan.selected.cost.totalCostUsd)}</strong></div><div><span>Costo puesto por unidad · USD</span><strong>{usd(plan.selected.cost.unitCostUsd)}</strong></div><div><span>Cantidad elegida</span><strong>{plan.selected.quantity} u.</strong></div><div><span>Modalidad comparada</span><strong>{modes[plan.selected.mode]}</strong></div></div>}
-      <p>Cálculo del {new Date(snapshot.quotedAt).toLocaleString('es-AR')}. Fuentes y tarifas corresponden a esta versión del cálculo.</p>
-      <p className="workspace-result-note">Estimación para decidir, sujeta a validación comercial y aduanera. Revisá los pendientes antes de comprar.</p>
+      <div className="calculator-result-product">
+        <span className="calculator-result-product-icon"><UiIcon name="product" size={21} /></span>
+        <div><h2>{analysis.product.name}</h2><p>{[origin && `${origin} → Argentina`, ncm && `NCM ${ncm}`].filter(Boolean).join(' · ')}</p></div>
+      </div>
+      {selected && <div className="calculator-result-banner">
+        <div>
+          <span className="calculator-result-label"><UiIcon name="info" size={15} /> Estimación para la cantidad elegida</span>
+          <p>{transportLabels[selected.mode]} · {selected.quantity.toLocaleString('es-AR')} u.</p>
+        </div>
+        <dl className="workspace-result-overview" aria-label="Resumen de la compra">
+          <div><dt>Costo puesto por unidad</dt><dd>{usd(selected.cost.unitCostUsd)}</dd></div>
+          <div><dt>Inversión total estimada</dt><dd>{usd(selected.cost.totalCostUsd)}</dd></div>
+          <div><dt>Plazo de transporte</dt><dd>{transit ? `${transit.minDays}–${transit.maxDays} días ${transit.basis === 'business' ? 'hábiles' : 'corridos'}` : 'A confirmar'}</dd></div>
+        </dl>
+      </div>}
+      <p className="calculator-result-date">Cálculo del {new Date(snapshot.quotedAt).toLocaleString('es-AR')} · Importes en USD</p>
       {selectedTransport?.eligibility === 'requires_quote' && <p className="purchase-conditional-price">Esta carga requiere aceptación y cotización específica del transportista. Los costos mostrados usan tarifas estándar y no incluyen recargos especiales pendientes.</p>}
-      {plan.note && <p>{plan.note}</p>}{plan.error && <p role="alert">{plan.error}</p>}
+      {plan.note && <p className="calculator-plan-note">{plan.note}</p>}{plan.error && <p role="alert">{plan.error}</p>}
       <PurchaseTransportComparison plan={plan} />
-      <section className="quote-scenarios" aria-label="Compra mínima y cantidad elegida"><h3>{analysis.product.moq ? 'Empezá por lo mínimo que podés comprar' : 'Tu compra mínima modelada'}</h3><p>{analysis.product.moq ? 'Respetamos el mínimo del proveedor, el tamaño de los lotes y los tramos de precio confirmados.' : 'MOQ pendiente de confirmar con el proveedor. Este mínimo se modela con el tamaño del lote y los tramos de precio de la oferta.'}</p><div className="simple-quote-grid">
-        <article className="simple-quote-card"><h4>{analysis.product.moq ? 'Si traés lo mínimo' : 'Compra mínima modelada'}{minimum ? `: ${minimum.quantity.toLocaleString('es-AR')} ${minimum.quantity === 1 ? 'unidad' : 'unidades'}` : ''}</h4>{minimum ? <><strong>{usd(minimum.cost.unitCostUsd)}</strong><span>USD por unidad · {modes[minimum.mode]}</span><p>Inversión mínima estimada: {usd(minimum.cost.totalCostUsd)}</p>{minimum.withinBudget === false && <p className="purchase-budget-warning">Esta compra mínima supera el presupuesto indicado. Revisá los demás tramos calculados.</p>}</> : <p>{minimumReason || 'Confirmá el mínimo y el precio de la oferta para calcular esta compra.'}</p>}</article>
-        {plan.selected && plan.selected.quantity !== minimum?.quantity && <article className="simple-quote-card"><h4>Tu compra: {plan.selected.quantity.toLocaleString('es-AR')} unidades</h4><strong>{usd(plan.selected.cost.unitCostUsd)}</strong><span>USD por unidad · {modes[plan.selected.mode]}</span><p>Total de esta compra: {usd(plan.selected.cost.totalCostUsd)}</p></article>}
-      </div></section>
       <PurchaseOptimization plan={plan} onChoose={onChoose} minimumConfirmed={Boolean(analysis.product.moq)} />
-      {cost && <section className="workspace-cost-composition" aria-label="Distribución de la inversión"><h3>Cómo se compone tu inversión (USD)</h3><dl>{composition.map(([label,amount]) => <div key={label}><dt>{label}</dt><dd>{usd(amount)}</dd><span className="workspace-cost-track" aria-hidden="true"><span style={{width:`${cost.totalCostUsd > 0 ? Math.min(100,Math.max(0,amount / cost.totalCostUsd * 100)) : 0}%`}} /></span></div>)}</dl></section>}
+      <section className="quote-scenarios" aria-label="Compra mínima y cantidad elegida"><h3>{analysis.product.moq ? 'Empezá por lo mínimo que podés comprar' : 'Tu compra mínima modelada'}</h3><p>{analysis.product.moq ? 'Respetamos el mínimo del proveedor, el tamaño de los lotes y los tramos de precio confirmados.' : 'MOQ pendiente de confirmar con el proveedor. Este mínimo se modela con el tamaño del lote y los tramos de precio de la oferta.'}</p><div className="simple-quote-grid">
+        <article className="simple-quote-card"><h4>{analysis.product.moq ? 'Si traés lo mínimo' : 'Compra mínima modelada'}{minimum ? `: ${minimum.quantity.toLocaleString('es-AR')} ${minimum.quantity === 1 ? 'unidad' : 'unidades'}` : ''}</h4>{minimum ? <><strong>{usd(minimum.cost.unitCostUsd)}</strong><span>USD por unidad · {transportLabels[minimum.mode]}</span><p>Inversión mínima estimada: {usd(minimum.cost.totalCostUsd)}</p>{minimum.withinBudget === false && <p className="purchase-budget-warning">Esta compra mínima supera el presupuesto indicado. Revisá los demás tramos calculados.</p>}</> : <p>{minimumReason || 'Confirmá el mínimo y el precio de la oferta para calcular esta compra.'}</p>}</article>
+        {plan.selected && plan.selected.quantity !== minimum?.quantity && <article className="simple-quote-card"><h4>Tu compra: {plan.selected.quantity.toLocaleString('es-AR')} unidades</h4><strong>{usd(plan.selected.cost.unitCostUsd)}</strong><span>USD por unidad · {transportLabels[plan.selected.mode]}</span><p>Total de esta compra: {usd(plan.selected.cost.totalCostUsd)}</p></article>}
+      </div></section>
+      {cost && selected && <section className="calculator-cost-section" aria-label="Desglose de costos">
+        <h3>Desglose de costos</h3>
+        <div className="calculator-cost-layout">
+          <div className="calculator-cost-composition">
+            <h4>{transportLabels[selected.mode]} · {selected.quantity.toLocaleString('es-AR')} u.</h4>
+            <p>Peso real {cost.totalWeightKg.toLocaleString('es-AR', { maximumFractionDigits: 2 })} kg · Volumen {cost.totalVolumeCbm.toLocaleString('es-AR', { maximumFractionDigits: 4 })} m³</p>
+            <div className="calculator-cost-bar" aria-hidden="true">{composition.map(([label, amount]) => <span key={label} style={{ flexGrow: amount }} />)}</div>
+            <dl>{composition.map(([label, amount]) => <div key={label}><dt>{label}</dt><dd>{usd(amount)}</dd></div>)}</dl>
+          </div>
+          <QuoteCostBreakdown cost={cost} quantity={selected.quantity} />
+        </div>
+      </section>}
       {plan.improvement && plan.selected && plan.improvement.quantity !== plan.selected.quantity && <aside className="case-alert" aria-label="Otra opción de compra">
         <p><b>{plan.improvement.quantity} unidades a {usd(plan.improvement.cost.unitCostUsd)} por unidad.</b> {plan.improvement.mode === plan.selected.mode && Math.abs(plan.improvement.cost.freightCostUsd - plan.selected.cost.freightCostUsd) < 0.005 ? 'Con el mismo costo de flete estimado.' : 'Una alternativa con menor costo unitario.'} Total: {usd(plan.improvement.cost.totalCostUsd)}. Diferencia de desembolso: {usd(plan.improvement.cost.totalCostUsd - plan.selected.cost.totalCostUsd)}.</p>
         {onChoose && <button type="button" className="pipeline-secondary" onClick={() => onChoose(plan.improvement!.quantity)}>Elegir esta cantidad y recalcular</button>}
@@ -54,7 +82,7 @@ export const PurchaseQuoteSummary = React.memo(function PurchaseQuoteSummary({ s
         {analysis.sourceUrl.startsWith('https://') && <a href={analysis.sourceUrl} target="_blank" rel="noreferrer">Publicación del proveedor</a>}
         <p>Oferta: {analysis.product.supplierQuote?.currency} {analysis.product.supplierQuote?.amount} / {analysis.product.supplierQuote?.basis === 'pack' ? 'lote' : 'unidad'} · {analysis.product.supplierQuote?.variant}.</p>
         {analysis.product.supplierQuote?.currency !== 'USD' && <p>Conversión: {analysis.product.supplierQuote?.usdPerCurrency} USD por moneda original · {analysis.product.supplierQuote?.fxSource} · {analysis.product.supplierQuote?.fxDate}.</p>}
-        {plan.selected && <dl>{([['Mercadería',plan.selected.cost.fobUsd],['Flete internacional',plan.selected.cost.freightCostUsd],['Derecho',plan.selected.cost.dutyUsd],['Tasa estadística',plan.selected.cost.statisticsUsd],['IVA',plan.selected.cost.vatUsd],['IVA adicional',plan.selected.cost.vatAdditionalUsd],['Ganancias',plan.selected.cost.gainsUsd],['IIBB',plan.selected.cost.iibbUsd],['Gastos de destino',plan.selected.cost.fixedDestinationUsd],['Firma de importador',plan.selected.cost.noImporterSignatureUsd],['Intervención',plan.selected.cost.sensitiveCategoryUsd]] as Array<[string,number]>).map(([label,value]) => <div key={label}><dt>{label}</dt><dd>{usd(value)}</dd></div>)}</dl>}
+
         <p>Fuente de flete: {plan.selected?.cost.source}. El costo de flete es estimado con la tarifa modelada; no constituye una reserva de transporte.</p>
         <p>Mercado argentino: {analysis.market.estimatedPriceArs && analysis.market.estimatedPriceArs > 0 ? 'La evidencia local se conserva en el análisis; este presupuesto no promete rentabilidad.' : 'No hay evidencia suficiente para afirmar rentabilidad.'}</p>
       </details>

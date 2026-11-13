@@ -14,6 +14,8 @@ import { useProcessingScreen } from '../lib/useProcessingScreen'
 type Props = {
   onAlibabaLink: (url: string, signal?: AbortSignal) => Promise<void>
   onStructuredData: (data: ManualProductChatData) => void
+  entryMode?: 'link' | 'form'
+  onManualFallback?: () => void
 }
 
 type Mode = 'link' | 'describe' | 'form' | null
@@ -129,9 +131,9 @@ type VolumeBasis = 'unit' | 'carton'
 
 type EntryDraft = { volumeBasis?: VolumeBasis | null; mode: Mode; link: string; chatStep?: ChatStep; chatAnswers?: Partial<Record<ChatStep, string>>; chatInput?: string; volumeMode?: 'dims' | 'cbm'; dimL?: string; dimW?: string; dimH?: string; dimUnit?: 'cm' | 'm'; awaitingSensitive?: boolean; pendingChatAnswers?: Partial<Record<ChatStep, string>> }
 
-export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: Props) {
+export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, entryMode, onManualFallback }: Props) {
   const [draft] = useState(() => readProductDraft<EntryDraft>('entry'))
-  const [mode, setMode] = useState<Mode>(draft?.mode === 'link' ? 'link' : draft?.mode === 'describe' ? 'describe' : draft?.mode === 'form' ? 'form' : null)
+  const [mode, setMode] = useState<Mode>(entryMode ?? (draft?.mode === 'link' || draft?.mode === 'describe' || draft?.mode === 'form' ? draft.mode : null))
   const [link, setLink] = useState(draft?.link || '')
   const [loading, setLoading] = useState(false)
   useProcessingScreen(loading, { title: 'Leyendo tu producto', detail: 'Estamos consultando la publicación de Alibaba. Después podrás confirmar los datos y completar lo que falte.' })
@@ -174,7 +176,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   const runLink = async (value: string) => {
     if (!value || busy.current) return
     if (!isAlibabaUrl(value)) {
-      setError('Pegá una URL de producto de Alibaba. Si no tenés link, elegí "Describir el producto".')
+      setError('Pegá una URL de producto de Alibaba. Si no tenés link, completá la ficha manualmente.')
       return
     }
     busy.current = true
@@ -194,7 +196,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       const message = /expected pattern|string did not match/i.test(raw)
         ? 'Falló transitoriamente la sesión del navegador. Reintená; el enlace es válido y no se consumió ningún análisis.'
         : raw || 'No pude leer esa publicación.'
-      setError(`${message} También podés describir el producto sin link.`)
+      setError(`${message} También podés completar la ficha manualmente.`)
     } finally {
       if (activeRequest.current === controller) {
         if (operation.status === 'running') operation.status = 'complete'
@@ -221,14 +223,14 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
   useEffect(() => {
     const resume = () => {
       const operation = readOperation<string>('owned-link')
-      if (operation && canResume(operation) && !busy.current) void runLinkRef.current(operation.payload)
+      if (mode === 'link' && operation && canResume(operation) && !busy.current) void runLinkRef.current(operation.payload)
     }
     const checkReady = () => { if (getSessionState() === 'ready') resume() }
     const unsubscribe = subscribeSession(checkReady)
     window.addEventListener('shippingapp:auth-resolved', resume)
     checkReady()
     return () => { unsubscribe(); window.removeEventListener('shippingapp:auth-resolved', resume) }
-  }, [loading])
+  }, [loading, mode])
 
   const answeredSteps = ALL_STEPS.filter(
     (s) => ALL_STEPS.indexOf(s) < ALL_STEPS.indexOf(chatStep) && chatAnswers[s] !== undefined,
@@ -332,7 +334,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
       <p className="quote-form-credit-note">La carga es gratis. Usás un análisis al confirmar la clasificación y el cálculo.</p>
     </div>
 
-    {mode === 'form' && <div className="owned-product-form"><ProductWorkspaceForm onSubmit={onStructuredData} /><button type="button" className="pipeline-secondary quote-form-switch" onClick={() => setMode(null)}>Cambiar forma de carga</button></div>}
+    {mode === 'form' && <div className="owned-product-form"><ProductWorkspaceForm onSubmit={onStructuredData} autoFocus={!entryMode} />{!entryMode && <button type="button" className="pipeline-secondary quote-form-switch" onClick={() => setMode(null)}>Cambiar forma de carga</button>}</div>}
     {mode === null && <div className="owned-product-options">
       <button type="button" onClick={() => setMode('form')}><span className="owned-product-option-icon"><UiIcon name="product" size={19} /></span><b>Completar ficha</b><small>Una pregunta por pantalla. Empezá por el nombre del producto.</small><em>Recomendado</em></button>
       <button type="button" onClick={() => setMode('link')}>
@@ -345,9 +347,9 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
     </div>}
 
     {mode === 'link' && <form className="owned-product-entry" onSubmit={(event) => void submitLink(event)}>
-      <div className="owned-product-entry-head">
+      {!entryMode && <div className="owned-product-entry-head">
         <div><span className="eyebrow">Tu producto · Enlace</span><h2>Pegá la publicación de Alibaba</h2><small>Revisaremos los datos con vos. Esta lectura no consume un análisis.</small></div>
-      </div>
+      </div>}
       <div className="owned-product-link-row">
         <input
           type="url"
@@ -361,7 +363,8 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData }: 
         <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : 'Leer producto'} <UiIcon name="arrow-right" size={16} /></button>
       </div>
       {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
-      <div className="quote-form-secondary-actions"><button type="button" className="pipeline-secondary" onClick={() => leaveLink(null)}>Cambiar forma de carga</button><button type="button" className="pipeline-secondary" onClick={() => leaveLink('form')}>Completar ficha manualmente</button></div>
+      {entryMode ? <p className="calculator-entry-note">Pegá un enlace de producto de Alibaba. Revisá los datos antes de calcular.</p> : <div className="quote-form-secondary-actions"><button type="button" className="pipeline-secondary" onClick={() => leaveLink(null)}>Cambiar forma de carga</button><button type="button" className="pipeline-secondary" onClick={() => leaveLink('form')}>Completar ficha manualmente</button></div>}
+      {entryMode && error && <button type="button" className="calculator-inline-action" onClick={() => { leaveLink('form'); onManualFallback?.() }}>Completar ficha manualmente</button>}
     </form>}
 
     {mode === 'describe' && !awaitingSensitive && <div className="product-chatbot">

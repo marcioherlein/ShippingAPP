@@ -20,6 +20,7 @@ type Props = {
   analysis?: ProductAnalysisV2 | null
   mode?: 'intake' | 'discovery'
   deferCalculation?: boolean
+  compact?: boolean
 }
 
 type SearchDraft = { draft?: string; lastSearch?: string; discovery?: ProductDiscoveryResponse | null; messages?: ThreadMessage[]; selectedConstraints?: DiscoveryConstraints | null; pendingAuth?: boolean; failedSourceUrl?: string | null; lastError?: string }
@@ -54,7 +55,7 @@ function units(value?: number | null) {
   return value && value > 0 ? `${value} u.` : null
 }
 
-export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mode = 'intake', deferCalculation = false }: Props) {
+export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mode = 'intake', deferCalculation = false, compact = false }: Props) {
   const [savedSearch] = useState(() => readProductDraft<SearchDraft>('search'))
   const [draft, setDraft] = useState(() => typeof savedSearch?.draft === 'string' ? savedSearch.draft.slice(0, 1800) : '')
   const [lastSearch, setLastSearch] = useState(() => typeof savedSearch?.lastSearch === 'string' ? savedSearch.lastSearch.slice(0, 1800) : '')
@@ -304,11 +305,11 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
   const modeClass = mode === 'discovery' ? ' discovery-search-mode' : ' search-first-mode'
 
   return <section className={`url-analyzer${modeClass}${discovery?.results.length ? ' has-results' : ''}`}>
-    <div className="analyzer-copy">
+    {!compact && <div className="analyzer-copy">
       <span className="eyebrow">Búsqueda real en Alibaba</span>
       <h2>Buscá un producto o pegá un link.</h2>
       <p>Describí qué querés traer o pegá una publicación de Alibaba. Elegís un producto real y después confirmás su oferta y embalaje.</p>
-    </div>
+    </div>}
 
 
 
@@ -325,7 +326,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
       <div className="url-input-wrap">
         <input
           type="text"
-          autoFocus={!messages.length && !discovery}
+          autoFocus={!compact && !messages.length && !discovery}
           value={draft}
           onChange={(event) => setDraft(event.target.value.slice(0, 1800))}
           placeholder="Ej: raqueta de tenis profesional hasta USD 30, MOQ menor a 100"
@@ -334,7 +335,7 @@ export default function UrlAnalyzer({ onAnalysis, onManualFallback, analysis, mo
         />
         <button type="submit" disabled={loading || !draft.trim()}>{loading ? (phase === 'extract' ? 'Leyendo…' : 'Buscando…') : 'Buscar'}</button>
       </div>
-      <small>También podés pegar directamente una URL de producto de Alibaba.</small>
+      <small>{compact ? 'Buscá por producto, material o uso. Podés incluir precio máximo y compra mínima.' : 'También podés pegar directamente una URL de producto de Alibaba.'}</small>
       {error && <div className="analyzer-error manual-fallback-error" role="alert" tabIndex={-1}>
         <span>{error}</span>{pendingAuth.current && <AccountControls />}
         {failedSourceUrl && onManualFallback && <button type="button" onClick={() => enterManual(failedSourceUrl)}>Cargar este producto manualmente</button>}

@@ -121,8 +121,8 @@ test('manual product sheet preserves fields on reload and creates a review witho
 for (const [width, scheme] of [[320,'light'],[1440,'dark']] as const) browserTest(`landing explains the product with accessible layout at ${width}px ${scheme}`,async({page},testInfo)=>{
  await page.setViewportSize({width,height:900});await page.emulateMedia({colorScheme:scheme})
  await page.goto('/')
- await expect(page.getByRole('heading',{level:1})).toContainText('mirá el panorama completo')
- await expect(page.getByRole('button',{name:'Planificar mi importación →'})).toBeVisible()
+ await expect(page.getByRole('heading',{level:1})).toHaveAccessibleName('Calculá cuánto te cuesta importar.')
+ await expect(page.getByRole('link',{name:'Empezar cálculo'})).toBeVisible()
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
  const violations=(await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations.filter(v=>v.impact==='serious'||v.impact==='critical')
  expect(violations).toEqual([])

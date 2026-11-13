@@ -353,7 +353,8 @@ body:has(.calculator-landing, .workspace-app, .personal-workspace) { min-width: 
 .calculator-cost-bar span:nth-child(4) { background: #778d9a; }
 .calculator-cost-table { width: 100%; border-collapse: collapse; color: var(--ds-text-strong); font-size: .78rem; font-variant-numeric: tabular-nums; text-align: left; }
 .calculator-cost-table :is(th, td) { padding: 8px 10px; border-bottom: 1px solid var(--ds-border-soft); overflow-wrap: anywhere; }
-.calculator-cost-table thead { color: var(--ds-text-secondary); }
+.calculator-cost-table th { color: inherit; font-size: inherit; text-transform: none; letter-spacing: normal; }
+.calculator-cost-table thead th { color: var(--ds-text-secondary); }
 .calculator-cost-table tbody th { font-weight: 500; }
 .calculator-cost-table :is(td, thead th:not(:first-child)) { text-align: right; }
 .calculator-cost-table tfoot { background: var(--ds-brand-soft); color: var(--ds-brand-strong); font-weight: 710; }

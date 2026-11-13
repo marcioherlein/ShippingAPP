@@ -11,6 +11,7 @@ import LoadingBoundary from './components/LoadingBoundary'
 import React, { lazy, type ComponentProps, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { supplierQuotePrice } from './lib/supplierQuote'
 import { useProcessingScreen } from './lib/useProcessingScreen'
+import { getProcessingState, subscribeProcessing } from './lib/processingScreen'
 import { startImportAnalysis } from './lib/productAnalysis'
 const LoadedUrlAnalyzer = lazy(() => import('./components/UrlAnalyzer'))
 const UrlAnalyzer = (props: ComponentProps<typeof LoadedUrlAnalyzer>) => <LoadingBoundary><LoadedUrlAnalyzer {...props} /></LoadingBoundary>
@@ -197,7 +198,23 @@ export default function App({ focusOnEntry = false, active = true, initialSavedQ
   const resetDialog = useRef<HTMLDialogElement>(null)
   const [productNavigation, setProductNavigation] = useState(0)
   useEffect(() => {
-    if (focusOnEntry && active) document.querySelector<HTMLElement>('.journey-task-title')?.focus({ preventScroll: true })
+    if (!focusOnEntry || !active) return
+    let frame = 0
+    let focused = false
+    const focusWhenReady = () => {
+      if (focused || getProcessingState()) return
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        // Lazy loading keeps the new page inert until the progress dialog's
+        // cleanup. Move keyboard context only after that cleanup has finished.
+        if (getProcessingState()) return
+        document.querySelector<HTMLElement>('.journey-task-title')?.focus({ preventScroll: true })
+        focused = true
+      })
+    }
+    const unsubscribe = subscribeProcessing(focusWhenReady)
+    focusWhenReady()
+    return () => { unsubscribe(); cancelAnimationFrame(frame) }
   }, [focusOnEntry, active])
   useEffect(() => {
     if (!productNavigation) return

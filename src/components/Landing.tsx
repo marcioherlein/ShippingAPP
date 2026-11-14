@@ -27,7 +27,7 @@ export default function Landing({ onStart, onProduct }: Props) {
       <section className="calculator-hero" id="landing-content" tabIndex={-1}>
         <div className="calculator-hero-copy">
           <p className="calculator-hero-label">Calculadora de importación</p>
-          <h1>Calculá cuánto te<br className="calculator-hero-break" /> cuesta <em>importar.</em></h1>
+          <h1>Calculá cuánto te<br className="calculator-hero-break" />{' '}cuesta <em>importar.</em></h1>
           <p>Compará courier, aéreo y marítimo LCL. Estimá el costo por unidad y decidí cuántas traer.</p>
           {onProduct
             ? <a className="calculator-hero-cta" href="#elegir-producto" onClick={event => {

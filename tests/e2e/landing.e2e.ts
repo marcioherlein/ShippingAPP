@@ -1,6 +1,8 @@
 import { expect, browserTest as test } from './fixtures'
 import { createManualProductAnalysis } from '../../src/lib/productConfirmation'
 
+const selectedProduct = '[data-prepared-product="true"]'
+
 test('product-first entry keeps a manual product through profile and reload', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.workspace-landing')).toBeVisible()
@@ -23,11 +25,11 @@ test('product-first entry keeps a manual product through profile and reload', as
   await page.getByLabel('Material y características').fill('Acero inoxidable con doble pared al vacío')
   await page.getByRole('button', { name: 'Crear ficha de importación' }).click()
   await expect(page.getByRole('progressbar', { name: /Datos del envío/ })).toBeVisible()
-  await expect(page.getByText('Termo de acero inoxidable', { exact: true })).toBeVisible()
+  await expect(page.locator(selectedProduct)).toContainText('Termo de acero inoxidable')
   await expect(page.locator('.workspace-landing')).toHaveCount(0)
 
   await page.reload()
-  await expect(page.getByText('Termo de acero inoxidable', { exact: true })).toBeVisible()
+  await expect(page.locator(selectedProduct)).toContainText('Termo de acero inoxidable')
   await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
   await page.getByRole('button', { name: 'Continuar', exact: true }).click()
   await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
@@ -55,7 +57,7 @@ test('product-first entry preserves the selected Alibaba product', async ({ page
   await page.getByRole('button', { name: 'Buscar', exact: true }).click()
   await page.getByRole('button', { name: 'Usar este producto', exact: true }).click()
   await expect(page.getByRole('progressbar', { name: /Datos del envío/ })).toBeVisible()
-  await expect(page.getByText('Termo de acero inoxidable', { exact: true })).toBeVisible()
+  await expect(page.locator(selectedProduct)).toContainText('Termo de acero inoxidable')
 })
 
 test('product-first entry falls back to the manual form after a failed link read', async ({ page }) => {
@@ -68,10 +70,12 @@ test('product-first entry falls back to the manual form after a failed link read
   await expect(page.getByLabel('Nombre y modelo del producto')).toBeVisible()
 })
 
- test('landing exposes legal pages and a keyboard skip link', async ({ page }) => {
+test('landing exposes legal pages and a keyboard skip link', async ({ page }) => {
   await page.goto('/')
+  const skipLink = page.getByRole('link', { name: 'Ir al contenido', exact: true })
+  await expect(skipLink).toBeAttached()
   await page.keyboard.press('Tab')
-  await expect(page.getByRole('link', { name: 'Ir al contenido', exact: true })).toBeFocused()
+  await expect(skipLink).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.locator('#landing-content')).toBeFocused()
   const legal = page.getByRole('navigation', { name: 'Páginas legales' })
@@ -84,4 +88,4 @@ test('product-first entry falls back to the manual form after a failed link read
     expect(html).toContain('Documento pendiente de publicación.')
     expect(html).not.toContain('id="root"')
   }
- })
+})

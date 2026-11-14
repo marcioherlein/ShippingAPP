@@ -51,7 +51,7 @@ export default function ProductEntry({ onProduct }: { onProduct: (product: Prepa
         </button>)}
       </div>
       <div className="calculator-entry-pane" id={id + '-panel'} role="tabpanel" aria-labelledby={id + '-' + method}>
-        <LoadingBoundary label="Cargando la ficha del producto…">
+        <LoadingBoundary label="Cargando la ficha del producto…" blocking={false}>
           {method === 'search'
             ? <UrlAnalyzer key="search" compact deferCalculation onAnalysis={analysis => onProduct({ intent: 'search_product', analysis })}
                 onManualFallback={async sourceUrl => {

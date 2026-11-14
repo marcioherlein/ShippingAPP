@@ -70,7 +70,7 @@ body:has(.calculator-landing, .workspace-app, .personal-workspace) { min-width: 
 .calculator-hero-copy { padding: 32px 44px; }
 .calculator-hero h1 { margin: 0; color: white; font-size: clamp(2.6rem, 5.45vw, 4.3rem); line-height: 1; letter-spacing: -.075em; font-weight: 720; }
 .calculator-hero h1 em { font-style: normal; color: var(--calculator-lime); }
-.calculator-hero-copy > p { max-width: 365px; margin: 15px 0 0; color: #e4efe5; font-size: .9rem; line-height: 1.5; }
+.calculator-hero-copy > p { max-width: 380px; margin: 15px 0 0; color: #e4efe5; font-size: 1rem; line-height: 1.5; }
 .calculator-hero-copy .calculator-hero-label { margin: 0 0 13px; color: #e4efe5; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .14em; }
 .calculator-hero-label::before { content: ''; display: inline-block; margin: 0 9px 1px 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--calculator-lime); box-shadow: 0 0 0 3px #d9f3a538; }
 .calculator-hero .calculator-hero-cta { display: inline-flex; justify-content: center; align-items: center; gap: 9px; margin-top: 18px; min-height: 44px; padding: 9px 13px; border: 1px solid transparent; border-radius: 8px; background: var(--calculator-lime); color: #193325; font: inherit; font-weight: 700; font-size: .83rem; text-decoration: none; }
@@ -150,7 +150,7 @@ body:has(.calculator-landing, .workspace-app, .personal-workspace) { min-width: 
   white-space: normal;
 }
 .calculator-entry-pane :is(.url-input-wrap,.owned-product-link-row) button:disabled { opacity: .72; cursor: default; }
-.calculator-entry-pane :is(.calculator-entry-note,.url-form > small) { display: block; margin: 7px 0 0; color: var(--ds-text-secondary); font-size: .76rem; line-height: 1.5; }
+.calculator-entry-pane :is(.calculator-entry-note,.url-form > small) { display: block; margin: 7px 0 0; color: var(--ds-text-secondary); font-size: 1rem; line-height: 1.5; }
 .calculator-entry-pane .workspace-product-form { width: min(100%, 720px); padding: 8px 0; }
 .calculator-entry-pane .workspace-product-form .eyebrow { display: none; }
 .calculator-entry-pane .workspace-product-form h3 { margin-top: 0; }
@@ -186,7 +186,7 @@ body:has(.calculator-landing, .workspace-app, .personal-workspace) { min-width: 
 .calculator-profile-first h3 { margin: 0 0 8px; color: var(--ds-text-secondary); font-size: .87rem; font-weight: 650; }
 .workspace-app[data-entry="true"] .calculator-profile-first .journey-choice-grid > button { padding: 13px; border-radius: 10px; }
 .workspace-app[data-entry="true"] .calculator-profile-first .journey-choice-grid > button b { font-size: .9rem; }
-.workspace-app[data-entry="true"] .calculator-profile-first .journey-choice-grid > button small { margin: 5px 0; font-size: .77rem; }
+.workspace-app[data-entry="true"] .calculator-profile-first .journey-choice-grid > button small { margin: 5px 0; font-size: 1rem; }
 .workspace-app :is(.journey-primary-action,.pipeline-secondary,.url-form button),
 .personal-workspace :is(.workspace-button,.saved-calculations-primary) { border-radius: 8px; }
 .workspace-app .journey-summary-sticky { border-radius: 12px; }
@@ -234,7 +234,7 @@ body:has(.calculator-landing, .workspace-app, .personal-workspace) { min-width: 
   .calculator-hero { min-height: 0; margin-top: 13px; border-radius: 16px; background-image: linear-gradient(90deg, #0f2d28fa 0%, #0f2d28ea 43%, #102e2961 100%), url('/images/globalshipping-cargo.webp'); }
   .calculator-hero-copy { padding: 23px 17px 24px; }
   .calculator-hero h1 { font-size: clamp(2rem, 9.8vw, 3.75rem); }
-  .calculator-hero-copy > p { max-width: 265px; margin-top: 11px; font-size: .82rem; }
+  .calculator-hero-copy > p { max-width: 275px; margin-top: 11px; }
   .calculator-hero-break { display: none; }
   .calculator-steps { margin-block: 14px 18px; padding: 7px 3px; }
   .calculator-steps li { flex-direction: column; align-items: center; gap: 4px; padding-inline: 2px; font-size: .59rem; text-align: center; overflow-wrap: anywhere; }

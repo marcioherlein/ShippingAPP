@@ -43,7 +43,7 @@ export const PurchaseQuoteSummary = React.memo(function PurchaseQuoteSummary({ s
         <dl className="workspace-result-overview" aria-label="Resumen de la compra">
           <div><dt>Costo puesto por unidad</dt><dd>{usd(selected.cost.unitCostUsd)}</dd></div>
           <div><dt>Inversión total estimada</dt><dd>{usd(selected.cost.totalCostUsd)}</dd></div>
-          <div><dt>Plazo de transporte</dt><dd>{transit ? `${transit.minDays}–${transit.maxDays} días ${transit.basis === 'business' ? 'hábiles' : 'corridos'}` : 'A confirmar'}</dd></div>
+          <div><dt>Plazo estimado</dt><dd>{transit ? `${transit.minDays}–${transit.maxDays} días ${transit.basis === 'business' ? 'hábiles' : 'corridos'}` : 'A confirmar'}</dd></div>
         </dl>
       </div>}
       <p className="calculator-result-date">Cálculo del {new Date(snapshot.quotedAt).toLocaleString('es-AR')} · Importes en USD</p>

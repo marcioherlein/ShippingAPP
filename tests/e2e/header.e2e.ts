@@ -6,12 +6,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 })
       await page.goto('/')
-      // The first decision must fit the screen without an empty operation rail.
-      await expect(page.getByRole('heading', { name: 'Elegí cómo empezar' })).toBeVisible()
+      // All intake choices should fit before showing the operation profile.
+      await expect(page.getByRole('heading', { name: '¿Qué querés importar?' })).toBeVisible()
       await expect(page.locator('.journey-case-summary')).toHaveCount(0)
       await expect(page.locator('.gs-chat-panel-header')).not.toBeVisible()
-      const entryChoices = page.locator('.journey-entry-panel button:visible')
-      await expect(entryChoices).toHaveCount(2)
+      const entryChoices = page.getByRole('tablist', { name: 'Forma de cargar el producto' }).getByRole('tab')
+      await expect(entryChoices).toHaveCount(3)
       for (const choice of await entryChoices.all()) {
         const box = await choice.boundingBox()
         expect(box!.y).toBeGreaterThanOrEqual(0)

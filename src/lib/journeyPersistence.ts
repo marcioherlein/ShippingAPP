@@ -403,7 +403,7 @@ export async function restoreJourneyState(state: PersistedJourneyState) {
     return button && !button.disabled ? button : null
   })
   next.click()
-  await waitFor(() => document.querySelector('.journey-product-surface'))
+  await waitFor(() => document.querySelector('.journey-product-surface, #case-confirmation, #calculator'))
 }
 
 export function installJourneyPersistence() {

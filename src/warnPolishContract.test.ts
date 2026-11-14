@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const app = fs.readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+const steps = fs.readFileSync(new URL('./components/CalculatorSteps.tsx', import.meta.url), 'utf8')
 const motion = fs.readFileSync(new URL('./lib/motionPreference.ts', import.meta.url), 'utf8')
 const polish = fs.readFileSync(new URL('./styles/p2-semantic-polish.css', import.meta.url), 'utf8')
 
@@ -19,7 +20,7 @@ describe('UI audit WARN cleanup contract', () => {
     expect(app).toContain('<UiIcon name="product"')
     expect(app).toContain('<UiIcon name="search"')
     expect(app).toContain('<UiIcon name="sparkles"')
-    expect(app).toContain('<UiIcon name="check"')
+    expect(steps).toContain('<UiIcon name="check"')
     expect(app).toContain('<UiIcon name="arrow-right"')
     expect(app).not.toContain('>▣<')
     expect(app).not.toContain('>⌕<')

@@ -70,9 +70,11 @@ test('budget mode is an accessible radio group with a contextual disabled reason
 test('core explanatory copy renders at readable body size', async ({ page }) => {
   await page.goto('/')
 
-  const assistantCopy = page.locator('.journey-bubble.assistant p').first()
-  const entryDescription = page.locator('.journey-choice-grid.three button small').first()
+  const entryDescription = page.getByText('Pegá un enlace de producto de Alibaba. Revisá los datos antes de calcular.', { exact: true })
+  const profileDescription = page.getByText('Cargá un enlace o describí qué querés traer.', { exact: true })
 
-  expect(Number.parseFloat(await assistantCopy.evaluate((element) => getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16)
-  expect(Number.parseFloat(await entryDescription.evaluate((element) => getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16)
+  for (const description of [entryDescription, profileDescription]) {
+    await expect(description).toBeVisible()
+    expect(Number.parseFloat(await description.evaluate(element => getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16)
+  }
 })

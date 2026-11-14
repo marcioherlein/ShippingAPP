@@ -1,13 +1,7 @@
 import { test as base, expect } from '@playwright/test'
 
-/**
- * The app now opens on a standalone marketing Landing screen; the tool itself
- * only renders once the user "enters" (persisted as localStorage
- * `shippingapp:entered`). These flow tests exercise the tool, not the landing,
- * so we seed the entered flag before any app JS runs — the standard way to jump
- * a test straight to the state under test. The landing screen and its jump-free
- * entry are covered separately in `landing.e2e.ts`.
- */
+// Tests for an existing case seed the calculator entry flag. Landing tests
+// exercise the public product-first path without this seed.
 // Restricted workspaces cannot spawn Chromium's renderer processes. Isolate
 // each test in a fresh browser when explicitly opting into the local fallback.
 export const browserTest = process.env.PW_CHROMIUM_SINGLE_PROCESS === '1' ? base.extend({

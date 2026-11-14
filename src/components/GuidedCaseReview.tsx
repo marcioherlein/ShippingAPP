@@ -139,7 +139,6 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const originalPrice = question?.id === 'quote.amount' ? analysis.product.supplierEvidence?.priceText?.trim() : null
   return <section className="guided-case quote-form-surface" id="case-confirmation" aria-busy={processing}>
     <header className="quote-form-header">
-      <ol className="quote-form-steps" aria-label="Etapas de la cotización"><li>✓ Tu operación</li><li>✓ Tu compra</li><li aria-current="step">3. Producto y oferta</li><li>4. Tu resultado</li></ol>
       <details className="quote-form-context"><summary>Producto y operación</summary>
         <p className="quote-form-product-name"><b>{draft.productName || analysis.product.name}</b>{source.startsWith('https://') && <a href={source} target="_blank" rel="noreferrer">{!analysis.fetched || analysis.sourceRead?.mode === 'partial' ? 'Publicación guardada · datos por confirmar' : 'Ver publicación original'}</a>}</p>
         <p className="workspace-capacity">Tu compra: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : explorationSummary}.</p>

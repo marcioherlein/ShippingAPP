@@ -1,6 +1,6 @@
 import React from 'react'
 
-export type UiIconName = 'product' | 'search' | 'sparkles' | 'external-link' | 'edit' | 'arrow-right' | 'check' | 'warning' | 'chevron-down' | 'info'
+export type UiIconName = 'product' | 'brand' | 'link' | 'plane' | 'ship' | 'search' | 'sparkles' | 'external-link' | 'edit' | 'arrow-right' | 'check' | 'warning' | 'chevron-down' | 'info'
 
 type Props = {
   name: UiIconName
@@ -9,6 +9,10 @@ type Props = {
 }
 
 const paths: Record<UiIconName, React.ReactNode> = {
+  brand: <path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/>,
+  link: <path d="M10 13a4 4 0 0 0 6 .5l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.7m2.4 4.5a4 4 0 0 0-6-.5l-3 3a4 4 0 0 0 5.7 5.7l1.7-1.7"/>,
+  plane: <path d="M17 20v-4l-5-3-5 3v4l-2-1v-4l-3-2v-2l8 1V6c0-1.2.8-2.5 2-2.5S14 4.8 14 6v6l8-1v2l-3 2v4l-2 1Z"/>,
+  ship: <path d="m4 14 8-3 8 3-2.5 4H6.5L4 14Zm2-1V8h12v5M9 8V5h6v3m-3 3v7M2 21c1.5 0 2.7-1.1 4-1.1S8.5 21 10 21s2.7-1.1 4-1.1 2.5 1.1 4 1.1 2.7-1.1 4-1.1"/>,
   product: <><path d="M4.5 7.5 12 3l7.5 4.5v9L12 21l-7.5-4.5z"/><path d="M4.8 7.7 12 12l7.2-4.3M12 12v9"/></>,
   search: <><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.2 4.2"/></>,
   sparkles: <><path d="M12 3.5 13.4 8l4.6 1.4-4.6 1.4L12 15.5l-1.4-4.7L6 9.4 10.6 8z"/><path d="m18 15 .7 2.3L21 18l-2.3.7L18 21l-.7-2.3L15 18l2.3-.7z"/></>,

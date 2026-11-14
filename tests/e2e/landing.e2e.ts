@@ -1,35 +1,81 @@
 import { expect, browserTest as test } from './fixtures'
+import { createManualProductAnalysis } from '../../src/lib/productConfirmation'
 
-// The landing must render as its own screen (no app tool visible) and entering
-// the tool must be an instant view switch — no anchor smooth-scroll "salto".
-test('landing is a standalone screen and entering the app does not scroll-jump', async ({ page }) => {
+const selectedProduct = '[data-prepared-product="true"]'
+
+test('product-first entry keeps a manual product through profile and reload', async ({ page }) => {
   await page.goto('/')
-
-  // Landing is shown; the tool's first question is not in the DOM yet.
   await expect(page.locator('.workspace-landing')).toBeVisible()
-  await expect(page.locator('.journey-brand-mark')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toHaveCount(0)
+  await expect(page.getByLabel('Enlace de Alibaba')).toBeVisible()
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
 
-  await page.getByRole('button', { name: 'Planificar mi importación →', exact: true }).click()
-
-  // The tool is now mounted, the landing is gone, and the page is still at the
-  // top (view switch, not a scroll).
-  await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toBeVisible()
+  await page.getByRole('link', { name: 'Empezar cálculo' }).click()
+  await expect(page.getByRole('heading', { name: '¿Qué querés importar?' })).toBeFocused()
+  const link = page.getByRole('tab', { name: 'Pegar enlace' })
+  await link.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: 'Buscar producto' })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('textbox', { name: 'Buscar productos en Alibaba' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Cargar manualmente' }).click()
+  await page.getByLabel('Nombre y modelo del producto').fill('Termo de acero inoxidable')
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await page.getByLabel('Función o uso principal').fill('Conservar bebidas calientes')
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await page.getByLabel('Material y características').fill('Acero inoxidable con doble pared al vacío')
+  await page.getByRole('button', { name: 'Crear ficha de importación' }).click()
+  await expect(page.getByRole('progressbar', { name: /Datos del envío/ })).toBeVisible()
+  await expect(page.locator(selectedProduct)).toContainText('Termo de acero inoxidable')
   await expect(page.locator('.workspace-landing')).toHaveCount(0)
-  expect(await page.evaluate(() => window.scrollY)).toBe(0)
-  await expect(page.getByRole('heading', { name: 'Planificá tu importación' })).toBeFocused()
 
-  // Entering persists: a reload lands straight back in the tool.
   await page.reload()
-  await expect(page.getByRole('button', { name: /Ya tengo un producto/i })).toBeVisible()
-  await expect(page.locator('.workspace-landing')).toHaveCount(0)
+  await expect(page.locator(selectedProduct)).toContainText('Termo de acero inoxidable')
+  await page.getByRole('radio', { name: 'Reventa', exact: true }).click()
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await page.getByRole('radio', { name: 'Empresa', exact: true }).click()
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await page.getByRole('radio', { name: 'Sí', exact: true }).click()
+  await page.getByRole('button', { name: 'Seguir con presupuesto' }).click()
+  await page.getByRole('radio', { name: /Todavía no sé/ }).click()
+  await page.getByRole('button', { name: 'Seguir con el producto elegido' }).click()
+  await expect(page.locator('#case-confirmation')).toBeVisible()
+  await expect(page.locator('.case-question h2')).toContainText('precio del proveedor')
 })
 
- test('landing exposes legal pages and a keyboard skip link', async ({ page }) => {
+test('product-first entry preserves the selected Alibaba product', async ({ page }) => {
+  const source = 'https://www.alibaba.com/product-detail/Termo_1600000001234.html'
+  const product = createManualProductAnalysis(source, 'Termo de acero inoxidable')
+  await page.route('**/api/opportunity-search', route => route.fulfill({ json: {
+    status: 'live', mode: 'direct', query: 'Termo acero', note: 'Proveedor de prueba',
+    constraints: { maxUnitPriceUsd: null, maxMoq: null, originCountry: null, excludedOriginCountries: [], lowMoqPreference: false },
+    constraintsNote: '', results: [{ title: 'Termo de acero inoxidable', url: source, unitPriceUsd: 4, priceDisplay: 'USD 4', moq: 50 }],
+  } }))
+  await page.route('**/api/product-read', route => route.fulfill({ json: product }))
   await page.goto('/')
+  await page.getByRole('tab', { name: 'Buscar producto' }).click()
+  await page.getByRole('textbox', { name: 'Buscar productos en Alibaba' }).fill('Termo acero')
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click()
+  await page.getByRole('button', { name: 'Usar este producto', exact: true }).click()
+  await expect(page.getByRole('progressbar', { name: /Datos del envío/ })).toBeVisible()
+  await expect(page.locator(selectedProduct)).toContainText('Termo de acero inoxidable')
+})
+
+test('product-first entry falls back to the manual form after a failed link read', async ({ page }) => {
+  await page.route('**/api/product-read', route => route.fulfill({ status: 502, json: { error: 'La publicación no respondió.' } }))
+  await page.goto('/')
+  await page.getByLabel('Enlace de Alibaba').fill('https://www.alibaba.com/product-detail/Termo_1600000001234.html')
+  await page.getByRole('button', { name: 'Leer producto' }).click()
+  await expect(page.getByRole('alert')).toContainText('La publicación no respondió.')
+  await page.getByRole('button', { name: 'Completar ficha manualmente', exact: true }).click()
+  await expect(page.getByLabel('Nombre y modelo del producto')).toBeVisible()
+})
+
+test('landing exposes legal pages and a keyboard skip link', async ({ page }) => {
+  await page.goto('/')
+  const skipLink = page.getByRole('link', { name: 'Ir al contenido', exact: true })
+  await expect(skipLink).toBeAttached()
   await page.keyboard.press('Tab')
-  await expect(page.getByRole('link', { name: 'Ir al contenido', exact: true })).toBeFocused()
+  await expect(skipLink).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.locator('#landing-content')).toBeFocused()
   const legal = page.getByRole('navigation', { name: 'Páginas legales' })
@@ -42,4 +88,4 @@ test('landing is a standalone screen and entering the app does not scroll-jump',
     expect(html).toContain('Documento pendiente de publicación.')
     expect(html).not.toContain('id="root"')
   }
- })
+})

@@ -30,9 +30,9 @@ export default function ManualNcmPicker({ customs, recoveryKey = customs.descrip
   const searchReady = query.trim().length >= 2 || !!chapter
   const results = useMemo(() => index && searchReady ? searchManualNcm(index, query, chapter) : [], [index, query, chapter, searchReady])
   const selectedVisible = results.some(([code]) => code === selected)
-  return <section className="manual-ncm-picker">
-    <h3>Buscar en el nomenclador</h3>
-    <p>Buscá por producto o código y filtrá por capítulo. Validamos que la posición exista y tenga aranceles; revisá que la descripción corresponda a tu producto.</p>
+  return <section className="manual-ncm-picker" aria-labelledby={`${selectionName}-title`}>
+    <h2 id={`${selectionName}-title`}>Nomenclador aduanero</h2>
+    <p>Buscá por producto o código NCM. Podés filtrar por capítulo.</p>
     {!index && !error && <p role="status">Cargando nomenclador…</p>}
     {!index && error && <div className="manual-ncm-load-error" role="alert">
       <b>{error}</b>
@@ -43,8 +43,21 @@ export default function ManualNcmPicker({ customs, recoveryKey = customs.descrip
       <p className="ncm-catalog-source">Fuente: {index.meta.source} · Actualización: {index.meta.sourceDate}</p>
       <label>Producto o código NCM<input autoFocus value={query} onChange={event => { setQuery(event.target.value); setSelected(''); setConfirmed(false) }} type="search" autoComplete="off" placeholder="Ej. crema, raquetas, 3304" /></label>
       <label>Capítulo<DsSelect ariaLabel="Capítulo del nomenclador" value={chapter} onChange={value => { setChapter(value); setSelected(''); setConfirmed(false) }} options={[{ value: '', label: 'Todos los capítulos' }, ...chapters.map(value => ({ value, label: `Capítulo ${value}` }))]} /></label>
-      <p role="status">{!searchReady ? 'Escribí al menos dos caracteres del producto o código, o elegí un capítulo para buscar.' : results.length === 60 ? 'Hay 60 o más coincidencias. Agregá palabras para acotar.' : `${results.length} posiciones encontradas.`}</p>
-      <div className="manual-ncm-results" role="group" aria-label="Posiciones del nomenclador">{results.map(([code, label]) => <label key={code}><input type="radio" name={selectionName} checked={selected === code} onChange={() => { setSelected(code); setConfirmed(false) }} /><span><b>{code}</b> {label}</span></label>)}</div>
+      <p role="status">{!searchReady ? 'Escribí al menos dos caracteres del producto o código, o elegí un capítulo para buscar.' : results.length === 60 ? 'Hay 60 o más coincidencias. Agregá palabras para acotar.' : results.length === 1 ? '1 posición encontrada.' : `${results.length} posiciones encontradas.`}</p>
+      {results.length > 0 && <div className="manual-ncm-results" role="group" aria-label="Posiciones del nomenclador">
+        {results.map(([code, label]) => {
+          const sections = label.split(/\s*>\s*/)
+          const description = sections.pop()?.trim()
+          return <label key={code}>
+            <input type="radio" name={selectionName} checked={selected === code} onChange={() => { setSelected(code); setConfirmed(false) }} />
+            <span className="manual-ncm-description">
+              <b>{code}</b>
+              <strong>{description || 'Descripción pendiente'}</strong>
+              {sections.length > 0 && <small>{sections.join(' › ')}</small>}
+            </span>
+          </label>
+        })}
+      </div>}
       {searchReady && results.length === 0 && <p className="manual-ncm-empty">No encontramos coincidencias. Probá con el nombre general del producto o elegí otro capítulo.</p>}
       {selectedVisible && <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />Revisé la descripción y corresponde a mi producto.</label>}
       <p id={`${selectionName}-help`} className="manual-ncm-selection-help">{!searchReady ? 'Empezá por buscar tu producto o una posición conocida.' : !selectedVisible ? 'Elegí una posición para continuar.' : !confirmed ? 'Confirmá que la descripción corresponde a tu producto.' : 'Posición elegida. Podés continuar.'}</p>

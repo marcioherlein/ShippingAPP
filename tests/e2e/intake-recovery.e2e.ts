@@ -54,6 +54,8 @@ for (const width of [320, 390, 1440]) {
     await page.getByRole('option', { name: 'Capítulo 73', exact: true }).click()
     const solidFuel = page.getByRole('radio', { name: /^7321\.19\.00/ })
     await expect(solidFuel).toBeVisible()
+    await expect(page.getByText('1 posición encontrada.', { exact: true })).toBeVisible()
+    await expect(page.locator('.manual-ncm-results .manual-ncm-description strong')).toBeVisible()
     await solidFuel.check()
     const confirmPosition = page.getByRole('button', { name: 'Usar esta posición' })
     await expect(confirmPosition).toBeDisabled()

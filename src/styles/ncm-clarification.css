@@ -225,6 +225,15 @@
   overflow-wrap: anywhere;
 }
 .manual-ncm-results label > span { min-width: 0; overflow-wrap: anywhere; }
+.manual-ncm-picker > label:has(input[type="search"], .ds-select) {
+  display: grid;
+  justify-items: stretch;
+  justify-content: stretch;
+  text-align: left;
+}
+.manual-ncm-results:has(> label:only-child) { max-height: none; }
+.manual-ncm-description strong { display: block; color: var(--ds-text-strong); }
+.manual-ncm-description small { display: block; margin-top: 4px; color: var(--ds-text-secondary); font-size: .875rem; line-height: 1.4; }
 .supplier-review, .supplier-tier, .ncm-disambiguation { min-width: 0; }
 
 .ncm-disambiguation-error {

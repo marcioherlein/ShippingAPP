@@ -60,6 +60,10 @@ describe('NCM canonical label reconciliation', () => {
       ['9999.99.99.100A', 'Familia oficial > Subfamilia > Variante A'],
       ['9999.99.99.200B', 'Familia oficial > Subfamilia > Variante B'],
     ])).toBe('Familia oficial > Subfamilia')
+
+    expect(deriveCanonicalParentLabel('', [
+      ['7321.12.00.000D', 'Aparatos de cocción > De combustibles l?quidos'],
+    ])).toBe('Aparatos de cocción > De combustibles líquidos')
   })
 
   it('fails closed if any NCM code lacks a canonical SIM parent label', () => {

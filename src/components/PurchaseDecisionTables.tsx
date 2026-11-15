@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import type { PurchasePlan, PurchaseScenario } from '../lib/purchasePlan'
-import { usd } from '../lib/format'
+import { formatUnits, usd } from '../lib/format'
 import UiIcon, { type UiIconName } from './UiIcon'
 import QuoteCostBreakdown from './QuoteCostBreakdown'
 import '../styles/purchase-decisions.css'
@@ -58,7 +58,7 @@ export function PurchaseOptimization({ plan, onChoose, minimumConfirmed = true }
           <Cell label="Inversión total · USD"><strong>{usd(scenario.cost.totalCostUsd)}</strong></Cell>
           <Cell label="Costo puesto · USD/u."><strong>{usd(scenario.cost.unitCostUsd)}</strong></Cell>
           <Cell label="Ahorro por unidad vs. mínimo">{saving === null ? 'Sin base comparable' : Math.abs(saving) < 0.005 ? 'Base de comparación' : saving > 0 ? <><strong>{usd(saving)} menos</strong><small>{pct!.toLocaleString('es-AR', { maximumFractionDigits: 1 })}% menos por unidad</small></> : <><strong>{usd(Math.abs(saving))} más</strong><small>Mayor costo por unidad</small></>}</Cell>
-          <Cell label="Tu elección">{selected ? <span className="purchase-current-badge">Cantidad elegida</span> : scenario.withinBudget === false ? <span className="purchase-budget-warning">Supera tu presupuesto</span> : onChoose ? <button type="button" className="pipeline-secondary" onClick={() => onChoose(scenario.quantity)}>Elegir {scenario.quantity} unidades</button> : 'Escenario comparado'}</Cell>
+          <Cell label="Tu elección">{selected ? <span className="purchase-current-badge">Cantidad elegida</span> : scenario.withinBudget === false ? <span className="purchase-budget-warning">Supera tu presupuesto</span> : onChoose ? <button type="button" className="pipeline-secondary" onClick={() => onChoose(scenario.quantity)}>Elegir {formatUnits(scenario.quantity)}</button> : 'Escenario comparado'}</Cell>
         </tr>
       })}</tbody>
     </table> : <p>No hay cantidades con precio y transporte confirmados para comparar. Revisá el mínimo y los tramos de la oferta.</p>}
@@ -71,7 +71,7 @@ export function PurchaseTransportComparison({ plan }: { plan: PurchasePlan }) {
   const options = plan.transportOptions
   return <section className="purchase-transport" aria-labelledby="purchase-transport-title">
     <div className="purchase-section-heading"><h3 id="purchase-transport-title">Compará los medios de envío</h3></div>
-    {plan.selected && options?.[0] && <p className="purchase-cargo-summary">{plan.selected.quantity.toLocaleString('es-AR')} unidades <span aria-hidden="true">·</span> {options[0].cost.totalVolumeCbm.toLocaleString('es-AR', { maximumFractionDigits: 3 })} m³ <span aria-hidden="true">·</span> {options[0].cost.totalWeightKg.toLocaleString('es-AR', { maximumFractionDigits: 2 })} kg de peso real</p>}
+    {plan.selected && options?.[0] && <p className="purchase-cargo-summary">{formatUnits(plan.selected.quantity)} <span aria-hidden="true">·</span> {options[0].cost.totalVolumeCbm.toLocaleString('es-AR', { maximumFractionDigits: 3 })} m³ <span aria-hidden="true">·</span> {options[0].cost.totalWeightKg.toLocaleString('es-AR', { maximumFractionDigits: 2 })} kg de peso real</p>}
     {options?.length ? <div className="purchase-transport-grid">{options.map(option => {
       const available = option.cost.available && option.eligibility !== 'unavailable'
       const chosen = plan.selected?.mode === option.mode
@@ -96,7 +96,7 @@ export function PurchaseTransportComparison({ plan }: { plan: PurchasePlan }) {
         <details className="purchase-transport-details"><summary>Ver límites y fuentes</summary>{baseLimit && <p className="purchase-transport-source">{baseLimit}</p>}{available && <p className="purchase-transport-source">{option.mode === 'lcl' ? 'Medida facturable' : 'Peso facturable'}: {option.cost.chargeableUnits.toLocaleString('es-AR')} {option.mode === 'lcl' ? 'W/M' : 'kg'}.</p>}
           {otherLimits.length > 0 && <ul>{otherLimits.map(limit => <li key={limit}>{limit}</li>)}</ul>}
           {available && <p className="purchase-transport-source">Fuente del costo: {option.cost.source}</p>}
-          {option.transit && <><p className="purchase-transport-source">Plazo: {option.transit.source}.</p><p className="purchase-transport-source">Alcance: {option.transit.scope}</p></>}
+          {option.transit && <><p className="purchase-transport-source">Plazo: {option.transit.source}</p><p className="purchase-transport-source">Alcance: {option.transit.scope}</p></>}
         </details>
         {available && quantity > 0 && <details className="calculator-route-breakdown">
           <summary>Ver desglose<span className="calculator-sr-only"> de {transportLabels[option.mode]}</span></summary>

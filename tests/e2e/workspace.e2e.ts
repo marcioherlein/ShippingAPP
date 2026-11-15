@@ -55,6 +55,7 @@ for (const [width,entry] of [[390,'link'],[1440,'link'],[390,'search']] as const
   await expect(result).toBeVisible()
   await expect(result.locator('.workspace-result-overview')).toContainText('Inversión total estimada')
   await expect(result.locator('.workspace-result-overview')).toContainText('Costo puesto por unidad')
+  await expect(result.getByRole('button', { name: 'Elegir 1 unidad', exact: true })).toBeVisible()
   await expect(result.locator('details.workspace-audit')).not.toHaveAttribute('open','')
   await page.getByRole('button',{name:'Guardar presupuesto',exact:true}).click()
   await expect(page.getByRole('button',{name:'Presupuesto guardado',exact:true})).toBeVisible()

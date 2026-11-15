@@ -7,4 +7,7 @@ export const ars = (value: number) =>
 export const formatUnits = (quantity: number) =>
   `${quantity.toLocaleString('es-AR')} ${quantity === 1 ? 'unidad' : 'unidades'}`
 
+export const formatCargoMeasure = (value: number) =>
+  value.toLocaleString('es-AR', { maximumSignificantDigits: 6 })
+
 export const pct = (value: number) => `${(value * 100).toFixed(1)}%`

@@ -67,11 +67,11 @@ export function PurchaseOptimization({ plan, onChoose, minimumConfirmed = true }
   </section>
 }
 
-export function PurchaseTransportComparison({ plan }: { plan: PurchasePlan }) {
+export function PurchaseTransportComparison({ plan, cargo }: { plan: PurchasePlan; cargo: { volume: string; weight: string } }) {
   const options = plan.transportOptions
   return <section className="purchase-transport" aria-labelledby="purchase-transport-title">
     <div className="purchase-section-heading"><h3 id="purchase-transport-title">Compará los medios de envío</h3></div>
-    {plan.selected && options?.[0] && <p className="purchase-cargo-summary">{formatUnits(plan.selected.quantity)} <span aria-hidden="true">·</span> {options[0].cost.totalVolumeCbm.toLocaleString('es-AR', { maximumFractionDigits: 3 })} m³ <span aria-hidden="true">·</span> {options[0].cost.totalWeightKg.toLocaleString('es-AR', { maximumFractionDigits: 2 })} kg de peso real</p>}
+    {plan.selected && options?.length && <p className="purchase-cargo-summary">{formatUnits(plan.selected.quantity)} <span aria-hidden="true">·</span> {cargo.volume} m³ <span aria-hidden="true">·</span> {cargo.weight} kg de peso real</p>}
     {options?.length ? <div className="purchase-transport-grid">{options.map(option => {
       const available = option.cost.available && option.eligibility !== 'unavailable'
       const chosen = plan.selected?.mode === option.mode

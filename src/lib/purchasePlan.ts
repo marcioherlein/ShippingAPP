@@ -2,6 +2,7 @@ import { compareLandedCost, type LandedCostInput, type ModeCostBreakdown } from 
 import { optimizeQuantity } from './quantityOptimizer'
 import { supplierQuotePrice, type SupplierQuote } from './supplierQuote'
 import { transportOption, type TransportOption } from './transportPlanning'
+import { formatUnits } from './format'
 export type PurchaseCapacity = { mode: 'budget' | 'units' | 'unknown'; budgetUsd: number; min: number; max: number }
 export type PurchaseScenario = { quantity: number; priceUsd: number; mode: 'lcl' | 'air' | 'courier'; cost: ModeCostBreakdown; withinBudget?: boolean }
 export type PurchasePlan = { single: PurchaseScenario | null; singleReason: string | null; selected: PurchaseScenario | null; improvement: PurchaseScenario | null; error: string | null; note: string | null; minimum?: PurchaseScenario | null; minimumReason?: string | null; alternatives?: PurchaseScenario[]; transportOptions?: TransportOption[] }
@@ -63,7 +64,7 @@ export function buildPurchasePlan(input: PurchasePlanInput): PurchasePlan {
     const alternatives = valid.filter(s => quantities.has(s.quantity))
     const comparison = selected ? compareLandedCost({ ...input.costs, quantity: selected.quantity, unitPriceUsd: selected.priceUsd }) : null
     return { ...plan, minimum: minimumScenario,
-      minimumReason: minimumScenario ? null : `No hay precio y transporte modelados para el mínimo comercial de ${minimum} unidades. Revisá MOQ, lotes, tramos y origen.`,
+      minimumReason: minimumScenario ? null : `No hay precio y transporte modelados para el mínimo comercial de ${formatUnits(minimum)}. Revisá MOQ, lotes, tramos y origen.`,
       alternatives,
       transportOptions: comparison ? (['courier', 'air', 'lcl'] as const).map(mode => transportOption(mode, comparison.modes[mode], input.costs.originCountry, input.cargoText)) : [],
     }
@@ -87,10 +88,10 @@ export function buildPurchasePlan(input: PurchasePlanInput): PurchasePlan {
     const quantity = input.quantity ?? input.capacity.min
     if (!Number.isInteger(quantity) || (!input.quantityApproved && (quantity < input.capacity.min || quantity > input.capacity.max))) return finish({ single, singleReason, selected: null, improvement: null, error: 'Elegí una cantidad dentro del rango que ingresaste.', note })
     selected = purchaseScenario(input, quantity)
-    if (input.capacity.min !== input.capacity.max) note = input.quantityApproved && (quantity < input.capacity.min || quantity > input.capacity.max) ? `Elegiste ${quantity} unidades como alternativa a tu rango original ${input.capacity.min}–${input.capacity.max}.` : `Usamos ${quantity} unidades de tu rango ${input.capacity.min}–${input.capacity.max}; podés cambiar esa cantidad.`
+    if (input.capacity.min !== input.capacity.max) note = input.quantityApproved && (quantity < input.capacity.min || quantity > input.capacity.max) ? `Elegiste ${formatUnits(quantity)} como alternativa a tu rango original ${input.capacity.min}–${input.capacity.max}.` : `Usamos ${formatUnits(quantity)} de tu rango ${input.capacity.min}–${input.capacity.max}. Podés cambiar esa cantidad.`
   } else {
     selected = purchaseScenario(input, input.quantity ?? minimum)
-    note = `Empezamos por la compra mínima disponible: ${minimum} unidades, respetando MOQ, lotes y tramos de precio confirmados.`
+    note = `Empezamos con ${formatUnits(minimum)}, la cantidad mínima que podemos calcular con los datos de la oferta.`
   }
   return finish({ single, singleReason, selected, improvement: selected ? sameFreightImprovement(input, selected) : null, error: selected ? null : 'La cantidad no cumple el mínimo, no tiene un tramo de precio confirmado o no dispone de flete. Revisá la oferta del proveedor.', note })
 }

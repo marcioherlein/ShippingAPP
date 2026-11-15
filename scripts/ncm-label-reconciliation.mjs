@@ -25,9 +25,11 @@ function hierarchySegments(value) {
 }
 
 export function deriveCanonicalParentLabel(parentLabel, openings) {
-  if (typeof parentLabel === 'string' && parentLabel.trim()) return parentLabel.trim()
+  // ARCA's printed chapter 73 confirms the missing accented letter in the source text.
+  const repairDescription = (label) => label.replace(/\bcombustibles l[?\uFFFD]quidos\b/g, 'combustibles líquidos')
+  if (typeof parentLabel === 'string' && parentLabel.trim()) return repairDescription(parentLabel.trim())
   const paths = (Array.isArray(openings) ? openings : [])
-    .map((opening) => Array.isArray(opening) ? hierarchySegments(opening[1]) : [])
+    .map((opening) => Array.isArray(opening) ? hierarchySegments(repairDescription(String(opening[1] || ''))) : [])
     .filter((segments) => segments.length)
   if (!paths.length) return ''
   if (paths.length === 1) return paths[0].join(' > ')

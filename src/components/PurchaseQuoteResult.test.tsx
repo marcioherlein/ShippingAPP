@@ -82,7 +82,7 @@ it('shows the calculable MOQ minimum and a visible optimization table instead of
  await act(async () => button.click())
  expect(choose).toHaveBeenCalledWith(2)
  expect(container.querySelectorAll('.purchase-transport-card')).toHaveLength(3)
- expect(container.textContent).toContain('Tiempo de transporte orientativo')
+ expect(container.textContent).toContain('Plazo estimado de transporte')
  expect(container.textContent).toContain('no fechas de entrega')
 })
 

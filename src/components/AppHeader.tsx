@@ -7,7 +7,7 @@ type Props = { onNewCase?: MouseEventHandler<HTMLButtonElement>; hasProduct?: bo
 
 export default function AppHeader({ onNewCase, hasProduct = false, onReviewProduct, hasResult = false, processing = false, workspace = false }: Props) {
   return <header className="app-header">
-    <a className="app-wordmark" href="#mi-panel" onClick={event => { event.preventDefault(); openPersonalWorkspace() }} aria-label="GlobalShipping, inicio"><span className="workspace-brand-symbol"><UiIcon name="product" size={22} /></span>GlobalShipping<span className="workspace-brand-dot">.</span></a>
+    <a className="app-wordmark" href="#mi-panel" onClick={event => { event.preventDefault(); openPersonalWorkspace() }} aria-label="GlobalShipping, inicio"><span className="workspace-brand-symbol"><UiIcon name="brand" size={21} /></span>GlobalShipping<span className="workspace-brand-dot">.</span></a>
     {onNewCase && <nav className="app-header-nav" aria-label="Navegación principal">
       <a href="#mi-panel" aria-current={workspace ? 'page' : undefined} onClick={event => { event.preventDefault(); openPersonalWorkspace() }}>Mis cálculos</a>
       {!workspace && <a href="#cotizador" aria-current={!hasProduct ? 'step' : undefined}>Cotizador</a>}

@@ -20,6 +20,8 @@ import '../../../src/styles/app-header.css'
 import '../../../src/styles/guided-case.css'
 import '../../../src/styles/workspace.css'
 import '../../../src/styles/personal-workspace.css'
+import '../../../src/styles/quote-forms.css'
+import '../../../src/styles/calculator-redesign.css'
 
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'

@@ -1,22 +1,58 @@
-import React from 'react'
+import { useRef } from 'react'
 import AccountControls from '../auth/AccountControls'
-import GlobalRoutesIllustration from './GlobalRoutesIllustration'
+import CalculatorSteps from './CalculatorSteps'
+import ProductEntry, { type PreparedProduct } from './ProductEntry'
 import UiIcon from './UiIcon'
 
-type Props = { onStart: () => void }
-export default function Landing({ onStart }: Props) {
-  return <main className="workspace-landing" id="home">
+type Props = { onStart: () => void; onProduct?: (product: PreparedProduct) => void }
+
+export default function Landing({ onStart, onProduct }: Props) {
+  const help = useRef<HTMLDetailsElement>(null)
+  return <main className="workspace-landing calculator-landing" id="home">
     <a className="skip-to-quote" href="#landing-content">Ir al contenido</a>
-    <div className="workspace-service-line">Planificación de importaciones · Argentina</div>
-    <header className="app-header"><a className="app-wordmark" href="#home" aria-label="GlobalShipping inicio"><span className="workspace-brand-symbol"><UiIcon name="product" size={22} /></span>GlobalShipping<span className="workspace-brand-dot">.</span></a><nav className="workspace-landing-nav" aria-label="Explorar GlobalShipping"><a href="#decisiones">Qué podés decidir</a><a href="#como-funciona">Cómo funciona</a></nav><div className="app-header-account"><AccountControls destination="workspace" /><button className="journey-primary-action" type="button" onClick={onStart}>Calculá ahora</button></div></header>
-    <section className="workspace-landing-hero" id="landing-content" tabIndex={-1}>
-      <div className="workspace-landing-copy"><span className="eyebrow">TU PRÓXIMA IMPORTACIÓN, CON MÁS CLARIDAD</span><h1>Antes de comprar afuera,<br /><em>mirá el panorama completo.</em></h1><p>Transformá un producto en un plan de importación a Argentina: costo por unidad, inversión total y alternativas de compra, con las fuentes y los pendientes a la vista.</p><div className="workspace-landing-actions"><button type="button" className="journey-primary-action" onClick={onStart}>Planificar mi importación →</button><a href="#como-funciona">Cómo funciona</a></div><p className="workspace-help">Empezá con un enlace de Alibaba o una ficha. Guardá tu presupuesto en tu cuenta cuando esté listo.</p></div>
-      <div className="workspace-hero-visual"><GlobalRoutesIllustration /><div className="workspace-preview" aria-label="Vista ilustrativa del panel"><div className="workspace-preview-top"><span>TU PANEL DE IMPORTACIÓN</span><span>Vista ilustrativa</span></div><h2>Del producto al costo puesto.</h2><div className="workspace-preview-steps"><span><UiIcon name="product" size={18} />Producto</span><UiIcon name="arrow-right" size={16} /><span><UiIcon name="check" size={18} />NCM</span><UiIcon name="arrow-right" size={16} /><span><UiIcon name="info" size={18} />Decisión</span></div><p>Costo por unidad · inversión total · fuentes y pendientes</p></div></div>
-    </section>
-    <section className="workspace-value-grid" id="decisiones" aria-label="Qué podés decidir"><article><span>01 / INVERSIÓN</span><h2>¿Cuánto necesito?</h2><p>Separá mercadería, flete, impuestos y gastos de destino para entender el desembolso total.</p></article><article><span>02 / CANTIDAD</span><h2>¿Cuánto conviene traer?</h2><p>Compará tu compra con alternativas dentro de tu presupuesto y de los precios confirmados.</p></article><article><span>03 / EVIDENCIA</span><h2>¿Qué falta validar?</h2><p>Distinguí datos del proveedor, estimaciones logísticas y clasificación pendiente. Evaluá los datos disponibles antes de comprometer tu inversión.</p></article></section>
-    <section className="workspace-how" id="como-funciona"><span className="eyebrow">UN RECORRIDO SIMPLE</span><h2>De un producto a una decisión informada.</h2><ol><li><b>Definí tu operación</b><p>Elegí tu objetivo, perfil y presupuesto o cantidad.</p></li><li><b>Completá y validá la ficha</b><p>Importá un enlace o cargá tus datos. Revisá oferta, embalaje y NCM en un panel editable.</p></li><li><b>Compará y guardá</b><p>Revisá el costo puesto estimado, elegí tu escenario y guardá una versión con fecha y fuentes.</p></li></ol><button type="button" className="journey-primary-action" onClick={onStart}>Empezar mi cálculo</button></section>
-    <section className="workspace-evidence" aria-labelledby="evidence-heading"><div><span className="eyebrow">SABÉ QUÉ ESTÁS MIRANDO</span><h2 id="evidence-heading">Cada dato, con su contexto.</h2><p>Un número útil necesita una fuente. Tu panel distingue lo confirmado de lo estimado y muestra lo que todavía falta resolver.</p></div><dl><div><dt><span className="workspace-evidence-dot confirmed" />Confirmado</dt><dd>Oferta y datos del producto revisados por vos; clasificación respaldada por evidencia.</dd></div><div><dt><span className="workspace-evidence-dot estimated" />Estimado</dt><dd>Flete y gastos modelados para comparar escenarios, sujetos a una cotización comercial.</dd></div><div><dt><span className="workspace-evidence-dot pending" />Pendiente</dt><dd>Información que falta validar antes de poder calcular o avanzar con la compra.</dd></div></dl></section>
-    <section className="workspace-next-step"><div><span className="eyebrow">ANTES DE COMPRAR, PLANIFICÁ</span><h2>Tu próxima importación<br />empieza con una decisión informada.</h2><p>Reuní tus datos. Compará escenarios. Guardá el plan que elegís.</p></div><button type="button" className="journey-primary-action" onClick={onStart}>Crear mi plan de importación <UiIcon name="arrow-right" size={18} /></button></section>
-    <footer className="workspace-footer"><b>GlobalShipping.</b><p>Planificación de importaciones a Argentina. Los cálculos orientan tu decisión y requieren validación antes de contratar una compra o un transporte.</p><nav aria-label="Páginas legales"><a href="/privacidad.html">Política de Privacidad</a><a href="/terminos.html">Términos de Uso</a></nav></footer>
+    <div className="calculator-header-surface">
+      <header className="app-header">
+        <a className="app-wordmark" href="#home" aria-label="GlobalShipping inicio"><span className="workspace-brand-symbol"><UiIcon name="brand" size={21} /></span>GlobalShipping<span className="workspace-brand-dot">.</span></a>
+        <nav className="calculator-landing-nav" aria-label="Navegación principal">
+          <a href={onProduct ? '#elegir-producto' : '#landing-content'} aria-current="page">Calculadora</a>
+          <a href="#como-funciona" onClick={() => { if (help.current) help.current.open = true }}>Cómo funciona</a>
+        </nav>
+        <div className="app-header-account">
+          <span className="calculator-destination"><span className="calculator-flag" aria-hidden="true" />Argentina <small>USD</small></span>
+          <AccountControls destination="workspace" />
+        </div>
+      </header>
+    </div>
+    <div className="calculator-shell">
+      <section className="calculator-hero" id="landing-content" tabIndex={-1}>
+        <div className="calculator-hero-copy">
+          <p className="calculator-hero-label">Calculadora de importación</p>
+          <h1>Calculá cuánto te<br className="calculator-hero-break" />{' '}cuesta <em>importar.</em></h1>
+          <p>Compará courier, aéreo y marítimo LCL. Estimá el costo por unidad y decidí cuántas traer.</p>
+          {onProduct
+            ? <a className="calculator-hero-cta" href="#elegir-producto" onClick={event => {
+                const heading = document.querySelector<HTMLElement>('#elegir-producto h2')
+                if (!heading) return
+                event.preventDefault()
+                heading.focus()
+              }}>Empezar cálculo <UiIcon name="arrow-right" size={17} /></a>
+            : <button className="calculator-hero-cta" type="button" onClick={onStart}>Retomar mi cálculo <UiIcon name="arrow-right" size={17} /></button>}
+        </div>
+      </section>
+      {onProduct && <><CalculatorSteps current={1} /><ProductEntry onProduct={onProduct} /></>}
+      <details ref={help} className="calculator-how" id="como-funciona">
+        <summary>Cómo funciona</summary>
+        <ol>
+          <li>Elegí un producto o completá la ficha con tus datos.</li>
+          <li>Confirmá el perfil de importación, el precio del proveedor y el embalaje.</li>
+          <li>Revisá la clasificación y las tarifas antes de calcular.</li>
+          <li>Compará costo por unidad, inversión total y alternativas de compra.</li>
+        </ol>
+      </details>
+      <footer className="calculator-footer">
+        <b>GlobalShipping.</b>
+        <nav aria-label="Páginas legales"><a href="/privacidad.html">Política de Privacidad</a><a href="/terminos.html">Términos de Uso</a></nav>
+      </footer>
+    </div>
   </main>
 }

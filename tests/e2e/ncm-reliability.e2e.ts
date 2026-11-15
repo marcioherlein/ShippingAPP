@@ -97,6 +97,9 @@ for (const width of [390, 1440]) for (const mode of ['manual', 'search', 'link']
  if (await calculate.isVisible()) await calculate.click()
  await expect(page.getByRole('region', { name: 'Tu presupuesto de importación' })).toBeVisible()
  await expect(page.getByRole('region', { name: 'Tu presupuesto de importación' })).toContainText('9617.00.10')
+ await expect(result.locator('.purchase-cargo-summary')).toContainText('1 unidad · 0,002 m³ · 0,6 kg de peso real')
+ await expect(result.getByRole('region', { name: 'Desglose de costos' })).toContainText('Volumen 0,002 m³')
+ await expect(result.locator('.calculator-plan-note')).toContainText('Empezamos con 1 unidad,')
  expect(requests).toHaveLength(2)
  await page.screenshot({ path: info.outputPath(`ncm-dashboard-${mode}-${width}.png`), fullPage: true })
 })
@@ -131,7 +134,10 @@ for (const width of [320, 390, 1440]) test(`electric scooter uses canonical clas
  await expect(result).toContainText('Si traés lo mínimo: 2 unidades')
  await expect(result.getByRole('table', { name: 'Tabla de optimización de tu compra' })).toBeVisible()
  await expect(result.locator('.purchase-transport-card')).toHaveCount(3)
- await expect(result).toContainText('Tiempo de transporte orientativo')
+ for (const transport of await result.locator('.purchase-transport-card').all()) {
+  await expect(transport.getByText('Plazo estimado de transporte', { exact: true })).toBeVisible()
+ }
+ await expect(result.getByText(/Los tiempos son referencias de planificación/)).toBeVisible()
  await expect(result.locator('.purchase-transport-status').filter({ hasText: 'Requiere cotización y aceptación' })).toHaveCount(3)
  expect(requests).toHaveLength(2)
  expect(codes).toEqual([null, '8711.60.00'])

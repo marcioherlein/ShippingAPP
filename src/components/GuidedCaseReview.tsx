@@ -139,13 +139,12 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
   const originalPrice = question?.id === 'quote.amount' ? analysis.product.supplierEvidence?.priceText?.trim() : null
   return <section className="guided-case quote-form-surface" id="case-confirmation" aria-busy={processing}>
     <header className="quote-form-header">
-      <ol className="quote-form-steps" aria-label="Etapas de la cotización"><li>✓ Tu operación</li><li>✓ Tu compra</li><li aria-current="step">3. Producto y oferta</li><li>4. Tu resultado</li></ol>
       <details className="quote-form-context"><summary>Producto y operación</summary>
         <p className="quote-form-product-name"><b>{draft.productName || analysis.product.name}</b>{source.startsWith('https://') && <a href={source} target="_blank" rel="noreferrer">{!analysis.fetched || analysis.sourceRead?.mode === 'partial' ? 'Publicación guardada · datos por confirmar' : 'Ver publicación original'}</a>}</p>
         <p className="workspace-capacity">Tu compra: {capacity.mode === 'budget' ? `hasta ${usd(capacity.budgetUsd)} en total` : capacity.mode === 'units' ? `${capacity.min}–${capacity.max} unidades` : explorationSummary}.</p>
       </details>
     </header><div className="quote-focus-content">
-    <div className={`workspace-classification-status ${classified ? 'is-confirmed' : ''}`}><b>{classified ? `NCM validada: ${analysis.customs.ncmCandidate}` : classificationAttempted ? 'Clasificación pendiente de validar' : 'Completá tu ficha de producto'}</b><span>{classified ? analysis.customs.source : classificationAttempted ? 'Conservamos lo que ya completaste. Necesitamos confirmar un detalle antes de calcular los costos.' : 'Completá la oferta y el embalaje. Después validamos la posición aduanera y calculamos tus opciones.'}</span></div>
+    {!manual && <div className={`workspace-classification-status ${classified ? 'is-confirmed' : ''}`}><b>{classified ? `NCM validada: ${analysis.customs.ncmCandidate}` : classificationAttempted ? 'Clasificación pendiente de validar' : 'Completá tu ficha de producto'}</b><span>{classified ? analysis.customs.source : classificationAttempted ? 'Conservamos lo que ya completaste. Necesitamos confirmar un detalle antes de calcular los costos.' : 'Completá la oferta y el embalaje. Después validamos la posición aduanera y calculamos tus opciones.'}</span></div>}
     {blocker && (!(preciseClarification || exhausted) || authRequired || !blocker.startsWith('No pude cerrar una NCM')) && <p role="alert" className="case-alert">{blocker}</p>}
     {authRequired && <AccountControls />}
     {processing ? <p role="status" className="quote-processing"><span className="quote-processing-indicator" aria-hidden="true" />{classified ? 'Calculando tus opciones de compra…' : 'Validando la clasificación del producto…'}</p> : <>
@@ -169,7 +168,7 @@ export default function GuidedCaseReview({ profileContext, analysis, draft, quot
       </div>)}
       {!manual && !advanced && !classified && !exhausted && (preciseClarification || !question) && candidates}
       {!manual && !advanced && <details className="quote-help-actions"><summary>Opciones de clasificación y oferta</summary><button type="button" className="pipeline-secondary" aria-expanded={manual} onClick={() => setManual(v => !v)}>Buscar en el nomenclador</button><button type="button" className="pipeline-secondary" onClick={() => setAdvanced(true)}>Editar tramos de precio</button></details>}
-      {manual && <><h2>Validá la posición aduanera</h2><ManualNcmPicker customs={analysis.customs} recoveryKey={source} onSelect={customs => { onManual(customs); setManual(false) }} /><button type="button" className="pipeline-secondary" onClick={() => setManual(false)}>Volver al paso anterior</button></>}
+      {manual && <><ManualNcmPicker customs={analysis.customs} recoveryKey={source} onSelect={customs => { onManual(customs); setManual(false) }} /><button type="button" className="pipeline-secondary" onClick={() => setManual(false)}>Volver al paso anterior</button></>}
       {advanced && <div className="case-advanced"><h3 className="workspace-form-heading">Oferta comercial y datos del producto</h3><SupplierQuoteReview quote={quote} quantity={draft.quantity} sourceUrl={source} evidence={analysis.product.supplierEvidence} onChange={onQuote} />
         <button type="button" className="pipeline-secondary" onClick={() => setAdvanced(false)}>Volver a la pregunta</button>
       </div>}

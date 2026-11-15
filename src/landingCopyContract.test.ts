@@ -7,9 +7,9 @@ const journeyCss = readFileSync(new URL('./styles/journey.css', import.meta.url)
 
 describe('landing copy contract', () => {
   it('explains the decision workflow without unsupported commercial promises', () => {
-    expect(landing).toContain('mirá el panorama completo.')
+    expect(landing).toContain('Calculá cuánto te')
     expect(landing).toContain('costo por unidad, inversión total y alternativas de compra')
-    expect(landing).toContain('Completá y validá la ficha')
+    expect(landing).toContain('Confirmá el perfil de importación')
     for (const claim of ['+1.200', 'menos de 2 minutos', 'Fletes Internacionales Reales']) expect(landing).not.toContain(claim)
     expect(app).toContain('Planificá tu importación')
   })

@@ -1,12 +1,13 @@
 import { mergeSupplierEvidence } from '../src/lib/supplierEvidence'
 import { extractAlibabaDirectHttp, type DirectAlibabaResult } from './alibabaDirectProvider'
-import { extractAlibabaWithParsebot, type ParsebotAlibabaFacts, type ParsebotAlibabaResult } from './parsebotAlibaba'
+import { extractAlibabaWithParsebot, parsebotConfigStatus, type ParsebotAlibabaFacts, type ParsebotAlibabaResult } from './parsebotAlibaba'
 import { extractAlibabaNative, type NativeAlibabaResult } from './nativeAlibaba'
 import type { BrowserRun } from './alibabaSource'
 import { analyzeArgentinaMarket } from './catalogProvider'
 import { resolveMercadoLibreAccessToken, type MercadoLibreAuthEnv } from './mercadoLibreAuth'
 import { fetchBcraReferenceFx } from './bcraFx'
 import { deriveNormalizedCategory, deriveSemanticConcepts } from './semanticConcepts'
+import { createAlibabaReadBudget, type AlibabaReadOptions } from './alibabaReadBudget'
 
 type Env = MercadoLibreAuthEnv & {
   BROWSER: BrowserRun
@@ -16,14 +17,16 @@ type Env = MercadoLibreAuthEnv & {
   PARSEBOT_ENDPOINT_NAME?: string
 }
 
-type DirectReader = (url: URL) => Promise<DirectAlibabaResult>
-type ParsebotReader = (url: URL, env: Env) => Promise<ParsebotAlibabaResult>
-type NativeReader = (url: URL, browser: BrowserRun) => Promise<NativeAlibabaResult>
+type DirectReader = (url: URL, options?: AlibabaReadOptions) => Promise<DirectAlibabaResult>
+type ParsebotReader = (url: URL, env: Env, options?: AlibabaReadOptions) => Promise<ParsebotAlibabaResult>
+type NativeReader = (url: URL, browser: BrowserRun, options?: AlibabaReadOptions) => Promise<NativeAlibabaResult>
 
-export type AlibabaSourceDeps = {
+export type AlibabaSourceDeps = AlibabaReadOptions & {
   directReader?: DirectReader
   parsebotReader?: ParsebotReader
   nativeReader?: NativeReader
+  /** Free intake returns published identity/offer promptly; logistics are confirmed next. */
+  intakeOnly?: boolean
 }
 
 function usableNumber(value: unknown): value is number {
@@ -34,6 +37,18 @@ function usableText(value: unknown, rejected: string[] = []): value is string {
   if (typeof value !== 'string' || !value.trim()) return false
   const normalized = value.trim().toLowerCase()
   return !rejected.some((item) => normalized === item.toLowerCase())
+}
+
+export function hasVerifiedAlibabaIdentity(data: any) {
+  if (!usableText(data?.product?.name, ['Producto Alibaba', 'Sin clasificar'])) return false
+  const source = String(data?.confidence?.productSource || '')
+  return data?.sourceRead?.mode !== 'blocked' && source !== 'url-only' && !source.includes('direct-provisional-url-title')
+}
+
+function hasPublishedOffer(data: any) {
+  const evidence = data.product?.supplierEvidence
+  return usableNumber(data.product?.moq) && (usableNumber(data.product?.unitPriceUsd)
+    || (usableText(evidence?.currency) && usableText(evidence?.priceText) && /\d/.test(evidence.priceText)))
 }
 
 function productTitleFromUrl(url: URL) {
@@ -93,9 +108,7 @@ function emptyAnalysis(url: URL) {
     market: { estimatedPriceArs: null as number | null, estimatedMonthlyDemand: 0, source: 'Mercado local pendiente' },
     suggestedQuantities: [] as number[],
     confidence: { overall: 10, productSource: 'url-only', logistics: 'missing', market: 'pending' },
-    assumptions: [
-      'El título del URL se conserva sólo como identidad provisional; el usuario debe confirmar la ficha antes de NCM.',
-    ],
+    assumptions: [] as string[],
     sourceEvidence: {} as Record<string, unknown>,
   }
 }
@@ -120,6 +133,7 @@ export function requiredSelfFirstSignals(data: any) {
 // fails closed (leaves 'Sin clasificar') when the evidence does not clearly describe a
 // product. Supplier-provided categories are tagged categorySource='supplier'.
 function applyDerivedCategory(data: any) {
+  if (!hasVerifiedAlibabaIdentity(data)) return data
   const product = data.product || {}
   if (usableText(product.category, ['Sin clasificar'])) {
     product.categorySource = product.categorySource || 'supplier'
@@ -167,12 +181,13 @@ function mergeCommonFacts(data: any, facts: ParsebotAlibabaFacts, options: {
   browserMsUsed: number | null
 }) {
   const product = data.product || {}
-  const priorNameIsUrlOnly = data.confidence?.productSource === 'url-only'
+  const priorNameIsUrlOnly = data.confidence?.productSource === 'url-only' || String(data.confidence?.productSource).includes('direct-provisional-url-title')
   const finalMoq = usableNumber(product.moq) ? product.moq : usableNumber(facts.moq) ? Math.round(facts.moq) : null
   const merged = {
     ...product,
     name: (!usableText(product.name, ['Producto Alibaba']) || priorNameIsUrlOnly) && usableText(facts.name) ? facts.name : product.name,
-    category: !usableText(product.category, ['Sin clasificar']) && usableText(facts.category) ? facts.category : product.category,
+    category: (!usableText(product.category, ['Sin clasificar']) || product.categorySource === 'derived') && usableText(facts.category) ? facts.category : product.category,
+    ...(usableText(facts.category) && (!usableText(product.category, ['Sin clasificar']) || product.categorySource === 'derived') ? { categorySource: 'supplier' } : {}),
     unitPriceUsd: usableNumber(product.unitPriceUsd) ? product.unitPriceUsd : usableNumber(facts.unitPriceUsd) ? facts.unitPriceUsd : null,
     supplierEvidence: mergeSupplierEvidence(product.supplierEvidence, facts.supplierEvidence, {
       price: !usableNumber(product.unitPriceUsd), weight: !usableNumber(product.packedWeightKg),
@@ -188,13 +203,16 @@ function mergeCommonFacts(data: any, facts: ParsebotAlibabaFacts, options: {
   }
   const signals = requiredSelfFirstSignals({ product: merged })
   const previousSource = String(data.confidence?.productSource || '')
-  const productSource = previousSource && previousSource !== 'url-only'
-    ? `${previousSource}+${options.source}`
-    : options.source
+  const productSource = priorNameIsUrlOnly
+    ? usableText(facts.name) ? options.source : previousSource
+    : previousSource ? `${previousSource}+${options.source}` : options.source
   return {
     ...data,
     fetched: true,
     product: merged,
+    assumptions: priorNameIsUrlOnly && usableText(facts.name)
+      ? (data.assumptions || []).filter((note: string) => !/identidad provisional|t[ií]tulo del URL/i.test(note))
+      : data.assumptions,
     sourceRead: {
       mode: options.source,
       quality: Math.min(10, 2 + signals),
@@ -217,11 +235,14 @@ function mergeDirect(data: any, direct: Exclude<DirectAlibabaResult, { status: '
   const facts = direct.facts
   const product = data.product || {}
   const directTitleIsProvisional = facts.evidence.includes('url_slug_title')
+  const listingContextOnly = facts.evidence.includes('public_listing:listing_page_category') && !facts.evidence.includes('category') && !facts.categoryPath.length
   const finalMoq = usableNumber(facts.moq) ? Math.round(facts.moq) : null
   const merged = {
     ...product,
     name: usableText(facts.name) ? facts.name : product.name,
-    category: usableText(facts.category) ? facts.category : facts.categoryPath.at(-1) || product.category,
+    // A showroom/search heading describes the results page, not the supplier's
+    // product type. Keep it as source context, not a confirmed classification.
+    category: listingContextOnly ? 'Sin clasificar' : usableText(facts.category) ? facts.category : facts.categoryPath.at(-1) || product.category,
     unitPriceUsd: usableNumber(facts.unitPriceUsd) ? facts.unitPriceUsd : null,
     supplierEvidence: mergeSupplierEvidence(undefined, facts.supplierEvidence, { price: true, weight: true, moq: true, volume: true }, 'Lectura directa'),
     moq: finalMoq,
@@ -271,6 +292,7 @@ function mergeDirect(data: any, direct: Exclude<DirectAlibabaResult, { status: '
         hsCode: facts.hsCode,
         evidence: facts.evidence,
         provisionalTitle: directTitleIsProvisional,
+        ...(listingContextOnly ? { listingContextCategory: facts.category } : {}),
       },
     },
   }
@@ -334,64 +356,90 @@ export async function resolveAlibabaSelfFirst(
   env: Env,
   deps: AlibabaSourceDeps = {},
 ) {
-  const directReader = deps.directReader || extractAlibabaDirectHttp
+  const directReader: DirectReader = deps.directReader || ((target, options) => extractAlibabaDirectHttp(target, fetch, undefined, undefined, options))
   const parsebotReader = deps.parsebotReader || extractAlibabaWithParsebot
   const nativeReader = deps.nativeReader || extractAlibabaNative
 
   let data: any = emptyAnalysis(url)
-  const direct = await directReader(url)
-  if (direct.status !== 'unavailable') data = mergeDirect(data, direct)
-  else data.assumptions = [...direct.warnings, ...(data.assumptions || [])]
+  const started = Date.now()
+  const budget = createAlibabaReadBudget(deps, 20_000)
+  const timedOutStages: string[] = []
+  const supplementNeeded = () => requiredSelfFirstSignals(data) < 7 && !(deps.intakeOnly && hasVerifiedAlibabaIdentity(data) && hasPublishedOffer(data))
+  const stage = async <T>(name: string, limit: number, read: (options: AlibabaReadOptions) => Promise<T>): Promise<T | null> => {
+    const timeoutMs = Math.min(limit, budget.remainingMs())
+    if (timeoutMs <= 0) { timedOutStages.push(name); return null }
+    // Let a provider return its accumulated evidence before the outer safety
+    // timer fires; equal deadlines otherwise discard valid partial HTML.
+    try { return await budget.run(signal => read({ signal, timeoutMs: Math.max(0, timeoutMs - 100) }), timeoutMs) }
+    catch (error) {
+      if (deps.signal?.aborted) throw error
+      if (error instanceof Error && error.name === 'TimeoutError') timedOutStages.push(name)
+      data.assumptions = [...data.assumptions, `La etapa ${name} no respondió dentro del presupuesto disponible; se conservan únicamente los datos recuperados.`]
+      return null
+    }
+  }
+  try {
+    const direct = await stage('direct', 8_000, options => directReader(url, options))
+    if (direct && direct.status !== 'unavailable') data = mergeDirect(data, direct)
+    else if (direct) data.assumptions = [...direct.warnings, ...(data.assumptions || [])]
 
-  // Fill a safe derived category from evidence already gathered. Category is the only one of
-  // the seven signals GlobalShipping can supply without a provider call, so deriving it here
-  // avoids spending Browser Run / Parse.bot merely to obtain a generic category label when
-  // every other signal is already present. Genuinely-missing numeric facts still gate below.
-  data = applyDerivedCategory(data)
+    // Fill a safe derived category from evidence already gathered. Category is the only one of
+    // the seven signals GlobalShipping can supply without a provider call, so deriving it here
+    // avoids spending Browser Run / Parse.bot merely to obtain a generic category label when
+    // every other signal is already present. Genuinely-missing numeric facts still gate below.
+    data = applyDerivedCategory(data)
 
-  // First-party path: direct HTTPS/embedded JSON first, then our own rendered
-  // browser extraction. A complete product ficha must consume zero Parse.bot credits.
-  if (requiredSelfFirstSignals(data) < 7) {
-    const native = await nativeReader(url, env.BROWSER)
-    if (native.status === 'ready') data = mergeNative(data, native)
-    else {
+    // First-party path: direct HTTPS/embedded JSON first, then our own rendered
+    // browser extraction. A complete product ficha must consume zero Parse.bot credits.
+    if (supplementNeeded()) {
+      // Reserve time for the configured rescue instead of exhausting the entire
+      // customer deadline on repeated browser calls after a challenge/rate limit.
+      const reserve = deps.parsebotReader || parsebotConfigStatus(env).ready ? 8_000 : 0
+      const native = await stage('browser', Math.max(0, budget.remainingMs() - reserve), options => nativeReader(url, env.BROWSER, options))
+      if (native?.status === 'ready') data = mergeNative(data, native)
+      else if (native) {
+        data.sourceRead = {
+          ...data.sourceRead,
+          browserAttempted: true,
+          browserMsUsed: native.browserMsUsed,
+          reason: 'La lectura directa y Browser Run propio no completaron la ficha; se evaluará el suplemento opcional de Parse.bot.',
+        }
+        data.assumptions = [...native.warnings, ...(data.assumptions || [])]
+      }
+      data = applyDerivedCategory(data)
+    }
+
+    // Parse.bot is a last-resort supplement only. GlobalShipping remains operational
+    // without a key, without credits, or while Parse.bot is unavailable.
+    if (supplementNeeded()) {
+      const parsebot = await stage('structured', budget.remainingMs(), options => parsebotReader(url, env, options))
+      if (parsebot?.status === 'ready') data = mergeParsebot(data, parsebot)
+      else if (parsebot) data.assumptions = [...parsebot.warnings, ...(data.assumptions || [])]
+      data = applyDerivedCategory(data)
+    }
+
+    if (requiredSelfFirstSignals(data) < 7) {
       data.sourceRead = {
         ...data.sourceRead,
-        browserAttempted: true,
-        browserMsUsed: native.browserMsUsed,
-        reason: 'La lectura directa y Browser Run propio no completaron la ficha; se evaluará el suplemento opcional de Parse.bot.',
+        reason: 'Los scrapers propios y cualquier suplemento opcional no completaron la ficha; GlobalShipping solicita al usuario sólo los datos faltantes.',
       }
-      data.assumptions = [...native.warnings, ...(data.assumptions || [])]
+      data.assumptions = [
+        'No se inventan precio, MOQ, peso, volumen ni origen. La ficha obligatoria queda abierta hasta que el usuario complete los faltantes.',
+        ...(data.assumptions || []),
+      ]
     }
-    data = applyDerivedCategory(data)
-  }
 
-  // Parse.bot is a last-resort supplement only. GlobalShipping remains operational
-  // without a key, without credits, or while Parse.bot is unavailable.
-  if (requiredSelfFirstSignals(data) < 7) {
-    const parsebot = await parsebotReader(url, env)
-    if (parsebot.status === 'ready') data = mergeParsebot(data, parsebot)
-    else data.assumptions = [...parsebot.warnings, ...(data.assumptions || [])]
-    data = applyDerivedCategory(data)
-  }
-
-  if (requiredSelfFirstSignals(data) < 7) {
-    data.sourceRead = {
-      ...data.sourceRead,
-      reason: 'Los scrapers propios y cualquier suplemento opcional no completaron la ficha; GlobalShipping solicita al usuario sólo los datos faltantes.',
+    const signals = requiredSelfFirstSignals(data)
+    data.confidence = {
+      ...data.confidence,
+      overall: Math.min(94, Math.max(Number(data.confidence?.overall) || 0, 20 + signals * 10)),
     }
-    data.assumptions = [
-      'No se inventan precio, MOQ, peso, volumen ni origen. La ficha obligatoria queda abierta hasta que el usuario complete los faltantes.',
-      ...(data.assumptions || []),
-    ]
-  }
-
-  const signals = requiredSelfFirstSignals(data)
-  data.confidence = {
-    ...data.confidence,
-    overall: Math.min(94, Math.max(Number(data.confidence?.overall) || 0, 20 + signals * 10)),
-  }
-  return data
+    data.sourceEvidence = { ...data.sourceEvidence, readBudget: { durationMs: Date.now() - started, timedOutStages } }
+    if (timedOutStages.length && hasVerifiedAlibabaIdentity(data)) {
+      data.sourceRead = { ...data.sourceRead, mode: 'partial', reason: 'Conservamos los datos publicados que se pudieron verificar. Los campos que faltan se confirman en la ficha.' }
+    }
+    return data
+  } finally { budget.dispose() }
 }
 
 async function hydrateMarketAndFx(data: any, env: Env) {

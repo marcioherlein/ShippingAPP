@@ -65,7 +65,7 @@ function rankDiscriminators(tokens: string[], noun: string) {
 }
 
 export function highSignalAlibabaPublicQueries(target: URL, hints: { name?: string | null; category?: string | null } = {}) {
-  const title = (hints.name || titleFromAlibabaProductUrl(target) || '').trim()
+  const title = (hints.name || titleFromAlibabaProductUrl(target.toString()) || '').trim()
   const tokens = normalizedTokens(title)
   const noun = productNoun(tokens)
   if (!noun) return []

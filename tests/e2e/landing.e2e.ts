@@ -70,6 +70,62 @@ test('product-first entry falls back to the manual form after a failed link read
   await expect(page.getByLabel('Nombre y modelo del producto')).toBeVisible()
 })
 
+const reportedSupplierUrl = 'https://www.alibaba.com/product-detail/Factory-Manufacture-Inner-Bladder-Basketball-Making_1601389995797.html?spm=a2700.prosearch.normal_offer.d_image.771b67afVPP1xD&priceId=e74649aeab9c4359b570d52c7a348432&priceId=e74649aeab9c4359b570d52c7a348432'
+
+for (const width of [320, 1440]) test(`reported supplier link keeps one recoverable error and retries verified partial data at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 })
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error' && /TypeError|ReferenceError|The above error occurred/.test(message.text())) errors.push(message.text()) })
+  // This response is a controlled supplier-evidence fixture. It proves the UI
+  // preserves a verified identity; it does not assert a live Alibaba read.
+  const product = createManualProductAnalysis(reportedSupplierUrl, 'Equipo de fabricación de cámaras de balones · modelo del proveedor')
+  product.fetched = true
+  product.sourceRead = { mode: 'partial', quality: 35, directStatus: 200, browserAttempted: false, browserMsUsed: null, reason: 'Título verificado en la publicación; oferta y embalaje pendientes.' }
+  const reads: string[] = []
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/api/product-read', async route => {
+    reads.push(route.request().postDataJSON().url)
+    if (reads.length === 1) {
+      await gate
+      await route.fulfill({ status: 503, json: { code: 'supplier_read_unavailable', retryable: true, error: 'Alibaba no permitió verificar esta publicación. Conservamos tu enlace; reintentá la lectura.' } })
+    } else await route.fulfill({ json: product })
+  })
+  let paidRequests = 0
+  await page.route('**/api/analyze', route => { paidRequests++; return route.fulfill({ status: 500, json: { error: 'El intake gratuito no debe iniciar un análisis pago.' } }) })
+  await page.goto('/')
+  const link = page.getByLabel('Enlace de Alibaba')
+  await link.fill(reportedSupplierUrl)
+  await page.getByRole('button', { name: 'Leer producto', exact: true }).click()
+  const progress = page.getByRole('dialog', { name: 'Leyendo tu producto' })
+  await expect(progress).toBeVisible()
+  await expect.poll(() => progress.evaluate(element => element.matches(':modal'))).toBe(true)
+  await page.keyboard.press('Escape')
+  await expect(progress).toBeVisible()
+  release()
+  await expect(page.locator('.processing-screen')).toHaveCount(0)
+  await expect(page.getByRole('alert')).toHaveCount(1)
+  await expect(page.getByRole('alert')).toContainText('Alibaba no permitió verificar')
+  await expect(link).toHaveValue(reportedSupplierUrl)
+  await expect(page.locator(selectedProduct)).toHaveCount(0)
+  const retry = page.getByRole('button', { name: 'Reintentar lectura', exact: true })
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(page.locator('.processing-screen')).toHaveCount(0)
+  await expect(page.getByRole('progressbar', { name: /Datos del envío/ })).toBeVisible()
+  await expect(page.locator(selectedProduct)).toContainText(product.product.name)
+  const saved = await page.evaluate(() => JSON.parse(sessionStorage.getItem('shippingapp:product-draft:prepared-entry')!).data.analysis)
+  expect(saved.sourceUrl).toBe(reportedSupplierUrl)
+  expect(saved.sourceRead.mode).toBe('partial')
+  expect(saved.product.unitPriceUsd).toBeNull()
+  expect(saved.customs.ncmCandidate).toBeNull()
+  expect(reads).toEqual([reportedSupplierUrl, reportedSupplierUrl])
+  expect(paidRequests).toBe(0)
+  expect(errors).toEqual([])
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
 test('landing exposes legal pages and a keyboard skip link', async ({ page }) => {
   await page.goto('/')
   const skipLink = page.getByRole('link', { name: 'Ir al contenido', exact: true })

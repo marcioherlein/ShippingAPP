@@ -1,7 +1,8 @@
 import app from './router'
 import { authorizeRequest } from './auth'
 import { withRequestContext } from './requestContext'
-import { analyzeAlibabaSelfFirst, parseAlibabaSelfFirstUrl, resolveAlibabaSelfFirst } from './alibabaSelfFirst'
+import { analyzeAlibabaSelfFirst, hasVerifiedAlibabaIdentity, parseAlibabaSelfFirstUrl, resolveAlibabaSelfFirst, type AlibabaSourceDeps } from './alibabaSelfFirst'
+import { createAlibabaReadBudget } from './alibabaReadBudget'
 import { analyzeArgentinaMarketHybrid } from './argentinaMarketOrchestrator'
 import { resolveMercadoLibreAccessToken } from './mercadoLibreAuth'
 import { fetchBcraReferenceFx } from './bcraFx'
@@ -219,7 +220,7 @@ function confirmedProductAnalysis(body: unknown) {
 export async function productRead(
   request: Request,
   env: Record<string, unknown>,
-  reader: (url: URL, env: any) => Promise<unknown> = resolveAlibabaSelfFirst,
+  reader: (url: URL, env: any, options?: AlibabaSourceDeps) => Promise<unknown> = resolveAlibabaSelfFirst,
 ) {
   let body: any = null
   try { body = await request.json() } catch { body = null }
@@ -232,34 +233,50 @@ export async function productRead(
     )
   }
 
-  // Deliberately no market, FX or NCM here — this is only the free supplier-ficha prefill.
-  // resolveAlibabaSelfFirst catches provider-level failures internally and returns a partial
-  // ficha (the UI then asks for missing fields), so a THROW reaching here is exceptional: a
-  // Worker CPU/time limit, an unhandled provider exception, or a transient upstream blip. We
-  // give it ONE bounded retry, then surface a structured, retryable error instead of a bare
-  // generic 503 so a transient failure never becomes a permanently broken flow.
+  // One server deadline spans both attempts and response bodies. It finishes
+  // before the client's 30-second deadline and never discards verified partial
+  // evidence merely because a supplier omitted freight measurements.
+  const budget = createAlibabaReadBudget({ signal: request.signal }, 22_000)
+  const unavailable = (timedOut: boolean) => Response.json({
+    error: timedOut
+      ? 'Alibaba no respondió a tiempo para verificar la publicación. Conservamos el enlace; podés reintentar la lectura.'
+      : 'Alibaba no permitió verificar esta publicación. Conservamos el enlace; podés reintentar la lectura.',
+    code: timedOut ? 'supplier_read_timeout' : 'supplier_read_unavailable', retryable: true, stage: 'alibaba_product_read',
+  }, { status: 503 })
   let lastError: unknown = null
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const data = await reader(url, env as any)
-      return Response.json(data)
-    } catch (error) {
-      lastError = error
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400))
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const data: any = await budget.run(signal => reader(url, env as any, { signal, timeoutMs: Math.min(20_000, budget.remainingMs()), intakeOnly: true }))
+        if (!hasVerifiedAlibabaIdentity(data)) return unavailable(Boolean(data?.sourceEvidence?.readBudget?.timedOutStages?.length))
+        return Response.json(data)
+      } catch (error) {
+        if (request.signal.aborted) return Response.json({ error: 'Lectura cancelada.', code: 'read_cancelled', retryable: true }, { status: 499 })
+        if (error instanceof Error && error.name === 'TimeoutError') return unavailable(true)
+        lastError = error
+        if (attempt === 0 && budget.remainingMs() > 2_000) {
+          try { await budget.run(() => new Promise(resolve => setTimeout(resolve, 400))) }
+          catch {
+            if (request.signal.aborted) return Response.json({ error: 'Lectura cancelada.', code: 'read_cancelled', retryable: true }, { status: 499 })
+            return unavailable(true)
+          }
+        }
+        else break
+      }
     }
-  }
-  // Provider-stage diagnostic metadata for debugging — no secrets, just the failure class.
-  const detail = lastError instanceof Error ? lastError.message.slice(0, 300) : 'unknown error'
-  return Response.json(
-    {
-      error: 'La lectura de Alibaba falló de forma transitoria. Podés reintentar en unos segundos o describir el producto sin link; no se te cobró nada.',
-      code: 'transient_provider_error',
-      retryable: true,
-      stage: 'alibaba_product_read',
-      detail,
-    },
-    { status: 503 },
-  )
+    // Provider-stage diagnostic metadata for debugging — no secrets, just the failure class.
+    const detail = lastError instanceof Error ? lastError.message.slice(0, 300) : 'unknown error'
+    return Response.json(
+      {
+        error: 'La lectura de Alibaba falló de forma transitoria. Podés reintentar en unos segundos o describir el producto sin link; no se te cobró nada.',
+        code: 'transient_provider_error',
+        retryable: true,
+        stage: 'alibaba_product_read',
+        detail,
+      },
+      { status: 503 },
+    )
+  } finally { budget.dispose() }
 }
 
 /**

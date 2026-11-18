@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import fs from 'node:fs'
 import {
   alibabaProductIdFromUrl,
   corroborateAlibabaPublicListing,
@@ -17,6 +18,23 @@ function card(id: string, title: string, commerce: string) {
 }
 
 describe('Alibaba public listing corroboration', () => {
+  it('recovers the actual inner-bladder machine title and EUR offer without contaminating identity or inventing USD', () => {
+    const target = new URL('https://www.alibaba.com/product-detail/Factory-Manufacture-Inner-Bladder-Basketball-Making_1601389995797.html')
+    const html = fs.readFileSync(new URL('./fixtures/alibaba-inner-bladder-card.html', import.meta.url), 'utf8')
+    const result = extractExactAlibabaPublicListingFacts(html, target, 'https://www.alibaba.com/countrysearch/CN/manufacture-inner-bladder-basketball.html')
+    expect(result?.name).toBe('Factory Manufacture Inner Bladder Basketball Making Machine Single Grain Winding Machine Yarn Winding Machine')
+    expect(result?.productId).toBe('1601389995797')
+    expect(result?.moq).toBe(1)
+    expect(result?.unitPriceUsd).toBeNull()
+    expect(result?.supplierEvidence).toMatchObject({ priceText: '€2,480.76', currency: 'EUR', quantityUnit: null, moqText: 'Min. order: 1 set' })
+    expect(result?.name).not.toContain('2,480')
+    expect(result?.supplier).toBeNull()
+  })
+  it('derives queries from a URL object when no title hint is available', () => {
+    const url = new URL('https://www.alibaba.com/product-detail/Factory-Manufacture-Inner-Bladder-Basketball-Making_1601389995797.html')
+    expect(publicCorroborationQueries(url).join(' ')).toContain('Inner Bladder Basketball')
+    expect(publicCorroborationQueries(url).length).toBeGreaterThan(0)
+  })
   it('extracts price and MOQ only from the exact requested product id', () => {
     const html = page([
       card('1600000000001', 'Neighbour cheap watch', '$1.20-1.50 MOQ: 1 piece Cheap Supplier Co., Ltd.'),

@@ -269,6 +269,11 @@ jobs:
           NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
         run: node scripts/smoke-production-alibaba-self.mjs
 
+      - name: Production customer Alibaba product-read regression gate
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+        run: node scripts/smoke-production-product-read.mjs
+
       # Product-level gate: the free direct-retailer tier must prove at least one
       # real live benchmark with >=5 traceable comparables. Mercado Libre can be
       # independently degraded without blocking the whole Argentina capability.

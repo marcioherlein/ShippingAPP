@@ -1,11 +1,13 @@
 name: Probe Alibaba Link
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/probe-alibaba-link.yml
   workflow_dispatch:
+    inputs:
+      alibaba_url:
+        description: Public Alibaba product URL to diagnose without starting a paid analysis
+        type: string
+        required: true
+        default: https://www.alibaba.com/product-detail/Factory-Manufacture-Inner-Bladder-Basketball-Making_1601389995797.html
 
 permissions:
   contents: read
@@ -13,64 +15,17 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 4
     env:
       PRODUCTION_URL: https://shippingapp.marciofabrizio.workers.dev
       INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
-      ALIBABA_URL: "https://www.alibaba.com/product-detail/Newest-Smart-Wifi-Video-Door-Phone_1601456927609.html?spm=a2700.product_home_fy25.just_for_you.15.2ce267afu8PhBI&priceId=3cd0b54d562c4bc3a5c1f60ca3f2a245"
+      ALIBABA_URL: ${{ inputs.alibaba_url }}
     steps:
-      - name: Probe production /api/analyze with provided Alibaba link
-        shell: bash
-        run: |
-          set -euo pipefail
-          node - <<'NODE'
-          const controller = new AbortController()
-          const timeout = setTimeout(() => controller.abort(), 45000)
-          const baseUrl = process.env.PRODUCTION_URL
-          const alibabaUrl = process.env.ALIBABA_URL
-          const internalToken = (process.env.INTERNAL_API_TOKEN || '').trim()
-          const headers = { 'content-type': 'application/json' }
-          if (internalToken.length >= 32) headers['x-shippingapp-internal-token'] = internalToken
-          let response
-          let text
-          try {
-            response = await fetch(`${baseUrl}/api/analyze`, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({ url: alibabaUrl }),
-              signal: controller.signal,
-            })
-            text = await response.text()
-          } finally {
-            clearTimeout(timeout)
-          }
-          let body
-          try {
-            body = JSON.parse(text)
-          } catch {
-            throw new Error(`Non-JSON response HTTP ${response?.status}: ${String(text).slice(0, 1000)}`)
-          }
-          if (!response.ok) {
-            throw new Error(`/api/analyze failed HTTP ${response.status}: ${JSON.stringify(body).slice(0, 2000)}`)
-          }
-          const summary = {
-            status: 'ok',
-            httpStatus: response.status,
-            sourceUrl: body.sourceUrl,
-            fetched: body.fetched,
-            sourceRead: body.sourceRead,
-            product: body.product,
-            market: {
-              estimatedPriceArs: body.market?.estimatedPriceArs,
-              source: body.market?.source,
-              detailsStatus: body.market?.details?.status,
-              detailsSource: body.market?.details?.source,
-              warnings: body.market?.details?.warnings,
-            },
-            fx: body.fx,
-            suggestedQuantities: body.suggestedQuantities,
-            confidence: body.confidence,
-            assumptions: body.assumptions,
-          }
-          console.log(JSON.stringify(summary, null, 2))
-          if (!summary.product?.name) throw new Error('No product name extracted')
-          NODE
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe customer product read and isolate direct/browser providers
+        env:
+          NODE_OPTIONS: --import=./scripts/smoke-auth-bootstrap.mjs
+        run: node scripts/probe-alibaba-product-read.mjs

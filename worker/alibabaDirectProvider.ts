@@ -1,6 +1,8 @@
 import { extractAlibabaDirectFacts, type AlibabaDirectFacts } from './alibabaDirectExtract'
 import { corroborateAlibabaPublicListing, type AlibabaPublicCorroborationResult } from './alibabaPublicCorroboration'
 import { corroborateAlibabaHighSignalRoutes } from './alibabaHighSignalCorroboration'
+import { bufferAlibabaResponse, createAlibabaReadBudget, type AlibabaReadBudget, type AlibabaReadOptions } from './alibabaReadBudget'
+import { mergeSupplierEvidence } from '../src/lib/supplierEvidence'
 
 export type DirectAlibabaResult =
   | { status: 'ready' | 'partial'; source: 'GlobalShipping direct Alibaba'; facts: AlibabaDirectFacts; httpStatus: number; warnings: string[] }
@@ -168,15 +170,21 @@ function mergePublicCorroboration(
   publicResult: Extract<AlibabaPublicCorroborationResult, { status: 'ready' }>,
 ): AlibabaDirectFacts {
   const publicFacts = publicResult.facts
+  const observedName = publicFacts.name?.trim()
+  const recoveredIdentity = !!observedName && (!facts.name || facts.evidence.includes('url_slug_title'))
   return {
     ...facts,
-    name: facts.name || publicFacts.name,
+    name: recoveredIdentity ? observedName : facts.name || publicFacts.name,
     category: facts.category || publicFacts.category,
     unitPriceUsd: facts.unitPriceUsd ?? publicFacts.unitPriceUsd,
     moq: facts.moq ?? publicFacts.moq,
     supplier: facts.supplier || publicFacts.supplier,
+    supplierEvidence: mergeSupplierEvidence(facts.supplierEvidence, publicFacts.supplierEvidence, {
+      price: !facts.unitPriceUsd && !facts.supplierEvidence?.priceText,
+      weight: false, moq: !facts.moq, volume: false,
+    }, publicFacts.sourceUrl),
     evidence: [...new Set([
-      ...facts.evidence,
+      ...facts.evidence.filter(item => !recoveredIdentity || item !== 'url_slug_title'),
       ...publicFacts.evidence.map((item) => `public_listing:${item}`),
     ])],
   }
@@ -191,10 +199,32 @@ export async function extractAlibabaDirectHttp(
   fetchImpl: FetchLike = fetch,
   corroborationReader: CorroborationReader = corroborateAlibabaPublicListing,
   highSignalReader: CorroborationReader = corroborateAlibabaHighSignalRoutes,
+  options: AlibabaReadOptions = {},
+): Promise<DirectAlibabaResult> {
+  const budget = createAlibabaReadBudget(options, 10_000)
+  const boundedFetch: FetchLike = (input, init) => budget.run(async signal => {
+    const response = await fetchImpl(input, { ...init, signal })
+    return bufferAlibabaResponse(response)
+  }, 4500)
+  try { return await readAlibabaDirectWithinBudget(url, boundedFetch, corroborationReader, highSignalReader, budget) }
+  finally { budget.dispose() }
+}
+
+function hasCommercialFicha(facts: AlibabaDirectFacts) {
+  const hasPrice = facts.unitPriceUsd || (facts.supplierEvidence?.priceText && facts.supplierEvidence.currency)
+  return !!(facts.name && !facts.evidence.includes('url_slug_title') && facts.category && hasPrice && facts.moq)
+}
+
+async function readAlibabaDirectWithinBudget(
+  url: URL,
+  fetchImpl: FetchLike,
+  corroborationReader: CorroborationReader,
+  highSignalReader: CorroborationReader,
+  budget: AlibabaReadBudget,
 ): Promise<DirectAlibabaResult> {
   let response: Response
   try {
-    response = await fetchImpl(url.toString(), {
+    response = await budget.run(() => fetchImpl(url.toString(), {
       headers: {
         'user-agent': 'Mozilla/5.0 (compatible; ShippingAPP/3.1; +https://shippingapp.marciofabrizio.workers.dev)',
         accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
@@ -202,7 +232,7 @@ export async function extractAlibabaDirectHttp(
         'cache-control': 'no-cache',
       },
       redirect: 'follow',
-    })
+    }), 4000)
   } catch (error) {
     return {
       status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: null,
@@ -239,9 +269,9 @@ export async function extractAlibabaDirectHttp(
 
   // First free pass: broad public Alibaba category/showroom/search surfaces.
   // An exact product_id match is mandatory before any commerce fact is merged.
-  if (coreSignals(facts) < 7) {
+  if (coreSignals(facts) < 7 && !hasCommercialFicha(facts)) {
     try {
-      const publicResult = await corroborationReader(url, hints, fetchImpl)
+      const publicResult = await budget.run(() => corroborationReader(url, hints, fetchImpl))
       corroborationWarnings.push(...publicResult.warnings)
       if (publicResult.status === 'ready') facts = mergePublicCorroboration(facts, publicResult)
     } catch (error) {
@@ -252,9 +282,9 @@ export async function extractAlibabaDirectHttp(
   // Second free pass: compact technical routes such as `100m-watch`, `65w-charger`
   // or `128gb-phone`. These are derived only from explicit title tokens, and the
   // same exact product_id gate prevents facts leaking from neighbouring SKUs.
-  if (coreSignals(facts) < 7) {
+  if (coreSignals(facts) < 7 && !hasCommercialFicha(facts)) {
     try {
-      const highSignalResult = await highSignalReader(url, hints, fetchImpl)
+      const highSignalResult = await budget.run(() => highSignalReader(url, hints, fetchImpl))
       corroborationWarnings.push(...highSignalResult.warnings)
       if (highSignalResult.status === 'ready') facts = mergePublicCorroboration(facts, highSignalResult)
     } catch (error) {
@@ -281,7 +311,9 @@ export async function extractAlibabaDirectHttp(
   if (!facts.packedWeightKg) warnings.push('Peso unitario embalado no expuesto por la lectura pública directa.')
   if (!facts.volumeCbm) warnings.push('Volumen/dimensiones logísticas no expuestos por la lectura pública directa.')
   if (!facts.originCountry) warnings.push('Origen de la mercadería no expuesto por la lectura pública directa.')
-  if (!facts.unitPriceUsd) warnings.push('Precio unitario no expuesto/corroborado por la lectura pública directa.')
+  if (!facts.unitPriceUsd) warnings.push(facts.supplierEvidence?.priceText && facts.supplierEvidence.currency
+    ? `Precio publicado en ${facts.supplierEvidence.currency}: se conserva el importe original; la conversión a USD requiere confirmación.`
+    : 'Precio unitario no expuesto/corroborado por la lectura pública directa.')
   if (!facts.moq) warnings.push('MOQ no expuesto/corroborado por la lectura pública directa.')
 
   return {

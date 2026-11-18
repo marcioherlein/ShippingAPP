@@ -3,6 +3,7 @@ import { parseWeightKg } from './weightUnits'
 import type { BrowserRun } from './alibabaSource'
 import { extractAlibabaDirectFacts, type AlibabaDirectFacts } from './alibabaDirectExtract'
 import type { ParsebotAlibabaFacts } from './parsebotAlibaba'
+import { bufferAlibabaResponse, createAlibabaReadBudget, type AlibabaReadOptions } from './alibabaReadBudget'
 
 export type NativeAlibabaResult =
   | { status: 'ready'; source: 'Cloudflare Browser Run JSON'; facts: ParsebotAlibabaFacts; warnings: string[]; browserMsUsed: number | null }
@@ -67,16 +68,6 @@ function productIdFromUrl(url: URL) {
   return url.pathname.match(/_(\d{8,})\.html/i)?.[1] || null
 }
 
-function productTitleFromUrl(url: URL) {
-  const segment = url.pathname.split('/').filter(Boolean).at(-1) || ''
-  const withoutId = segment.replace(/_\d{8,}\.html$/i, '').replace(/\.html$/i, '')
-  let decoded = withoutId
-  try { decoded = decodeURIComponent(withoutId) } catch { /* keep encoded slug */ }
-  const title = decoded.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
-  if (!title || /^(?:product|product detail|detail)$/i.test(title)) return null
-  return title.slice(0, 700)
-}
-
 function normalizeResult(raw: any, url: URL): ParsebotAlibabaFacts {
   const root = raw && typeof raw === 'object' ? raw : {}
   const categoryPath = Array.isArray(root.category_path)
@@ -103,7 +94,7 @@ function normalizeResult(raw: any, url: URL): ParsebotAlibabaFacts {
   const categoryFromSpecs = cleanString(specValue(specs, ['product type', 'type']), 250)
 
   return {
-    name: cleanString(root.title, 700) || productTitleFromUrl(url),
+    name: cleanString(root.title, 700),
     category: cleanString(root.product_type, 250) || categoryPath[categoryPath.length - 1] || categoryFromSpecs || null,
     categoryPath,
     unitPriceUsd: positiveNumber(root.unit_price) || firstTierPrice,
@@ -138,7 +129,7 @@ function normalizeResult(raw: any, url: URL): ParsebotAlibabaFacts {
 
 function directFactsToNative(facts: AlibabaDirectFacts, url: URL): ParsebotAlibabaFacts {
   return {
-    name: facts.name || productTitleFromUrl(url),
+    name: facts.name,
     category: facts.category || facts.categoryPath.at(-1) || null,
     categoryPath: facts.categoryPath,
     unitPriceUsd: facts.unitPriceUsd,
@@ -349,7 +340,7 @@ async function extractRenderedHtml(url: URL, browser: BrowserRun) {
     }
     const direct = extractAlibabaDirectFacts(html, url)
     const facts = directFactsToNative(direct, url)
-    if (evidenceSignals(facts) < 2) {
+    if (!facts.name || evidenceSignals(facts) < 2) {
       return {
         facts: null as ParsebotAlibabaFacts | null,
         ms,
@@ -373,14 +364,34 @@ async function extractRenderedHtml(url: URL, browser: BrowserRun) {
   }
 }
 
-export async function extractAlibabaNative(url: URL, browser: BrowserRun): Promise<NativeAlibabaResult> {
+export async function extractAlibabaNative(url: URL, browser: BrowserRun, options: AlibabaReadOptions = {}): Promise<NativeAlibabaResult> {
+  const budget = createAlibabaReadBudget(options, 12_000)
+  const boundedBrowser: BrowserRun = {
+    quickAction(action, input) {
+      const request = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+      const suppliedGoto = request.gotoOptions && typeof request.gotoOptions === 'object' ? request.gotoOptions as Record<string, unknown> : {}
+      const navigationMs = Math.max(1, Math.min(8000, budget.remainingMs()))
+      return budget.run(async () => {
+        const response = await browser.quickAction(action, { ...request, gotoOptions: { ...suppliedGoto, waitUntil: 'domcontentloaded', timeout: navigationMs } })
+        return bufferAlibabaResponse(response)
+      })
+    },
+  }
+  try { return await extractAlibabaNativeWithinBudget(url, boundedBrowser) }
+  finally { budget.dispose() }
+}
+
+async function extractAlibabaNativeWithinBudget(url: URL, browser: BrowserRun): Promise<NativeAlibabaResult> {
   const rendered = await extractRenderedHtml(url, browser)
   const warnings: string[] = [...rendered.warnings]
 
   // A complete deterministic ficha from the rendered DOM is preferable to an
   // AI/JSON extraction and avoids a second Browser Run request entirely.
-  if (rendered.facts && coreFichaSignals(rendered.facts) === 7) {
-    warnings.push('La ficha obligatoria quedó completa desde HTML renderizado; no fue necesario ejecutar Browser Run JSON.')
+  if (rendered.facts && (coreFichaSignals(rendered.facts) === 7 ||
+    (rendered.facts.name && rendered.facts.category && rendered.facts.unitPriceUsd && rendered.facts.moq))) {
+    warnings.push(coreFichaSignals(rendered.facts) === 7
+      ? 'La ficha obligatoria quedó completa desde HTML renderizado; no fue necesario ejecutar Browser Run JSON.'
+      : 'La identidad, el precio y el mínimo del proveedor quedaron leídos desde HTML renderizado; no fue necesario ejecutar Browser Run JSON para inventar datos de embalaje ausentes.')
     return {
       status: 'ready',
       source: 'Cloudflare Browser Run JSON',

@@ -188,6 +188,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
     writeProductDraft(draftKey, { mode: 'link', link: value, chatStep, chatAnswers, chatInput, volumeBasis, volumeMode, dimL, dimW, dimH, dimUnit, awaitingSensitive, pendingChatAnswers })
     setLoading(true)
     setError('')
+    setAuthRequired(false)
     try {
       await onAlibabaLink(value, controller.signal)
     } catch (err) {
@@ -196,9 +197,11 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
       setAuthRequired(err instanceof ApiAuthError)
       const raw = err instanceof Error ? err.message : ''
       const message = /expected pattern|string did not match/i.test(raw)
-        ? 'Falló transitoriamente la sesión del navegador. Reintená; el enlace es válido y no se consumió ningún análisis.'
+        ? 'Falló transitoriamente la sesión del navegador. Reintentá; el enlace es válido y no se consumió ningún análisis.'
         : raw || 'No pude leer esa publicación.'
-      setError(`${message} También podés completar la ficha manualmente.`)
+      // Transport/provider errors already explain the recovery. Keep one clear
+      // message instead of appending the manual fallback a second time.
+      setError(message)
     } finally {
       if (activeRequest.current === controller) {
         if (operation.status === 'running') operation.status = 'complete'
@@ -362,7 +365,7 @@ export default function OwnedProductIntake({ onAlibabaLink, onStructuredData, en
           autoComplete="off"
           disabled={loading}
         />
-        <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : 'Leer producto'} <UiIcon name="arrow-right" size={16} /></button>
+        <button className="journey-primary-action" type="submit" disabled={loading || !link.trim()}>{loading ? 'Leyendo…' : error && !authRequired && isAlibabaUrl(link) ? 'Reintentar lectura' : 'Leer producto'} <UiIcon name="arrow-right" size={16} /></button>
       </div>
       {loading && <p className="owned-product-progress" role="status">Estoy leyendo la publicación y cruzando las fuentes disponibles. No voy a inventar un dato que Alibaba no exponga.</p>}
       {entryMode ? <p className="calculator-entry-note">Pegá un enlace de producto de Alibaba. Revisá los datos antes de calcular.</p> : <div className="quote-form-secondary-actions"><button type="button" className="pipeline-secondary" onClick={() => leaveLink(null)}>Cambiar forma de carga</button><button type="button" className="pipeline-secondary" onClick={() => leaveLink('form')}>Completar ficha manualmente</button></div>}

@@ -80,8 +80,14 @@ export async function readAlibabaProduct(url: string, signal?: AbortSignal): Pro
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url }),
   })
-  const data = await response.json() as ProductAnalysis & { error?: string }
-  if (!response.ok) throw new Error(data.error || 'No pudimos leer el link de Alibaba.')
+  let data: ProductAnalysis & { error?: string }
+  try { data = await response.json() as ProductAnalysis & { error?: string } } catch {
+    throw new Error('No recibimos una ficha válida de la publicación. Conservamos tu enlace; reintentá la lectura.')
+  }
+  if (!response.ok) throw new Error(data?.error || 'No pudimos leer el link de Alibaba.')
+  if (!data?.product || typeof data.product.name !== 'string' || !data.product.name.trim()) {
+    throw new Error('La publicación no devolvió una identidad verificable del producto. Conservamos tu enlace; reintentá la lectura.')
+  }
   return data
 }
 

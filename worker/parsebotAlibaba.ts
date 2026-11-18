@@ -1,5 +1,6 @@
 import { originalSupplierText, type SupplierEvidence } from '../src/lib/supplierEvidence'
 import { parseWeightKg } from './weightUnits'
+import { createAlibabaReadBudget, type AlibabaReadBudget, type AlibabaReadOptions } from './alibabaReadBudget'
 type ParsebotEnv = {
   PARSEBOT_API_KEY?: string
   PARSEBOT_ENDPOINT_URL?: string
@@ -140,7 +141,16 @@ function volumeToCbm(value: unknown) {
   return amount
 }
 
-function dimensionsToCbm(value: unknown) {
+function dimensionFactor(value: unknown) {
+  const unit = cleanString(value, 40)?.toLowerCase()
+  if (!unit) return null
+  if (/^(?:mm|millimet(?:er|re)s?)$/.test(unit)) return 0.001
+  if (/^(?:cm|centimet(?:er|re)s?)$/.test(unit)) return 0.01
+  if (/^(?:m|met(?:er|re)s?)$/.test(unit)) return 1
+  return null
+}
+
+function dimensionsToCbm(value: unknown, declaredUnit?: unknown) {
   let text = cleanString(value, 200)
   if (!text && value && typeof value === 'object') {
     const root: any = value
@@ -148,15 +158,37 @@ function dimensionsToCbm(value: unknown) {
     const width = numberOrNull(root.width ?? root.w)
     const height = numberOrNull(root.height ?? root.h)
     if (!length || !width || !height) return null
-    const unit = cleanString(root.unit ?? root.units, 30) || 'cm'
+    const unit = cleanString(root.unit ?? root.units ?? declaredUnit, 30)
+    if (!dimensionFactor(unit)) return null
     text = `${length}x${width}x${height} ${unit}`
   }
   if (!text) return null
-  const dims = text.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) || []
+  const matched = text.match(/(\d+(?:[.,]\d+)?)\s*(?:mm|cm|m)?\s*[x×*]\s*(\d+(?:[.,]\d+)?)\s*(?:mm|cm|m)?\s*[x×*]\s*(\d+(?:[.,]\d+)?)/i)
+  const dims = matched?.slice(1).map(value => Number(value.replace(',', '.'))) || []
   if (dims.length !== 3 || dims.some((n) => !Number.isFinite(n) || n <= 0)) return null
-  const factor = /\bmm\b/i.test(text) ? 0.001 : /\bm\b|meters?|metres?/i.test(text) && !/\bcm\b/i.test(text) ? 1 : 0.01
+  // A bare "500X1430X1420" can be mm or cm. The provider did not declare a
+  // unit, so retain the original dimensions and ask the user instead of making
+  // a 1,000-fold assumption about the freight volume.
+  if (/(?:^|[^a-z])(?:inches?|feet|foot|ft|yd)(?:$|[^a-z])/i.test(text)) return null
+  const units = [...text.matchAll(/(?:^|[^a-z])(mm|cm|m|millimet(?:er|re)s?|centimet(?:er|re)s?|met(?:er|re)s?)(?=$|[^a-z])/gi)]
+    .map(match => dimensionFactor(match[1]))
+  const declaredFactor = dimensionFactor(declaredUnit)
+  if (declaredFactor) units.push(declaredFactor)
+  const uniqueFactors = [...new Set(units)]
+  if (uniqueFactors.length !== 1 || !uniqueFactors[0]) return null
+  const factor = uniqueFactors[0]
   const cbm = dims.reduce((product, n) => product * n * factor, 1)
-  return Number.isFinite(cbm) && cbm > 0 ? Number(cbm.toFixed(6)) : null
+  return Number.isFinite(cbm) && cbm > 0 ? Number(cbm.toPrecision(12)) : null
+}
+
+function dimensionEvidence(value: unknown) {
+  const original = originalSupplierText(value)
+  if (original || !value || typeof value !== 'object') return original
+  const object: any = value
+  const parts = [object.length ?? object.l, object.width ?? object.w, object.height ?? object.h].map(originalSupplierText)
+  if (!parts.every(Boolean)) return null
+  const unit = originalSupplierText(object.unit ?? object.units)
+  return `${parts.join(' x ')}${unit ? ` ${unit}` : ''}`
 }
 
 function compactSpecsDescription(root: any) {
@@ -204,19 +236,26 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
 
   const moqValue = firstPresent(product, ['moq', 'minimum_order_quantity', 'minimumOrderQuantity', 'min_order', 'minOrder', 'minimum_order'])
   const weightValue = firstPresent(product, [
-    'unit_weight',
-    'unitWeight',
     'packedWeightKg',
     'packed_weight_kg',
-    'weightKg',
-    'weight_kg',
     'package_weight_kg',
     'package_weight',
     'packaging.package_weight',
     'packaging.weight_kg',
+    'packaging.weight',
+    'packaging.gross_weight',
+    'gross_weight',
+    'grossWeight',
+    'shipping_info.gross_weight',
+    'shippingInfo.grossWeight',
     'shipping_info.unit_weight',
     'shippingInfo.unitWeight',
-  ]) ?? firstPresent(packaging, ['package_weight', 'weight', 'weight_kg', 'packedWeightKg', 'weightKg']) ?? firstPresent(shipping, ['unit_weight', 'unitWeight', 'weight'])
+  ]) ?? firstPresent(packaging, ['package_weight', 'weight', 'weight_kg', 'packedWeightKg', 'weightKg'])
+    ?? firstPresent(shipping, ['unit_weight', 'unitWeight', 'weight'])
+    // Parse.bot's unit_weight field uses the provider's kg convention. Generic
+    // product/net weight aliases do not establish the packed shipping weight.
+    ?? firstPresent(product, ['unit_weight', 'unitWeight'])
+  const weightEvidenceValue = weightValue ?? firstPresent(product, ['net_weight', 'netWeight', 'weightKg', 'weight_kg'])
   const volumeValue = firstPresent(product, [
     'unit_volume',
     'unitVolume',
@@ -236,6 +275,9 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
     'dimensions',
   ]) ?? firstPresent(shipping, ['unit_size', 'unitSize', 'package_size', 'package_dimensions', 'dimensions'])
     ?? firstPresent(packaging, ['package_dimensions', 'unit_size', 'dimensions', 'size'])
+  const dimensionsUnit = firstPresent(product, ['unit_size_unit', 'size_unit', 'dimension_unit', 'dimensions_unit'])
+    ?? firstPresent(shipping, ['unit_size_unit', 'size_unit', 'dimension_unit', 'dimensions_unit', 'dimensionUnit', 'dimensionsUnit'])
+    ?? firstPresent(packaging, ['unit_size_unit', 'size_unit', 'dimension_unit', 'dimensions_unit', 'dimensionUnit', 'dimensionsUnit'])
 
   // Supplier country is not the same thing as country of origin. Only explicit product-origin
   // evidence can populate originCountry; supplier_country is kept separately.
@@ -261,15 +303,15 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
       currency: cleanString(firstPresent(product, ['priceCurrency', 'currency', 'currency_code']), 30),
       quantityUnit: cleanString(firstPresent(product, ['quantity_unit', 'quantityUnit']), 80),
       variant: cleanString(firstPresent(product, ['sku_name', 'model']), 300),
-      weightText: originalSupplierText(weightValue), moqText: originalSupplierText(moqValue),
-      volumeText: originalSupplierText(volumeValue) || originalSupplierText(dimensionsValue),
-      priceSource: 'Datos estructurados del proveedor', weightSource: 'Datos estructurados del proveedor',
+      weightText: originalSupplierText(weightEvidenceValue), moqText: originalSupplierText(moqValue),
+      volumeText: originalSupplierText(volumeValue) || dimensionEvidence(dimensionsValue),
+      priceSource: 'Datos estructurados del proveedor', weightSource: weightValue !== null ? 'Datos estructurados del proveedor' : 'Peso del producto; confirmar el peso embalado',
       moqSource: 'Datos estructurados del proveedor', volumeSource: 'Datos estructurados del proveedor',
     },
     moq: numberOrNull(moqValue),
     packedWeightKg: weightKg(weightValue),
-    volumeCbm: volumeToCbm(volumeValue) ?? dimensionsToCbm(dimensionsValue),
-    unitSize: cleanString(dimensionsValue, 200),
+    volumeCbm: volumeToCbm(volumeValue) ?? dimensionsToCbm(dimensionsValue, dimensionsUnit),
+    unitSize: dimensionEvidence(dimensionsValue),
     originCountry: cleanString(originValue, 120),
     supplierCountry: cleanString(supplierCountryValue, 120),
     imageUrl: firstImage(product) || firstImage(data),
@@ -277,7 +319,7 @@ function normalizeFacts(raw: unknown): ParsebotAlibabaFacts {
     supplierBadges: cleanStringArray(firstPresent(product, ['supplier_badges', 'supplierBadges']), 20, 120),
     description: cleanString(description, 1800),
     hsCode: cleanString(firstPresent(product, ['hs_code', 'hsCode']), 120),
-    productId: cleanString(firstPresent(product, ['product_id', 'productId', 'id']), 100),
+    productId: productIdFromRaw(product),
     productCategoryId: cleanString(firstPresent(product, ['product_category_id', 'productCategoryId']), 100),
     quantityUnit: cleanString(firstPresent(product, ['quantity_unit', 'quantityUnit']), 80),
     leadTime: firstPresent(product, ['lead_time', 'leadTime']),
@@ -332,8 +374,18 @@ function alibabaQueryFromUrl(url: URL) {
 
 function productIdFromRaw(raw: unknown) {
   const root: any = raw && typeof raw === 'object' ? raw : {}
-  const id = firstPresent(root, ['product_id', 'productId', 'id', 'item_id', 'offer_id', 'product.product_id', 'product.id'])
-  return cleanString(id, 80)
+  const data = root.data && typeof root.data === 'object' ? root.data : root
+  const id = firstPresent(data, ['product_id', 'productId', 'id', 'item_id', 'offer_id', 'product.product_id', 'product.productId', 'product.id'])
+  if (typeof id === 'number' && Number.isSafeInteger(id)) return String(id)
+  const explicit = cleanString(id, 80)
+  if (explicit) return explicit
+  const productUrl = firstPresent(data, ['product_url', 'productUrl', 'url', 'detail_url', 'product.product_url', 'product.url'])
+  if (typeof productUrl !== 'string') return null
+  try {
+    const target = new URL(productUrl)
+    if (target.protocol !== 'https:' || !(target.hostname === 'alibaba.com' || target.hostname.endsWith('.alibaba.com'))) return null
+    return alibabaProductId(target)
+  } catch { return null }
 }
 
 type ParsebotAttempt = {
@@ -347,34 +399,23 @@ function withQuery(endpoint: string, params: Record<string, string>) {
   return target.toString()
 }
 
-async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotAttempt, timeoutMs = 3500) {
-  const controller = new AbortController()
-  let timer: ReturnType<typeof setTimeout> | null = null
+async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotAttempt, budget: AlibabaReadBudget, timeoutMs = 3500) {
   const headers = {
     accept: 'application/json',
     'x-api-key': apiKey,
     'user-agent': 'ShippingAPP/2.6 ParsebotAlibaba',
   }
-  const request = attempt.method === 'GET'
-    ? fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal: controller.signal })
-    : fetch(endpoint, {
-      method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify(attempt.params),
-      signal: controller.signal,
-    })
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      controller.abort()
-      reject(new Error(`Parse.bot ${attempt.method} timeout after ${timeoutMs}ms`))
-    }, timeoutMs)
-  })
-  const response = await Promise.race([request, timeout])
-  if (timer) clearTimeout(timer)
-  const text = await response.text()
-  let body: any = null
-  try { body = text ? JSON.parse(text) : null } catch { body = { raw_output: text } }
-  return { response, body }
+  return budget.run(async signal => {
+    const response = attempt.method === 'GET'
+      ? await fetch(withQuery(endpoint, attempt.params), { method: 'GET', headers, signal })
+      : await fetch(endpoint, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(attempt.params), signal })
+    // Body buffering is part of the same deadline; receiving headers alone
+    // must never leave product reading stuck beyond the customer budget.
+    const text = await response.text()
+    let body: any = null
+    try { body = text ? JSON.parse(text) : null } catch { body = { raw_output: text } }
+    return { response, body }
+  }, timeoutMs)
 }
 
 function attemptLabel(attempt: ParsebotAttempt) {
@@ -386,19 +427,21 @@ function parsebotAttempts(url: URL): ParsebotAttempt[] {
   const productId = alibabaProductId(url)
   if (productId) {
     return [
+      // This URL lookup is the method observed recovering the reported real
+      // listing. Do not burn three legacy query retries before using it.
+      { method: 'POST', params: { url: urlString, product_url: urlString, product_id: productId, id: productId } },
       { method: 'GET', params: { product_id: productId } },
       { method: 'GET', params: { id: productId } },
       { method: 'GET', params: { url: urlString } },
-      { method: 'POST', params: { url: urlString, product_url: urlString, product_id: productId, id: productId } },
     ]
   }
   return [
-    { method: 'GET', params: { url: urlString } },
     { method: 'POST', params: { url: urlString, product_url: urlString } },
+    { method: 'GET', params: { url: urlString } },
   ]
 }
 
-function firstProductCandidate(body: any): any | null {
+function productCandidates(body: any): any[] {
   const data = body?.data ?? body
   const candidates = [
     data?.products,
@@ -409,20 +452,16 @@ function firstProductCandidate(body: any): any | null {
     data?.data?.products,
     data?.data?.results,
   ]
-  for (const list of candidates) {
-    if (Array.isArray(list)) {
-      const item = list.find((entry) => entry && typeof entry === 'object')
-      if (item) return item
-    }
-  }
-  if (Array.isArray(data)) return data.find((entry) => entry && typeof entry === 'object') ?? null
-  return data && typeof data === 'object' ? data : null
+  const entries = candidates.flatMap(list => Array.isArray(list) ? list.filter(entry => entry && typeof entry === 'object') : [])
+  if (entries.length) return entries
+  if (Array.isArray(data)) return data.filter((entry) => entry && typeof entry === 'object')
+  return data && typeof data === 'object' ? [data] : []
 }
 
-async function lookupProduct(endpoint: string, apiKey: string, attempt: ParsebotAttempt, failures: string[]) {
+async function lookupProduct(endpoint: string, apiKey: string, attempt: ParsebotAttempt, failures: string[], budget: AlibabaReadBudget) {
   let result: Awaited<ReturnType<typeof callParsebot>>
   try {
-    result = await callParsebot(endpoint, apiKey, attempt)
+    result = await callParsebot(endpoint, apiKey, attempt, budget)
   } catch (error) {
     failures.push(`${attemptLabel(attempt)} -> ${error instanceof Error ? error.message : 'timeout'}`)
     return null
@@ -433,6 +472,12 @@ async function lookupProduct(endpoint: string, apiKey: string, attempt: Parsebot
     return null
   }
   const facts = normalizeFacts(body?.data ?? body)
+  const expectedId = attempt.params.product_id || attempt.params.id || (attempt.params.url ? alibabaProductId(new URL(attempt.params.url)) : null)
+  const returnedId = productIdFromRaw(body?.data ?? body)
+  if (expectedId && returnedId && expectedId !== returnedId) {
+    failures.push(`${attemptLabel(attempt)} -> product_id does not match the requested publication`)
+    return null
+  }
   const useful = Boolean(facts.name || facts.unitPriceUsd || facts.moq || facts.packedWeightKg || facts.volumeCbm || facts.category || facts.imageUrl)
   if (!useful) {
     failures.push(`${attemptLabel(attempt)} -> no usable product facts`)
@@ -441,7 +486,7 @@ async function lookupProduct(endpoint: string, apiKey: string, attempt: Parsebot
   return { facts, body }
 }
 
-export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Promise<ParsebotAlibabaResult> {
+export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv, options: AlibabaReadOptions = {}): Promise<ParsebotAlibabaResult> {
   const config = parsebotConfigStatus(env)
   if (!config.ready) {
     return {
@@ -465,17 +510,19 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
   }
 
   const failures: string[] = []
+  const budget = createAlibabaReadBudget(options, 12_000)
   let lastStatus: number | undefined
   try {
     for (const attempt of parsebotAttempts(url)) {
-      const productLookup = await lookupProduct(endpoint, env.PARSEBOT_API_KEY, attempt, failures)
+      if (budget.remainingMs() <= 0 || options.signal?.aborted) break
+      const productLookup = await lookupProduct(endpoint, env.PARSEBOT_API_KEY, attempt, failures, budget)
       if (productLookup) {
         return {
           status: 'ready',
           source: `Parse.bot · ${attemptLabel(attempt)}`,
           facts: productLookup.facts,
           executionTime: numberOrNull(productLookup.body?.execution_time),
-          warnings: [],
+          warnings: failures.length ? [`La lectura estructurada recuperó la publicación después de ${failures.length} intento(s) sin datos útiles.`] : [],
         }
       }
     }
@@ -484,18 +531,19 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
     const searchAttempt: ParsebotAttempt = { method: 'GET', params: { query: alibabaQueryFromUrl(url), page: '1', sort: 'best_match' } }
     let searchResult: Awaited<ReturnType<typeof callParsebot>> | null = null
     try {
-      searchResult = await callParsebot(searchEndpoint, env.PARSEBOT_API_KEY, searchAttempt, 6000)
+      searchResult = await callParsebot(searchEndpoint, env.PARSEBOT_API_KEY, searchAttempt, budget, 6000)
       lastStatus = searchResult.response.status
     } catch (error) {
       failures.push(`${attemptLabel(searchAttempt)} -> ${error instanceof Error ? error.message : 'timeout'}`)
     }
 
     if (searchResult && searchResult.response.ok && searchResult.body?.status !== 'error' && searchResult.body?.status !== 'timeout') {
-      const candidate = firstProductCandidate(searchResult.body)
+      const requestedId = alibabaProductId(url)
+      const candidate = requestedId ? productCandidates(searchResult.body).find(entry => productIdFromRaw(entry) === requestedId) : null
       const candidateFacts = normalizeFacts(candidate)
       const candidateProductId = productIdFromRaw(candidate)
       if (candidateProductId) {
-        const detailLookup = await lookupProduct(endpoint, env.PARSEBOT_API_KEY, { method: 'GET', params: { product_id: candidateProductId } }, failures)
+        const detailLookup = await lookupProduct(endpoint, env.PARSEBOT_API_KEY, { method: 'POST', params: { url: url.href, product_url: url.href, product_id: candidateProductId, id: candidateProductId } }, failures, budget)
         if (detailLookup) {
           return {
             status: 'ready',
@@ -506,13 +554,13 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
           }
         }
       }
-      if (candidate && Boolean(candidateFacts.name || candidateFacts.unitPriceUsd || candidateFacts.moq || candidateFacts.packedWeightKg || candidateFacts.volumeCbm || candidateFacts.category || candidateFacts.imageUrl)) {
+      if (candidate && candidateProductId === requestedId && Boolean(candidateFacts.name || candidateFacts.unitPriceUsd || candidateFacts.moq || candidateFacts.packedWeightKg || candidateFacts.volumeCbm || candidateFacts.category || candidateFacts.imageUrl)) {
         return {
           status: 'ready',
           source: 'Parse.bot · search_products',
           facts: candidateFacts,
           executionTime: numberOrNull(searchResult.body?.execution_time),
-          warnings: candidateProductId ? [`Parse.bot get_product failed for search result ${candidateProductId}; using search_products summary.`] : ['Parse.bot search_products returned product facts without a detail product_id.'],
+          warnings: [`Parse.bot get_product failed for the exact search result ${candidateProductId}; using only its product_id-matched summary.`],
         }
       }
       failures.push('GET search_products -> no usable product facts')
@@ -535,5 +583,7 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv): Pr
       httpStatus: lastStatus,
       warnings: [error instanceof Error ? `Parse.bot failed: ${error.message}` : 'Parse.bot failed; GlobalShipping will fall back to Browser Run.'],
     }
+  } finally {
+    budget.dispose()
   }
 }

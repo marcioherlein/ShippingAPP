@@ -12,6 +12,9 @@ function targetCard() {
 }
 
 describe('Alibaba high-signal public corroboration', () => {
+  it('uses the URL identity when the caller has not already read a title', () => {
+    expect(highSignalAlibabaPublicQueries(watchUrl)).toContain('mechanical watches')
+  })
   it('derives technical queries from the mechanical-watch identity', () => {
     const queries = highSignalAlibabaPublicQueries(watchUrl, {
       name: 'Fully Automatic Mechanical Watches 42.5MM Green Dial Waterproof 100m Stainless Steel Wristwatch',

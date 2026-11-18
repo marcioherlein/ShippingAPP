@@ -1,4 +1,5 @@
 import { buildAlibabaSearchUrl, buildAlibabaSeoSearchUrls, canonicalAlibabaProductUrl, titleFromAlibabaProductUrl } from './productDiscovery'
+import type { SupplierEvidence } from '../src/lib/supplierEvidence'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -12,6 +13,7 @@ export type AlibabaPublicCorroborationFacts = {
   productId: string
   sourceUrl: string
   evidence: string[]
+  supplierEvidence?: SupplierEvidence
 }
 
 export type AlibabaPublicCorroborationResult =
@@ -106,6 +108,23 @@ function headingFromHtml(html: string) {
   return heading && heading.length <= 180 ? heading : null
 }
 
+function selectedTitle(anchor: ProductAnchor) {
+  const heading = anchor.body.match(/<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/i)?.[1]
+  const image = anchor.body.match(/<img\b[^>]*>/i)?.[0]
+  return cleanText(attr(anchor.tag, 'title') || attr(anchor.tag, 'aria-label') || heading || (image ? attr(image, 'alt') : null) || anchor.body)
+}
+
+function originalPriceEvidence(anchor: ProductAnchor, text: string, sourceUrl: string): SupplierEvidence {
+  const priceNode = anchor.body.match(/<([a-z][a-z0-9]*)\b[^>]*\bproperty=["']price["'][^>]*>([\s\S]*?)<\/\1>/i)?.[2]
+  const priceText = priceNode ? cleanText(priceNode) : text.match(/(?:US\s*\$|USD|EUR|GBP|€|£|\$)\s*[\d,.]+(?:\s*(?:-|–|—|to)\s*(?:US\s*\$|USD|EUR|GBP|€|£|\$)?\s*[\d,.]+)?/i)?.[0] || null
+  const currency = priceText && /\bUSD\b|US\s*\$/i.test(priceText) ? 'USD'
+    : priceText && /\bEUR\b|€/.test(priceText) ? 'EUR'
+      : priceText && /\bGBP\b|£/.test(priceText) ? 'GBP' : null
+  const moqText = text.match(/\b(?:MOQ|min(?:imum)?\.?\s*(?:order|order quantity))\s*:?\s*[\d,]+(?:\s+[a-z]+)?/i)?.[0] || null
+  return { priceText, currency, quantityUnit: null, variant: null, moqText,
+    priceSource: priceText ? sourceUrl : null, moqSource: moqText ? sourceUrl : null }
+}
+
 type ProductAnchor = {
   index: number
   end: number
@@ -155,19 +174,21 @@ export function extractExactAlibabaPublicListingFacts(html: string, target: URL 
   const segment = html.slice(segmentStart, segmentEnd)
   const text = cleanText(segment)
 
-  const observedTitle = cleanText(attr(first.anchor.tag, 'title') || attr(first.anchor.tag, 'aria-label') || first.anchor.body)
+  const observedTitle = selectedTitle(first.anchor)
   const fallbackTitle = titleFromAlibabaProductUrl(first.anchor.url)
   const name = observedTitle && observedTitle.length >= 8 && observedTitle.length <= 700 ? observedTitle : fallbackTitle
   const range = priceRange(text)
   const moq = moqFromText(text)
   const category = headingFromHtml(html)
   const supplier = supplierFromText(text)
+  const supplierEvidence = originalPriceEvidence(first.anchor, text, sourceUrl)
   const evidence = [
     name ? 'exact_product_id_title' : null,
     range ? 'exact_product_id_price' : null,
     moq ? 'exact_product_id_moq' : null,
     category ? 'listing_page_category' : null,
     supplier ? 'exact_product_id_supplier' : null,
+    supplierEvidence.priceText ? 'exact_product_id_original_price' : null,
   ].filter((item): item is string => Boolean(item))
 
   if (!name && !range && !moq && !category) return null
@@ -184,6 +205,7 @@ export function extractExactAlibabaPublicListingFacts(html: string, target: URL 
     productId: targetId,
     sourceUrl,
     evidence,
+    supplierEvidence,
   } satisfies AlibabaPublicCorroborationFacts
 }
 
@@ -201,7 +223,7 @@ function compactQuery(title: string) {
 }
 
 export function publicCorroborationQueries(target: URL, hints: { name?: string | null; category?: string | null } = {}) {
-  const urlTitle = titleFromAlibabaProductUrl(target) || ''
+  const urlTitle = titleFromAlibabaProductUrl(target.toString()) || ''
   const name = (hints.name || '').trim()
   const category = (hints.category || '').trim()
   const candidates = [

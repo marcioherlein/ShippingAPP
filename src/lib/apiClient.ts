@@ -70,13 +70,15 @@ function signalUsageUpdated(response: Response) {
   }
 }
 
-async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
+type ApiRequestPhase = 'session' | 'token' | 'request'
+async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit, onPhase: (phase: ApiRequestPhase) => void = () => {}) {
   const shouldAttach = isProtectedSameOriginApi(input)
   const headers = new Headers(input instanceof Request ? input.headers : undefined)
   if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value))
 
   const url = inputUrl(input)
   if (shouldAttach && url?.pathname !== '/api/me') {
+    onPhase('session')
     try { await waitForVerifiedSession(init?.signal ?? undefined) } catch (error) {
       if (getSessionState() === 'signed_out') signalAuthenticationRequired()
       throw error
@@ -96,6 +98,7 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
   const attachToken = async (fresh = false) => {
     if (init?.signal?.aborted) throw init.signal.reason
     if (!provider) return
+    onPhase('token')
     let token: string | null
     try { token = await provider(fresh) } catch {
       if (init?.signal?.aborted) throw init.signal.reason
@@ -112,6 +115,7 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
   await attachToken()
   // Clone Request inputs before their body is consumed by the first fetch.
   const replay = input instanceof Request ? input.clone() : input
+  onPhase('request')
   let response = await fetch(input, { ...init, ...(shouldAttach ? { cache: 'no-store' as const } : {}), headers })
   let code = ''
   const responseCode = async () => {
@@ -122,6 +126,7 @@ async function apiFetchInternal(input: RequestInfo | URL, init?: RequestInit) {
     if (provider && code !== 'auth_origin_rejected') {
       await attachToken(true)
       if (init?.signal?.aborted) throw init.signal.reason
+      onPhase('request')
       response = await fetch(replay, { ...init, ...(shouldAttach ? { cache: 'no-store' as const } : {}), headers })
       code = await responseCode()
     }
@@ -152,6 +157,7 @@ async function boundedApiFetch(input: RequestInfo | URL, init?: RequestInit) {
   if (init?.signal?.aborted) abort()
   let timer: ReturnType<typeof setTimeout> | undefined
   let rejectOnAbort: (() => void) | undefined
+  let phase: ApiRequestPhase = 'request'
   try {
     return await Promise.race([
       new Promise<never>((_, reject) => {
@@ -159,7 +165,7 @@ async function boundedApiFetch(input: RequestInfo | URL, init?: RequestInit) {
         controller.signal.addEventListener('abort', rejectOnAbort, { once: true })
         if (controller.signal.aborted) rejectOnAbort()
       }),
-      apiFetchInternal(input, { ...init, signal: controller.signal }).then(async response => {
+      apiFetchInternal(input, { ...init, signal: controller.signal }, next => { phase = next }).then(async response => {
         // These statuses forbid a body, even when a fetch/transport wrapper
         // exposes an empty stream. ArrayBuffer(0) is still an illegal body here.
         if (response.status === 204 || response.status === 205 || response.status === 304) {
@@ -171,8 +177,12 @@ async function boundedApiFetch(input: RequestInfo | URL, init?: RequestInit) {
       }),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
-          reject(new Error('La operación tardó más de 30 segundos. Conservamos los datos: podés reintentar o completar la ficha manualmente.'))
-          controller.abort()
+          const error = phase === 'request'
+            ? new Error('La operación tardó más de 30 segundos. Conservamos los datos: podés reintentar o completar la ficha manualmente.')
+            : authenticationError(phase === 'token' ? 'auth_token_unavailable' : 'auth_session_pending', true)
+          reject(error)
+          controller.abort(error)
+          if (phase !== 'request' && getSessionState() !== 'unmanaged') setSessionState('error')
         }, 30_000)
       }),
     ])

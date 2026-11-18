@@ -219,17 +219,26 @@ describe('extractAlibabaNative', () => {
     expect(result.warnings.some((warning) => warning.includes('Origen'))).toBe(true)
   })
 
-  it('uses the explicit Alibaba URL slug as provisional identity when structured JSON omits title', async () => {
+  it('does not promote the URL slug to a read title when structured JSON only returns price and MOQ', async () => {
     const result = await extractAlibabaNative(watchUrl, browserWithJson({ result: {
       unit_price: 71.5,
       moq: 5,
       price_tiers: [{ min_quantity: 5, unit_price: 71.5 }],
     } }))
-    expect(result.status).toBe('ready')
-    if (result.status !== 'ready') return
-    expect(result.facts.name).toContain('Fully Automatic Mechanical Watches')
-    expect(result.facts.unitPriceUsd).toBe(71.5)
-    expect(result.facts.moq).toBe(5)
+    expect(result.status).toBe('unavailable')
+    expect(result.facts).toBeNull()
+  })
+
+  it('does not convert price-only rendered HTML into an observed title when structured extraction fails', async () => {
+    const noTitle = '<!doctype html><html><body><div>FOB Price: USD 2700 / set</div><div>MOQ: 1 set</div>' + 'product supplier '.repeat(20) + '</body></html>'
+    const { browser, quickAction } = browserActionSequence([
+      { action: 'content', body: noTitle, status: 200 },
+      { action: 'json', body: { error: 'unavailable' }, status: 503 },
+    ])
+    const result = await extractAlibabaNative(watchUrl, browser)
+    expect(result.status).toBe('unavailable')
+    expect(result.facts).toBeNull()
+    expect(quickAction).toHaveBeenCalledTimes(2)
   })
 
   it('still fails closed when Browser Run exposes no product facts beyond the URL identity', async () => {

@@ -92,7 +92,10 @@ describe('Parse.bot Alibaba extraction', () => {
     expect(result.facts.moq).toBe(1)
     expect(result.facts.packedWeightKg).toBe(3)
     expect(result.facts.supplierEvidence).toMatchObject({ priceText: '$76-78', currency: null, weightText: '3.0', moqText: 'Min. order: 1 sets' })
-    expect(result.facts.volumeCbm).toBeCloseTo(0.005508, 6)
+    // The raw source did not state whether 36X25.5X6 is cm, mm or another unit.
+    expect(result.facts.volumeCbm).toBeNull()
+    expect(result.facts.unitSize).toBe('36X25.5X6')
+    expect(result.facts.supplierEvidence?.volumeText).toBe('36X25.5X6')
     expect(result.facts.imageUrl).toBe('https://sc04.alicdn.com/kf/H78d2e944cd984fafbcae555c783b645fG.jpg')
     expect(result.facts.supplier).toBe('Shenzhen Outdoor Special Display Equipment Co., Ltd.')
     expect(result.facts.originCountry).toBe('Guangdong, China')
@@ -100,7 +103,7 @@ describe('Parse.bot Alibaba extraction', () => {
   })
 
   it('consumes the new direct logistics/category schema for the exact mechanical-watch URL', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(watchSample), { status: 200 }))
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify(watchSample), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await extractAlibabaWithParsebot(
@@ -109,7 +112,11 @@ describe('Parse.bot Alibaba extraction', () => {
     )
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('product_id=1601666174891')
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('POST')
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      product_id: '1601666174891',
+      url: 'https://www.alibaba.com/product-detail/Fully-Automatic-Mechanical-Watches-42-5MM_1601666174891.html?spm=test',
+    })
     expect(result.status).toBe('ready')
     if (result.status !== 'ready') throw new Error('expected ready')
 

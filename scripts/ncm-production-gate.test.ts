@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import worker from '../worker/enrich'
 import { resetNcmIndexCacheForTests } from '../worker/ncmRetrieval'
 import { verifyNcmReliability } from './smoke-production-ncm-reliability.mjs'
@@ -16,4 +16,10 @@ it('runs the production gate against the actual endpoint and complete catalog wi
   expect(report.cases).toBe(11)
   expect(report.confirmedMobilityCode).toBe('8711.60.00')
   expect(report.catalogRecordCount).toBeGreaterThan(10000)
+})
+
+it('does not retry an incorrect classification returned by the API', async () => {
+  const fetcher = vi.fn(async () => Response.json({ status: 'candidate', code: '9617.00.10' }))
+  await expect(verifyNcmReliability('https://shippingapp.test', fetcher)).rejects.toThrow('Unconfirmed vacuum construction')
+  expect(fetcher).toHaveBeenCalledTimes(1)
 })

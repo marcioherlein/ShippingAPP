@@ -1,15 +1,16 @@
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
+import { readOnlySmokeFetch } from './read-only-smoke-fetch.mjs'
 
 export async function verifyNcmReliability(baseUrl, fetcher = fetch) {
   const product = { name: 'Termo Stanley', material: 'Acero inoxidable', functionText: 'Para mantener el agua caliente y tomar mate' }
   async function classify(facts) {
-    const response = await fetcher(`${baseUrl.replace(/\/$/, '')}/api/ncm-classify`, {
+    const { response, text } = await readOnlySmokeFetch(fetcher, `${baseUrl.replace(/\/$/, '')}/api/ncm-classify`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(facts), signal: AbortSignal.timeout(25_000),
-    })
+      body: JSON.stringify(facts),
+    }, 25_000)
     if (!response.ok) throw new Error(`NCM gate HTTP ${response.status}`)
-    return response.json()
+    return JSON.parse(text)
   }
   const pending = await classify(product)
   if (pending.code || pending.tariff || pending.alternatives?.length || pending.disambiguation?.candidates?.length) throw new Error('Unconfirmed vacuum construction must not expose a classification or arbitrary alternatives')

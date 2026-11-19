@@ -12,7 +12,7 @@ const nativeOut = { status: 'unavailable' as const, source: 'Cloudflare Browser 
 const structuredOut = { status: 'unavailable' as const, source: 'Parse.bot' as const, facts: null, warnings: ['unavailable'] }
 const directOut: DirectAlibabaResult = { status: 'unavailable', source: 'GlobalShipping direct Alibaba', facts: null, httpStatus: 403, warnings: ['blocked'] }
 const publicOut = { status: 'unavailable' as const, source: 'Alibaba public listing corroboration' as const, facts: null, pagesAttempted: 0, warnings: [] }
-afterEach(() => vi.useRealTimers())
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('customer Alibaba read deadline and evidence', () => {
   it('reads the exact reported machine from its real public card and advances without waiting for absent logistics', async () => {
@@ -56,6 +56,40 @@ describe('customer Alibaba read deadline and evidence', () => {
     const body: any = await response.json()
     expect(body.code).toBe('supplier_read_unavailable')
     expect(body.product).toBeUndefined()
+    expect(body.diagnostics.stages).toEqual([
+      { stage: 'direct', durationMs: expect.any(Number), status: 'unavailable', httpStatus: 403 },
+      { stage: 'browser', durationMs: expect.any(Number), status: 'unavailable' },
+      { stage: 'structured', durationMs: expect.any(Number), status: 'unavailable' },
+    ])
+  })
+
+  it('recovers a slower real structured response even when both first-party readers stall', async () => {
+    vi.useFakeTimers()
+    const hanging = vi.fn(() => new Promise<any>(() => {}))
+    const fetcher = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(Response.json({ status: 'success', data: {
+        product_id: '1601389995797',
+        title: 'Factory Manufacture Inner Bladder Basketball Making Machine Single Grain Winding Machine',
+        price_tiers: [{ min_quantity: 1, price_value: 2700 }], moq: '1', unit_size: '500X1430X1420',
+      } })), 7_000)
+      init?.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(init.signal?.reason) }, { once: true })
+    }))
+    vi.stubGlobal('fetch', fetcher)
+    const bindings = { ...env, PARSEBOT_API_KEY: 'fixture-key' }
+    const result = productRead(request(), bindings, (url, workerEnv, options) => resolveAlibabaSelfFirst(url, workerEnv, {
+      ...options, directReader: hanging, nativeReader: hanging,
+    }))
+
+    await vi.advanceTimersByTimeAsync(15_001)
+    const response = await result
+    expect(response.status).toBe(200)
+    const body: any = await response.json()
+    expect(body.product).toMatchObject({ unitPriceUsd: 2700, moq: 1, volumeCbm: 0 })
+    expect(body.product.name).toContain('Basketball Making Machine')
+    expect(body.confidence.productSource).toBe('parsebot')
+    expect(body.sourceEvidence.readBudget.durationMs).toBeLessThan(20_000)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('bounds the HTTP handler even when a replacement reader never resolves', async () => {

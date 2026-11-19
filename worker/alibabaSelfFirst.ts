@@ -1,6 +1,6 @@
 import { mergeSupplierEvidence } from '../src/lib/supplierEvidence'
 import { extractAlibabaDirectHttp, type DirectAlibabaResult } from './alibabaDirectProvider'
-import { extractAlibabaWithParsebot, parsebotConfigStatus, type ParsebotAlibabaFacts, type ParsebotAlibabaResult } from './parsebotAlibaba'
+import { extractAlibabaWithParsebot, parsebotConfigStatus, type ParsebotAlibabaFacts, type ParsebotAlibabaResult, type ParsebotReadAttemptDiagnostic } from './parsebotAlibaba'
 import { extractAlibabaNative, type NativeAlibabaResult } from './nativeAlibaba'
 import type { BrowserRun } from './alibabaSource'
 import { analyzeArgentinaMarket } from './catalogProvider'
@@ -45,10 +45,14 @@ export function hasVerifiedAlibabaIdentity(data: any) {
   return data?.sourceRead?.mode !== 'blocked' && source !== 'url-only' && !source.includes('direct-provisional-url-title')
 }
 
+function hasOriginalPrice(evidence: any) {
+  return usableText(evidence?.currency) && usableText(evidence?.priceText) && /\d/.test(evidence.priceText)
+}
+
 function hasPublishedOffer(data: any) {
   const evidence = data.product?.supplierEvidence
   return usableNumber(data.product?.moq) && (usableNumber(data.product?.unitPriceUsd)
-    || (usableText(evidence?.currency) && usableText(evidence?.priceText) && /\d/.test(evidence.priceText)))
+    || hasOriginalPrice(evidence))
 }
 
 function productTitleFromUrl(url: URL) {
@@ -190,7 +194,7 @@ function mergeCommonFacts(data: any, facts: ParsebotAlibabaFacts, options: {
     ...(usableText(facts.category) && (!usableText(product.category, ['Sin clasificar']) || product.categorySource === 'derived') ? { categorySource: 'supplier' } : {}),
     unitPriceUsd: usableNumber(product.unitPriceUsd) ? product.unitPriceUsd : usableNumber(facts.unitPriceUsd) ? facts.unitPriceUsd : null,
     supplierEvidence: mergeSupplierEvidence(product.supplierEvidence, facts.supplierEvidence, {
-      price: !usableNumber(product.unitPriceUsd), weight: !usableNumber(product.packedWeightKg),
+      price: !usableNumber(product.unitPriceUsd) && (usableNumber(facts.unitPriceUsd) || !hasOriginalPrice(product.supplierEvidence)), weight: !usableNumber(product.packedWeightKg),
       moq: !usableNumber(product.moq), volume: !usableNumber(product.volumeCbm),
     }, options.source === 'browser' ? 'Lectura en navegador' : 'Datos estructurados del proveedor'),
     moq: finalMoq,
@@ -364,22 +368,35 @@ export async function resolveAlibabaSelfFirst(
   const started = Date.now()
   const budget = createAlibabaReadBudget(deps, 20_000)
   const timedOutStages: string[] = []
+  const stages: Array<{ stage: string; durationMs: number; status: string; httpStatus?: number; attempts?: ParsebotReadAttemptDiagnostic[] }> = []
+  const hasStructuredRescue = Boolean(deps.parsebotReader || parsebotConfigStatus(env).ready)
   const supplementNeeded = () => requiredSelfFirstSignals(data) < 7 && !(deps.intakeOnly && hasVerifiedAlibabaIdentity(data) && hasPublishedOffer(data))
   const stage = async <T>(name: string, limit: number, read: (options: AlibabaReadOptions) => Promise<T>): Promise<T | null> => {
     const timeoutMs = Math.min(limit, budget.remainingMs())
-    if (timeoutMs <= 0) { timedOutStages.push(name); return null }
+    if (timeoutMs <= 0) { stages.push({ stage: name, durationMs: 0, status: 'skipped' }); return null }
+    const stageStarted = Date.now()
     // Let a provider return its accumulated evidence before the outer safety
     // timer fires; equal deadlines otherwise discard valid partial HTML.
-    try { return await budget.run(signal => read({ signal, timeoutMs: Math.max(0, timeoutMs - 100) }), timeoutMs) }
+    try {
+      const result = await budget.run(signal => read({ signal, timeoutMs: Math.max(0, timeoutMs - 100) }), timeoutMs)
+      const outcome = result as { status?: string; httpStatus?: number; diagnostics?: { attempts: ParsebotReadAttemptDiagnostic[] } }
+      if (outcome?.status === 'unavailable' && outcome.diagnostics?.attempts.some(attempt => attempt.outcome === 'timeout')) timedOutStages.push(name)
+      stages.push({ stage: name, durationMs: Date.now() - stageStarted, status: outcome?.status || 'completed',
+        ...(typeof outcome?.httpStatus === 'number' ? { httpStatus: outcome.httpStatus } : {}),
+        ...(outcome?.diagnostics ? { attempts: outcome.diagnostics.attempts } : {}) })
+      return result
+    }
     catch (error) {
       if (deps.signal?.aborted) throw error
-      if (error instanceof Error && error.name === 'TimeoutError') timedOutStages.push(name)
+      const timedOut = error instanceof Error && error.name === 'TimeoutError'
+      if (timedOut) timedOutStages.push(name)
+      stages.push({ stage: name, durationMs: Date.now() - stageStarted, status: timedOut ? 'timeout' : 'error' })
       data.assumptions = [...data.assumptions, `La etapa ${name} no respondió dentro del presupuesto disponible; se conservan únicamente los datos recuperados.`]
       return null
     }
   }
   try {
-    const direct = await stage('direct', 8_000, options => directReader(url, options))
+    const direct = await stage('direct', deps.intakeOnly && hasStructuredRescue ? 6_000 : 8_000, options => directReader(url, options))
     if (direct && direct.status !== 'unavailable') data = mergeDirect(data, direct)
     else if (direct) data.assumptions = [...direct.warnings, ...(data.assumptions || [])]
 
@@ -394,7 +411,7 @@ export async function resolveAlibabaSelfFirst(
     if (supplementNeeded()) {
       // Reserve time for the configured rescue instead of exhausting the entire
       // customer deadline on repeated browser calls after a challenge/rate limit.
-      const reserve = deps.parsebotReader || parsebotConfigStatus(env).ready ? 8_000 : 0
+      const reserve = hasStructuredRescue ? (deps.intakeOnly ? 12_000 : 8_000) : 0
       const native = await stage('browser', Math.max(0, budget.remainingMs() - reserve), options => nativeReader(url, env.BROWSER, options))
       if (native?.status === 'ready') data = mergeNative(data, native)
       else if (native) {
@@ -434,7 +451,7 @@ export async function resolveAlibabaSelfFirst(
       ...data.confidence,
       overall: Math.min(94, Math.max(Number(data.confidence?.overall) || 0, 20 + signals * 10)),
     }
-    data.sourceEvidence = { ...data.sourceEvidence, readBudget: { durationMs: Date.now() - started, timedOutStages } }
+    data.sourceEvidence = { ...data.sourceEvidence, readBudget: { durationMs: Date.now() - started, timedOutStages, stages } }
     if (timedOutStages.length && hasVerifiedAlibabaIdentity(data)) {
       data.sourceRead = { ...data.sourceRead, mode: 'partial', reason: 'Conservamos los datos publicados que se pudieron verificar. Los campos que faltan se confirman en la ficha.' }
     }

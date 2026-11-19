@@ -23,3 +23,8 @@ it('rejects commerce accidentally recovered from a neighbouring product', async 
   const data = fixture(); data.sourceEvidence.parsebotAlibaba.productId = '1600000000001'
   await expect(verifyProductRead('https://shipping.test', response(data))).rejects.toThrow('exact requested product ID')
 })
+it('reports bounded provider-stage diagnostics on a failed real read', async () => {
+  await expect(verifyProductRead('https://shipping.test', async () => Response.json({
+    code: 'supplier_read_unavailable', diagnostics: { durationMs: 19_800, stages: [{ stage: 'structured', status: 'unavailable', durationMs: 12_000 }] },
+  }, { status: 503 }))).rejects.toThrow('"stage":"structured"')
+})

@@ -1,3 +1,5 @@
+import { readOnlySmokeFetch } from './read-only-smoke-fetch.mjs'
+
 const baseUrl = process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS || 15000)
 
@@ -52,23 +54,19 @@ function almostEqual(a, b) {
 }
 
 async function postJson(path, payload, label) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   let response
   let text
   try {
-    response = await fetch(`${baseUrl}${path}`, {
+    const result = await readOnlySmokeFetch(fetch, `${baseUrl}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
-    text = await response.text()
+    }, REQUEST_TIMEOUT_MS)
+    response = result.response
+    text = result.text
   } catch (error) {
-    const reason = error?.name === 'AbortError' ? `timed out after ${REQUEST_TIMEOUT_MS}ms` : (error?.message || 'request failed')
+    const reason = ['AbortError', 'TimeoutError'].includes(error?.name) ? `timed out after ${REQUEST_TIMEOUT_MS}ms` : (error?.message || 'request failed')
     throw new Error(`${label}: ${path} ${reason}`)
-  } finally {
-    clearTimeout(timeout)
   }
 
   let body

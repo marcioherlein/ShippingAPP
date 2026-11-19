@@ -112,11 +112,8 @@ describe('Parse.bot Alibaba extraction', () => {
     )
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('POST')
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
-      product_id: '1601666174891',
-      url: 'https://www.alibaba.com/product-detail/Fully-Automatic-Mechanical-Watches-42-5MM_1601666174891.html?spm=test',
-    })
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('GET')
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get('product_id')).toBe('1601666174891')
     expect(result.status).toBe('ready')
     if (result.status !== 'ready') throw new Error('expected ready')
 

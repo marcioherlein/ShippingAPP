@@ -13,7 +13,7 @@ export async function verifyProductRead(origin, fetchImpl = fetch, timeoutMs = 2
       body: JSON.stringify({ url: REPORTED_ALIBABA_URL }), signal: controller.signal,
     })
     const body = await response.json()
-    if (!response.ok) throw new Error(`Customer product-read failed HTTP ${response.status}: ${body.code || 'no code'}`)
+    if (!response.ok) throw new Error(`Customer product-read failed HTTP ${response.status}: ${body.code || 'no code'}; ${JSON.stringify(body.diagnostics || {})}`)
     const product = body.product ?? {}
     const name = String(product.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     const source = String(body.confidence?.productSource || '')
@@ -34,10 +34,14 @@ export async function verifyProductRead(origin, fetchImpl = fetch, timeoutMs = 2
     if (elapsedMs >= timeoutMs) throw new Error('The actual customer read exceeded its acceptance deadline')
     return { status: 'passed', productId: '1601389995797', elapsedMs, name: product.name, mode: body.sourceRead?.mode, source,
       priceUsd: product.unitPriceUsd, originalPrice: price?.priceText ?? null, currency: price?.currency ?? null, moq: product.moq,
-      weightKg: product.packedWeightKg, volumeCbm: product.volumeCbm, paidReservation: false }
+      weightKg: product.packedWeightKg, volumeCbm: product.volumeCbm, paidReservation: false, readBudget: body.sourceEvidence?.readBudget ?? null }
   } finally { clearTimeout(timer) }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  console.log(JSON.stringify(await verifyProductRead(process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'), null, 2))
+  // Exercise separate customer reads, with no retry that could mask an unstable
+  // first response. Each read must meet every identity/commerce/deadline check.
+  const reads = []
+  for (let read = 0; read < 3; read++) reads.push(await verifyProductRead(process.env.PRODUCTION_URL || 'https://shippingapp.marciofabrizio.workers.dev'))
+  console.log(JSON.stringify({ status: 'passed', reads }, null, 2))
 }

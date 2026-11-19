@@ -13,7 +13,7 @@ async function probe(path, timeoutMs) {
     return { path, httpStatus: response.status, elapsedMs: Date.now() - started, status: body.status ?? null, code: body.code ?? null, fetched: body.fetched ?? null,
       sourceRead: body.sourceRead ?? null, name: facts.name ?? null, category: facts.category ?? null, priceUsd: facts.unitPriceUsd ?? null, moq: facts.moq ?? null,
       weightKg: facts.packedWeightKg ?? null, volumeCbm: facts.volumeCbm ?? null, originCountry: facts.originCountry ?? null, evidence: facts.evidence ?? null,
-      warnings: body.warnings ?? body.assumptions ?? [], sourceEvidence: body.sourceEvidence ?? null }
+      warnings: body.warnings ?? body.assumptions ?? [], sourceEvidence: body.sourceEvidence ?? null, diagnostics: body.diagnostics ?? null }
   } catch (error) { return { path, elapsedMs: Date.now() - started, error: error instanceof Error ? error.message : String(error) } }
   finally { clearTimeout(timer) }
 }

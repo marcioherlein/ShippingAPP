@@ -79,6 +79,22 @@ const nativeOut: NativeAlibabaResult = {
 }
 
 describe('Alibaba self-scrape-first orchestration', () => {
+  it('keeps an original EUR offer when the browser only fills its missing MOQ', async () => {
+    const structured = vi.fn(async () => parsebotOut)
+    const result = await resolveAlibabaSelfFirst(url, env, {
+      intakeOnly: true,
+      directReader: async () => direct({ unitPriceUsd: null, moq: null, supplierEvidence: {
+        priceText: 'EUR 71.50 / piece', currency: 'EUR', quantityUnit: 'piece', variant: 'Green',
+      } }),
+      nativeReader: async () => native({ unitPriceUsd: null, moq: 5, supplierEvidence: undefined }),
+      parsebotReader: structured,
+    })
+    expect(result.product.unitPriceUsd).toBeNull()
+    expect(result.product.moq).toBe(5)
+    expect(result.product.supplierEvidence).toMatchObject({ priceText: 'EUR 71.50 / piece', currency: 'EUR', priceSource: 'Lectura directa' })
+    expect(structured).not.toHaveBeenCalled()
+  })
+
   it('keeps the retained direct price currency while supplementing original weight from Browser Run', async () => {
     const prior = direct({ packedWeightKg: null, volumeCbm: null, supplierEvidence: {
       priceText: 'EUR 71.50 / piece', currency: 'EUR', quantityUnit: 'piece', variant: 'Green',

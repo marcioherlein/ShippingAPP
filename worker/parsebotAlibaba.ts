@@ -37,10 +37,18 @@ export type ParsebotAlibabaFacts = {
   raw?: unknown
 }
 
+export type ParsebotReadAttemptDiagnostic = {
+  method: 'GET' | 'POST'
+  outcome: 'ready' | 'timeout' | 'error' | 'http_error' | 'no_facts' | 'mismatched_id'
+  durationMs: number
+  httpStatus?: number
+}
+type ParsebotReadDiagnostics = { attempts: ParsebotReadAttemptDiagnostic[] }
+
 export type ParsebotAlibabaResult =
-  | { status: 'ready'; source: string; facts: ParsebotAlibabaFacts; warnings: string[]; executionTime?: number | null }
-  | { status: 'not_configured'; source: 'Parse.bot'; facts: null; warnings: string[]; missing: string[] }
-  | { status: 'unavailable'; source: 'Parse.bot'; facts: null; warnings: string[]; httpStatus?: number }
+  | { status: 'ready'; source: string; facts: ParsebotAlibabaFacts; warnings: string[]; executionTime?: number | null; diagnostics?: ParsebotReadDiagnostics }
+  | { status: 'not_configured'; source: 'Parse.bot'; facts: null; warnings: string[]; missing: string[]; diagnostics?: ParsebotReadDiagnostics }
+  | { status: 'unavailable'; source: 'Parse.bot'; facts: null; warnings: string[]; httpStatus?: number; diagnostics?: ParsebotReadDiagnostics }
 
 function cleanString(value: unknown, max = 500) {
   if (typeof value !== 'string') return null
@@ -399,7 +407,7 @@ function withQuery(endpoint: string, params: Record<string, string>) {
   return target.toString()
 }
 
-async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotAttempt, budget: AlibabaReadBudget, timeoutMs = 3500) {
+async function callParsebot(endpoint: string, apiKey: string, attempt: ParsebotAttempt, budget: AlibabaReadBudget, timeoutMs = budget.remainingMs()) {
   const headers = {
     accept: 'application/json',
     'x-api-key': apiKey,
@@ -427,12 +435,11 @@ function parsebotAttempts(url: URL): ParsebotAttempt[] {
   const productId = alibabaProductId(url)
   if (productId) {
     return [
-      // This URL lookup is the method observed recovering the reported real
-      // listing. Do not burn three legacy query retries before using it.
-      { method: 'POST', params: { url: urlString, product_url: urlString, product_id: productId, id: productId } },
+      // The canonical product_id lookup recovered this exact listing in the
+      // production probe. Give it useful time before one URL-body fallback;
+      // aliases of the same lookup only add duplicate provider work.
       { method: 'GET', params: { product_id: productId } },
-      { method: 'GET', params: { id: productId } },
-      { method: 'GET', params: { url: urlString } },
+      { method: 'POST', params: { url: urlString, product_url: urlString, product_id: productId, id: productId } },
     ]
   }
   return [
@@ -458,16 +465,20 @@ function productCandidates(body: any): any[] {
   return data && typeof data === 'object' ? [data] : []
 }
 
-async function lookupProduct(endpoint: string, apiKey: string, attempt: ParsebotAttempt, failures: string[], budget: AlibabaReadBudget) {
+async function lookupProduct(endpoint: string, apiKey: string, attempt: ParsebotAttempt, failures: string[], budget: AlibabaReadBudget, diagnostics: ParsebotReadAttemptDiagnostic[], timeoutMs = budget.remainingMs()) {
+  const started = Date.now()
+  const record = (outcome: ParsebotReadAttemptDiagnostic['outcome'], httpStatus?: number) => diagnostics.push({ method: attempt.method, outcome, durationMs: Date.now() - started, ...(httpStatus === undefined ? {} : { httpStatus }) })
   let result: Awaited<ReturnType<typeof callParsebot>>
   try {
-    result = await callParsebot(endpoint, apiKey, attempt, budget)
+    result = await callParsebot(endpoint, apiKey, attempt, budget, timeoutMs)
   } catch (error) {
+    record(error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'error')
     failures.push(`${attemptLabel(attempt)} -> ${error instanceof Error ? error.message : 'timeout'}`)
     return null
   }
   const { response, body } = result
   if (!response.ok || body?.status === 'error' || body?.status === 'timeout') {
+    record('http_error', response.status)
     failures.push(`${attemptLabel(attempt)} -> ${body?.status || `HTTP ${response.status}`}`)
     return null
   }
@@ -475,14 +486,17 @@ async function lookupProduct(endpoint: string, apiKey: string, attempt: Parsebot
   const expectedId = attempt.params.product_id || attempt.params.id || (attempt.params.url ? alibabaProductId(new URL(attempt.params.url)) : null)
   const returnedId = productIdFromRaw(body?.data ?? body)
   if (expectedId && returnedId && expectedId !== returnedId) {
+    record('mismatched_id', response.status)
     failures.push(`${attemptLabel(attempt)} -> product_id does not match the requested publication`)
     return null
   }
   const useful = Boolean(facts.name || facts.unitPriceUsd || facts.moq || facts.packedWeightKg || facts.volumeCbm || facts.category || facts.imageUrl)
   if (!useful) {
+    record('no_facts', response.status)
     failures.push(`${attemptLabel(attempt)} -> no usable product facts`)
     return null
   }
+  record('ready', response.status)
   return { facts, body }
 }
 
@@ -511,29 +525,52 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv, opt
 
   const failures: string[] = []
   const budget = createAlibabaReadBudget(options, 12_000)
+  const attempts: ParsebotReadAttemptDiagnostic[] = []
   let lastStatus: number | undefined
+  const unavailable = (warning: string): ParsebotAlibabaResult => ({
+    status: 'unavailable', source: 'Parse.bot', facts: null,
+    httpStatus: lastStatus ?? [...attempts].reverse().find(attempt => attempt.httpStatus !== undefined)?.httpStatus,
+    diagnostics: { attempts }, warnings: [warning],
+  })
   try {
-    for (const attempt of parsebotAttempts(url)) {
+    for (const [index, attempt] of parsebotAttempts(url).entries()) {
       if (budget.remainingMs() <= 0 || options.signal?.aborted) break
-      const productLookup = await lookupProduct(endpoint, env.PARSEBOT_API_KEY, attempt, failures, budget)
+      // A 5–7 second real supplier response is useful, not a failed attempt.
+      // Keep room for a single fallback inside the same 12-second budget.
+      const attemptMs = index === 0 ? Math.min(8_000, budget.remainingMs()) : budget.remainingMs()
+      const productLookup = await lookupProduct(endpoint, env.PARSEBOT_API_KEY, attempt, failures, budget, attempts, attemptMs)
       if (productLookup) {
         return {
           status: 'ready',
           source: `Parse.bot · ${attemptLabel(attempt)}`,
           facts: productLookup.facts,
           executionTime: numberOrNull(productLookup.body?.execution_time),
+          diagnostics: { attempts },
           warnings: failures.length ? [`La lectura estructurada recuperó la publicación después de ${failures.length} intento(s) sin datos útiles.`] : [],
         }
       }
+      const status = attempts.at(-1)?.httpStatus
+      if (status && [401, 402, 403, 429].includes(status)) {
+        return unavailable(`Parse.bot returned HTTP ${status}; another lookup was not started with the same credentials or exhausted quota.`)
+      }
+    }
+
+    if (budget.remainingMs() < 1_000 || options.signal?.aborted) {
+      return unavailable(`Parse.bot did not return usable product facts within the remaining read budget (${failures.slice(0, 5).join('; ')}).`)
     }
 
     const searchEndpoint = parsebotSearchEndpoint(env)
     const searchAttempt: ParsebotAttempt = { method: 'GET', params: { query: alibabaQueryFromUrl(url), page: '1', sort: 'best_match' } }
     let searchResult: Awaited<ReturnType<typeof callParsebot>> | null = null
+    const searchStarted = Date.now()
+    let searchDiagnostic: ParsebotReadAttemptDiagnostic | undefined
     try {
       searchResult = await callParsebot(searchEndpoint, env.PARSEBOT_API_KEY, searchAttempt, budget, 6000)
       lastStatus = searchResult.response.status
+      searchDiagnostic = { method: 'GET', outcome: searchResult.response.ok ? 'no_facts' : 'http_error', durationMs: Date.now() - searchStarted, httpStatus: searchResult.response.status }
+      attempts.push(searchDiagnostic)
     } catch (error) {
+      attempts.push({ method: 'GET', outcome: error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'error', durationMs: Date.now() - searchStarted })
       failures.push(`${attemptLabel(searchAttempt)} -> ${error instanceof Error ? error.message : 'timeout'}`)
     }
 
@@ -542,25 +579,16 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv, opt
       const candidate = requestedId ? productCandidates(searchResult.body).find(entry => productIdFromRaw(entry) === requestedId) : null
       const candidateFacts = normalizeFacts(candidate)
       const candidateProductId = productIdFromRaw(candidate)
-      if (candidateProductId) {
-        const detailLookup = await lookupProduct(endpoint, env.PARSEBOT_API_KEY, { method: 'POST', params: { url: url.href, product_url: url.href, product_id: candidateProductId, id: candidateProductId } }, failures, budget)
-        if (detailLookup) {
-          return {
-            status: 'ready',
-            source: 'Parse.bot · search_products → get_product',
-            facts: detailLookup.facts,
-            executionTime: numberOrNull(detailLookup.body?.execution_time),
-            warnings: [],
-          }
-        }
-      }
+      if (searchDiagnostic && candidate) searchDiagnostic.outcome = 'ready'
+      else if (searchDiagnostic && productCandidates(searchResult.body).length) searchDiagnostic.outcome = 'mismatched_id'
       if (candidate && candidateProductId === requestedId && Boolean(candidateFacts.name || candidateFacts.unitPriceUsd || candidateFacts.moq || candidateFacts.packedWeightKg || candidateFacts.volumeCbm || candidateFacts.category || candidateFacts.imageUrl)) {
         return {
           status: 'ready',
           source: 'Parse.bot · search_products',
           facts: candidateFacts,
           executionTime: numberOrNull(searchResult.body?.execution_time),
-          warnings: [`Parse.bot get_product failed for the exact search result ${candidateProductId}; using only its product_id-matched summary.`],
+          diagnostics: { attempts },
+          warnings: [`Both direct lookups failed; preserving only the exact product_id ${candidateProductId} search summary without repeating a failed detail lookup.`],
         }
       }
       failures.push('GET search_products -> no usable product facts')
@@ -568,21 +596,9 @@ export async function extractAlibabaWithParsebot(url: URL, env: ParsebotEnv, opt
       failures.push(`GET search_products -> ${searchResult.body?.status || `HTTP ${searchResult.response.status}`}`)
     }
 
-    return {
-      status: 'unavailable',
-      source: 'Parse.bot',
-      facts: null,
-      httpStatus: lastStatus,
-      warnings: [`Parse.bot did not return usable product facts (${failures.slice(0, 5).join('; ')}); GlobalShipping will fall back to Browser Run.`],
-    }
+    return unavailable(`Parse.bot did not return usable product facts (${failures.slice(0, 5).join('; ')}); GlobalShipping will fall back to Browser Run.`)
   } catch (error) {
-    return {
-      status: 'unavailable',
-      source: 'Parse.bot',
-      facts: null,
-      httpStatus: lastStatus,
-      warnings: [error instanceof Error ? `Parse.bot failed: ${error.message}` : 'Parse.bot failed; GlobalShipping will fall back to Browser Run.'],
-    }
+    return unavailable(error instanceof Error ? `Parse.bot failed: ${error.message}` : 'Parse.bot failed; GlobalShipping will fall back to Browser Run.')
   } finally {
     budget.dispose()
   }

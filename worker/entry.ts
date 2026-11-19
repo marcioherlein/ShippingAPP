@@ -236,19 +236,21 @@ export async function productRead(
   // One server deadline spans both attempts and response bodies. It finishes
   // before the client's 30-second deadline and never discards verified partial
   // evidence merely because a supplier omitted freight measurements.
+  const started = Date.now()
   const budget = createAlibabaReadBudget({ signal: request.signal }, 22_000)
-  const unavailable = (timedOut: boolean) => Response.json({
+  const unavailable = (timedOut: boolean, data?: any) => Response.json({
     error: timedOut
       ? 'Alibaba no respondió a tiempo para verificar la publicación. Conservamos el enlace; podés reintentar la lectura.'
       : 'Alibaba no permitió verificar esta publicación. Conservamos el enlace; podés reintentar la lectura.',
     code: timedOut ? 'supplier_read_timeout' : 'supplier_read_unavailable', retryable: true, stage: 'alibaba_product_read',
+    diagnostics: { durationMs: Date.now() - started, stages: data?.sourceEvidence?.readBudget?.stages || [] },
   }, { status: 503 })
   let lastError: unknown = null
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const data: any = await budget.run(signal => reader(url, env as any, { signal, timeoutMs: Math.min(20_000, budget.remainingMs()), intakeOnly: true }))
-        if (!hasVerifiedAlibabaIdentity(data)) return unavailable(Boolean(data?.sourceEvidence?.readBudget?.timedOutStages?.length))
+        if (!hasVerifiedAlibabaIdentity(data)) return unavailable(Boolean(data?.sourceEvidence?.readBudget?.timedOutStages?.length), data)
         return Response.json(data)
       } catch (error) {
         if (request.signal.aborted) return Response.json({ error: 'Lectura cancelada.', code: 'read_cancelled', retryable: true }, { status: 499 })
